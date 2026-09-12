@@ -43,6 +43,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.7 Supervisor Rust | Concluída localmente | Processo filho, protocolo limitado, eventos Tauri, reinício, encerramento, keyring por sistema e segredo efêmero da ponte passaram em 140 testes Rust ativos e no fake sidecar real |
 | 2.8 Ponte com identidade | Em andamento, parcial | `bridge/mod.rs` e `bridge/protocol.rs` já têm `BridgeControl`, identidade do dispositivo e do computador no `welcome`, exigência de `x-cialai-node-key` e fechamento por revogação com 4401. O supervisor ainda não chama essa API: Clippy com `-D warnings` falha por código não usado e por `serve` com oito argumentos, e o teste `bridge::tests::proxy_secret_marks_the_connection_as_a_device` falha porque não envia a chave do nó |
 | 2.9 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 3.1 API e build gomobile | Código preparado e superfície validada localmente | `packages/tunnel-core/mobile` compõe nó, inspeção e pareamento, perfis, proxy e ciclo de vida sem persistir tokens. `tools/build-tunnel-mobile.sh` tem preflight de Go, Xcode, SDK e NDK e gera hashes SHA 256. Bindings Java e Objective C gerados; XCFramework, AAR e aparelhos continuam pendentes do Codemagic |
 
 ## Ambiente observado
 
@@ -294,6 +295,25 @@ O trabalho de 1.6 a 2.7 estava todo fora de commit. Foi gravado no `main` local 
 O binário `packages/tunnel-core/cialai-tunnel`, de 30 MiB, gerado por `go build ./cmd/cialai-tunnel`, estava fora do `.gitignore` e passou a ser ignorado. O check `tools/check/desktop-extraction.mjs` exigia o texto literal `app.manage(mobile_site)` e parava o `npm test` antes do Rust e do Go; agora aceita o `clone()` da 2.7 e confere que o supervisor recebe o `mobile_site`.
 
 Resultado real depois da correção, com Node 22.23.2 e npm 10.9.8: fundação, UI 17 e 38, protocolo 9, scaffold, ícone, extração, onboarding, autoteste estrutural, build Vite e recurso móvel passaram. `cargo clippy -D warnings` falhou pelos avisos da 2.8 parcial. `cargo test --locked` terminou com 140 aprovados, 1 falha e 2 ignorados. `go vet ./...` e `go test -race -mod=readonly ./...` passaram nos dez pacotes com testes. Não houve push.
+
+### 12/09/2026, API gomobile da tarefa 3.1 preparada
+
+Criado `packages/tunnel-core/mobile` com a superfície do documento 06. O pacote valida o QR sem devolver segredos, cria ou retoma um perfil `tsnet`, espera o peer pela chave do nó, troca a prova de uso único no endpoint `/pair`, abre somente o proxy de loopback já existente e serializa mudanças de perfil. O estado Go persiste apenas URL, identidade e metadados de desktops; chaves de entrada, segredos do QR e tokens de dispositivo não entram no arquivo. Nenhum arquivo de `internal/` foi alterado.
+
+`tools/build-tunnel-mobile.sh` fixa o contrato de saída `Tunnelcore.xcframework.zip` e `tunnelcore.aar`, executa preflight explícito de Go 1.26.5, Xcode, SDK, NDK e gera SHA 256. O script não foi usado para compilar os artefatos neste Mac porque o build pertence ao runner `mac_mini_m2` do Codemagic. Isso não foi registrado como impedimento e não prova XCFramework, AAR ou execução em aparelho.
+
+Comandos concluídos com código 0:
+
+```sh
+cd packages/tunnel-core
+go vet ./...
+go test -race -mod=readonly ./...
+bash -n ../../tools/build-tunnel-mobile.sh
+mkdir -p build/spikes/_bindings
+go tool gobind -lang=java,objc -outdir=build/spikes/_bindings ./mobile
+```
+
+O race detector aprovou todos os pacotes, inclusive os três casos novos de `mobile`. `gobind` gerou as interfaces Java e Objective C com todos os métodos documentados. Os gerados ficaram sob `build/`, ignorados pelo Git.
 
 ## Arquivos para retomar
 
