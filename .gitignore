@@ -21,5 +21,6 @@ apps/desktop/src-tauri/binaries/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/resources/mobile/
 packages/tunnel-core/build/
+packages/tunnel-core/cialai-tunnel
 .local/
 *.log

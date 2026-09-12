@@ -3,7 +3,10 @@ module github.com/OrdinumTeam/cialai-platform/packages/tunnel-core
 
 go 1.26.5
 
-require tailscale.com v1.102.0
+require (
+	github.com/mitchellh/go-ps v1.0.0
+	tailscale.com v1.102.0
+)
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
@@ -28,7 +31,6 @@ require (
 	github.com/klauspost/compress v1.19.1 // indirect
 	github.com/mdlayher/netlink v1.7.3-0.20250113171957-fbb4dce95f42 // indirect
 	github.com/mdlayher/socket v0.5.0 // indirect
-	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/pires/go-proxyproto v0.8.1 // indirect
 	github.com/safchain/ethtool v0.3.0 // indirect
 	github.com/tailscale/certstore v0.1.1-0.20260409135935-3638fb84b77d // indirect
