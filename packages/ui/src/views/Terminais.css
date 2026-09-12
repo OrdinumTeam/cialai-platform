@@ -12,8 +12,8 @@
 [data-platform="macos"] .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
 
 [data-platform="macos"]{
-  --terminais-editor-line:rgba(26,79,160,.045);
-  --terminais-editor-match:rgba(26,79,160,.16);
+  --terminais-editor-line:rgba(226,59,132,.045);
+  --terminais-editor-match:rgba(226,59,132,.16);
   --terminais-editor-search:rgba(194,122,0,.22);
   --terminais-syn-keyword:#8a3fb2;
   --terminais-syn-string:#1f7a3e;
@@ -26,8 +26,8 @@
   --terminais-syn-regexp:#c25e00;
 }
 [data-platform="macos"][data-theme="dark"]{
-  --terminais-editor-line:rgba(74,138,230,.10);
-  --terminais-editor-match:rgba(74,138,230,.26);
+  --terminais-editor-line:rgba(255,122,178,.10);
+  --terminais-editor-match:rgba(255,122,178,.26);
   --terminais-syn-keyword:#d09aee;
   --terminais-syn-string:#7fd29a;
   --terminais-syn-number:#f0b070;

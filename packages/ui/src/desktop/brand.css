@@ -1,0 +1,100 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Identidade cromática do Cialai. Esta camada vem por último para substituir
+   somente a marca azul herdada do Ordinum Control. Cores ANSI, sintaxe,
+   estados e a paleta escolhida para cada sessão continuam independentes. */
+
+:root {
+  --cialai-magenta:#E23B84;
+  --cialai-pink:#FF7AB2;
+  --cialai-blush:#FFD6E6;
+  --cialai-plum:#3A1B33;
+  --cialai-white:#FFFFFF;
+
+  --brand:var(--cialai-magenta);
+  --brand-deep:#C9317A;
+  --brand-accent:var(--cialai-pink);
+  --brand-soft:rgba(226,59,132,.09);
+  --brand-soft-hover:rgba(226,59,132,.14);
+  --brand-glow:rgba(226,59,132,.22);
+
+  --mac-brand:var(--cialai-pink);
+  --mac-brand-bright:var(--cialai-blush);
+  --mac-brand-deep:var(--cialai-magenta);
+  --mac-brand-ink:var(--cialai-plum);
+
+  --mac-accent:var(--cialai-magenta);
+  --mac-accent-hover:#C9317A;
+  --mac-accent-soft:rgba(226,59,132,.09);
+  --mac-accent-soft-hover:rgba(226,59,132,.14);
+  --mac-accent-row:rgba(226,59,132,.055);
+  --mac-accent-ring:rgba(226,59,132,.22);
+  --mac-accent-text:var(--cialai-plum);
+
+  --mac-gradient:linear-gradient(135deg,var(--cialai-plum) 0%,var(--cialai-magenta) 100%);
+  --mac-gradient-text:linear-gradient(120deg,var(--cialai-plum) 0%,var(--cialai-magenta) 100%);
+  --mac-gradient-button:linear-gradient(180deg,var(--cialai-blush) 0%,var(--cialai-pink) 100%);
+  --mac-gradient-line:linear-gradient(90deg,var(--cialai-magenta) 0%,var(--cialai-pink) 100%);
+  --mac-aura:radial-gradient(circle,rgba(255,122,178,.18) 0%,rgba(255,122,178,0) 62%);
+  --mac-hero:var(--mac-gradient);
+  --mac-hero-glow:radial-gradient(ellipse 560px 340px at 92% 0%,rgba(255,214,230,.30) 0%,rgba(255,214,230,0) 70%);
+
+  --mac-sidebar-bg:linear-gradient(168deg,var(--cialai-blush) 0%,var(--cialai-white) 100%);
+  --mac-sidebar-text:rgba(58,27,51,.94);
+  --mac-sidebar-text-2:rgba(58,27,51,.58);
+  --mac-sidebar-icon:rgba(58,27,51,.68);
+  --mac-sidebar-hover:rgba(226,59,132,.09);
+  --mac-sidebar-press:rgba(226,59,132,.16);
+  --mac-sidebar-active:rgba(226,59,132,.14);
+  --mac-sidebar-line:rgba(58,27,51,.10);
+
+  --mac-shadow-primary:0 1px 2px rgba(226,59,132,.24),inset 0 1px 0 rgba(255,255,255,.42);
+}
+
+:root[data-theme="dark"] {
+  --brand:var(--cialai-pink);
+  --brand-deep:#FF8FC0;
+  --brand-accent:var(--cialai-blush);
+  --brand-soft:rgba(255,122,178,.16);
+  --brand-soft-hover:rgba(255,122,178,.24);
+  --brand-glow:rgba(255,122,178,.38);
+
+  --mac-accent:var(--cialai-pink);
+  --mac-accent-hover:#FF8FC0;
+  --mac-accent-soft:rgba(255,122,178,.16);
+  --mac-accent-soft-hover:rgba(255,122,178,.24);
+  --mac-accent-row:rgba(255,122,178,.10);
+  --mac-accent-ring:rgba(255,122,178,.38);
+  --mac-accent-text:var(--cialai-pink);
+
+  --mac-gradient:linear-gradient(135deg,var(--cialai-plum) 0%,var(--cialai-magenta) 100%);
+  --mac-gradient-text:linear-gradient(120deg,var(--cialai-pink) 0%,var(--cialai-blush) 100%);
+  --mac-gradient-button:linear-gradient(180deg,var(--cialai-blush) 0%,var(--cialai-pink) 100%);
+  --mac-gradient-line:linear-gradient(90deg,var(--cialai-magenta) 0%,var(--cialai-pink) 100%);
+  --mac-aura:radial-gradient(circle,rgba(255,122,178,.22) 0%,rgba(255,122,178,0) 62%);
+  --mac-hero-glow:radial-gradient(ellipse 560px 340px at 92% 0%,rgba(255,122,178,.15) 0%,rgba(255,122,178,0) 70%);
+
+  --mac-sidebar-bg:linear-gradient(168deg,var(--cialai-plum) 0%,#1C1C1E 100%);
+  --mac-sidebar-text:rgba(255,214,230,.94);
+  --mac-sidebar-text-2:rgba(255,214,230,.56);
+  --mac-sidebar-icon:rgba(255,214,230,.66);
+  --mac-sidebar-hover:rgba(255,122,178,.10);
+  --mac-sidebar-press:rgba(255,122,178,.18);
+  --mac-sidebar-active:rgba(255,122,178,.16);
+  --mac-sidebar-line:rgba(255,214,230,.12);
+}
+
+[data-shell="desktop"] .btn-primary,
+[data-form-factor="phone"] .btn-primary {
+  background:var(--mac-gradient-button);
+  color:var(--cialai-plum);
+  border:0;
+  box-shadow:var(--mac-shadow-primary);
+}
+
+[data-shell="desktop"] .btn-primary:hover,
+[data-form-factor="phone"] .btn-primary:hover {
+  background:var(--mac-gradient-button);
+  color:var(--cialai-plum);
+  filter:brightness(1.03);
+  box-shadow:var(--mac-shadow-primary);
+}

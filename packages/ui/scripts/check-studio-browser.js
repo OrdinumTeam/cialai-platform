@@ -14,9 +14,26 @@ async function until(test, label) {
   return test();
 }
 
+async function assertTransparentMark(selector) {
+  const mark = await until(() => {
+    const image = document.querySelector(selector);
+    return image?.complete && image.naturalWidth ? image : null;
+  }, 'Cialai mark');
+  const canvas = document.createElement('canvas');
+  canvas.width = 1;
+  canvas.height = 1;
+  const context = canvas.getContext('2d');
+  context.drawImage(mark, 0, 0, 1, 1, 0, 0, 1, 1);
+  assert(context.getImageData(0, 0, 1, 1).data[3] === 0, 'Cialai mark must keep its transparent margin');
+}
+
 document.title = 'CHECK: Cialai studio';
 await until(() => runtime.isDemo(), 'terminal demo mode');
 assert(runtime.isDemo(), 'Browser check must run only in terminal demo mode');
+
+const dark = document.documentElement.dataset.theme === 'dark';
+const rootStyle = getComputedStyle(document.documentElement);
+assert(rootStyle.getPropertyValue('--mac-accent').trim().toLowerCase() === (dark ? '#ff7ab2' : '#e23b84'), 'Cialai accent missing');
 
 if (document.documentElement.dataset.formFactor === 'phone') {
   await until(() => document.querySelector('.phone-terminal__sessions .terminais-card'), 'phone session list');
@@ -30,6 +47,10 @@ if (document.documentElement.dataset.formFactor === 'phone') {
 } else {
   await until(() => document.querySelector('.terminais-terminal__host .xterm'), 'desktop terminal');
   assert(document.querySelector('.mac-sidebar__brand-name')?.textContent === 'Cialai', 'Cialai brand missing');
+  await assertTransparentMark('.mac-sidebar__logo');
+  const sidebarGradient = getComputedStyle(document.querySelector('.mac-sidebar')).backgroundImage;
+  assert(sidebarGradient.includes(dark ? '58, 27, 51' : '255, 214, 230'), 'Cialai sidebar gradient missing');
+  assert(!/10, 42, 94|21, 63, 128|31, 87, 171/.test(sidebarGradient), 'Ordinum blue gradient remains visible');
   assert(document.querySelectorAll('.mac-nav-item').length === 1, 'Registry must expose only Terminais');
   assert(!/Ordinum Control|Stack local|Reuniões/.test(document.body.textContent), 'Removed Control UI is visible');
   assert(runtime.orderedSessions().length >= 2, 'Terminal demo sessions missing');

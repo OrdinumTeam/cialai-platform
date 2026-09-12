@@ -8,7 +8,7 @@ import { createTheme } from '@mui/material/styles';
 export const MAC_FONT = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif";
 
 const LIGHT = {
-  accent: '#1a4fa0', accentDark: '#174690', accentLight: '#2d7ae0',
+  accent: '#E23B84', accentDark: '#C9317A', accentLight: '#FF7AB2', primaryText: '#3A1B33', info: '#1a4fa0',
   bg: '#ffffff', surface: '#ffffff',
   label: '#1d1d1f', label2: '#6e6e73', label3: '#a1a1a6',
   separator: 'rgba(0,0,0,.07)', separatorStrong: 'rgba(0,0,0,.12)',
@@ -16,7 +16,7 @@ const LIGHT = {
 };
 
 const DARK = {
-  accent: '#4a8ae6', accentDark: '#5f9aeb', accentLight: '#6ea3f0',
+  accent: '#FF7AB2', accentDark: '#FF8FC0', accentLight: '#FFD6E6', primaryText: '#3A1B33', info: '#4a8ae6',
   bg: '#1c1c1e', surface: '#262628',
   label: '#f5f5f7', label2: 'rgba(235,235,245,.62)', label3: 'rgba(235,235,245,.4)',
   separator: 'rgba(255,255,255,.08)', separatorStrong: 'rgba(255,255,255,.15)',
@@ -41,11 +41,11 @@ export function buildMacTheme(mode) {
   return createTheme({
     palette: {
       mode: dark ? 'dark' : 'light',
-      primary: { main: c.accent, dark: c.accentDark, light: c.accentLight, contrastText: '#ffffff' },
+      primary: { main: c.accent, dark: c.accentDark, light: c.accentLight, contrastText: c.primaryText },
       success: { main: c.success },
       warning: { main: c.warning },
       error: { main: c.error },
-      info: { main: c.accent },
+      info: { main: c.info },
       divider: c.separator,
       background: { default: c.bg, paper: c.surface },
       text: { primary: c.label, secondary: c.label2, disabled: c.label3 },
@@ -97,7 +97,7 @@ export function buildMacTheme(mode) {
         styleOverrides: {
           root: {
             fontSize: 13, minHeight: 26, borderRadius: 5, margin: '1px 0', padding: '3px 10px',
-            '&.Mui-selected': { backgroundColor: c.accent, color: '#fff' },
+            '&.Mui-selected': { backgroundColor: c.accent, color: c.primaryText },
             '&.Mui-selected:hover': { backgroundColor: c.accentDark },
           },
         },

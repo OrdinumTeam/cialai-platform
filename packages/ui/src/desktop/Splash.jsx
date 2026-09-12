@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import logo from './assets/cialai-mark.png';
+import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
 
 export default function Splash({ status, leaving }) {
   const message = status === 'ready' ? 'Pronto' : status === 'error' ? 'Não foi possível restaurar as sessões' : 'Carregando o estúdio';

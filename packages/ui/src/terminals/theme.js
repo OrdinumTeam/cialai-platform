@@ -18,10 +18,12 @@ export function terminalFont() {
 
 const LIGHT_ANSI = {
   black: '#1d1d1f',
+  blue: '#1a4fa0',
   magenta: '#8a3fb2',
   cyan: '#0f7f8c',
   white: '#d2d2d7',
   brightBlack: '#6e6e73',
+  brightBlue: '#4a8ae6',
   brightMagenta: '#a55ad0',
   brightCyan: '#1a9aa8',
   brightWhite: '#f5f6f8',
@@ -29,10 +31,12 @@ const LIGHT_ANSI = {
 
 const DARK_ANSI = {
   black: '#2f2f34',
+  blue: '#4a8ae6',
   magenta: '#c67de8',
   cyan: '#3fc1cf',
   white: '#d8d8dc',
   brightBlack: '#8e8e93',
+  brightBlue: '#5f9aeb',
   brightMagenta: '#d9a0f2',
   brightCyan: '#66d3de',
   brightWhite: '#f5f5f7',
@@ -47,8 +51,6 @@ export function buildTheme() {
   const ok = token('--mac-ok', '#1f9d5b');
   const warn = token('--mac-warn', '#c27a00');
   const bad = token('--mac-bad', '#d83a3a');
-  const accent = token('--mac-accent', '#1a4fa0');
-  const accentBright = token('--mac-accent-hover', accent);
   return {
     background: surface,
     foreground: ink,
@@ -59,11 +61,9 @@ export function buildTheme() {
     red: bad,
     green: ok,
     yellow: warn,
-    blue: accent,
     brightRed: bad,
     brightGreen: ok,
     brightYellow: warn,
-    brightBlue: accentBright,
     ...(dark ? DARK_ANSI : LIGHT_ANSI),
   };
 }

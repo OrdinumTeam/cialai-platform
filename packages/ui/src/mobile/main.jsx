@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import '../desktop/macos.css';
 import './mobile.css';
+import '../desktop/brand.css';
 import * as remote from '../lib/remote.js';
 import { installMobileLinks } from './links.js';
 import MobileApp from './MobileApp.jsx';
