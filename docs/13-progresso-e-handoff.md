@@ -27,7 +27,8 @@ Execução iniciada. Nenhuma fase concluída.
 | 1.2 Extração Rust | Concluída localmente | Núcleo macOS extraído sem stack, reuniões e VPN. Clippy sem avisos, 118 testes ativos passaram, dois ensaios externos permaneceram ignorados e o binário Tauri compilou e iniciou |
 | 1.3 Extração da interface | Concluída localmente | Estúdio de Terminais e cascas desktop/celular compilam; `check-terminal-sync` 17/17, demais checks UI 32/32, raiz e Tauri verdes. Checks no Chromium visível terminaram em `PASS` nas duas entradas |
 | 1.4 Camada multiplataforma | Concluída localmente | Contratos Rust e JavaScript, escolha de shell, locale, prefixo de PATH e caminhos portáteis integrados ao PTY. Suítes, Chromium visível e binário Tauri aprovados no macOS; ramos nativos Windows/Linux aguardam a matriz remota |
-| 1.5 a 7.6 | Não iniciadas | A próxima entrega é o recurso da página do celular em 1.5; a autorização para avançar não aprova os testes físicos pendentes |
+| 1.5 Recurso web do celular | Concluída localmente | Bundle móvel isolado, validado e mapeado em `$RESOURCE/mobile`; `MobileSite` fornece o caminho absoluto ao futuro supervisor. Recurso carregou no Chromium e no bootstrap Tauri do macOS |
+| 1.6 a 7.6 | Não iniciadas | A próxima entrega é `projectRoots` e onboarding em 1.6; a autorização para avançar não aprova os testes físicos pendentes |
 
 ## Ambiente observado
 
@@ -158,6 +159,14 @@ O `npm test` da raiz terminou com código 0: sincronização 17/17, demais teste
 
 `tauri build --debug --no-bundle --ci` gerou novamente o executável macOS. No smoke test ele registrou o início e expandiu a janela de 440×321 para 1380×880 em 528 ms e 24 quadros, permanecendo ativo até Ctrl C. Isso verifica o bootstrap nativo e o carregamento da interface no macOS. Os ramos de descoberta de shell e PATH para Windows e Linux estão implementados, mas não foram compilados nem executados nativamente; dependem da matriz remota e não estão aceitos por esta evidência.
 
+### 12/09/2026, recurso web do celular da tarefa 1.5 concluído localmente
+
+O Vite ganhou um build `mobile-resource` isolado, com `mobile.html` como única entrada, gravado em `src-tauri/resources/mobile`. O check da geração exige o documento, todos os assets diretamente referenciados, pelo menos JavaScript e CSS e a ausência de `index.html`. O resultado atual tem 133 arquivos e 3,9 MiB; os arquivos gerados são ignorados e reconstruídos tanto no build normal quanto antes de `tauri dev`.
+
+`tauri.conf.json` mapeia `resources/mobile/` para `$RESOURCE/mobile/`. O novo `tunnel::MobileSite` resolve esse diretório pelo `PathResolver` do Tauri, exige `mobile.html`, canonicaliza o caminho e é registrado como estado durante o bootstrap. Assim, o futuro supervisor poderá enviar um `staticDir` absoluto em `edge.serve`, sem tentar ler o `frontendDist` embutido. O sidecar, a borda, o proxy e o aplicativo móvel nativo continuam inexistentes nesta tarefa.
+
+O `npm test` da raiz terminou com código 0: o check do recurso passou, o Rust compilou 127 casos, 125 passaram, zero falharam e dois ensaios externos permaneceram ignorados. `tauri build --debug --no-bundle --ci` copiou o recurso para `target/debug/mobile/mobile.html`. O executável iniciou com a validação obrigatória de `MobileSite`, cresceu a janela em 524 ms e permaneceu ativo até Ctrl C. Por fim, o próprio diretório de recurso foi servido localmente e aberto no Dev Browser Panel em 393×852: a entrada carregou seu script e três folhas de estilo, hidratou a lista com cinco sessões de demonstração e teve zero overflow horizontal. Isso aprova o artefato web local no macOS, não os spikes WKWebView/Android, pareamento, rede ou lojas.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -169,12 +178,15 @@ O `npm test` da raiz terminou com código 0: sincronização 17/17, demais teste
 | `tools/check/desktop-extraction.mjs` | Guarda da extração Rust, produtos removidos, preferências e ponte PTY |
 | `apps/desktop/src-tauri/src/lib.rs`, `commands.rs`, `prefs.rs` | Composição do núcleo extraído e comandos locais |
 | `apps/desktop/src-tauri/src/platform/mod.rs` | Contratos de sistema, shell, locale e PATH da tarefa 1.4 |
+| `apps/desktop/src-tauri/src/tunnel/mod.rs` | `MobileSite`, caminho absoluto que o futuro supervisor usará como `staticDir` |
+| `apps/desktop/src-tauri/resources/README.md` | Origem e regra do bundle móvel gerado e não versionado |
 | `apps/desktop/src-tauri/src/workspace/`, `bridge/` | Estúdio nativo e transporte remoto reduzido |
 | `packages/ui/src/lib/platform.js`, `terminals/files.js` | Snapshot da plataforma e caminhos/cotação de shell no frontend |
 | `packages/ui/src/terminals/`, `views/Terminais.jsx` | Runtime e interface extraídos do estúdio |
 | `packages/ui/src/desktop/`, `mobile/` | Composições Cialai para as duas entradas Vite |
 | `packages/ui/scripts/check-terminal-sync.mjs` | Dezessete casos de sincronização e migração |
 | `packages/ui/scripts/check-studio-browser.js` | Check visível aprovado nas entradas desktop e celular |
+| `tools/check/mobile-resource.mjs` | Integridade e isolamento do recurso móvel gerado |
 | `tools/check/ui-extraction.mjs` | Guarda contra módulos do Control e chaves antigas fora das migrações |
 | `.github/workflows/ci.yml` | Matriz mínima, sem execução remota registrada |
 | `.github/workflows/spike-headscale.yml` | Integração do spike no Linux, sem execução remota registrada |
@@ -195,7 +207,7 @@ npm run test:spike:headscale
 npm run check:source
 ```
 
-`npm run dev:desktop` e `npm run build:desktop` agora compilam o núcleo Rust, a interface de Terminais e a camada multiplataforma da tarefa 1.4. A segunda entrada `mobile.html` também compila, mas o aplicativo móvel nativo ainda não existe. Os demais scripts futuros do documento 09 continuam sendo planejamento.
+`npm run dev:desktop` e `npm run build:desktop` agora também geram e validam o recurso móvel da tarefa 1.5. A página `mobile.html` existe como artefato web, mas o aplicativo móvel nativo ainda não existe. Os demais scripts futuros do documento 09 continuam sendo planejamento.
 
 ## Próxima ação
 
@@ -204,4 +216,4 @@ npm run check:source
 3. O usuário deve fazer o commit das oito alterações do Control conforme 0.2. Depois atualizar o inventário conscientemente, sem apagar mudanças da origem.
 4. Disponibilizar Xcode completo, SDK e NDK Android e aparelhos reais. Compilar os bindings experimentais e criar os hosts nativos de teste do spike 1, ainda inexistentes.
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
-6. Continuar em 1.5: empacotar `mobile.html` e seus assets como recurso do Tauri e expor ao futuro supervisor um caminho estável, sem iniciar ainda o sidecar ou confundir a página empacotada com aplicativo móvel nativo.
+6. Continuar em 1.6: substituir as raízes provisórias de `repos.rs` e `mobile_files` por `projectRoots` e implementar o onboarding com boas-vindas, escolha de pastas, shell e confirmação, sem ampliar a interface para os produtos removidos.

@@ -19,6 +19,7 @@ apps/mobile/ios/
 apps/mobile/android/
 apps/desktop/src-tauri/binaries/
 apps/desktop/src-tauri/gen/
+apps/desktop/src-tauri/resources/mobile/
 packages/tunnel-core/build/
 .local/
 *.log

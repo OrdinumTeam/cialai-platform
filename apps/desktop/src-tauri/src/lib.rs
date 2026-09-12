@@ -11,6 +11,7 @@ mod diagnostics;
 mod lifecycle;
 pub mod platform;
 mod prefs;
+pub mod tunnel;
 mod window;
 pub mod workspace;
 
@@ -94,6 +95,9 @@ pub fn run() {
             commands::preview_register,
         ])
         .setup(|app| {
+            let mobile_site =
+                tunnel::MobileSite::resolve(app.handle()).map_err(std::io::Error::other)?;
+            app.manage(mobile_site);
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
             let prefs = prefs::PrefsState::new(preferences);

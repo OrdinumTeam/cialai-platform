@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "br.com.ordinum.cialai",
   "build": {
-    "beforeDevCommand": "npm run vite",
+    "beforeDevCommand": "npm run build:mobile-resource && npm run vite",
     "devUrl": "http://127.0.0.1:1420",
     "beforeBuildCommand": "npm run build:ui",
     "frontendDist": "../dist"
@@ -53,6 +53,9 @@
     "copyright": "Copyright 2026 Ordinum",
     "shortDescription": "Terminal studio for local and remote coding sessions",
     "longDescription": "Cialai keeps terminal sessions and project tools together on the desktop and makes them available to paired mobile devices.",
+    "resources": {
+      "resources/mobile/": "mobile/"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

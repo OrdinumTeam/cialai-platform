@@ -10,7 +10,7 @@ Versões conferidas no `Cargo.lock` do Control: tauri 2.11.5, wry 0.55.1, tao 0.
 apps/desktop/
   package.json                 scripts dev, build, icon, test, clippy, check
   index.html, mobile.html      entradas do Vite, movidas de $CONTROL/frontend
-  vite.config.js               três entradas: main, mobile e o bundle do celular como recurso
+  vite.config.js               main e mobile no dist; build mobile isolado como recurso
   src-tauri/
     Cargo.toml                 crate cialai-desktop, lib cialai_desktop_lib
     tauri.conf.json            comum; tauri.macos.conf.json, tauri.windows.conf.json, tauri.linux.conf.json

@@ -13,6 +13,7 @@ for (const path of [
   'lifecycle.rs',
   'prefs.rs',
   'platform/mod.rs',
+  'tunnel/mod.rs',
   'window.rs',
   'bridge/mod.rs',
   'bridge/protocol.rs',
@@ -42,6 +43,10 @@ for (const [name, source] of Object.entries({ lib, commands, dispatch, allowlist
 for (const prefix of ['stack_', 'vpn_', 'meetings_']) {
   assert.ok(!allowlist.includes(`"${prefix}`), `Ponte ainda permite ${prefix}*`);
 }
+
+assert.match(lib, /MobileSite::resolve\(app\.handle\(\)\)/);
+assert.match(lib, /app\.manage\(mobile_site\)/);
+assert.match(read('tunnel/mod.rs'), /pub fn mobile_static_dir/);
 
 const prefs = read('prefs.rs').split('#[cfg(test)]')[0];
 for (const field of [

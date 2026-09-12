@@ -12,6 +12,8 @@ assert.equal(common.productName, 'Cialai');
 assert.equal(common.identifier, 'br.com.ordinum.cialai');
 assert.equal(common.build.devUrl, 'http://127.0.0.1:1420');
 assert.equal(common.build.frontendDist, '../dist');
+assert.match(common.build.beforeDevCommand, /build:mobile-resource/);
+assert.equal(common.bundle.resources['resources/mobile/'], 'mobile/');
 assert.deepEqual(Object.keys(common.app.security.csp).sort(), [
   'connect-src', 'default-src', 'font-src', 'frame-src', 'img-src',
   'script-src', 'style-src', 'worker-src',
