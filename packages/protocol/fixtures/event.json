@@ -1,0 +1,8 @@
+{
+  "type": "event",
+  "name": "pty://exit",
+  "payload": {
+    "id": 3,
+    "code": 0
+  }
+}

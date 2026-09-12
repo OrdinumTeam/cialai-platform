@@ -12,6 +12,7 @@
     "test": "node ../../tools/check/ui-extraction.mjs && node scripts/check-terminal-sync.mjs && node --test scripts/check-brand.mjs scripts/check-file-kinds.mjs scripts/check-platform.mjs scripts/check-preferences.mjs scripts/check-phone-terminal.mjs scripts/check-phone-workbench.mjs scripts/tests/*.test.cjs"
   },
   "dependencies": {
+    "@cialai/protocol": "0.1.0",
     "@codemirror/commands": "6.11.0",
     "@codemirror/language": "6.12.4",
     "@codemirror/language-data": "6.5.2",

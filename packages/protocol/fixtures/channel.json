@@ -1,0 +1,9 @@
+{
+  "type": "channel",
+  "channel": 5,
+  "message": {
+    "type": "replay",
+    "offset": 100,
+    "length": 3
+  }
+}

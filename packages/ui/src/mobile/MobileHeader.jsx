@@ -12,14 +12,15 @@ function appearanceStep(appearance) {
 
 export default function MobileHeader({ view, appearance, onReload, connection }) {
   const step = appearanceStep(appearance);
-  if (view.id === 'terminais') return connection === 'connected' ? null : <header className="ios-header ios-header--compact"><p className="ios-connection" role="status">{connection === 'connecting' ? 'Conectando ao Mac…' : 'Ponte com o Mac desconectada'}</p></header>;
+  const connectionText = connection === 'connecting' ? 'Conectando ao computador…' : connection === 'removed' ? 'Este aparelho foi removido' : connection === 'incompatible' ? 'Atualize o Cialai para continuar' : 'Ponte com o computador desconectada';
+  if (view.id === 'terminais') return connection === 'connected' ? null : <header className="ios-header ios-header--compact"><p className="ios-connection" role="status">{connectionText}</p></header>;
   return <header className="ios-header">
     <div className="ios-header__heading"><div><h1>{view.label}</h1><p>{view.sub}</p></div>
       <button type="button" className="mac-tool" aria-label="Atualizar dados" onClick={onReload}><RefreshCw size={19} /></button>
       <button type="button" className="mac-tool" aria-label={step.label} onClick={() => appearance.setMode(step.next)}><step.Icon size={19} /></button>
     </div>
     {view.id !== 'terminais' && <p className="ios-readonly"><Eye size={13} aria-hidden="true" />Somente visualização</p>}
-    {connection !== 'connected' && <p className="ios-connection" role="status">{connection === 'connecting' ? 'Conectando ao Mac…' : 'Ponte com o Mac desconectada'}</p>}
+    {connection !== 'connected' && <p className="ios-connection" role="status">{connectionText}</p>}
     <div id="mac-toolbar-slot" />
   </header>;
 }

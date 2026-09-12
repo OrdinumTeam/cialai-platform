@@ -1,0 +1,9 @@
+{
+  "type": "call",
+  "id": 17,
+  "cmd": "pty_write",
+  "args": {
+    "id": 3,
+    "data": "ls\n"
+  }
+}

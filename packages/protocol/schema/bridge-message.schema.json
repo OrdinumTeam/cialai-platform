@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cialai.local/schema/bridge-message.schema.json",
+  "title": "Cialai bridge protocol version 1",
+  "oneOf": [
+    { "$ref": "#/$defs/hello" },
+    { "$ref": "#/$defs/welcome" },
+    { "$ref": "#/$defs/call" },
+    { "$ref": "#/$defs/resultOk" },
+    { "$ref": "#/$defs/resultError" },
+    { "$ref": "#/$defs/event" },
+    { "$ref": "#/$defs/channel" }
+  ],
+  "$defs": {
+    "hello": {
+      "type": "object",
+      "required": ["type", "version", "token", "client", "app"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "hello" },
+        "version": { "const": 1 },
+        "token": { "type": ["string", "null"] },
+        "client": { "enum": ["cialai-ios", "cialai-android", "cialai-dev", "ios"] },
+        "app": { "type": "string" }
+      }
+    },
+    "party": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "welcome": {
+      "type": "object",
+      "required": ["type", "version", "auth", "capabilities", "features"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "welcome" },
+        "version": { "const": 1 },
+        "auth": { "enum": ["device", "token", "open"] },
+        "user": { "type": ["string", "null"] },
+        "device": { "oneOf": [{ "$ref": "#/$defs/party" }, { "type": "null" }] },
+        "desktop": { "oneOf": [{ "$ref": "#/$defs/party" }, { "type": "null" }] },
+        "capabilities": { "type": "array", "items": { "type": "string" } },
+        "features": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "call": {
+      "type": "object",
+      "required": ["type", "id", "cmd", "args"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "call" },
+        "id": { "type": "integer", "minimum": 1 },
+        "cmd": { "type": "string" },
+        "args": { "type": "object" }
+      }
+    },
+    "resultOk": {
+      "type": "object",
+      "required": ["type", "id", "ok", "value"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "result" },
+        "id": { "type": "integer", "minimum": 1 },
+        "ok": { "const": true },
+        "value": {}
+      }
+    },
+    "resultError": {
+      "type": "object",
+      "required": ["type", "id", "ok", "error"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "result" },
+        "id": { "type": "integer", "minimum": 1 },
+        "ok": { "const": false },
+        "error": { "type": "string" }
+      }
+    },
+    "event": {
+      "type": "object",
+      "required": ["type", "name", "payload"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "event" },
+        "name": { "type": "string" },
+        "payload": {}
+      }
+    },
+    "channel": {
+      "type": "object",
+      "required": ["type", "channel", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "type": { "const": "channel" },
+        "channel": { "type": "integer", "minimum": 1 },
+        "message": { "type": "object" }
+      }
+    }
+  }
+}

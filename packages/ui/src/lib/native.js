@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as remote from './remote.js';
+import { createNativeBridge, NATIVE_ONLY_MESSAGE } from '@cialai/protocol/native';
 import { authorizeNative, resetTerminalAuthorization } from './sensitive.js';
-export const NATIVE_ONLY_MESSAGE = 'Disponível só no aplicativo desktop.';
-export const hasBridge = () => isTauri() || remote.isConfigured();
+export { NATIVE_ONLY_MESSAGE };
 remote.subscribeState((value) => { if (value.status !== 'connected') resetTerminalAuthorization(); });
 
 // Ponte com o Tauri. Fora do app, no Vite de desenvolvimento aberto num
@@ -12,21 +12,39 @@ export function isTauri() {
   return typeof window !== 'undefined' && Boolean(window.__TAURI_INTERNALS__);
 }
 
-export async function invoke(command, args) {
-  if (!isTauri()) {
-    if (!remote.isConfigured()) return undefined;
-    await authorizeNative(command, args);
-    return remote.invoke(command, args);
-  }
+async function invokeTauri(command, args) {
   const { invoke: tauriInvoke } = await import('@tauri-apps/api/core');
   return tauriInvoke(command, args);
 }
 
-export async function listen(event, handler) {
-  if (!isTauri()) return remote.isConfigured() ? remote.listen(event, handler) : () => {};
+async function listenTauri(event, handler) {
   const { listen: tauriListen } = await import('@tauri-apps/api/event');
   return tauriListen(event, (message) => handler(message.payload, message));
 }
+
+async function createTauriChannel(onmessage) {
+  const { Channel } = await import('@tauri-apps/api/core');
+  const channel = new Channel();
+  channel.onmessage = onmessage;
+  return channel;
+}
+
+const bridge = createNativeBridge({
+  isNative: isTauri,
+  isRemoteConfigured: remote.isConfigured,
+  authorizeRemote: authorizeNative,
+  invokeRemote: remote.invoke,
+  invokeNative: invokeTauri,
+  listenRemote: remote.listen,
+  listenNative: listenTauri,
+  createRemoteChannel: remote.createChannel,
+  createNativeChannel: createTauriChannel,
+});
+
+export const hasBridge = bridge.hasBridge;
+export const invoke = bridge.invoke;
+export const listen = bridge.listen;
+export const createChannel = bridge.createChannel;
 
 // O macOS entrega caminhos locais pelo evento nativo, nao por File.path
 // no drag-and-drop HTML. A posicao chega ao handler ja em pontos CSS.
@@ -123,14 +141,6 @@ export async function chooseSavePath(options = {}) {
 
 // Canal do Tauri para receber dados continuos de um comando Rust, como a
 // saida de um terminal. Fora do app devolve null.
-export async function createChannel(onmessage) {
-  if (!isTauri()) return remote.isConfigured() ? remote.createChannel(onmessage) : null;
-  const { Channel } = await import('@tauri-apps/api/core');
-  const channel = new Channel();
-  channel.onmessage = onmessage;
-  return channel;
-}
-
 export async function closeCurrentWindow() {
   if (!isTauri()) return;
   const { getCurrentWindow } = await import('@tauri-apps/api/window');

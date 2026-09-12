@@ -1,0 +1,16 @@
+{
+  "type": "welcome",
+  "version": 1,
+  "auth": "device",
+  "user": null,
+  "device": {
+    "id": "dev_example",
+    "name": "iPhone de Exemplo"
+  },
+  "desktop": {
+    "id": "desktop_example",
+    "name": "Computador de Exemplo"
+  },
+  "capabilities": ["pty"],
+  "features": ["terminal-mobile-v1"]
+}

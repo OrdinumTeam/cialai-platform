@@ -119,6 +119,37 @@ pub fn allowed_command(cmd: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_json_fixtures_match_the_rust_wire_types() {
+        let hello: Incoming = serde_json::from_str(include_str!(
+            "../../../../../packages/protocol/fixtures/hello.json"
+        ))
+        .unwrap();
+        assert_eq!(validate_hello(&hello, None, None), Ok(()));
+        assert!(matches!(
+            hello,
+            Incoming::Hello {
+                version: 1,
+                client: Some(client),
+                ..
+            } if client == "cialai-ios"
+        ));
+
+        let call: Incoming = serde_json::from_str(include_str!(
+            "../../../../../packages/protocol/fixtures/call.json"
+        ))
+        .unwrap();
+        assert!(matches!(
+            call,
+            Incoming::Call {
+                id: 17,
+                cmd,
+                ..
+            } if cmd == "pty_write"
+        ));
+    }
+
     #[test]
     fn handshake_distinguishes_protocol_version_and_auth_failures() {
         let hello: Incoming = serde_json::from_str(r#"{"type":"hello","version":1}"#).unwrap();
