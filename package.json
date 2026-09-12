@@ -1,0 +1,21 @@
+{
+  "name": "cialai-platform",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "workspaces": ["apps/*", "packages/*"],
+  "engines": { "node": "22.x", "npm": "10.x" },
+  "packageManager": "npm@10.9.8",
+  "scripts": {
+    "check:foundation": "node tools/check/foundation.mjs",
+    "test": "npm run check:foundation && npm run test:ui && npm run test:protocol && npm run test:desktop && npm run test:tunnel && npm run test:mobile",
+    "test:ui": "npm run test --workspace @cialai/ui --if-present",
+    "test:protocol": "npm run test --workspace @cialai/protocol --if-present",
+    "test:desktop": "node tools/run.mjs desktop-check",
+    "test:tunnel": "node tools/run.mjs tunnel-check",
+    "test:mobile": "npm run test --workspace @cialai/mobile --if-present",
+    "test:spike:headscale": "node tools/run.mjs spike-headscale",
+    "check:source": "node tools/check/control-source.mjs"
+  }
+}

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Phase 0 Headscale spike
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - packages/tunnel-core/**
+      - .github/workflows/spike-headscale.yml
+
+permissions:
+  contents: read
+
+jobs:
+  policy-and-expiry:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+      - run: docker pull headscale/headscale:0.29.3
+      - run: go vet -tags=integration ./spikes/headscale
+        working-directory: packages/tunnel-core
+      - run: go test -mod=readonly -tags=integration -count=1 -timeout=6m -v ./spikes/headscale
+        working-directory: packages/tunnel-core

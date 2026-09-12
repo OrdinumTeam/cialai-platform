@@ -1,0 +1,25 @@
+Cialai
+Copyright 2026 ORDINUM INOVACAO E TECNOLOGIA LTDA
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+Phase 0 dependency inventory:
+
+- Tailscale / tsnet: BSD-3-Clause
+  https://github.com/tailscale/tailscale/blob/v1.102.0/LICENSE
+- Headscale: BSD-3-Clause, used as a separate Docker test service
+  https://github.com/juanfont/headscale/blob/v0.29.3/LICENSE
+
+Planned dependencies, not yet bundled:
+
+- xterm.js: MIT, https://github.com/xtermjs/xterm.js
+- CodeMirror: MIT, https://github.com/codemirror/dev
+- Tauri: Apache-2.0 OR MIT, https://github.com/tauri-apps/tauri
+- React: MIT, https://github.com/facebook/react
+- Expo: MIT, https://github.com/expo/expo
+- JetBrains Mono: OFL-1.1, https://github.com/JetBrains/JetBrainsMono
+
+This inventory does not replace upstream license texts. Before distributing
+binaries, include the applicable copyright and license notices for all bundled
+direct and transitive dependencies and fonts. No product binaries are distributed
+at this stage.
