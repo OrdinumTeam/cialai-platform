@@ -9,6 +9,7 @@ pub mod bridge;
 mod commands;
 mod diagnostics;
 mod lifecycle;
+pub mod platform;
 mod prefs;
 mod window;
 pub mod workspace;
@@ -44,6 +45,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_preferences,
             commands::set_preferences,
+            commands::app_platform,
             commands::splash_ready,
             commands::window_grow,
             commands::pty_spawn,
@@ -94,9 +96,11 @@ pub fn run() {
         .setup(|app| {
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
-            app.manage(prefs::PrefsState::new(preferences));
+            let prefs = prefs::PrefsState::new(preferences);
+            app.manage(prefs.clone());
             app.manage(workspace::terminal::TerminalManager::new(
                 app.handle().clone(),
+                prefs,
             ));
             app.manage(workspace::watch::Watcher::new(app.handle().clone()));
             app.manage(workspace::files::FindCache::default());

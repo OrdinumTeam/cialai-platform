@@ -4,16 +4,9 @@ import { createRoot } from 'react-dom/client';
 import '../styles.css';
 import './macos.css';
 import DesktopApp from './DesktopApp.jsx';
+import { initPlatform } from '../lib/platform.js';
 
-function platformName() {
-  const agent = navigator.userAgent.toLowerCase();
-  if (agent.includes('mac')) return 'macos';
-  if (agent.includes('win')) return 'windows';
-  if (agent.includes('linux')) return 'linux';
-  return 'unknown';
-}
-
-document.documentElement.dataset.platform = platformName();
+await initPlatform();
 if (new URLSearchParams(window.location.search).get('motion') === '0') document.documentElement.dataset.motion = 'none';
 createRoot(document.getElementById('root')).render(<DesktopApp />);
 

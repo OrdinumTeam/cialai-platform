@@ -7,6 +7,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::platform::PlatformInfo;
 use crate::prefs::{Preferences, PrefsState};
 use crate::workspace::ai::{self, AgentUsage, UsageCache};
 use crate::workspace::browser::{BrowserInfo, BrowserManager};
@@ -29,6 +30,12 @@ use crate::workspace::watch::Watcher;
 #[tauri::command]
 pub fn get_preferences(prefs: State<'_, PrefsState>) -> Preferences {
     prefs.get()
+}
+
+#[tauri::command]
+pub fn app_platform(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<PlatformInfo, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    Ok(PlatformInfo::detect(&home, &prefs.get()))
 }
 
 #[tauri::command]

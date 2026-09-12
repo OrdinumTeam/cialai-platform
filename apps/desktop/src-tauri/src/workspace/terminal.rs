@@ -37,10 +37,15 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::platform::{self, ShellFlavor, ShellSpec};
+use crate::prefs::{Preferences, PrefsState};
+
+#[cfg(test)]
+use super::DEFAULT_SHELL;
+use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache};
 use super::resume;
-use super::{DEFAULT_SHELL, EVENT_PTY_EXIT};
 
 const READ_BUFFER: usize = 16 * 1024;
 const COALESCE_WINDOW: Duration = Duration::from_millis(4);
@@ -89,6 +94,7 @@ pub struct TerminalInfo {
     pub tag: String,
     pub cwd: String,
     pub shell: String,
+    pub shell_flavor: ShellFlavor,
     pub pid: Option<u32>,
     pub alive: bool,
     pub exit_code: Option<i32>,
@@ -493,23 +499,31 @@ pub struct TerminalManager {
     /// O app esta saindo: o fim dos shells nao apaga a conversa do agente
     /// guardada para a retomada.
     closing: Arc<AtomicBool>,
+    prefs: PrefsState,
+    home: PathBuf,
 }
 
 impl TerminalManager {
-    pub fn new(app: AppHandle) -> Self {
+    pub fn new(app: AppHandle, prefs: PrefsState) -> Self {
         let view_app = app.clone();
+        let home = app
+            .path()
+            .home_dir()
+            .unwrap_or_else(|_| std::env::temp_dir());
         let journal_dir = app
             .path()
             .app_data_dir()
             .ok()
             .map(|dir| dir.join("terminals"));
-        let manager = Self::with_notifiers(
+        let manager = Self::with_environment(
             Arc::new(move |exit| {
                 let _ = app.emit(EVENT_PTY_EXIT, exit);
             }),
             Arc::new(move |view| {
                 let _ = view_app.emit("pty://view", view);
             }),
+            prefs,
+            home,
         );
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
@@ -522,7 +536,24 @@ impl TerminalManager {
         Self::with_notifiers(notify_exit, Arc::new(|_| {}))
     }
 
+    #[cfg(test)]
     fn with_notifiers(notify_exit: ExitNotifier, notify_view: ViewNotifier) -> Self {
+        Self::with_environment(
+            notify_exit,
+            notify_view,
+            PrefsState::new(Preferences::default()),
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir),
+        )
+    }
+
+    fn with_environment(
+        notify_exit: ExitNotifier,
+        notify_view: ViewNotifier,
+        prefs: PrefsState,
+        home: PathBuf,
+    ) -> Self {
         let manager = Self {
             inner: Arc::new(Mutex::new(Inner {
                 next_id: 0,
@@ -534,6 +565,8 @@ impl TerminalManager {
             commands: Arc::new(Mutex::new(CommandCache::default())),
             journal: None,
             closing: Arc::new(AtomicBool::new(false)),
+            prefs,
+            home,
         };
         // Weak ownership prevents this watchdog from keeping a manager alive.
         let weak = Arc::downgrade(&manager.inner);
@@ -596,9 +629,10 @@ impl TerminalManager {
         tag: &str,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
-        self.spawn_with_args(cwd, cols, rows, tag, channel, &["-l"])
+        self.spawn_configured(cwd, cols, rows, tag, SubscriberKey::Webview, channel)
     }
 
+    #[cfg(test)]
     pub(crate) fn spawn_with_args(
         &self,
         cwd: &str,
@@ -608,7 +642,41 @@ impl TerminalManager {
         channel: Channel,
         args: &[&str],
     ) -> Result<TerminalInfo, String> {
-        self.spawn_for_with_args(cwd, cols, rows, tag, SubscriberKey::Webview, channel, args)
+        let shell = ShellSpec::new(
+            DEFAULT_SHELL,
+            args.iter().map(|value| (*value).to_string()).collect(),
+        );
+        let prefs = self.prefs.get();
+        self.spawn_for_with_spec(
+            cwd,
+            cols,
+            rows,
+            tag,
+            SubscriberKey::Webview,
+            channel,
+            &shell,
+            &prefs,
+        )
+    }
+
+    #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_for_with_args(
+        &self,
+        cwd: &str,
+        cols: u16,
+        rows: u16,
+        tag: &str,
+        key: SubscriberKey,
+        channel: Channel,
+        args: &[&str],
+    ) -> Result<TerminalInfo, String> {
+        let shell = ShellSpec::new(
+            DEFAULT_SHELL,
+            args.iter().map(|value| (*value).to_string()).collect(),
+        );
+        let prefs = self.prefs.get();
+        self.spawn_for_with_spec(cwd, cols, rows, tag, key, channel, &shell, &prefs)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -621,11 +689,11 @@ impl TerminalManager {
         key: SubscriberKey,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
-        self.spawn_for_with_args(cwd, cols, rows, tag, key, channel, &["-l"])
+        self.spawn_configured(cwd, cols, rows, tag, key, channel)
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn spawn_for_with_args(
+    fn spawn_configured(
         &self,
         cwd: &str,
         cols: u16,
@@ -633,7 +701,23 @@ impl TerminalManager {
         tag: &str,
         key: SubscriberKey,
         channel: Channel,
-        args: &[&str],
+    ) -> Result<TerminalInfo, String> {
+        let prefs = self.prefs.get();
+        let shell = platform::default_shell(&prefs);
+        self.spawn_for_with_spec(cwd, cols, rows, tag, key, channel, &shell, &prefs)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn spawn_for_with_spec(
+        &self,
+        cwd: &str,
+        cols: u16,
+        rows: u16,
+        tag: &str,
+        key: SubscriberKey,
+        channel: Channel,
+        shell: &ShellSpec,
+        prefs: &Preferences,
     ) -> Result<TerminalInfo, String> {
         let dir = Path::new(cwd);
         if !dir.is_dir() {
@@ -651,10 +735,8 @@ impl TerminalManager {
             })
             .map_err(|error| format!("Não foi possível abrir o PTY: {error}"))?;
 
-        let mut command = CommandBuilder::new(DEFAULT_SHELL);
-        // Login shell: le o .zprofile e herda o PATH do usuario, com Homebrew,
-        // Node e Python, mesmo quando o app foi aberto pelo Dock.
-        for arg in args {
+        let mut command = CommandBuilder::new(&shell.path);
+        for arg in &shell.args {
             command.arg(arg);
         }
         command.cwd(dir);
@@ -662,7 +744,7 @@ impl TerminalManager {
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Cialai");
         command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
-        command.env("PATH", prefixed_path());
+        command.env("PATH", platform::path_env(prefs, &self.home));
         // O app pode ter sido aberto de dentro de um agente, e ai o ambiente
         // traz marcadores de sessao filha que fariam um Claude Code novo
         // desligar o historico. Os shells nascem sem isso.
@@ -674,15 +756,16 @@ impl TerminalManager {
             }
         }
         if needs_lang() {
-            // App aberto pelo Dock chega sem LANG e o zsh cai em C, o que
-            // quebra acentos. O Terminal do macOS faz o mesmo ajuste.
-            command.env("LANG", "pt_BR.UTF-8");
+            if let Some(lang) = platform::default_lang(prefs) {
+                // Apps abertos pela interface grafica podem chegar sem LANG.
+                command.env("LANG", lang);
+            }
         }
 
         let mut child = pair
             .slave
             .spawn_command(command)
-            .map_err(|error| format!("Não foi possível iniciar o zsh: {error}"))?;
+            .map_err(|error| format!("Não foi possível iniciar o shell: {error}"))?;
         // Sem soltar o slave aqui a leitora nunca ve EOF quando o shell sai.
         drop(pair.slave);
 
@@ -706,7 +789,8 @@ impl TerminalManager {
             id,
             tag: tag.to_string(),
             cwd: cwd.to_string(),
-            shell: DEFAULT_SHELL.to_string(),
+            shell: shell.path.clone(),
+            shell_flavor: shell.flavor,
             pid,
             alive: true,
             exit_code: None,
@@ -1449,14 +1533,6 @@ fn force_kill(pid: Option<u32>) {
     }
 }
 
-/// PATH com o Homebrew na frente para apps iniciados pelo Dock.
-fn prefixed_path() -> String {
-    format!(
-        "/opt/homebrew/bin:/usr/local/bin:{}",
-        std::env::var("PATH").unwrap_or_default()
-    )
-}
-
 fn needs_lang() -> bool {
     match std::env::var("LANG") {
         Ok(value) => value.is_empty() || value == "C" || value == "POSIX",
@@ -1867,8 +1943,10 @@ mod tests {
     use std::sync::mpsc::channel;
 
     #[test]
-    fn prefixed_path_puts_homebrew_first() {
-        assert!(prefixed_path().starts_with("/opt/homebrew/bin:/usr/local/bin:"));
+    fn configured_path_prefix_wins() {
+        let mut prefs = Preferences::default();
+        prefs.terminal.path_prefix = vec!["/cialai-test-bin".into()];
+        assert!(platform::path_env(&prefs, Path::new("/tmp")).starts_with("/cialai-test-bin"));
     }
 
     fn collect_until_exit(
@@ -1903,6 +1981,11 @@ mod tests {
 
         let info = manager.spawn("/tmp", 80, 24, "t1", sink).expect("spawn");
         assert!(info.alive);
+        assert_eq!(info.shell_flavor, ShellFlavor::from_path(&info.shell));
+        assert_eq!(
+            serde_json::to_value(&info).unwrap()["shellFlavor"],
+            serde_json::to_value(info.shell_flavor).unwrap()
+        );
         assert_eq!(manager.list().len(), 1);
         manager.resize(info.id, 100, 30).expect("resize");
         manager

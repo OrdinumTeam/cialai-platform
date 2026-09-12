@@ -10,7 +10,7 @@ const read = (path) => readFileSync(path, 'utf8');
 
 for (const path of [
   'src/desktop/DesktopApp.jsx', 'src/desktop/main.jsx', 'src/mobile/main.jsx',
-  'src/terminals/runtime.js', 'src/views/Terminais.jsx', 'src/views/registry.js',
+  'src/lib/platform.js', 'src/terminals/runtime.js', 'src/views/Terminais.jsx', 'src/views/registry.js',
   'scripts/check-terminal-sync.mjs', 'scripts/check-studio-browser.js',
 ]) assert.ok(existsSync(`${ui}/${path}`), `Missing extracted UI file: ${path}`);
 
@@ -53,6 +53,9 @@ for (const [body, current, legacy] of [
 }
 assert.match(read(`${source}/lib/shell.js`), /__CIALAI_SHELL__/);
 assert.match(read(`${source}/desktop/main.jsx`), /cialai_selftest/);
+assert.match(read(`${source}/desktop/main.jsx`), /await initPlatform\(\)/);
+assert.match(runtime, /info\.shellFlavor/);
+assert.match(runtime, /shellQuote\(path, session\.shellFlavor\)/);
 assert.match(read(`${source}/desktop/Sidebar.jsx`), /cialai_groups_closed/);
 
 const manifest = JSON.parse(read(`${ui}/package.json`));

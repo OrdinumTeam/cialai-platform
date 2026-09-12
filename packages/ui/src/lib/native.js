@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import * as remote from './remote.js';
 import { authorizeNative, resetTerminalAuthorization } from './sensitive.js';
-export const NATIVE_ONLY_MESSAGE = 'Disponível só no app macOS.';
+export const NATIVE_ONLY_MESSAGE = 'Disponível só no aplicativo desktop.';
 export const hasBridge = () => isTauri() || remote.isConfigured();
 remote.subscribeState((value) => { if (value.status !== 'connected') resetTerminalAuthorization(); });
 

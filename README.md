@@ -6,7 +6,7 @@ O produto nasce do estúdio de terminais do Ordinum Control, preservando sua exp
 
 ## Estado
 
-Fase 0 aberta e Fase 1 em execução desde 12/09/2026 por autorização do usuário. O scaffold Tauri, o núcleo Rust e a interface de Terminais compilam e passam nas suítes locais e nos checks visíveis de desktop e celular no macOS. Isso não equivale a aplicativo final nem aprova os ensaios físicos pendentes. A execução segue [o roadmap](./docs/11-roadmap-de-execucao.md), com tarefas e evidências em [progresso e handoff](./docs/13-progresso-e-handoff.md).
+Fase 0 aberta e Fase 1 em execução desde 12/09/2026 por autorização do usuário. O scaffold Tauri, o núcleo Rust, a interface de Terminais e a camada multiplataforma compilam e passam nas suítes locais e nos checks visíveis de desktop e celular no macOS. Isso não equivale a aplicativo final nem aprova os ensaios físicos pendentes. A execução segue [o roadmap](./docs/11-roadmap-de-execucao.md), com tarefas e evidências em [progresso e handoff](./docs/13-progresso-e-handoff.md).
 
 Para validar a fundação com Node 22 e npm 10:
 

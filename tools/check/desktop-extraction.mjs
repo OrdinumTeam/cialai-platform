@@ -12,6 +12,7 @@ for (const path of [
   'diagnostics.rs',
   'lifecycle.rs',
   'prefs.rs',
+  'platform/mod.rs',
   'window.rs',
   'bridge/mod.rs',
   'bridge/protocol.rs',
@@ -58,6 +59,11 @@ for (const field of ['pub repo_dir:', 'pub stop_stack_on_quit:', 'pub meetings:'
 }
 
 assert.match(read('workspace/terminal.rs'), /TERM_PROGRAM", "Cialai"/);
+assert.match(read('workspace/terminal.rs'), /pub shell_flavor: ShellFlavor/);
+assert.match(commands, /pub fn app_platform/);
+for (const contract of ['PlatformInfo', 'ShellSpec', 'ShellFlavor', 'to_portable', 'default_lang', 'path_prefix']) {
+  assert.match(read('platform/mod.rs'), new RegExp(`\\b${contract}\\b`), `Contrato de plataforma ausente: ${contract}`);
+}
 assert.deepEqual(
   JSON.parse(readFileSync(`${root}/apps/desktop/src-tauri/capabilities/default.json`, 'utf8')).windows,
   ['main'],

@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -100,11 +100,12 @@ impl Preferences {
     }
 }
 
-pub struct PrefsState(Mutex<Preferences>);
+#[derive(Clone)]
+pub struct PrefsState(Arc<Mutex<Preferences>>);
 
 impl PrefsState {
     pub fn new(preferences: Preferences) -> Self {
-        Self(Mutex::new(preferences))
+        Self(Arc::new(Mutex::new(preferences)))
     }
 
     pub fn get(&self) -> Preferences {
@@ -163,10 +164,12 @@ mod tests {
     #[test]
     fn state_replaces_the_complete_snapshot() {
         let state = PrefsState::new(Preferences::default());
+        let shared = state.clone();
         let mut next = state.get();
         next.appearance = "light".into();
         next.project_roots = vec!["~/src".into()];
         state.set(next.clone());
         assert_eq!(state.get(), next);
+        assert_eq!(shared.get(), next);
     }
 }

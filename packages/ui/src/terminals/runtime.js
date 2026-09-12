@@ -47,6 +47,7 @@ import { openExternal } from '../lib/downloads.js';
 import { buildTheme, terminalFont, watchTheme } from './theme.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
 import { getLayout, subscribeLayout } from './layout.js';
+import { platform } from '../lib/platform.js';
 
 export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
@@ -392,7 +393,7 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
-function createSession({ id, cwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser } = {}) {
+function createSession({ id, cwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
   const session = {
     id: id || newId(),
@@ -410,6 +411,7 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
     host: null,
     ptyId: null,
     pid: null,
+    shellFlavor: shellFlavor || platform().defaultShellFlavor,
     identityEpoch: 0,
     status: 'starting',
     exitCode: null,
@@ -869,6 +871,7 @@ function applyTerminalInfo(session, info) {
   if (session.ptyId !== info.id || session.pid !== pid) invalidateTerminalIdentity(session);
   session.ptyId = info.id;
   session.pid = pid;
+  session.shellFlavor = info.shellFlavor || session.shellFlavor || platform().defaultShellFlavor;
   if (info.view) viewportFor(session)?.receive(info.view);
   else if (info.cols && info.rows && !session.viewport?.owned) resizeRenderer(session, info);
 }
@@ -1736,7 +1739,7 @@ export function insertPaths(id, paths) {
   if (!session || session.ptyId == null || session.status !== 'running') return false;
   const valid = paths.filter((path) => typeof path === 'string' && path.length > 0 && !/[\x00-\x1f\x7f]/.test(path));
   if (!valid.length) return false;
-  session.term.paste(`${valid.map((path) => shellQuote(path)).join(' ')} `);
+  session.term.paste(`${valid.map((path) => shellQuote(path, session.shellFlavor)).join(' ')} `);
   session.term.focus();
   return true;
 }
@@ -1987,7 +1990,7 @@ export function setMaximized(id, target) {
 /* ── fixtures para capturas fora do Tauri ─────────────────────────── */
 
 function seedDemo() {
-  const home = '/Users/exemplo/Projects';
+  const home = `${platform().home}/Projects`;
   // Uso do plano de exemplo, para o card mostrar o chip nas capturas.
   state.aiUsage = new Map([
     ['Claude Code|claude-main', {

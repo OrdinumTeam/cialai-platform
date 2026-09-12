@@ -33,6 +33,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 tokio = { version = "1", features = ["net", "time", "macros"] }
 tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", features = ["sink"] }
+sys-locale = "0.3"
+which = "7"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

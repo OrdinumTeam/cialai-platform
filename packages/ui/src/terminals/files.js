@@ -5,6 +5,7 @@
 // componentes chamam e decidem.
 
 import { invoke, isTauri, NATIVE_ONLY_MESSAGE } from '../lib/native.js';
+import { platform } from '../lib/platform.js';
 import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind } from './kinds.js';
 
 export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
@@ -120,30 +121,44 @@ export function nativeAvailable() {
 /* ── caminhos ─────────────────────────────────────────────────────── */
 
 export function baseName(path) {
-  const trimmed = String(path || '').replace(/\/+$/, '');
+  const trimmed = portablePath(path).replace(/\/+$/, '');
   return trimmed.split('/').pop() || trimmed || '';
 }
 
 export function dirName(path) {
-  const trimmed = String(path || '').replace(/\/+$/, '');
+  const trimmed = portablePath(path).replace(/\/+$/, '');
   const index = trimmed.lastIndexOf('/');
   if (index <= 0) return '/';
   return trimmed.slice(0, index);
 }
 
 export function joinPath(dir, name) {
-  return `${String(dir).replace(/\/+$/, '')}/${name}`;
+  return `${portablePath(dir).replace(/\/+$/, '')}/${name}`;
 }
 
-// ~ no lugar da pasta do usuario, como o Finder e o Terminal mostram.
+export function portablePath(path) {
+  const value = String(path || '').replace(/\\/g, '/');
+  if (value.startsWith('//?/UNC/')) return `//${value.slice(8)}`;
+  return value.replace(/^\/\/\?\//, '');
+}
+
+export function displayPath(path) {
+  const value = portablePath(path);
+  return platform().os === 'windows' ? value.replace(/\//g, '\\') : value;
+}
+
+// ~ no lugar da pasta real do usuario, em qualquer sistema.
 export function shortPath(path) {
-  return String(path || '').replace(/^\/Users\/[^/]+/, '~');
+  const value = portablePath(path);
+  const home = portablePath(platform().home).replace(/\/+$/, '');
+  const short = home && value === home ? '~' : home && value.startsWith(`${home}/`) ? `~${value.slice(home.length)}` : value;
+  return displayPath(short);
 }
 
 // Versao curta para um card: as duas ultimas pastas, com ~ na frente quando
 // o caminho esta dentro da pasta do usuario.
 export function compactPath(path) {
-  const short = shortPath(path);
+  const short = portablePath(shortPath(path));
   const parts = short.split('/').filter(Boolean);
   if (parts.length <= 3) return short;
   return `${parts[0] === '~' ? '~/…/' : '…/'}${parts.slice(-2).join('/')}`;
@@ -168,24 +183,28 @@ export async function freeName(dir, name) {
 }
 
 export function isInside(root, path) {
-  const base = String(root || '').replace(/\/+$/, '');
-  const target = String(path || '');
+  const base = portablePath(root).replace(/\/+$/, '');
+  const target = portablePath(path);
   return target === base || target.startsWith(`${base}/`);
 }
 
 export function relativePath(root, path) {
   if (!isInside(root, path)) return null;
-  const base = String(root).replace(/\/+$/, '');
-  const rest = String(path).slice(base.length).replace(/^\/+/, '');
+  const base = portablePath(root).replace(/\/+$/, '');
+  const rest = portablePath(path).slice(base.length).replace(/^\/+/, '');
   return rest || '.';
 }
 
-// Cita um caminho para o zsh: sem aspas quando so tem caracteres seguros,
-// senao entre aspas simples, com a aspa simples interna escapada.
-export function shellQuote(path) {
+export function shellQuote(path, flavor = platform().defaultShellFlavor) {
   const text = String(path ?? '');
+  if (flavor === 'cmd') {
+    if (text === '') return '""';
+    if (/^[A-Za-z0-9_./\\~+@%:,=-]+$/.test(text) && !text.startsWith('-')) return text;
+    return `"${text.replace(/"/g, '""')}"`;
+  }
   if (text === '') return "''";
   if (/^[A-Za-z0-9_./~+@%:,=-]+$/.test(text) && !text.startsWith('~') && !text.startsWith('-')) return text;
+  if (flavor === 'powershell') return `'${text.replace(/'/g, "''")}'`;
   return `'${text.replace(/'/g, "'\\''")}'`;
 }
 
