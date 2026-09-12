@@ -6,7 +6,7 @@ O produto nasce do estúdio de terminais do Ordinum Control, preservando sua exp
 
 ## Estado
 
-Fase 0 aberta e Fase 1 iniciada em 12/09/2026 por autorização do usuário. A fundação contém workspaces npm, módulo Go, CI mínima e experimentos de rede. O scaffold Tauri da tarefa 1.1 compila no macOS, mas o estúdio ainda não foi extraído do Control. A execução segue [o roadmap](./docs/11-roadmap-de-execucao.md), com tarefas e evidências em [progresso e handoff](./docs/13-progresso-e-handoff.md).
+Fase 0 aberta e Fase 1 em execução desde 12/09/2026 por autorização do usuário. A fundação contém workspaces npm, módulo Go, CI mínima e experimentos de rede. O scaffold Tauri e o núcleo Rust do estúdio compilam e passam na suíte local do macOS; a interface do estúdio ainda é o placeholder da tarefa 1.1. A execução segue [o roadmap](./docs/11-roadmap-de-execucao.md), com tarefas e evidências em [progresso e handoff](./docs/13-progresso-e-handoff.md).
 
 Para validar a fundação com Node 22 e npm 10:
 

@@ -24,7 +24,8 @@ Execução iniciada. Nenhuma fase concluída.
 | 0.5, 0.7 a 0.11 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja, assinatura e soak não executados |
 | 0.12 Decisões dos spikes | Atualizado parcialmente | Decisões 022 a 026 registram correções, aceite local do spike 3 e estado dos demais |
 | 1.1 Scaffold desktop | Concluído localmente | Tauri real, configurações macOS, Windows e Linux, capabilities, duas entradas Vite e ícones provisórios. Build macOS sem bundle aprovado. Configurações Windows e Linux aguardam a matriz remota |
-| 1.2 e 1.3 Extração | Não iniciadas | Próximas tarefas. O estúdio do Control ainda não foi copiado |
+| 1.2 Extração Rust | Concluída localmente | Núcleo macOS extraído sem stack, reuniões e VPN. Clippy sem avisos, 118 testes ativos passaram, dois ensaios externos permaneceram ignorados e o binário Tauri compilou e iniciou |
+| 1.3 Extração da interface | Não iniciada | Próxima tarefa. A janela ainda mostra o placeholder da tarefa 1.1 |
 | 1.4 a 7.6 | Não iniciadas | Seguem as dependências do roadmap; a autorização para avançar não aprova os testes físicos pendentes |
 
 ## Ambiente observado
@@ -107,6 +108,29 @@ Ambos terminaram com código 0. O primeiro comando validou os arquivos esperados
 
 O executável gerado também foi iniciado diretamente e permaneceu ativo por mais de cinco segundos, sem erro no stderr, até a interrupção manual com Ctrl C. Esse smoke test confirma o ciclo básico do processo; a janela não foi inspecionada visualmente e o placeholder não representa o estúdio final.
 
+### 12/09/2026, núcleo Rust da tarefa 1.2 extraído
+
+Copiados do working tree preservado do Control os módulos `workspace/`, `bridge/`, `commands.rs`, `diagnostics.rs`, `lifecycle.rs`, `prefs.rs` e `window.rs`. `stack.rs`, `meetings/` e `vpn/` não foram copiados. O `lib.rs` agora registra somente PTYs, arquivos, Git, observação, journal e retomada, uso do plano, previews, Office, Dev Browser, preferências, janela e ponte. Na saída, Chromiums são encerrados antes dos terminais. Não há Node ou Python no processo.
+
+Removidos do handler Tauri, do despacho remoto e dos eventos todos os comandos de stack, reuniões e VPN. A allowlist remota ficou limitada ao contrato de terminais e leituras associadas; o `welcome` anuncia apenas `capabilities: ["pty"]`. A configuração da ponte lê `CIALAI_BRIDGE_PORT`, exige o segredo efêmero do proxy antes do upgrade e só abre sem ele com `--dev-open-bridge`; o dispositivo é associado à conexão. A entrega ao sidecar, a revogação e os campos completos do `welcome` continuam na tarefa 2.8.
+
+`prefs.rs` foi substituído pelo esquema com Aparência, Terminal, Projetos, Dev Browser, Janela e Rede. Chave da API não é persistida. Alterar as preferências atualiza o caminho do Chromium no gerenciador vivo. A integração efetiva de `projectRoots` e a escolha do shell continuam nas tarefas 1.6 e 1.4, respectivamente. Textos, identificador do `TERM_PROGRAM`, classe de arraste, log e raízes provisórias deixaram de usar a marca do Control.
+
+A contagem de 137 casos do planejamento estava desatualizada. A origem atual declara 142 casos: 138 no `HEAD` e quatro nas mudanças preservadas. Os 28 casos de stack, reuniões e VPN não pertencem ao Cialai; o recorte elegível trouxe 114. Seis testes dos novos contratos de preferências e autenticação da ponte elevaram o crate a 120 casos compilados. Resultado real: 118 passaram, zero falharam e dois ficaram ignorados (`installs_the_real_playwright_chromium`, que baixa um Chromium, e `converts_rtf_to_pdf_with_soffice`, integração opt-in com LibreOffice). A decisão 030 substitui a contagem congelada por suíte elegível sem falhas e ignores justificados.
+
+Validação da tarefa 1.2:
+
+```sh
+npm run check:source
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
+npm exec --workspace @cialai/desktop -- tauri build --debug --no-bundle --ci
+apps/desktop/src-tauri/target/debug/cialai-desktop
+```
+
+Os cinco primeiros comandos terminaram com código 0. O último iniciou o app, registrou `Cialai 0.1.0 iniciado` e permaneceu ativo por cinco segundos até Ctrl C. A janela não foi inspecionada visualmente e ainda contém o placeholder; isso não valida paridade da interface. Nenhum instalador, assinatura, notarização, Windows ou Linux foi testado. `tools/check/desktop-extraction.mjs` passou a impedir o retorno dos três subsistemas removidos e a conferir o novo esquema e a redução da ponte. O `ordinum-control` continuou com exatamente as oito alterações inventariadas, sem modificação desta execução.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -115,6 +139,9 @@ O executável gerado também foi iniciado diretamente e permaneceu ativo por mai
 | `apps/desktop/vite.config.js` | Build das entradas desktop e celular |
 | `apps/desktop/src-tauri/tauri*.conf.json` | Configuração comum e diferenças por sistema |
 | `tools/check/desktop-scaffold.mjs` | Validação rápida das três configurações e arquivos esperados |
+| `tools/check/desktop-extraction.mjs` | Guarda da extração Rust, produtos removidos, preferências e ponte PTY |
+| `apps/desktop/src-tauri/src/lib.rs`, `commands.rs`, `prefs.rs` | Composição do núcleo extraído e comandos locais |
+| `apps/desktop/src-tauri/src/workspace/`, `bridge/` | Estúdio nativo e transporte remoto reduzido |
 | `.github/workflows/ci.yml` | Matriz mínima, sem execução remota registrada |
 | `.github/workflows/spike-headscale.yml` | Integração do spike no Linux, sem execução remota registrada |
 | `packages/tunnel-core/spikes/headscale/headscale_test.go` | Experimento Docker reproduzível, sem usar servidor do usuário |
@@ -134,7 +161,7 @@ npm run test:spike:headscale
 npm run check:source
 ```
 
-`npm run dev:desktop` e `npm run build:desktop` agora existem, mas abrem ou empacotam apenas a casca da tarefa 1.1. `dev:mobile` e o aplicativo móvel ainda não existem. Os demais scripts futuros do documento 09 continuam sendo planejamento.
+`npm run dev:desktop` e `npm run build:desktop` agora compilam o núcleo Rust da tarefa 1.2, mas a interface ainda é a casca da tarefa 1.1. `dev:mobile` e o aplicativo móvel ainda não existem. Os demais scripts futuros do documento 09 continuam sendo planejamento.
 
 ## Próxima ação
 
@@ -143,4 +170,4 @@ npm run check:source
 3. O usuário deve fazer o commit das oito alterações do Control conforme 0.2. Depois atualizar o inventário conscientemente, sem apagar mudanças da origem.
 4. Disponibilizar Xcode completo, SDK e NDK Android e aparelhos reais. Compilar os bindings experimentais e criar os hosts nativos de teste do spike 1, ainda inexistentes.
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
-6. Continuar pela tarefa 1.2, abrindo `docs/04-desktop.md` e a tabela de origem do documento 02. Conferir `npm run check:source` antes de copiar. Extrair Rust sem stack, reuniões e VPN, adaptar `prefs.rs`, reduzir a ponte e só então contar os testes herdados. A casca atual não é o aplicativo final.
+6. Continuar pela tarefa 1.3, abrindo a tabela de frontend do documento 04. Conferir `npm run check:source` antes de cada lote copiado. Portar as suítes Node junto dos módulos, remover as seções de negócio e manter a interface ainda não verificada separada do núcleo Rust já aprovado.

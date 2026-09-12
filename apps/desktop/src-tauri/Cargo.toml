@@ -20,5 +20,31 @@ tauri-build = { version = "2.5.4", features = [] }
 [dependencies]
 tauri = { version = "2.11.5", features = ["macos-private-api"] }
 tauri-plugin-dialog = "2.7.3"
+tauri-plugin-fs = "2"
 tauri-plugin-opener = "2.5.5"
 tauri-plugin-window-state = "2.4.1"
+window-vibrancy = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+portable-pty = "0.9"
+libc = "0.2"
+base64 = "0.21"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+tokio = { version = "1", features = ["net", "time", "macros"] }
+tokio-tungstenite = "0.30"
+futures-util = { version = "0.3", features = ["sink"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "objc2-core-foundation", "NSFileManager", "NSURL", "NSError", "NSString", "NSArray", "NSProcessInfo"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSScreen", "NSApplication", "NSEvent", "NSGraphicsContext", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSPasteboard", "NSImage", "NSWorkspace"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+# Um panic numa thread de apoio nao deve encerrar os terminais do processo.
+strip = true

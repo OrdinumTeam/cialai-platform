@@ -1,6 +1,6 @@
 # Documentação de planejamento do Cialai
 
-Estado em 12/09/2026: Fase 0 aberta e Fase 1 iniciada por autorização do usuário. O scaffold desktop da tarefa 1.1 compila no macOS; o estúdio ainda não foi extraído. Para continuar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md). Os demais documentos preservam o planejamento e recebem correções verificadas durante a execução.
+Estado em 12/09/2026: Fase 0 aberta e Fase 1 em execução por autorização do usuário. O scaffold desktop e o núcleo Rust da tarefa 1.2 compilam e passam localmente no macOS; a extração da interface da tarefa 1.3 ainda não começou. Para continuar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md). Os demais documentos preservam o planejamento e recebem correções verificadas durante a execução.
 
 Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão segura por Headscale.
 

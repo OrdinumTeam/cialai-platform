@@ -123,3 +123,7 @@ Data: 12/09/2026. Contexto: Vite 5.4.8, herdado do protótipo, produziu uma vuln
 ## 029 Marca usada como ícone provisório
 
 Data: 12/09/2026. Contexto: a tarefa 1.1 precisava de ícones e a marca Cialai já existe no repositório de marketing. A imagem `cialai-mantis-v4-1-head.png` contém JPEG apesar da extensão. Decisão: copiar como fonte, converter para PNG verdadeiro e gerar os formatos pelo Tauri. Consequência: os ícones permitem builds nos três sistemas, mas continuam provisórios até a tarefa 1.7 conferir margens, legibilidade e capturas.
+
+## 030 Aceite Rust pela suíte elegível, não por contagem congelada
+
+Data: 12/09/2026. Contexto: o planejamento registrava 137 testes Rust, mas a origem conferida contém 138 casos no `HEAD` e quatro adicionados no working tree preservado, totalizando 142. Stack, reuniões e VPN concentram 28 desses casos e saem do produto; o recorte elegível contém 114. Decisão: aceitar a extração por zero falhas na suíte elegível e por justificativa explícita dos ignores, mantendo a contagem real como evidência em vez de criar testes artificiais para alcançar 137. Consequência: a tarefa 1.2 compila 120 casos depois de seis testes novos dos contratos Cialai; 118 passaram e dois ensaios externos herdados ficaram ignorados. As contagens crescerão com os backends por sistema e não serão tratadas como interface estável.

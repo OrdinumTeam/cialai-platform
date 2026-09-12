@@ -8,6 +8,7 @@ const jobs = {
     cwd: '.',
     commands: [
       ['node', 'tools/check/desktop-scaffold.mjs'],
+      ['node', 'tools/check/desktop-extraction.mjs'],
       ['npm', 'run', 'build:ui', '--workspace', '@cialai/desktop'],
       ['cargo', 'fmt', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--check'],
       ['cargo', 'clippy', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--locked', '--all-targets', '--', '-D', 'warnings'],

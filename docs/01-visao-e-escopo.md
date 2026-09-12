@@ -64,6 +64,6 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 
 1. Uma pessoa que nunca viu o Control instala o Cialai no seu sistema, escolhe as pastas e abre o primeiro terminal em menos de 3 minutos.
 2. Com um Headscale próprio já no ar, o pareamento do celular pelo QR leva menos de 1 minuto e a sessão aparece no telefone com histórico.
-3. As suítes de verificação herdadas do protótipo passam no Cialai: 137 testes Rust, `check-terminal-sync.mjs` com 17 casos, `check-phone-*.mjs`, os testes Node de `terminal-*` e `mobile-*` e o `selftest-app.js` dentro do app.
+3. As suítes de verificação elegíveis do protótipo passam no Cialai sem falhas e com cada caso ignorado justificado: baseline Rust e contagens reais no documento 13, `check-terminal-sync.mjs` com 17 casos, `check-phone-*.mjs`, os testes Node de `terminal-*` e `mobile-*` e o `selftest-app.js` dentro do app.
 4. Os roteiros manuais de rede do documento 06 passam nos três sistemas desktop e nas duas plataformas móveis.
 5. Os cinco estados visuais da demo do estúdio ficam idênticos ao Control nas capturas de referência, exceto pela marca.

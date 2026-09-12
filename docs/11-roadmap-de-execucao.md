@@ -30,7 +30,7 @@ Objetivo: o estúdio completo rodando no macOS a partir do monorepo, idêntico a
 | Tarefa | Tamanho | Depende | Raia | Documento |
 | --- | --- | --- | --- | --- |
 | 1.1 Scaffold de `apps/desktop`: `tauri.conf.json` com os arquivos por sistema, capabilities, ícones provisórios, `vite.config.js` com as entradas `index.html` e `mobile.html` | M | 0 | | 04 |
-| 1.2 Mover o Rust sem `stack.rs`, `meetings/`, `vpn/`; renomear identificadores e textos; `prefs.rs` novo; ponte reduzida a `pty`; `commands.rs` sem os comandos removidos; 137 testes verdes no macOS | G | 1.1 | A | 02, 04 |
+| 1.2 Mover o Rust sem `stack.rs`, `meetings/`, `vpn/`; renomear identificadores e textos; `prefs.rs` novo; ponte reduzida a `pty`; `commands.rs` sem os comandos removidos; suíte elegível sem falhas e ignores justificados no macOS | G | 1.1 | A | 02, 04 |
 | 1.3 Mover o frontend para `packages/ui` conforme a tabela de extração; apagar `AppContext`, `lib/api.js`, `lib/query*.js`, `StackGate`, reuniões, views de negócio; `DesktopApp` e `main` novos; chaves `cialai_*` com migração; checks Node e de navegador verdes | G | 1.1 | B | 04 |
 | 1.4 Módulo `platform/` com `PlatformInfo`, `ShellSpec`, `ShellFlavor`, `to_portable`, `default_lang`, `path_prefix`; `TerminalInfo.shellFlavor`; `lib/platform.js` | M | 1.2, 1.3 | | 04 |
 | 1.5 Bundle da página do celular como recurso do Tauri, caminho exposto ao supervisor | P | 1.3 | B | 06 |
@@ -41,7 +41,7 @@ Objetivo: o estúdio completo rodando no macOS a partir do monorepo, idêntico a
 | 1.10 `selftest-app.js` rodando por `tauri dev` com `?cialai_selftest=1` | P | 1.2, 1.3 | | 09 |
 | 1.11 Capturas da demo em claro e escuro comparadas com o Control | P | 1.7 | | 08 |
 
-Aceite: `cargo test` com os 137 casos; `check-terminal-sync.mjs` com 17 casos; checks de navegador terminando em `PASS`; self test com todos os itens; capturas idênticas exceto pela marca; um usuário do Control abre o Cialai e não percebe diferença de comportamento.
+Aceite: `cargo test` sem falhas e com cada ignore justificado, usando a contagem real registrada no handoff; `check-terminal-sync.mjs` com 17 casos; checks de navegador terminando em `PASS`; self test com todos os itens; capturas idênticas exceto pela marca; um usuário do Control abre o Cialai e não percebe diferença de comportamento.
 
 ## Fase 2: túnel e pareamento
 
