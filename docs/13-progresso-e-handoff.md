@@ -42,7 +42,9 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.6 Sidecar executável | Concluída localmente | `serve-stdio`, `doctor` e `version` estão compilados; handshake, comandos, eventos, encerramento pelo pai, trava, log rotativo e ausência de segredos na linha de comando passaram com race detector |
 | 2.7 Supervisor Rust | Concluída localmente | Processo filho, protocolo limitado, eventos Tauri, reinício, encerramento, keyring por sistema e segredo efêmero da ponte passaram em 140 testes Rust ativos e no fake sidecar real |
 | 2.8 Ponte com identidade | Em andamento, parcial | `bridge/mod.rs` e `bridge/protocol.rs` já têm `BridgeControl`, identidade do dispositivo e do computador no `welcome`, exigência de `x-cialai-node-key` e fechamento por revogação com 4401. O supervisor ainda não chama essa API: Clippy com `-D warnings` falha por código não usado e por `serve` com oito argumentos, e o teste `bridge::tests::proxy_secret_marks_the_connection_as_a_device` falha porque não envia a chave do nó |
-| 2.9 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 2.9 a 4.8 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 5.1 Fonte de processos | Concluída localmente no macOS | `procs/` separa contrato portável, backend macOS e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. Linux e Windows continuam apenas preparados para 5.2 e 5.3 |
+| 5.2 a 7.6 | Não iniciadas | Os backends Linux e Windows, a matriz remota e os testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -294,6 +296,12 @@ O trabalho de 1.6 a 2.7 estava todo fora de commit. Foi gravado no `main` local 
 O binário `packages/tunnel-core/cialai-tunnel`, de 30 MiB, gerado por `go build ./cmd/cialai-tunnel`, estava fora do `.gitignore` e passou a ser ignorado. O check `tools/check/desktop-extraction.mjs` exigia o texto literal `app.manage(mobile_site)` e parava o `npm test` antes do Rust e do Go; agora aceita o `clone()` da 2.7 e confere que o supervisor recebe o `mobile_site`.
 
 Resultado real depois da correção, com Node 22.23.2 e npm 10.9.8: fundação, UI 17 e 38, protocolo 9, scaffold, ícone, extração, onboarding, autoteste estrutural, build Vite e recurso móvel passaram. `cargo clippy -D warnings` falhou pelos avisos da 2.8 parcial. `cargo test --locked` terminou com 140 aprovados, 1 falha e 2 ignorados. `go vet ./...` e `go test -race -mod=readonly ./...` passaram nos dez pacotes com testes. Não houve push.
+
+### 12/09/2026, fonte de processos da tarefa 5.1
+
+`workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
+
+Com `CARGO_TARGET_DIR=~/.cache/cialai-target`, os testes direcionados `workspace::procs::tests::detects_agents_on_posix_and_windows_command_lines` e `workspace::terminal::tests::metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo fmt --check` e `git diff --check` passaram. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados de `bridge/` da tarefa 2.8 parcial; não houve aviso fora de `bridge/`. Os arquivos Linux e Windows ainda são stubs declarados e não contam como backend implementado.
 
 ## Arquivos para retomar
 

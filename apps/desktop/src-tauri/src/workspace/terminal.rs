@@ -44,7 +44,7 @@ use crate::prefs::{Preferences, PrefsState};
 use super::DEFAULT_SHELL;
 use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
-use super::procs::{self, CommandCache};
+use super::procs::{self, CommandCache, ProcSource, ProcState, SystemProcs};
 use super::resume;
 
 const READ_BUFFER: usize = 16 * 1024;
@@ -494,6 +494,7 @@ pub struct TerminalManager {
     /// Ultimo tempo de CPU por pid, para a proxima amostra virar percentual.
     samples: Arc<Mutex<HashMap<u32, (u64, Instant)>>>,
     commands: Arc<Mutex<CommandCache>>,
+    procs: Arc<dyn ProcSource>,
     /// Historico e estado em disco. `None` nos testes que nao pedem.
     journal: Option<Arc<JournalStore>>,
     /// O app esta saindo: o fim dos shells nao apaga a conversa do agente
@@ -524,6 +525,7 @@ impl TerminalManager {
             }),
             prefs,
             home,
+            Arc::new(SystemProcs),
         );
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
@@ -545,6 +547,20 @@ impl TerminalManager {
             std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(std::env::temp_dir),
+            Arc::new(SystemProcs),
+        )
+    }
+
+    #[cfg(test)]
+    fn with_proc_source(notify_exit: ExitNotifier, procs: Arc<dyn ProcSource>) -> Self {
+        Self::with_environment(
+            notify_exit,
+            Arc::new(|_| {}),
+            PrefsState::new(Preferences::default()),
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir),
+            procs,
         )
     }
 
@@ -553,6 +569,7 @@ impl TerminalManager {
         notify_view: ViewNotifier,
         prefs: PrefsState,
         home: PathBuf,
+        procs: Arc<dyn ProcSource>,
     ) -> Self {
         let manager = Self {
             inner: Arc::new(Mutex::new(Inner {
@@ -563,6 +580,7 @@ impl TerminalManager {
             notify_view: notify_view.clone(),
             samples: Arc::new(Mutex::new(HashMap::new())),
             commands: Arc::new(Mutex::new(CommandCache::default())),
+            procs,
             journal: None,
             closing: Arc::new(AtomicBool::new(false)),
             prefs,
@@ -1226,7 +1244,8 @@ impl TerminalManager {
                 .collect()
         };
         let now = Instant::now();
-        let home = user_home();
+        let home = self.home.clone();
+        let source = self.procs.as_ref();
         let mut samples = lock(&self.samples);
         let mut commands = lock(&self.commands);
         let mut alive = Vec::new();
@@ -1251,7 +1270,7 @@ impl TerminalManager {
                 continue;
             };
             let mut tree = vec![pid];
-            tree.extend(procs::descendants(pid));
+            tree.extend(source.descendants(pid));
             alive.extend_from_slice(&tree);
 
             let mut cpu = 0f64;
@@ -1259,7 +1278,7 @@ impl TerminalManager {
             let mut memory = 0u64;
             let mut memory_known = false;
             for &member in &tree {
-                let Some(usage) = procs::usage(member) else {
+                let Some(usage) = source.usage(member) else {
                     continue;
                 };
                 memory = memory.saturating_add(usage.footprint);
@@ -1277,10 +1296,10 @@ impl TerminalManager {
             let mut agent = None;
             let mut agent_profile = None;
             for &member in &tree {
-                let Some(info) = procs::bsd_info(member) else {
+                let Some(info) = source.info(member) else {
                     continue;
                 };
-                let Some(command) = commands.get(member, info.start_sec) else {
+                let Some(command) = commands.get_from(source, member, info.start_sec) else {
                     continue;
                 };
                 if let Some(found) = procs::agent_of(&command) {
@@ -1291,7 +1310,7 @@ impl TerminalManager {
             }
             let foreground = foreground_pgid
                 .filter(|pgid| *pgid != pid)
-                .and_then(|pgid| describe_foreground(pgid, &tree, &mut commands, &home));
+                .and_then(|pgid| describe_foreground(source, pgid, &tree, &mut commands, &home));
 
             result.push(SessionMetrics {
                 id,
@@ -1310,7 +1329,7 @@ impl TerminalManager {
                 agent_profile_name: agent_profile
                     .as_ref()
                     .and_then(|profile| profile.name.clone()),
-                shell_cwd: procs::cwd(pid),
+                shell_cwd: source.cwd(pid),
             });
         }
         samples.retain(|member, _| alive.contains(member));
@@ -1476,6 +1495,7 @@ fn user_home() -> PathBuf {
 /// Descreve o lider do grupo em primeiro plano. Se o lider ja saiu, vale o
 /// primeiro processo da arvore que ainda esta nesse grupo.
 fn describe_foreground(
+    source: &dyn ProcSource,
     pgid: u32,
     tree: &[u32],
     commands: &mut CommandCache,
@@ -1485,16 +1505,17 @@ fn describe_foreground(
         Some(pgid)
     } else {
         tree.iter().copied().find(|member| {
-            procs::bsd_info(*member)
+            source
+                .info(*member)
                 .map(|info| info.pgid == pgid)
                 .unwrap_or(false)
         })
     }?;
-    let info = procs::bsd_info(candidate)?;
-    if info.status == libc::SZOMB {
+    let info = source.info(candidate)?;
+    if info.state == ProcState::Zombie {
         return None;
     }
-    let command = commands.get(candidate, info.start_sec);
+    let command = commands.get_from(source, candidate, info.start_sec);
     let agent = command
         .as_ref()
         .and_then(procs::agent_of)
@@ -1503,7 +1524,7 @@ fn describe_foreground(
         (Some(line), Some(found)) => procs::agent_profile(line, found, home),
         _ => None,
     };
-    let name = procs::name(candidate).unwrap_or_else(|| info.comm.clone());
+    let name = source.name(candidate).unwrap_or_else(|| info.comm.clone());
     let argv0 = command
         .as_ref()
         .and_then(|line| line.argv.first().cloned())
@@ -1515,8 +1536,8 @@ fn describe_foreground(
         name,
         command: argv0,
         agent,
-        stopped: info.status == libc::SSTOP,
-        cwd: procs::cwd(candidate),
+        stopped: info.state == ProcState::Stopped,
+        cwd: source.cwd(candidate),
         config_dir: profile.as_ref().map(|value| value.config_dir.clone()),
         profile: profile.as_ref().map(|value| value.slug.clone()),
         profile_name: profile.as_ref().and_then(|value| value.name.clone()),
@@ -2121,5 +2142,98 @@ mod tests {
         let (_, exit) = collect_until_exit(&rx);
         assert!(exit.is_some());
         assert!(manager.metrics().is_empty());
+    }
+
+    #[test]
+    fn metrics_use_the_injected_process_source() {
+        use super::procs::{CommandLine, FakeProcs, ProcInfo, ProcState, Usage};
+
+        let fake = Arc::new(FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), fake.clone());
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(manager.clone());
+        let info = manager
+            .spawn_with_args(
+                "/tmp",
+                80,
+                24,
+                "fake-metrics",
+                Channel::new(|_| Ok(())),
+                &["-f"],
+            )
+            .expect("spawn");
+        let shell = info.pid.expect("pid do shell");
+        let agent = shell.saturating_add(10_000);
+        fake.set_children(shell, vec![agent]);
+        fake.set_info(ProcInfo {
+            pid: shell,
+            ppid: std::process::id(),
+            pgid: shell,
+            state: ProcState::Sleeping,
+            comm: "zsh".into(),
+            name: "zsh".into(),
+            start_sec: 10,
+        });
+        fake.set_info(ProcInfo {
+            pid: agent,
+            ppid: shell,
+            pgid: agent,
+            state: ProcState::Running,
+            comm: "node".into(),
+            name: "node".into(),
+            start_sec: 11,
+        });
+        fake.set_usages(
+            shell,
+            [
+                Usage {
+                    cpu_nanos: 1_000,
+                    footprint: 4_096,
+                },
+                Usage {
+                    cpu_nanos: 2_000_000,
+                    footprint: 4_096,
+                },
+            ],
+        );
+        fake.set_usages(
+            agent,
+            [
+                Usage {
+                    cpu_nanos: 2_000,
+                    footprint: 8_192,
+                },
+                Usage {
+                    cpu_nanos: 4_000_000,
+                    footprint: 8_192,
+                },
+            ],
+        );
+        fake.set_command(
+            agent,
+            CommandLine {
+                exe: "/opt/cialai/bin/claude".into(),
+                argv: vec!["claude".into()],
+                ..Default::default()
+            },
+        );
+        fake.set_name(agent, "claude");
+        fake.set_cwd(shell, "/tmp/projeto");
+
+        let first = manager.metrics().remove(0);
+        assert_eq!(first.cpu_percent, None);
+        std::thread::sleep(Duration::from_millis(10));
+        let second = manager.metrics().remove(0);
+        assert_eq!(second.processes, 2);
+        assert_eq!(second.memory_bytes, Some(12_288));
+        assert!(second.cpu_percent.is_some_and(|cpu| cpu > 0.0));
+        assert_eq!(second.agent.as_deref(), Some("Claude Code"));
+        assert_eq!(second.agent_profile.as_deref(), Some("claude"));
+        assert_eq!(second.shell_cwd.as_deref(), Some("/tmp/projeto"));
     }
 }

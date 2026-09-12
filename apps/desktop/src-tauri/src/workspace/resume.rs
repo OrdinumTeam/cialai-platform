@@ -139,7 +139,7 @@ pub fn detect(
     let mut best: Option<(usize, AgentSession)> = None;
     let mut found = Vec::new();
     for &pid in tree {
-        let Some(info) = procs::bsd_info(pid) else {
+        let Some(info) = procs::info(pid) else {
             continue;
         };
         parents.insert(pid, info.ppid);
