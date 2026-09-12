@@ -5,11 +5,13 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const jobs = {
   'desktop-check': {
-    cwd: 'apps/desktop/src-tauri',
+    cwd: '.',
     commands: [
-      ['cargo', 'fmt', '--check'],
-      ['cargo', 'clippy', '--locked', '--all-targets', '--', '-D', 'warnings'],
-      ['cargo', 'test', '--locked'],
+      ['node', 'tools/check/desktop-scaffold.mjs'],
+      ['npm', 'run', 'build:ui', '--workspace', '@cialai/desktop'],
+      ['cargo', 'fmt', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--check'],
+      ['cargo', 'clippy', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--locked', '--all-targets', '--', '-D', 'warnings'],
+      ['cargo', 'test', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--locked'],
     ],
   },
   'tunnel-check': {

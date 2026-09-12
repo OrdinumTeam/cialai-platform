@@ -111,3 +111,15 @@ Limites: Docker local em macOS arm64, controle HTTP em loopback e DERP local de 
 Data: 12/09/2026. Spike 1 parcialmente preparado: API Go experimental, interfaces Java e Objective-C geradas por gobind e scripts de build. A API foi exercitada no desktop com eco e reabertura usando a mesma identidade. `Up` termina antes de o mapa de peers necessariamente estar disponível, então o experimento espera o peer dentro do prazo do teste de eco. Isso não substitui execução nativa.
 
 Spikes 1 e 2 sem aceite em aparelhos. Spikes 4 e 5 sem WebView nativo validado. Spike 6 sem submissão ou revisão externa. Spike 7 sem instaladores assinados e notarização. Spike 8 sem proxy completo e sem soak de 24 horas. Nenhuma alternativa de produto foi escolhida por falta de ferramentas ou aparelhos. A Fase 0 permanece aberta e a extração não começou.
+
+## 027 Início antecipado da Fase 1 autorizado
+
+Data: 12/09/2026. Contexto: a Fase 0 continua aberta por depender de aparelhos, toolchains móveis, contas e ensaios externos. O usuário autorizou avançar para a próxima etapa. Decisão: iniciar a Fase 1 e preservar cada pendência da Fase 0 como não aprovada. Consequência: tarefas locais independentes podem avançar, mas nenhuma evidência do desktop substitui aceite móvel, assinatura, loja ou soak.
+
+## 028 Vite atualizado após auditoria
+
+Data: 12/09/2026. Contexto: Vite 5.4.8, herdado do protótipo, produziu uma vulnerabilidade alta e uma moderada no `npm audit`, ambas ligadas ao servidor de desenvolvimento. Decisão: usar Vite 7.3.6 e plugin React 5.2.0, mantendo React 18.3.1 e o alvo Safari 16. Alternativa: permanecer no Vite 5 com risco conhecido ou aplicar uma correção que ainda deixava alertas posteriores. Consequência: a tarefa 1.3 deve portar e executar todos os checks de navegador para detectar incompatibilidades com a versão nova. A auditoria ficou limpa nesta fundação.
+
+## 029 Marca usada como ícone provisório
+
+Data: 12/09/2026. Contexto: a tarefa 1.1 precisava de ícones e a marca Cialai já existe no repositório de marketing. A imagem `cialai-mantis-v4-1-head.png` contém JPEG apesar da extensão. Decisão: copiar como fonte, converter para PNG verdadeiro e gerar os formatos pelo Tauri. Consequência: os ícones permitem builds nos três sistemas, mas continuam provisórios até a tarefa 1.7 conferir margens, legibilidade e capturas.

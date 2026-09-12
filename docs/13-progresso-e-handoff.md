@@ -23,7 +23,9 @@ Execução iniciada. Nenhuma fase concluída.
 | 0.6 Spike 3 | Aprovado localmente | Headscale 0.29.3 e tsnet 1.102.0; oito verificações finais passaram em 35,830 s, incluindo persistência do módulo móvel no desktop. Workflow remoto preparado |
 | 0.5, 0.7 a 0.11 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja, assinatura e soak não executados |
 | 0.12 Decisões dos spikes | Atualizado parcialmente | Decisões 022 a 026 registram correções, aceite local do spike 3 e estado dos demais |
-| Fases 1 a 7 | Não iniciadas | Dependem do aceite da Fase 0 |
+| 1.1 Scaffold desktop | Concluído localmente | Tauri real, configurações macOS, Windows e Linux, capabilities, duas entradas Vite e ícones provisórios. Build macOS sem bundle aprovado. Configurações Windows e Linux aguardam a matriz remota |
+| 1.2 e 1.3 Extração | Não iniciadas | Próximas tarefas. O estúdio do Control ainda não foi copiado |
+| 1.4 a 7.6 | Não iniciadas | Seguem as dependências do roadmap; a autorização para avançar não aprova os testes físicos pendentes |
 
 ## Ambiente observado
 
@@ -86,11 +88,33 @@ O teste de integração fecha os nós, o relé e remove o seu contêiner descart
 
 O checkpoint local usa a mensagem `chore: inicializa fundacao e registra spikes da fase 0`. Consulte `git log -1` para obter seu hash. Não há remoto configurado nem push. Arquivos gerados em `node_modules`, `target` e `packages/tunnel-core/build` permanecem ignorados.
 
+### 12/09/2026, início da Fase 1 autorizado
+
+O usuário autorizou avançar para a próxima etapa mesmo com os ensaios físicos da Fase 0 pendentes. A execução iniciou a tarefa 1.1. Isso altera a ordem operacional, sem transformar preparação ou testes locais em aceite dos spikes.
+
+Criado o aplicativo Tauri real em `apps/desktop`, com identificador `br.com.ordinum.cialai`, duas entradas HTML, Vite servindo apenas em `127.0.0.1:1420`, CSP de produção e desenvolvimento, capability da janela principal e configurações específicas dos três sistemas. macOS usa barra sobreposta e transparência; Windows usa janela sem decoração, sombra e fundo ameixa; Linux mantém as decorações e fundo opaco. Os ícones provisórios foram gerados da imagem de marca `cialai-mantis-v4-1-head.png`; o arquivo de origem tinha conteúdo JPEG apesar da extensão PNG e foi convertido de fato antes da geração.
+
+O Vite 5.4.8 do protótipo retornou duas vulnerabilidades no `npm audit`, uma moderada e uma alta. A fundação foi atualizada para Vite 7.3.6 e plugin React 5.2.0, compatíveis com Node 22.23.2. O build preserva `target: safari16`. Depois da atualização, `npm audit --audit-level=moderate` terminou sem vulnerabilidades.
+
+Validação da tarefa 1.1:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
+npm exec --workspace @cialai/desktop -- tauri build --debug --no-bundle --ci
+```
+
+Ambos terminaram com código 0. O primeiro comando validou os arquivos esperados, as duas entradas Vite, as três configurações, capabilities, ícones, bundle web, Clippy e testes Rust. O segundo gerou o executável macOS de depuração em `apps/desktop/src-tauri/target/debug/cialai-desktop`. O diretório `target` é ignorado. Nenhum instalador, assinatura, notarização ou execução Windows e Linux foi produzida.
+
+O executável gerado também foi iniciado diretamente e permaneceu ativo por mais de cinco segundos, sem erro no stderr, até a interrupção manual com Ctrl C. Esse smoke test confirma o ciclo básico do processo; a janela não foi inspecionada visualmente e o placeholder não representa o estúdio final.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
 | --- | --- |
-| `package.json`, `tools/run.mjs` | Comandos reais existentes nesta etapa |
+| `package.json`, `tools/run.mjs` | Comandos reais existentes nesta etapa, incluindo build do scaffold desktop |
+| `apps/desktop/vite.config.js` | Build das entradas desktop e celular |
+| `apps/desktop/src-tauri/tauri*.conf.json` | Configuração comum e diferenças por sistema |
+| `tools/check/desktop-scaffold.mjs` | Validação rápida das três configurações e arquivos esperados |
 | `.github/workflows/ci.yml` | Matriz mínima, sem execução remota registrada |
 | `.github/workflows/spike-headscale.yml` | Integração do spike no Linux, sem execução remota registrada |
 | `packages/tunnel-core/spikes/headscale/headscale_test.go` | Experimento Docker reproduzível, sem usar servidor do usuário |
@@ -110,7 +134,7 @@ npm run test:spike:headscale
 npm run check:source
 ```
 
-Não executar `dev:desktop`, `dev:mobile` ou builds de produto: esses comandos e os aplicativos ainda não existem. Os scripts futuros do documento 09 continuam sendo planejamento.
+`npm run dev:desktop` e `npm run build:desktop` agora existem, mas abrem ou empacotam apenas a casca da tarefa 1.1. `dev:mobile` e o aplicativo móvel ainda não existem. Os demais scripts futuros do documento 09 continuam sendo planejamento.
 
 ## Próxima ação
 
@@ -119,4 +143,4 @@ Não executar `dev:desktop`, `dev:mobile` ou builds de produto: esses comandos e
 3. O usuário deve fazer o commit das oito alterações do Control conforme 0.2. Depois atualizar o inventário conscientemente, sem apagar mudanças da origem.
 4. Disponibilizar Xcode completo, SDK e NDK Android e aparelhos reais. Compilar os bindings experimentais e criar os hosts nativos de teste do spike 1, ainda inexistentes.
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
-6. Só depois do aceite da Fase 0 iniciar a Fase 1 pela tabela de extração do documento 04. Não copiar cegamente o Control, não inventar resultados e não confundir esta entrega com um aplicativo pronto.
+6. Continuar pela tarefa 1.2, abrindo `docs/04-desktop.md` e a tabela de origem do documento 02. Conferir `npm run check:source` antes de copiar. Extrair Rust sem stack, reuniões e VPN, adaptar `prefs.rs`, reduzir a ponte e só então contar os testes herdados. A casca atual não é o aplicativo final.

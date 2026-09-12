@@ -18,6 +18,7 @@ android/key.properties
 apps/mobile/ios/
 apps/mobile/android/
 apps/desktop/src-tauri/binaries/
+apps/desktop/src-tauri/gen/
 packages/tunnel-core/build/
 .local/
 *.log

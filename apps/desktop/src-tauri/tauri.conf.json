@@ -1,0 +1,65 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Cialai",
+  "version": "0.1.0",
+  "identifier": "br.com.ordinum.cialai",
+  "build": {
+    "beforeDevCommand": "npm run vite",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "npm run build:ui",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Cialai",
+        "width": 440,
+        "height": 320,
+        "minWidth": 440,
+        "minHeight": 320,
+        "center": true,
+        "resizable": false,
+        "visible": true
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "img-src": "'self' data: blob:",
+        "font-src": "'self' data:",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*",
+        "frame-src": "'self' blob: preview: http://preview.localhost",
+        "worker-src": "'self' blob:"
+      },
+      "devCsp": {
+        "default-src": "'self' http://127.0.0.1:*",
+        "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://127.0.0.1:*",
+        "style-src": "'self' 'unsafe-inline' http://127.0.0.1:*",
+        "img-src": "'self' data: blob: http://127.0.0.1:*",
+        "font-src": "'self' data: http://127.0.0.1:*",
+        "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*",
+        "frame-src": "'self' blob: preview: http://preview.localhost",
+        "worker-src": "'self' blob:"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "DeveloperTool",
+    "copyright": "Copyright 2026 Ordinum",
+    "shortDescription": "Terminal studio for local and remote coding sessions",
+    "longDescription": "Cialai keeps terminal sessions and project tools together on the desktop and makes them available to paired mobile devices.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {}
+}

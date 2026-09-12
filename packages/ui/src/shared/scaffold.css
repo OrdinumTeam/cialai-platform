@@ -1,0 +1,34 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #37112f;
+  background: #fff8fb;
+  color-scheme: light dark;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { width: 100%; min-height: 100%; margin: 0; }
+body { display: grid; place-items: center; }
+
+.scaffold {
+  max-width: 34rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.scaffold__mark {
+  width: 3rem;
+  height: 3rem;
+  margin: 0 auto 1rem;
+  border-radius: 1rem;
+  background: linear-gradient(145deg, #ff70b7, #5e163e);
+  box-shadow: 0 14px 40px rgb(94 22 62 / 18%);
+}
+
+.scaffold h1 { margin: 0; font-size: 1.5rem; }
+.scaffold p { margin: .65rem 0 0; color: #765268; line-height: 1.5; }
+
+@media (prefers-color-scheme: dark) {
+  :root { color: #fff5fa; background: #1f111b; }
+  .scaffold p { color: #d9b9cc; }
+}

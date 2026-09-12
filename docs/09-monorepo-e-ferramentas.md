@@ -50,6 +50,7 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | --- | --- | --- |
 | Node | 22, fixado por `.nvmrc` e `engines` | Vite, testes Node, Expo, scripts |
 | npm | 10, workspaces | Instalação e scripts |
+| Vite | 7.3.6, `target: 'safari16'` | Duas entradas do desktop; atualizado após a auditoria da decisão 028 |
 | Rust | 1.98.1 fixado em `rust-toolchain.toml`, `rust-version = "1.85"` no crate | Desktop; mínimo real será revisto na extração |
 | Tauri CLI | 2.x | `tauri dev`, `tauri build`, `tauri icon` |
 | Go | 1.26.5 | Núcleo do túnel; mínimo exigido pelo tsnet 1.102.0, decisão 022 |

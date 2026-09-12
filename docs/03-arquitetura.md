@@ -29,7 +29,7 @@
 | Componente | Tecnologia | Origem | Responsabilidade |
 | --- | --- | --- | --- |
 | `apps/desktop` | Tauri 2.11, Rust 1.85 ou mais novo | `$CONTROL/macos/src-tauri` | Janela, PTY, processos, jornal, retomada, arquivos, Git, observador, prévias, Dev Browser, Office, uso do plano, ponte, supervisor do sidecar, pareamento e dispositivos na interface |
-| `packages/ui` | React 18, Vite 5, xterm.js 6, CodeMirror 6 | `$CONTROL/frontend/src` | Estúdio, casca desktop, casca do celular, tokens e componentes compartilhados |
+| `packages/ui` | React 18, Vite 7, xterm.js 6, CodeMirror 6 | `$CONTROL/frontend/src` | Estúdio, casca desktop, casca do celular, tokens e componentes compartilhados |
 | `packages/protocol` | JavaScript e JSON | `$CONTROL/frontend/src/lib/remote.js`, `native.js`, `sensitive.js`, `ios/docs/ponte.md` | Contrato da ponte e do pareamento, cliente remoto, fixtures compartilhadas pelos testes Go, Rust e JS |
 | `packages/tunnel-core` | Go 1.26.5, `tailscale.com` 1.102.0 | Novo | Nó `tsnet`, borda, proxy, pareamento, cliente Headscale, sidecar e ligação `gomobile` |
 | `apps/mobile` | Expo SDK 57, React Native 0.86, módulo nativo em Swift e Kotlin | `$CONTROL/ios/app` | Casca com WebView, leitor de QR, perfis, biometria, proxy em loopback pelo núcleo Go |
