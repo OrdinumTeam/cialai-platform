@@ -86,14 +86,11 @@ fn open_at(parent: i32, name: &OsStr, directory: bool) -> Result<File, String> {
     Ok(unsafe { File::from_raw_fd(fd) })
 }
 
-fn root(home: &Path, cwd: &Path) -> Result<File, String> {
+fn root(home: &Path, project_roots: &[String], cwd: &Path) -> Result<File, String> {
     if !cwd.is_absolute()
-        || !crate::workspace::REPO_ROOTS_FROM_HOME
+        || !crate::workspace::repos::project_roots(home, project_roots)
             .iter()
-            .any(|relative| {
-                cwd.strip_prefix(home.join(relative))
-                    .is_ok_and(|tail| !tail.as_os_str().is_empty())
-            })
+            .any(|root| cwd == root || cwd.starts_with(root))
     {
         return Err(denied());
     }
@@ -115,20 +112,26 @@ fn root(home: &Path, cwd: &Path) -> Result<File, String> {
     Ok(dir)
 }
 
-fn open(home: &Path, cwd: &Path, path: &str, directory: bool) -> Result<File, String> {
+fn open(
+    home: &Path,
+    project_roots: &[String],
+    cwd: &Path,
+    path: &str,
+    directory: bool,
+) -> Result<File, String> {
     let parts = relative(path)?;
     if !directory && parts.is_empty() {
         return Err(denied());
     }
-    let mut file = root(home, cwd)?;
+    let mut file = root(home, project_roots, cwd)?;
     for (index, name) in parts.iter().enumerate() {
         file = open_at(file.as_raw_fd(), name, directory || index + 1 < parts.len())?;
     }
     Ok(file)
 }
 
-pub fn read(home: &Path, cwd: &Path, path: &str) -> Result<Text, String> {
-    let file = open(home, cwd, path, false)?;
+pub fn read(home: &Path, project_roots: &[String], cwd: &Path, path: &str) -> Result<Text, String> {
+    let file = open(home, project_roots, cwd, path, false)?;
     let metadata = file.metadata().map_err(|_| denied())?;
     if !metadata.is_file() || metadata.nlink() != 1 || metadata.len() > MAX_TEXT {
         return Err(denied());
@@ -164,8 +167,13 @@ impl Drop for Directory {
     }
 }
 
-pub fn list(home: &Path, cwd: &Path, path: &str) -> Result<Listing, String> {
-    let file = open(home, cwd, path, true)?;
+pub fn list(
+    home: &Path,
+    project_roots: &[String],
+    cwd: &Path,
+    path: &str,
+) -> Result<Listing, String> {
+    let file = open(home, project_roots, cwd, path, true)?;
     let fd = file.into_raw_fd();
     // SAFETY: fd is owned here. fdopendir takes it only on success.
     let raw = unsafe { libc::fdopendir(fd) };
@@ -238,6 +246,7 @@ mod tests {
     struct Fixture {
         home: PathBuf,
         cwd: PathBuf,
+        roots: Vec<String>,
     }
     impl Fixture {
         fn new() -> Self {
@@ -247,12 +256,14 @@ mod tests {
                 std::process::id(),
                 NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
             ));
-            let cwd = home
-                .join(crate::workspace::REPO_ROOTS_FROM_HOME[0])
-                .join("project");
+            let cwd = home.join("Projects").join("project");
             fs::create_dir_all(cwd.join("src")).unwrap();
             fs::write(cwd.join("src/main.rs"), "fn main() {}\n").unwrap();
-            Self { home, cwd }
+            Self {
+                home,
+                cwd,
+                roots: vec!["~/Projects".into()],
+            }
         }
     }
     impl Drop for Fixture {
@@ -264,7 +275,7 @@ mod tests {
     #[test]
     fn mobile_files_reads_relative_text_and_blocks_escapes_and_secrets() {
         let f = Fixture::new();
-        let text = read(&f.home, &f.cwd, "src/main.rs").unwrap();
+        let text = read(&f.home, &f.roots, &f.cwd, "src/main.rs").unwrap();
         assert_eq!(
             (text.path.as_str(), text.content.as_str(), text.size),
             ("src/main.rs", "fn main() {}\n", 13)
@@ -280,9 +291,12 @@ mod tests {
             "credentials.json",
             "id_rsa",
         ] {
-            assert!(read(&f.home, &f.cwd, path).is_err(), "accepted {path}");
+            assert!(
+                read(&f.home, &f.roots, &f.cwd, path).is_err(),
+                "accepted {path}"
+            );
         }
-        let listing = list(&f.home, &f.cwd, "").unwrap();
+        let listing = list(&f.home, &f.roots, &f.cwd, "").unwrap();
         assert_eq!(listing.entries.len(), 1);
         assert_eq!(
             (
@@ -291,7 +305,7 @@ mod tests {
             ),
             ("src", "dir")
         );
-        assert!(read(&f.home, &f.home, "src/main.rs").is_err());
+        assert!(read(&f.home, &f.roots, &f.home, "src/main.rs").is_err());
     }
 
     #[test]
@@ -299,13 +313,16 @@ mod tests {
         let f = Fixture::new();
         symlink(f.cwd.join("src"), f.cwd.join("linked")).unwrap();
         symlink(f.cwd.join("src/main.rs"), f.cwd.join("alias.rs")).unwrap();
-        assert!(read(&f.home, &f.cwd, "linked/main.rs").is_err());
-        assert!(read(&f.home, &f.cwd, "alias.rs").is_err());
-        assert!(list(&f.home, &f.cwd.join("linked"), "").is_err());
-        assert_eq!(list(&f.home, &f.cwd, "").unwrap().entries.len(), 1);
+        assert!(read(&f.home, &f.roots, &f.cwd, "linked/main.rs").is_err());
+        assert!(read(&f.home, &f.roots, &f.cwd, "alias.rs").is_err());
+        assert!(list(&f.home, &f.roots, &f.cwd.join("linked"), "").is_err());
+        assert_eq!(
+            list(&f.home, &f.roots, &f.cwd, "").unwrap().entries.len(),
+            1
+        );
         let root = f.cwd.parent().unwrap();
         symlink(&f.cwd, root.join("alias-project")).unwrap();
-        assert!(list(&f.home, &root.join("alias-project"), "").is_err());
+        assert!(list(&f.home, &f.roots, &root.join("alias-project"), "").is_err());
     }
 
     #[test]
@@ -314,19 +331,19 @@ mod tests {
         for i in 0..205 {
             fs::write(f.cwd.join(format!("file-{i}")), "ok").unwrap();
         }
-        let listing = list(&f.home, &f.cwd, "").unwrap();
+        let listing = list(&f.home, &f.roots, &f.cwd, "").unwrap();
         assert_eq!(listing.entries.len(), 200);
         assert!(listing.truncated);
         fs::write(f.cwd.join("large.txt"), vec![b'a'; 131_073]).unwrap();
-        assert!(read(&f.home, &f.cwd, "large.txt").is_err());
+        assert!(read(&f.home, &f.roots, &f.cwd, "large.txt").is_err());
         fs::write(f.cwd.join("binary.dat"), b"one\0two").unwrap();
-        assert!(read(&f.home, &f.cwd, "binary.dat").is_err());
+        assert!(read(&f.home, &f.roots, &f.cwd, "binary.dat").is_err());
         fs::write(
             f.cwd.join("key.txt"),
             "-----BEGIN PRIVATE KEY-----\nfixture",
         )
         .unwrap();
-        assert!(read(&f.home, &f.cwd, "key.txt").is_err());
+        assert!(read(&f.home, &f.roots, &f.cwd, "key.txt").is_err());
     }
 
     #[test]
@@ -338,7 +355,10 @@ mod tests {
             "passwords.txt",
         ] {
             fs::write(f.cwd.join(name), "synthetic fixture").unwrap();
-            assert!(read(&f.home, &f.cwd, name).is_err(), "accepted {name}");
+            assert!(
+                read(&f.home, &f.roots, &f.cwd, name).is_err(),
+                "accepted {name}"
+            );
         }
     }
 
@@ -359,11 +379,18 @@ mod tests {
         });
         let mut escaped = false;
         for _ in 0..200 {
-            if let Ok(text) = read(&f.home, &f.cwd, "src/main.rs") {
+            if let Ok(text) = read(&f.home, &f.roots, &f.cwd, "src/main.rs") {
                 escaped |= text.content != "fn main() {}\n";
             }
         }
         writer.join().unwrap();
         assert!(!escaped);
+    }
+
+    #[test]
+    fn mobile_files_follow_the_live_project_roots_list() {
+        let f = Fixture::new();
+        assert!(list(&f.home, &["~/elsewhere".into()], &f.cwd, "").is_err());
+        assert!(list(&f.home, &f.roots, &f.home.join("Projects"), "").is_ok());
     }
 }

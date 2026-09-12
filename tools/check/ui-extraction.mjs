@@ -9,7 +9,7 @@ const source = `${ui}/src`;
 const read = (path) => readFileSync(path, 'utf8');
 
 for (const path of [
-  'src/desktop/DesktopApp.jsx', 'src/desktop/main.jsx', 'src/mobile/main.jsx',
+  'src/desktop/DesktopApp.jsx', 'src/desktop/Onboarding.jsx', 'src/desktop/main.jsx', 'src/mobile/main.jsx',
   'src/lib/platform.js', 'src/terminals/runtime.js', 'src/views/Terminais.jsx', 'src/views/registry.js',
   'scripts/check-terminal-sync.mjs', 'scripts/check-studio-browser.js',
 ]) assert.ok(existsSync(`${ui}/${path}`), `Missing extracted UI file: ${path}`);

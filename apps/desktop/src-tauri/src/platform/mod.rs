@@ -32,7 +32,8 @@ impl ShellFlavor {
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShellSpec {
     pub path: String,
     pub args: Vec<String>,

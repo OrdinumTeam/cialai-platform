@@ -14,6 +14,7 @@ import { AppearanceContext, useAppearance } from './appearance.js';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
 import Preferences from './Preferences.jsx';
+import Onboarding, { shouldShowOnboarding } from './Onboarding.jsx';
 import Sidebar from './Sidebar.jsx';
 import { installShellBridge } from './shell-bridge.js';
 import Splash from './Splash.jsx';
@@ -90,6 +91,7 @@ export default function DesktopApp() {
   const [sidebarHidden, setSidebarHidden] = useState(() => readStored(SIDEBAR_KEY) === 'true');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();
 
@@ -122,6 +124,11 @@ export default function DesktopApp() {
       .then((runtime) => { if (!runtime.closeActive()) closeWindow(); })
       .catch(closeWindow);
   }, [closeWindow]);
+  const completeOnboarding = useCallback((root) => {
+    setOnboardingOpen(false);
+    navigate('terminais');
+    import('../terminals/runtime.js').then((runtime) => runtime.openSession(root)).catch(() => {});
+  }, [navigate]);
 
   const actions = useMemo(() => ({
     navigate, toggleSidebar, reloadData, openPalette, openPreferences,
@@ -162,6 +169,7 @@ export default function DesktopApp() {
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={VIEWS} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} onClose={() => setPrefsOpen(false)} appearance={appearance} />
+            {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}
           </div>
         </ToastProvider>

@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Comandos invocaveis pelo frontend via `invoke`.
 
-use std::path::PathBuf;
+use std::io::Read;
+use std::path::{Path, PathBuf};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::platform::PlatformInfo;
+use crate::platform::{self, PlatformInfo, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 use crate::workspace::ai::{self, AgentUsage, UsageCache};
 use crate::workspace::browser::{BrowserInfo, BrowserManager};
@@ -20,7 +26,7 @@ use crate::workspace::git::{self, GitDiff, GitStatus};
 use crate::workspace::journal::SavedTerminal;
 use crate::workspace::office::{self, ConvertResult, OfficeQueue};
 use crate::workspace::preview::PreviewRoots;
-use crate::workspace::repos::{self, RepoListing};
+use crate::workspace::repos::{self, RepoListing, RepoRoot};
 use crate::workspace::terminal::{
     SessionMetrics, SubscriberKey, TerminalInfo, TerminalManager, TerminalPresentation,
     TerminalView,
@@ -223,9 +229,103 @@ pub fn app_request_quit(app: AppHandle) {
 
 /// Repositorios das raizes conhecidas, para o seletor rapido de pastas.
 #[tauri::command]
-pub fn list_repo_dirs(app: AppHandle) -> Result<RepoListing, String> {
+pub fn list_repo_dirs(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<RepoListing, String> {
     let home = app.path().home_dir().map_err(|error| error.to_string())?;
-    Ok(repos::list(&home))
+    Ok(repos::list(&home, &prefs.get().project_roots))
+}
+
+/// Candidatas documentadas para o primeiro uso, com existência conferida sem
+/// atravessar ou criar diretórios.
+#[tauri::command]
+pub fn detect_project_roots(app: AppHandle) -> Result<Vec<RepoRoot>, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    Ok(repos::detected_roots(&home))
+}
+
+/// Shell efetivo depois de aplicar preferência, argumentos de login e a
+/// detecção específica da plataforma.
+#[tauri::command]
+pub fn app_shell(prefs: State<'_, PrefsState>) -> ShellSpec {
+    platform::default_shell(&prefs.get())
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShellProbe {
+    shell: ShellSpec,
+    output: String,
+}
+
+/// Abre o shell escolhido num PTY descartável. O ensaio não cria uma sessão
+/// persistente nem entra na ponte; serve apenas para comprovar o prompt no
+/// onboarding antes de salvar a preferência.
+#[tauri::command(async)]
+pub fn shell_probe(
+    app: AppHandle,
+    prefs: State<'_, PrefsState>,
+    shell: String,
+    cwd: String,
+) -> Result<ShellProbe, String> {
+    let cwd = Path::new(cwd.trim());
+    if !cwd.is_dir() {
+        return Err(format!("Pasta não encontrada: {}", cwd.display()));
+    }
+    let mut preferences = prefs.get();
+    preferences.terminal.shell = Some(shell.trim().into());
+    preferences.terminal.args.clear();
+    let shell = platform::default_shell(&preferences);
+    if shell.path.trim().is_empty() {
+        return Err("Informe o caminho do shell.".into());
+    }
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let pair = native_pty_system()
+        .openpty(PtySize {
+            rows: 12,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        })
+        .map_err(|error| format!("Não foi possível abrir o PTY: {error}"))?;
+    let mut command = CommandBuilder::new(&shell.path);
+    for arg in &shell.args {
+        command.arg(arg);
+    }
+    command.cwd(cwd);
+    command.env("TERM", "xterm-256color");
+    command.env("COLORTERM", "truecolor");
+    command.env("TERM_PROGRAM", "Cialai");
+    command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+    command.env("PATH", platform::path_env(&preferences, &home));
+    if let Some(lang) = platform::default_lang(&preferences) {
+        command.env("LANG", lang);
+    }
+    let mut child = pair
+        .slave
+        .spawn_command(command)
+        .map_err(|error| format!("Não foi possível iniciar o shell: {error}"))?;
+    drop(pair.slave);
+    let mut reader = pair
+        .master
+        .try_clone_reader()
+        .map_err(|error| error.to_string())?;
+    let (send, receive) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let mut bytes = vec![0_u8; 4096];
+        let size = reader.read(&mut bytes).unwrap_or(0);
+        bytes.truncate(size);
+        let _ = send.send(bytes);
+    });
+    let bytes = receive
+        .recv_timeout(Duration::from_millis(1600))
+        .unwrap_or_default();
+    let _ = child.kill();
+    let _ = child.wait();
+    let output = if bytes.is_empty() {
+        "PTY aberto; o shell não escreveu texto inicial.".into()
+    } else {
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    Ok(ShellProbe { shell, output })
 }
 
 /* ── arquivos do estudio ──────────────────────────────────────────── */

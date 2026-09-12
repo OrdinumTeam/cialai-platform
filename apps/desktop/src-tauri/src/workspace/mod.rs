@@ -11,8 +11,8 @@
 //!   de ate 64 KiB a cada 4 ms e controle de fluxo por `pty_ack`, seguindo o
 //!   guia de flow control do xterm.js. O fim da sessao chega pelo mesmo canal,
 //!   depois do ultimo lote, e tambem pelo evento global [`EVENT_PTY_EXIT`].
-//! - **Repositorios** listados por [`repos::list`] a partir das raizes em
-//!   [`REPO_ROOTS_FROM_HOME`], para o seletor rapido da secao.
+//! - **Repositorios** listados por [`repos::list`] a partir de `projectRoots`
+//!   nas preferências, para o seletor rápido da seção.
 //! - **Renderizacao** com `@xterm/xterm` no webview, instancias vivas num
 //!   runtime de escopo de modulo em `frontend/src/terminals/runtime.js`.
 //!
@@ -58,9 +58,6 @@ pub mod repos;
 pub mod resume;
 pub mod terminal;
 pub mod watch;
-
-/// Raizes de repositorios, relativas a pasta do usuario.
-pub const REPO_ROOTS_FROM_HOME: &[&str] = &["Projects", "Github Projects"];
 
 /// Evento global emitido quando o shell de uma sessao termina.
 pub const EVENT_PTY_EXIT: &str = "pty://exit";

@@ -69,6 +69,10 @@ assert.match(commands, /pub fn app_platform/);
 for (const contract of ['PlatformInfo', 'ShellSpec', 'ShellFlavor', 'to_portable', 'default_lang', 'path_prefix']) {
   assert.match(read('platform/mod.rs'), new RegExp(`\\b${contract}\\b`), `Contrato de plataforma ausente: ${contract}`);
 }
+assert.doesNotMatch(read('workspace/repos.rs'), /REPO_ROOTS_FROM_HOME/);
+assert.doesNotMatch(read('workspace/mobile_files.rs'), /REPO_ROOTS_FROM_HOME/);
+assert.match(commands, /prefs\.get\(\)\.project_roots/);
+assert.match(dispatch, /PrefsState>\(\)\.get\(\)\.project_roots/);
 assert.deepEqual(
   JSON.parse(readFileSync(`${root}/apps/desktop/src-tauri/capabilities/default.json`, 'utf8')).windows,
   ['main'],

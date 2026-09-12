@@ -167,6 +167,7 @@ pub(super) fn dispatch(
                 .path()
                 .home_dir()
                 .map_err(|_| "Pasta de projetos indisponível.".to_string())?;
+            let project_roots = app.state::<crate::prefs::PrefsState>().get().project_roots;
             let path: String = if cmd == "pty_files_list" {
                 arg::<Option<String>>(&args, "path")?.unwrap_or_default()
             } else {
@@ -175,12 +176,14 @@ pub(super) fn dispatch(
             let result = if cmd == "pty_files_list" {
                 value(crate::workspace::mobile_files::list(
                     &home,
+                    &project_roots,
                     std::path::Path::new(&cwd),
                     &path,
                 )?)
             } else {
                 value(crate::workspace::mobile_files::read(
                     &home,
+                    &project_roots,
                     std::path::Path::new(&cwd),
                     &path,
                 )?)
@@ -203,7 +206,7 @@ pub(super) fn dispatch(
             lock(&conn.bindings).remove(&id);
             Ok(Value::Null)
         }
-        "list_repo_dirs" => value(commands::list_repo_dirs(app.clone())?),
+        "list_repo_dirs" => value(commands::list_repo_dirs(app.clone(), app.state())?),
         _ => Err("Disponível só no computador.".into()),
     }
 }

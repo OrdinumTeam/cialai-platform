@@ -421,6 +421,71 @@
 .mac-splash__bar{position:absolute;left:0;right:0;bottom:0;height:3px;background:var(--mac-surface-3);overflow:hidden}
 .mac-splash__bar span{display:block;width:34%;height:100%;border-radius:999px;background:var(--mac-gradient-line);animation:macSweep 1.5s var(--mac-ease) infinite}
 
+/* onboarding: uma sequência calma, sem grade de cartões, sobre o canvas do app */
+.mac-onboarding{position:fixed;inset:0;z-index:1500;display:grid;grid-template-columns:224px minmax(0,1fr);background:var(--mac-bg);color:var(--mac-label);animation:macFade var(--mac-normal) var(--mac-ease)}
+.mac-onboarding__rail{display:flex;flex-direction:column;padding:46px 24px 24px;background:var(--mac-surface-2);border-right:1px solid var(--mac-separator);user-select:none;-webkit-user-select:none}
+.mac-onboarding__brand{display:flex;align-items:center;gap:9px;padding:0 4px;font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mac-onboarding__brand img{width:24px;height:24px;object-fit:contain}
+[data-theme="dark"] .mac-onboarding__brand img{filter:brightness(0) invert(1)}
+.mac-onboarding__steps{display:flex;flex-direction:column;gap:4px;list-style:none;margin:38px 0 0;padding:0}
+.mac-onboarding__steps li{display:flex;align-items:center;gap:10px;min-height:32px;padding:4px 6px;border-radius:8px;color:var(--mac-label-3);font-size:12.5px;transition:color var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease)}
+.mac-onboarding__steps li.is-current{background:var(--mac-accent-soft);color:var(--mac-accent-text);font-weight:600}
+.mac-onboarding__steps li.is-done{color:var(--mac-label-2)}
+.mac-onboarding__step-dot{display:grid;place-items:center;width:20px;height:20px;flex:0 0 auto;border-radius:50%;background:var(--mac-surface-3);font-size:10px;font-weight:600;color:currentColor}
+.mac-onboarding__steps li.is-current .mac-onboarding__step-dot{background:var(--mac-accent);color:#fff}
+.mac-onboarding__steps li.is-done .mac-onboarding__step-dot{background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-onboarding__rail>p{margin:auto 4px 0;color:var(--mac-label-3);font-size:11px;line-height:1.55}
+.mac-onboarding__canvas{display:flex;min-width:0;min-height:0;flex-direction:column;background:var(--mac-bg)}
+.mac-onboarding__content{display:flex;flex:1;min-height:0;align-items:center;justify-content:center;padding:54px 64px 34px;overflow:auto;animation:macRise var(--mac-normal) var(--mac-ease)}
+.mac-onboarding__screen{width:min(100%,600px);margin:auto}
+.mac-onboarding__welcome{text-align:center;max-width:540px}
+.mac-onboarding__mark{width:64px;height:64px;margin:0 auto 22px;object-fit:contain}
+[data-theme="dark"] .mac-onboarding__mark{filter:brightness(0) invert(1)}
+.mac-onboarding__icon,.mac-onboarding__ready-mark{display:grid;place-items:center;width:42px;height:42px;margin-bottom:18px;border-radius:13px;background:var(--mac-accent-soft);color:var(--mac-accent)}
+.mac-onboarding__icon svg{width:20px;height:20px}
+.mac-onboarding__ready-mark{border-radius:50%;background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-onboarding__ready-mark svg{width:21px;height:21px;stroke-width:2.5}
+.mac-onboarding__eyebrow{margin:0 0 6px;color:var(--mac-accent-text);font-size:11px;font-weight:600}
+.mac-onboarding h1{margin:0;font-size:26px;line-height:1.14;font-weight:650;letter-spacing:-.025em;color:var(--mac-label)}
+.mac-onboarding__lead{max-width:560px;margin:12px 0 24px;color:var(--mac-label-2);font-size:14px;line-height:1.55}
+.mac-onboarding__welcome .mac-onboarding__lead{margin-left:auto;margin-right:auto}
+.mac-onboarding__primary{min-width:174px}
+.mac-onboarding__roots{margin:4px 0 14px;border-top:1px solid var(--mac-separator)}
+.mac-onboarding__root{display:flex;align-items:center;gap:11px;min-height:48px;padding:7px 8px;border-bottom:1px solid var(--mac-separator);cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.mac-onboarding__root:hover:not(.is-missing){background:var(--mac-hover)}
+.mac-onboarding__root.is-selected{background:var(--mac-accent-row)}
+.mac-onboarding__root.is-missing{opacity:.54}
+.mac-onboarding__root-copy{display:flex;min-width:0;flex:1;flex-direction:column;gap:1px}
+.mac-onboarding__root-copy strong{font-size:13px;font-weight:500}
+.mac-onboarding__root-copy span{overflow:hidden;color:var(--mac-label-3);font:10.5px/1.4 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
+.mac-onboarding__root-state{color:var(--mac-label-3);font-size:11px}
+.mac-onboarding__root.is-selected .mac-onboarding__root-state{color:var(--mac-accent-text)}
+.mac-onboarding__add{margin-top:2px}
+.mac-onboarding__field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px;color:var(--mac-label-2);font-size:12px;font-weight:500}
+.mac-onboarding__field .field__control{width:100%;height:34px;font-family:var(--mac-font-mono);font-size:12px}
+.mac-onboarding__probe{margin:0 0 14px;padding:12px 14px;border-radius:var(--mac-radius-card);background:var(--mac-surface-2)}
+.mac-onboarding__probe-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;color:var(--mac-label-2);font-size:11px}
+.mac-onboarding__probe-state{color:var(--mac-label-3)}
+.mac-onboarding__probe-state.is-pass{color:var(--mac-ok)}
+.mac-onboarding__probe-state.is-error{color:var(--mac-bad)}
+.mac-onboarding__probe-state.is-running{color:var(--mac-accent);animation:macPulse 1s ease-in-out infinite}
+.mac-onboarding__probe pre{min-height:38px;max-height:120px;margin:0;overflow:auto;color:var(--mac-label-2);font:11px/1.55 var(--mac-font-mono);white-space:pre-wrap;word-break:break-word}
+.mac-onboarding__summary{margin:0;border-top:1px solid var(--mac-separator)}
+.mac-onboarding__summary>div{display:grid;grid-template-columns:130px minmax(0,1fr);gap:16px;padding:11px 0;border-bottom:1px solid var(--mac-separator)}
+.mac-onboarding__summary dt{color:var(--mac-label-2);font-size:12px}
+.mac-onboarding__summary dd{min-width:0;margin:0;overflow:hidden;color:var(--mac-label);font:11.5px/1.45 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
+.mac-onboarding__error{margin:12px 0 0;color:var(--mac-bad);font-size:12px}
+.mac-onboarding__saving{margin:12px 0 0;color:var(--mac-label-2);font-size:12px}
+.mac-onboarding__loading{color:var(--mac-label-2);font-size:13px}
+.mac-onboarding__footer{display:flex;align-items:center;justify-content:space-between;min-height:66px;padding:14px 32px;border-top:1px solid var(--mac-separator);background:var(--mac-bg)}
+.mac-onboarding__footer .btn-primary{min-width:92px}
+
+@media (max-width:760px){
+  .mac-onboarding{grid-template-columns:1fr}
+  .mac-onboarding__rail{display:none}
+  .mac-onboarding__content{padding:40px 28px 24px}
+}
+
 /* porta da stack: aparece quando o launcher falha */
 .mac-gate{min-height:calc(100vh - 132px);display:flex;align-items:center;justify-content:center;animation:macFade var(--mac-normal) var(--mac-ease)}
 .mac-gate__card{width:min(560px,100%);padding:22px 24px;border-radius:var(--mac-radius-panel);background:var(--mac-surface-2)}
