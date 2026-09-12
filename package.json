@@ -17,6 +17,7 @@
     "test:desktop": "node tools/run.mjs desktop-check",
     "test:tunnel": "node tools/run.mjs tunnel-check",
     "test:mobile": "npm run test --workspace @cialai/mobile --if-present",
+    "test:selftest": "node tools/selftest/run.mjs",
     "test:spike:headscale": "node tools/run.mjs spike-headscale",
     "check:source": "node tools/check/control-source.mjs"
   }

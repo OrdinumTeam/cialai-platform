@@ -12,6 +12,5 @@ if (new URLSearchParams(window.location.search).get('motion') === '0') document.
 createRoot(document.getElementById('root')).render(<DesktopApp />);
 
 if (new URLSearchParams(window.location.search).get('cialai_selftest')) {
-  const script = '/scripts/selftest-app.js';
-  import(/* @vite-ignore */ script).catch((error) => console.error('[autoteste]', error));
+  import('../../../../tools/selftest/selftest-app.js').catch((error) => console.error('[autoteste]', error));
 }

@@ -68,6 +68,7 @@ pub fn run() {
             commands::pty_forget,
             commands::pty_prune,
             commands::app_request_quit,
+            commands::app_selftest_paths,
             commands::list_repo_dirs,
             commands::detect_project_roots,
             commands::fs_list_dir,

@@ -227,6 +227,51 @@ pub fn app_request_quit(app: AppHandle) {
     crate::lifecycle::request_exit(&app);
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SelftestPaths {
+    root: String,
+    output: String,
+}
+
+fn prepare_selftest_paths(
+    cache: &Path,
+    logs: &Path,
+    run_id: &str,
+) -> Result<SelftestPaths, String> {
+    let root = cache.join("selftest").join(format!("run-{run_id}"));
+    let output = logs.join("selftest.json");
+    std::fs::create_dir_all(&root).map_err(|error| error.to_string())?;
+    std::fs::create_dir_all(logs).map_err(|error| error.to_string())?;
+    Ok(SelftestPaths {
+        root: platform::to_portable(root),
+        output: platform::to_portable(output),
+    })
+}
+
+/// Diretórios exclusivos do autoteste. O roteiro nunca precisa conhecer a
+/// pasta pessoal nem escrever em projetos do usuário.
+#[tauri::command]
+pub fn app_selftest_paths(app: AppHandle) -> Result<SelftestPaths, String> {
+    let cache = app
+        .path()
+        .app_cache_dir()
+        .map_err(|error| error.to_string())?;
+    let logs = app
+        .path()
+        .app_log_dir()
+        .map_err(|error| error.to_string())?;
+    let run_id = format!(
+        "{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis()
+    );
+    prepare_selftest_paths(&cache, &logs, &run_id)
+}
+
 /// Repositorios das raizes conhecidas, para o seletor rapido de pastas.
 #[tauri::command]
 pub fn list_repo_dirs(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<RepoListing, String> {
@@ -247,6 +292,34 @@ pub fn detect_project_roots(app: AppHandle) -> Result<Vec<RepoRoot>, String> {
 #[tauri::command]
 pub fn app_shell(prefs: State<'_, PrefsState>) -> ShellSpec {
     platform::default_shell(&prefs.get())
+}
+
+#[cfg(test)]
+mod selftest_path_tests {
+    use super::prepare_selftest_paths;
+
+    #[test]
+    fn selftest_paths_stay_inside_app_owned_directories() {
+        let base = std::env::temp_dir().join(format!(
+            "cialai-selftest-paths-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let cache = base.join("cache");
+        let logs = base.join("logs");
+        let paths = prepare_selftest_paths(&cache, &logs, "fixture").unwrap();
+        assert_eq!(
+            paths.root,
+            cache.join("selftest/run-fixture").to_string_lossy()
+        );
+        assert_eq!(paths.output, logs.join("selftest.json").to_string_lossy());
+        assert!(cache.join("selftest/run-fixture").is_dir());
+        assert!(logs.is_dir());
+        std::fs::remove_dir_all(base).unwrap();
+    }
 }
 
 #[derive(Serialize)]
