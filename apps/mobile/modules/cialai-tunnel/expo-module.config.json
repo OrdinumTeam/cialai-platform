@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["CialaiTunnelModule"]
+  },
+  "android": {
+    "modules": ["br.com.ordinum.cialai.tunnel.CialaiTunnelModule"]
+  }
+}
