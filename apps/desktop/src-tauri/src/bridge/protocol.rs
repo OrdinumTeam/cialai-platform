@@ -33,8 +33,16 @@ pub struct Welcome<'a> {
     pub version: u32,
     pub auth: &'static str,
     pub user: Option<&'a str>,
+    pub device: Option<WelcomeIdentity>,
+    pub desktop: Option<WelcomeIdentity>,
     pub capabilities: [&'static str; 1],
     pub features: [&'static str; 1],
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct WelcomeIdentity {
+    pub id: String,
+    pub name: String,
 }
 
 pub fn validate_hello(
@@ -164,6 +172,29 @@ mod tests {
         let call: Incoming =
             serde_json::from_str(r#"{"type":"call","id":1,"cmd":"pty_list"}"#).unwrap();
         assert_eq!(validate_hello(&call, None, None), Err(4400));
+    }
+
+    #[test]
+    fn welcome_serializes_device_and_desktop_identity() {
+        let value = serde_json::to_value(Welcome {
+            r#type: "welcome",
+            version: 1,
+            auth: "device",
+            user: None,
+            device: Some(WelcomeIdentity {
+                id: "dev_fixture".into(),
+                name: "iPhone".into(),
+            }),
+            desktop: Some(WelcomeIdentity {
+                id: "d_fixture".into(),
+                name: "MacBook".into(),
+            }),
+            capabilities: ["pty"],
+            features: ["terminal-mobile-v1"],
+        })
+        .unwrap();
+        assert_eq!(value["device"]["id"], "dev_fixture");
+        assert_eq!(value["desktop"]["name"], "MacBook");
     }
     #[test]
     fn origins_require_exact_host_or_loopback_and_valid_http_url() {

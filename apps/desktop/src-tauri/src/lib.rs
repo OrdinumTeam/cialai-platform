@@ -46,6 +46,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_preferences,
             commands::set_preferences,
+            commands::tunnel_call,
+            commands::tunnel_control_configure,
+            commands::tunnel_control_configure_saved,
+            commands::tunnel_control_rotate_api_key,
+            commands::tunnel_api_key_status,
+            commands::tunnel_delete_api_key,
             commands::app_platform,
             commands::app_shell,
             commands::shell_probe,
@@ -101,7 +107,7 @@ pub fn run() {
         .setup(|app| {
             let mobile_site =
                 tunnel::MobileSite::resolve(app.handle()).map_err(std::io::Error::other)?;
-            app.manage(mobile_site);
+            app.manage(mobile_site.clone());
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
             let prefs = prefs::PrefsState::new(preferences);
@@ -130,7 +136,17 @@ pub fn run() {
                 chromium,
             ));
 
-            bridge::start(app.handle().clone(), bridge::BridgeConfig::from_process());
+            let bridge_session =
+                tunnel::BridgeSession::generate(bridge::BridgeConfig::requested_port())
+                    .map_err(std::io::Error::other)?;
+            let bridge_config = bridge::BridgeConfig::from_process(bridge_session.secret().into());
+            let bridge_control = bridge::start(app.handle().clone(), bridge_config)
+                .map_err(std::io::Error::other)?;
+            debug_assert_eq!(bridge_control.port(), bridge_session.port());
+            let supervisor =
+                tunnel::Supervisor::for_app(app.handle(), &mobile_site, bridge_session)
+                    .map_err(std::io::Error::other)?;
+            app.manage(supervisor);
 
             if let Some(main_window) = app.get_webview_window("main") {
                 window::decorate(&main_window);
@@ -165,6 +181,9 @@ pub fn run() {
             }
             if let Some(terminals) = handle.try_state::<workspace::terminal::TerminalManager>() {
                 terminals.kill_all_blocking();
+            }
+            if let Some(tunnel) = handle.try_state::<tunnel::Supervisor>() {
+                tunnel.shutdown_blocking();
             }
         }
     });

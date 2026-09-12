@@ -41,12 +41,18 @@ pub struct BridgeConfig {
 }
 
 impl BridgeConfig {
-    pub(crate) fn from_process() -> Self {
+    pub(crate) fn requested_port() -> u16 {
+        std::env::var("CIALAI_BRIDGE_PORT")
+            .ok()
+            .and_then(|value| value.parse().ok())
+            .filter(|port| *port > 0)
+            .unwrap_or(3720)
+    }
+
+    pub(crate) fn from_process(proxy_secret: String) -> Self {
         Self {
-            port: std::env::var("CIALAI_BRIDGE_PORT")
-                .ok()
-                .and_then(|value| value.parse().ok()),
-            proxy_secret: None,
+            port: Some(Self::requested_port()),
+            proxy_secret: Some(proxy_secret),
             dev_open: std::env::args().any(|arg| arg == "--dev-open-bridge"),
         }
     }
@@ -74,9 +80,11 @@ pub(super) fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
 pub(super) struct Connection {
     id: u64,
     pub(super) device_id: Option<String>,
+    node_key: Option<String>,
     tx: mpsc::Sender<Message>,
     closed: Arc<AtomicBool>,
     stop: Arc<Notify>,
+    close_frame: Mutex<Option<CloseFrame>>,
     /// Session to client channel. Also serializes attach with scoped ACKs.
     bindings: Mutex<HashMap<u32, u32>>,
     pending: Mutex<HashSet<u64>>,
@@ -107,6 +115,14 @@ impl Connection {
         self.stop.notify_one();
     }
 
+    fn close_with(&self, code: u16, reason: &'static str) {
+        *lock(&self.close_frame) = Some(CloseFrame {
+            code: code.into(),
+            reason: reason.into(),
+        });
+        self.close();
+    }
+
     fn key(&self) -> SubscriberKey {
         SubscriberKey::Remote(self.id)
     }
@@ -115,20 +131,134 @@ impl Connection {
 type Registry = Arc<Mutex<HashMap<u64, Arc<Connection>>>>;
 type Dispatch = Arc<dyn Fn(&Connection, &str, Value) -> Result<Value, String> + Send + Sync>;
 
-pub fn start(app: AppHandle, config: BridgeConfig) {
-    let Some(port) = config.port else {
-        return;
+#[derive(Clone, Default)]
+struct IdentityState {
+    desktop: Option<protocol::WelcomeIdentity>,
+    devices: HashMap<String, DeviceIdentity>,
+}
+
+#[derive(Clone)]
+struct DeviceIdentity {
+    display: protocol::WelcomeIdentity,
+    node_key: String,
+}
+
+#[derive(Clone)]
+pub struct BridgeControl {
+    port: u16,
+    registry: Registry,
+    identities: Arc<Mutex<IdentityState>>,
+}
+
+impl BridgeControl {
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub(crate) fn set_desktop(&self, value: &Value) {
+        if let Some(identity) = value_identity(value) {
+            lock(&self.identities).desktop = Some(identity);
+        }
+    }
+
+    pub(crate) fn upsert_device(&self, value: &Value) {
+        let Some(display) = value_identity(value) else {
+            return;
+        };
+        let Some(node_key) = value.get("nodeKey").and_then(Value::as_str) else {
+            return;
+        };
+        lock(&self.identities).devices.insert(
+            display.id.clone(),
+            DeviceIdentity {
+                display,
+                node_key: node_key.into(),
+            },
+        );
+    }
+
+    pub(crate) fn sync_devices(&self, value: &Value) {
+        let Some(devices) = value.get("devices").and_then(Value::as_array) else {
+            return;
+        };
+        let mut identities = lock(&self.identities);
+        identities.devices.clear();
+        for value in devices {
+            let Some(display) = value_identity(value) else {
+                continue;
+            };
+            let Some(node_key) = value.get("nodeKey").and_then(Value::as_str) else {
+                continue;
+            };
+            identities.devices.insert(
+                display.id.clone(),
+                DeviceIdentity {
+                    display,
+                    node_key: node_key.into(),
+                },
+            );
+        }
+    }
+
+    pub(crate) fn rename_device(&self, device_id: &str, name: &str) {
+        if let Some(device) = lock(&self.identities).devices.get_mut(device_id) {
+            device.display.name = name.into();
+        }
+    }
+
+    pub(crate) fn revoke_device(&self, device_id: &str) -> usize {
+        lock(&self.identities).devices.remove(device_id);
+        let connections: Vec<_> = lock(&self.registry)
+            .values()
+            .filter(|connection| connection.device_id.as_deref() == Some(device_id))
+            .cloned()
+            .collect();
+        for connection in &connections {
+            connection.close_with(4401, "Dispositivo revogado.");
+        }
+        connections.len()
+    }
+}
+
+fn value_identity(value: &Value) -> Option<protocol::WelcomeIdentity> {
+    let id = value.get("id")?.as_str()?.trim();
+    let name = value.get("name")?.as_str()?.trim();
+    if id.is_empty() || name.is_empty() {
+        return None;
+    }
+    Some(protocol::WelcomeIdentity {
+        id: id.into(),
+        name: name.into(),
+    })
+}
+
+pub fn start(app: AppHandle, config: BridgeConfig) -> Result<BridgeControl, String> {
+    let port = config.port.unwrap_or(3720);
+    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
+        .map_err(|error| format!("Não foi possível abrir a ponte do Cialai: {error}"))?;
+    listener
+        .set_nonblocking(true)
+        .map_err(|error| format!("Não foi possível preparar a ponte do Cialai: {error}"))?;
+    let actual_port = listener
+        .local_addr()
+        .map_err(|error| format!("Endereço da ponte do Cialai indisponível: {error}"))?
+        .port();
+    let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
+    let identities = Arc::new(Mutex::new(IdentityState::default()));
+    let control = BridgeControl {
+        port: actual_port,
+        registry: registry.clone(),
+        identities: identities.clone(),
     };
     tauri::async_runtime::spawn(async move {
-        let listener = match TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)).await {
+        let listener = match TcpListener::from_std(listener) {
             Ok(listener) => listener,
             Err(error) => {
-                eprintln!("Não foi possível abrir a ponte iPhone: {error}");
+                eprintln!("Não foi possível preparar a ponte do Cialai: {error}");
                 return;
             }
         };
-        eprintln!("Ponte iPhone em ws://127.0.0.1:{port}");
-        let registry: Registry = Arc::new(Mutex::new(HashMap::new()));
+        eprintln!("Ponte Cialai em ws://127.0.0.1:{actual_port}");
         let _events = events::forward(app.clone(), registry.clone());
         let slots = Arc::new(Semaphore::new(MAX_CONNECTIONS));
         let calls = Arc::new(Semaphore::new(MAX_CONNECTIONS * MAX_CALLS));
@@ -146,24 +276,32 @@ pub fn start(app: AppHandle, config: BridgeConfig) {
             let terminals = terminals.clone();
             let dispatch = dispatch.clone();
             let calls = calls.clone();
+            let identities = identities.clone();
             tauri::async_runtime::spawn(async move {
                 let _slot = slot;
-                let Ok((socket, device_id)) = handshake(stream, &config).await else {
+                let Ok((socket, device_id, node_key)) =
+                    handshake(stream, &config, &identities).await
+                else {
                     return;
                 };
-                serve(socket, device_id, id, registry, terminals, dispatch, calls).await;
+                serve(
+                    socket, device_id, node_key, id, registry, terminals, dispatch, calls,
+                )
+                .await;
             });
         }
     });
+    Ok(control)
 }
 
 async fn handshake(
     stream: TcpStream,
     config: &BridgeConfig,
-) -> Result<(WebSocketStream<TcpStream>, Option<String>), ()> {
-    let mut user = None;
+    identities: &Arc<Mutex<IdentityState>>,
+) -> Result<(WebSocketStream<TcpStream>, Option<String>, Option<String>), ()> {
     let mut bearer = None;
     let mut device_id = None;
+    let mut node_key = None;
     let mut auth = "open";
     // Tungstenite's callback requires this exact HTTP error response type.
     #[allow(clippy::result_large_err)]
@@ -207,20 +345,28 @@ async fn handshake(
                 .unwrap());
         }
         if via_proxy {
-            auth = "device";
             device_id = request
                 .headers()
                 .get("x-cialai-device-id")
                 .and_then(|value| value.to_str().ok())
+                .filter(|value| !value.is_empty())
                 .map(str::to_owned);
+            node_key = request
+                .headers()
+                .get("x-cialai-node-key")
+                .and_then(|value| value.to_str().ok())
+                .filter(|value| !value.is_empty())
+                .map(str::to_owned);
+            if device_id.is_none() || node_key.is_none() {
+                return Err(tauri::http::Response::builder()
+                    .status(403)
+                    .body(Some("Identidade da borda incompleta.".into()))
+                    .unwrap());
+            }
+            auth = "device";
         } else if via_bearer {
             auth = "token";
         }
-        user = request
-            .headers()
-            .get("tailscale-user-login")
-            .and_then(|v| v.to_str().ok())
-            .map(str::to_owned);
         Ok(response)
     };
     let ws_config = WebSocketConfig::default()
@@ -254,11 +400,28 @@ async fn handshake(
         .await;
         return Err(());
     }
+    let (device, desktop) = {
+        let identities = lock(identities);
+        let device = device_id.as_deref().map(|id| {
+            identities
+                .devices
+                .get(id)
+                .filter(|device| Some(device.node_key.as_str()) == node_key.as_deref())
+                .map(|device| device.display.clone())
+                .unwrap_or_else(|| protocol::WelcomeIdentity {
+                    id: id.into(),
+                    name: id.into(),
+                })
+        });
+        (device, identities.desktop.clone())
+    };
     let welcome = protocol::Welcome {
         r#type: "welcome",
         version: 1,
         auth,
-        user: user.as_deref(),
+        user: None,
+        device,
+        desktop,
         capabilities: ["pty"],
         features: ["terminal-mobile-v1"],
     };
@@ -271,12 +434,13 @@ async fn handshake(
     .await
     .map_err(|_| ())?
     .map_err(|_| ())?;
-    Ok((socket, device_id))
+    Ok((socket, device_id, node_key))
 }
 
 async fn serve(
     mut socket: WebSocketStream<TcpStream>,
     device_id: Option<String>,
+    node_key: Option<String>,
     id: u64,
     registry: Registry,
     terminals: TerminalManager,
@@ -287,9 +451,11 @@ async fn serve(
     let conn = Arc::new(Connection {
         id,
         device_id,
+        node_key,
         tx,
         closed: Arc::new(AtomicBool::new(false)),
         stop: Arc::new(Notify::new()),
+        close_frame: Mutex::new(None),
         bindings: Mutex::new(HashMap::new()),
         pending: Mutex::new(HashSet::new()),
     });
@@ -364,7 +530,8 @@ async fn serve(
     conn.close();
     lock(&registry).remove(&id);
     terminals.detach_all(conn.key());
-    let _ = timeout(WRITE_TIMEOUT, socket.close(None)).await;
+    let frame = lock(&conn.close_frame).take();
+    let _ = timeout(WRITE_TIMEOUT, socket.close(frame)).await;
 }
 
 #[cfg(test)]
@@ -380,6 +547,7 @@ mod tests {
             .await
             .unwrap();
         let address = format!("ws://{}/pty", listener.local_addr().unwrap());
+        let identities = Arc::new(Mutex::new(IdentityState::default()));
         let task = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let config = BridgeConfig {
@@ -387,10 +555,12 @@ mod tests {
                 dev_open: token.is_none(),
                 proxy_secret: token,
             };
-            if let Ok((socket, device_id)) = handshake(stream, &config).await {
+            if let Ok((socket, device_id, node_key)) = handshake(stream, &config, &identities).await
+            {
                 serve(
                     socket,
                     device_id,
+                    node_key,
                     1,
                     Arc::new(Mutex::new(HashMap::new())),
                     TerminalManager::with_notifier(Arc::new(|_| {})),
@@ -635,9 +805,11 @@ mod tests {
         let conn = Connection {
             id: 1,
             device_id: None,
+            node_key: None,
             tx,
             closed: Arc::new(AtomicBool::new(false)),
             stop: Arc::new(Notify::new()),
+            close_frame: Mutex::new(None),
             bindings: Mutex::new(HashMap::new()),
             pending: Mutex::new(HashSet::new()),
         };

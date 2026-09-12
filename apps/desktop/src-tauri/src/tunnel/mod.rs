@@ -5,6 +5,14 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager, Runtime};
 
+mod credentials;
+mod protocol;
+mod supervisor;
+
+pub use credentials::SecretStatus;
+pub use protocol::RpcProblem;
+pub use supervisor::{BridgeSession, Supervisor};
+
 const MOBILE_RESOURCE_DIR: &str = "mobile";
 const MOBILE_ENTRY: &str = "mobile.html";
 
