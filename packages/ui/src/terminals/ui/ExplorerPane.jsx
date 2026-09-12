@@ -1,0 +1,725 @@
+// SPDX-License-Identifier: Apache-2.0
+// Explorador de arquivos da sessao selecionada. A raiz e a pasta escolhida
+// ao criar a sessao e so muda por acao explicita: "Ir" para o diretorio
+// atual do shell ou o modo de acompanhar. Cada pasta e listada ao expandir e
+// observada por kqueue enquanto estiver visivel; recolher devolve o
+// observador. Marcadores Git vem do `git status` do projeto e dizem so que o
+// arquivo mudou, sem atribuir autoria.
+//
+// O painel assina so os eventos de explorador da propria sessao; da
+// atividade le apenas o diretorio do shell, e so redesenha quando ele muda.
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ChevronRight, ChevronsDownUp, Crosshair, File, FileCode2, FileImage, FileJson2, FileText, FilePlus2, Folder,
+  FolderOpen, FolderPlus, Locate, PanelRightClose, RefreshCw, Search, X,
+} from 'lucide-react';
+import Menu, { anchorFromEvent } from './Menu.jsx';
+import { baseName, compactPath, dirName, extensionOf, fileKind, freeName, fs, git, isInside, joinPath, relativePath, shortPath } from '../files.js';
+import { beginDrag, inside, nativeDragOutPath, onDrag, wasDragged } from '../drag.js';
+import { markExplorerChanged, setExplorerRoot, setFollowCwd, subscribeChanges, unwatchPath, watchPath } from '../runtime.js';
+import { retargetTabs } from '../editor.js';
+import { swapIn } from '../motion.js';
+import { useRuntimeEvents, useRuntimeValue } from '../hooks.js';
+import { copyToClipboard } from '../../lib/helpers.js';
+import { onNativeDragDrop } from '../../lib/native.js';
+
+// Linhas novas que entram escalonadas na arvore; acima disso nenhuma anima.
+const FRESH_ROWS_LIMIT = 60;
+
+// Tempo parado sobre uma pasta recolhida antes de ela abrir sozinha durante
+// um arraste, como no explorador do VS Code.
+const HOVER_EXPAND_MS = 700;
+
+const GIT_REFRESH_MS = 15000;
+const GIT_DEBOUNCE_MS = 900;
+const DIR_RELOAD_DEBOUNCE_MS = 150;
+const STATUS_LETTER = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T', untracked: 'U', conflict: '!' };
+const STATUS_LABEL = { modified: 'Modificado', added: 'Adicionado', deleted: 'Apagado', renamed: 'Renomeado', copied: 'Copiado', typechange: 'Tipo alterado', untracked: 'Novo, fora do Git', conflict: 'Conflito' };
+
+const CODE_EXT = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'rb', 'php', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'hpp', 'cs', 'sh', 'zsh', 'bash', 'css', 'scss', 'html', 'vue', 'svelte', 'sql', 'lua', 'toml', 'yaml', 'yml', 'xml']);
+
+function IconFor({ entry, expanded }) {
+  const isDir = entry.kind === 'dir' || entry.targetKind === 'dir';
+  if (isDir) return expanded ? <FolderOpen size={14} strokeWidth={1.75} aria-hidden="true" /> : <Folder size={14} strokeWidth={1.75} aria-hidden="true" />;
+  const kind = fileKind(entry.name);
+  const ext = extensionOf(entry.name);
+  if (kind === 'image') return <FileImage size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'markdown') return <FileText size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (ext === 'json') return <FileJson2 size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (CODE_EXT.has(ext)) return <FileCode2 size={14} strokeWidth={1.75} aria-hidden="true" />;
+  return <File size={14} strokeWidth={1.75} aria-hidden="true" />;
+}
+
+function isDirEntry(entry) {
+  return entry.kind === 'dir' || entry.targetKind === 'dir';
+}
+
+export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, notify, revealRequest, onCollapse }) {
+  const explorer = session.explorer;
+  const root = explorer.root;
+  const sessionId = session.id;
+  // Troca de sessao: a arvore surge de novo.
+  useEffect(() => { swapIn(treeRef.current, { x: 6, y: 0 }); }, [sessionId]);
+  useRuntimeEvents(['explorer'], sessionId);
+  const readCwd = useCallback(() => session.activity?.shellCwd || null, [session]);
+  const shellCwd = useRuntimeValue(['activity'], sessionId, readCwd);
+  const [, setRender] = useState(0);
+  const rerender = useCallback(() => setRender((value) => value + 1), []);
+  const [menu, setMenu] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState(null);
+  const [focused, setFocused] = useState(null);
+  // Pasta destacada durante um arraste, e o efeito que o soltar vai ter.
+  const [drop, setDrop] = useState(null);
+  const treeRef = useRef(null);
+  const hoverExpand = useRef({ path: null, timer: null });
+  const reloadTimers = useRef(new Map());
+  const gitTimer = useRef(null);
+  const searchTimer = useRef(null);
+
+  /* ── carregamento ────────────────────────────────────────────────── */
+
+  const loadDir = useCallback(async (path, { quiet = false } = {}) => {
+    const nodes = session.explorer.nodes;
+    const current = nodes.get(path);
+    if (current?.loading) return;
+    nodes.set(path, { ...(current || {}), loading: !quiet || !current, error: null });
+    markExplorerChanged(sessionId);
+    try {
+      const listing = await fs.listDir(path);
+      nodes.set(path, { entries: listing.entries, total: listing.total, truncated: listing.truncated, loading: false, error: null, loadedAt: Date.now() });
+    } catch (error) {
+      nodes.set(path, { entries: current?.entries || [], total: 0, truncated: false, loading: false, error: error?.message || String(error) });
+    }
+    markExplorerChanged(sessionId);
+  }, [session, sessionId]);
+
+  const scheduleReload = useCallback((path) => {
+    const timers = reloadTimers.current;
+    if (timers.has(path)) clearTimeout(timers.get(path));
+    timers.set(path, setTimeout(() => { timers.delete(path); loadDir(path, { quiet: true }); }, DIR_RELOAD_DEBOUNCE_MS));
+  }, [loadDir]);
+
+  const refreshGit = useCallback(async () => {
+    try {
+      const status = await git.status(root);
+      session.explorer.git = status;
+      session.explorer.gitAt = Date.now();
+    } catch (_error) {
+      session.explorer.git = { isRepo: false, changes: [] };
+    }
+    markExplorerChanged(sessionId);
+  }, [root, session, sessionId]);
+
+  const scheduleGit = useCallback(() => {
+    if (gitTimer.current) clearTimeout(gitTimer.current);
+    gitTimer.current = setTimeout(() => { gitTimer.current = null; refreshGit(); }, GIT_DEBOUNCE_MS);
+  }, [refreshGit]);
+
+  // Pastas expandidas e visiveis: cada uma carregada e observada. Recolher
+  // uma pasta devolve o observador dela e dos filhos.
+  const visibleDirs = useMemo(() => {
+    const result = [];
+    const walk = (path) => {
+      result.push(path);
+      const node = explorer.nodes.get(path);
+      if (!node?.entries) return;
+      node.entries.forEach((entry) => {
+        if (isDirEntry(entry) && explorer.expanded.has(entry.path)) walk(entry.path);
+      });
+    };
+    walk(root);
+    return result;
+  }, [explorer, root, explorer.revision]);
+
+  const watched = useRef(new Set());
+  useEffect(() => {
+    const next = new Set(visibleDirs);
+    visibleDirs.forEach((path) => {
+      if (!explorer.nodes.has(path)) loadDir(path);
+      if (!watched.current.has(path)) { watched.current.add(path); watchPath(session, path); }
+    });
+    [...watched.current].forEach((path) => {
+      if (!next.has(path)) { watched.current.delete(path); unwatchPath(session, path); }
+    });
+  }, [visibleDirs, explorer, loadDir, session]);
+
+  useEffect(() => () => {
+    [...watched.current].forEach((path) => unwatchPath(session, path));
+    watched.current.clear();
+  }, [session]);
+
+  // Recarrega o que esta a vista: as pastas abertas e o estado do Git. O
+  // observador kqueue ja avisa quase sempre; isto e a rede de seguranca para
+  // o que ele nao viu, como uma pasta criada por um agente enquanto a janela
+  // estava atras de outra.
+  const visibleDirsRef = useRef(visibleDirs);
+  visibleDirsRef.current = visibleDirs;
+  const refreshAll = useCallback(() => {
+    visibleDirsRef.current.forEach((path) => loadDir(path, { quiet: true }));
+    refreshGit();
+  }, [loadDir, refreshGit]);
+
+  useEffect(() => {
+    if (!explorer.nodes.has(root)) loadDir(root);
+    refreshGit();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') refreshAll();
+    }, GIT_REFRESH_MS);
+    // Voltar para a janela mostra o disco como ele esta agora.
+    const onFocus = () => refreshAll();
+    const onVisible = () => { if (document.visibilityState === 'visible') refreshAll(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [root, explorer, loadDir, refreshGit, refreshAll]);
+
+  useEffect(() => subscribeChanges((event) => {
+    if (!isInside(root, event.path) && event.path !== root) return;
+    if (event.dir && explorer.nodes.has(event.path)) scheduleReload(event.path);
+    scheduleGit();
+  }), [root, explorer, scheduleReload, scheduleGit]);
+
+  // Um pedido de revelar vindo da busca rapida: expande os ancestrais.
+  useEffect(() => {
+    if (!revealRequest || revealRequest.sessionId !== sessionId) return;
+    const target = revealRequest.path;
+    if (!isInside(root, target)) return;
+    let cursor = dirName(target);
+    const ancestors = [];
+    while (isInside(root, cursor) && cursor !== root) { ancestors.push(cursor); cursor = dirName(cursor); }
+    ancestors.forEach((path) => explorer.expanded.add(path));
+    setFocused(target);
+    markExplorerChanged(sessionId);
+    setTimeout(() => {
+      treeRef.current?.querySelector(`[data-path="${CSS.escape(target)}"]`)?.scrollIntoView({ block: 'center' });
+    }, 200);
+  }, [revealRequest, root, explorer, sessionId]);
+
+  /* ── git ─────────────────────────────────────────────────────────── */
+
+  const gitIndex = useMemo(() => {
+    const status = explorer.git;
+    const files = new Map();
+    const dirs = new Set();
+    if (!status?.isRepo || !status.root) return { files, dirs, status };
+    status.changes.forEach((change) => {
+      const path = joinPath(status.root, change.path.replace(/\/$/, ''));
+      files.set(path, change);
+      let cursor = dirName(path);
+      while (cursor.length >= status.root.length && !dirs.has(cursor)) {
+        dirs.add(cursor);
+        if (cursor === status.root) break;
+        cursor = dirName(cursor);
+      }
+    });
+    return { files, dirs, status };
+  }, [explorer.git]);
+
+  /* ── acoes ───────────────────────────────────────────────────────── */
+
+  const toggleDir = (path) => {
+    if (explorer.expanded.has(path)) explorer.expanded.delete(path);
+    else explorer.expanded.add(path);
+    markExplorerChanged(sessionId);
+    rerender();
+  };
+
+  // Recolhe todas as pastas, como o botao do explorador do VS Code.
+  const collapseAll = () => {
+    explorer.expanded = new Set([root]);
+    setFocused(null);
+    markExplorerChanged(sessionId);
+  };
+
+  const startCreate = (parent, kind) => {
+    explorer.expanded.add(parent);
+    setEditing({ kind: kind === 'dir' ? 'new-dir' : 'new-file', parent, value: '' });
+    markExplorerChanged(sessionId);
+  };
+
+  const commitEditing = async (value) => {
+    const current = editing;
+    setEditing(null);
+    if (!current) return;
+    const name = String(value || '').trim();
+    if (!name) return;
+    if (name.includes('/')) { notify('O nome não pode conter barra', 'warning'); return; }
+    try {
+      if (current.kind === 'rename') {
+        const target = joinPath(dirName(current.path), name);
+        if (target === current.path) return;
+        await fs.rename(current.path, target);
+        await loadDir(dirName(current.path), { quiet: true });
+        setFocused(target);
+      } else {
+        const target = joinPath(current.parent, name);
+        if (current.kind === 'new-dir') await fs.createDir(target);
+        else await fs.createFile(target);
+        await loadDir(current.parent, { quiet: true });
+        setFocused(target);
+        if (current.kind === 'new-file') onOpenFile(target);
+      }
+      scheduleGit();
+    } catch (error) {
+      notify(error?.message || String(error), 'warning');
+    }
+  };
+
+  // Copia ao lado, com o sufixo do Finder: `nota copy.md`, `nota copy 2.md`.
+  const duplicate = useCallback(async (path) => {
+    const dir = dirName(path);
+    try {
+      const nome = await freeName(dir, baseName(path));
+      await fs.copy(path, joinPath(dir, nome));
+      await loadDir(dir, { quiet: true });
+      setFocused(joinPath(dir, nome));
+      scheduleGit();
+      notify(`Duplicado como ${nome}`, 'success');
+    } catch (error) {
+      notify(error?.message || String(error), 'warning');
+    }
+  }, [loadDir, scheduleGit, notify]);
+
+  const copyPath = async (path, relative) => {
+    const text = relative ? (relativePath(root, path) || path) : path;
+    const ok = await copyToClipboard(text);
+    notify(ok ? 'Caminho copiado' : 'Não foi possível copiar', ok ? 'success' : 'warning');
+  };
+
+  const openEntry = (entry) => {
+    if (isDirEntry(entry)) toggleDir(entry.path);
+    else onOpenFile(entry.path);
+  };
+
+  // O arraste comeca no mousedown e so passa a valer depois de alguns
+  // pixels, entao um clique continua abrindo o arquivo.
+  const startDrag = (event, path, dir = false) => {
+    if (editing) return;
+    setFocused(path);
+    beginDrag(event, { path, label: baseName(path), dir });
+  };
+
+  /* ── arrastar e soltar na arvore ─────────────────────────────────── */
+
+  // Pasta que recebe o item solto: a propria linha quando e pasta, a pasta
+  // que contem a linha quando e arquivo, a raiz no espaco vazio.
+  const dropDirAt = useCallback((node) => {
+    const row = node && node.closest ? node.closest('[data-path][data-kind]') : null;
+    if (!row) return root;
+    const path = row.getAttribute('data-path');
+    return row.getAttribute('data-kind') === 'dir' ? path : dirName(path);
+  }, [root]);
+
+  const cancelHoverExpand = useCallback(() => {
+    if (hoverExpand.current.timer) clearTimeout(hoverExpand.current.timer);
+    hoverExpand.current = { path: null, timer: null };
+  }, []);
+
+  // Parar sobre uma pasta recolhida durante o arraste abre ela.
+  const scheduleHoverExpand = useCallback((path) => {
+    if (hoverExpand.current.path === path) return;
+    cancelHoverExpand();
+    if (!path || explorer.expanded.has(path)) return;
+    hoverExpand.current = {
+      path,
+      timer: setTimeout(() => {
+        hoverExpand.current = { path: null, timer: null };
+        explorer.expanded.add(path);
+        markExplorerChanged(sessionId);
+      }, HOVER_EXPAND_MS),
+    };
+  }, [explorer, sessionId, cancelHoverExpand]);
+
+  const clearDrop = useCallback(() => { cancelHoverExpand(); setDrop(null); }, [cancelHoverExpand]);
+
+  useEffect(() => () => cancelHoverExpand(), [cancelHoverExpand]);
+
+  // Move ou copia um item para dentro de uma pasta. Mover mantem o nome e
+  // recusa nome ocupado; copiar procura um nome livre, como o Finder.
+  const dropInto = useCallback(async (source, dir, { copy = false } = {}) => {
+    if (!source || !dir) return;
+    if (source === root) { notify('A raiz do projeto não pode ser movida', 'warning'); return; }
+    if (isInside(source, dir)) { notify('Uma pasta não pode ir para dentro dela mesma', 'warning'); return; }
+    const from = dirName(source);
+    if (!copy && from === dir) return;
+    const name = baseName(source);
+    try {
+      const finalName = copy ? await freeName(dir, name) : name;
+      const target = joinPath(dir, finalName);
+      if (copy) {
+        await fs.copy(source, target);
+      } else {
+        await fs.rename(source, target);
+        retargetTabs(source, target);
+        // As pastas que estavam abertas continuam abertas no lugar novo.
+        const moved = [...explorer.expanded].filter((path) => path === source || path.startsWith(`${source}/`));
+        moved.forEach((path) => {
+          explorer.expanded.delete(path);
+          explorer.expanded.add(`${target}${path.slice(source.length)}`);
+        });
+      }
+      explorer.expanded.add(dir);
+      await loadDir(dir, { quiet: true });
+      if (!copy && from !== dir) await loadDir(from, { quiet: true });
+      setFocused(target);
+      markExplorerChanged(sessionId);
+      scheduleGit();
+      if (copy && finalName !== name) notify(`Copiado como ${finalName}`, 'info');
+    } catch (error) {
+      notify(error?.message || String(error), 'warning');
+    }
+  }, [root, explorer, sessionId, loadDir, scheduleGit, notify]);
+
+  // Itens vindos do Finder ou de outro app entram sempre como copia.
+  const importPaths = useCallback(async (paths, dir) => {
+    for (const source of paths) {
+      if (typeof source !== 'string' || !source.startsWith('/')) continue;
+      // eslint-disable-next-line no-await-in-loop
+      await dropInto(source, dir, { copy: true });
+    }
+  }, [dropInto]);
+
+  // O destino e decidido pelo ponto do cursor, nao por evento do HTML: o
+  // arraste interno nao passa pelo drag-and-drop do WebKit dentro do app.
+  useEffect(() => onDrag((event) => {
+    if (event.kind && event.kind !== 'path') return;
+    if (event.type === 'end' || event.type === 'cancel') { clearDrop(); return; }
+    if (!inside(treeRef.current, event.x, event.y)) {
+      if (event.type === 'move') clearDrop();
+      return;
+    }
+    const dir = dropDirAt(document.elementFromPoint(event.x, event.y));
+    if (event.type === 'move') {
+      scheduleHoverExpand(dir);
+      setDrop((current) => (current?.dir === dir && current.copy === event.alt ? current : { dir, copy: event.alt }));
+      return;
+    }
+    if (event.type === 'drop') {
+      clearDrop();
+      dropInto(event.path, dir, { copy: event.alt });
+    }
+  }), [dropDirAt, clearDrop, scheduleHoverExpand, dropInto]);
+
+  // O macOS entrega os caminhos de um arraste do Finder pelo evento nativo,
+  // nunca pelo dataTransfer do webview. A posicao ja chega em pontos CSS.
+  // Um item que saiu desta arvore pela borda da janela e voltou chega pelo
+  // mesmo evento; ele continua sendo movido, como no arraste interno.
+  useEffect(() => {
+    let disposed = false;
+    let unlisten;
+    onNativeDragDrop((event) => {
+      if (disposed) return;
+      const point = event.position ? document.elementFromPoint(event.position.x, event.position.y) : null;
+      const inside = point && treeRef.current?.contains(point);
+      if (!inside) { setDrop(null); return; }
+      const dir = dropDirAt(point);
+      const own = nativeDragOutPath();
+      const paths = event.paths || [];
+      const mine = Boolean(own && paths.length === 1 && paths[0] === own);
+      if (event.type === 'drop') {
+        clearDrop();
+        if (mine) dropInto(own, dir, { copy: false });
+        else importPaths(paths, dir);
+        return;
+      }
+      cancelHoverExpand();
+      const copy = !mine;
+      setDrop((current) => (current?.dir === dir && current.copy === copy ? current : { dir, copy }));
+    }).then((off) => {
+      if (disposed) off();
+      else unlisten = off;
+    }).catch((error) => console.error('[terminais] Arraste nativo indisponível:', error));
+    return () => { disposed = true; unlisten?.(); };
+  }, [dropDirAt, clearDrop, cancelHoverExpand, importPaths, dropInto]);
+
+
+  const menuFor = (entry, anchor) => {
+    const dir = isDirEntry(entry);
+    const change = gitIndex.files.get(entry.path);
+    const items = [
+      dir
+        ? { id: 'toggle', label: explorer.expanded.has(entry.path) ? 'Recolher' : 'Expandir', run: () => toggleDir(entry.path) }
+        : { id: 'open', label: 'Abrir no editor', run: () => onOpenFile(entry.path) },
+      { id: 'default', label: 'Abrir no app padrão', run: () => fs.openDefault(entry.path).catch((error) => notify(error.message, 'warning')) },
+      { id: 'reveal', label: 'Revelar no Finder', run: () => fs.reveal(entry.path).catch((error) => notify(error.message, 'warning')) },
+      change && !dir ? { id: 'diff', label: 'Comparar alterações', run: () => onOpenDiff(gitIndex.status.root, entry.path) } : null,
+      { separator: true },
+      dir ? { id: 'session', label: 'Nova sessão nesta pasta', run: () => onNewSessionAt(entry.path) } : null,
+      { id: 'insert', label: 'Inserir caminho no terminal', run: () => onInsertPath(entry.path) },
+      { id: 'copy', label: 'Copiar caminho', run: () => copyPath(entry.path, false) },
+      { id: 'copy-rel', label: 'Copiar caminho relativo', run: () => copyPath(entry.path, true) },
+      { separator: true },
+      { id: 'duplicate', label: 'Duplicar', run: () => duplicate(entry.path) },
+      dir ? { id: 'new-file', label: 'Novo arquivo', run: () => startCreate(entry.path, 'file') } : null,
+      dir ? { id: 'new-dir', label: 'Nova pasta', run: () => startCreate(entry.path, 'dir') } : null,
+      { id: 'rename', label: 'Renomear', run: () => setEditing({ kind: 'rename', path: entry.path, value: entry.name }) },
+      { id: 'delete', label: 'Mover para a Lixeira…', danger: true, run: () => onDeleteRequest({ path: entry.path, name: entry.name, kind: dir ? 'dir' : 'file', parent: dirName(entry.path) }) },
+    ];
+    setMenu({ anchor, items });
+  };
+
+  /* ── busca ───────────────────────────────────────────────────────── */
+
+  useEffect(() => {
+    if (!searching) { setResults(null); return undefined; }
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const found = await fs.find(root, query, 80);
+        setResults(found);
+      } catch (error) {
+        setResults({ items: [], error: error?.message || String(error) });
+      }
+    }, 140);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [searching, query, root]);
+
+  /* ── arvore achatada ─────────────────────────────────────────────── */
+
+  const rows = useMemo(() => {
+    const list = [];
+    const walk = (path, depth) => {
+      const node = explorer.nodes.get(path);
+      if (editing && editing.kind !== 'rename' && editing.parent === path) list.push({ type: 'edit', path: `${path}/__new__`, depth, parent: path });
+      if (!node) { list.push({ type: 'loading', path: `${path}/__loading__`, depth }); return; }
+      if (node.error) { list.push({ type: 'error', path: `${path}/__error__`, depth, message: node.error }); return; }
+      if (node.loading && !node.entries) { list.push({ type: 'loading', path: `${path}/__loading__`, depth }); return; }
+      if (node.entries && node.entries.length === 0) list.push({ type: 'empty', path: `${path}/__empty__`, depth });
+      (node.entries || []).forEach((entry) => {
+        const dir = isDirEntry(entry);
+        const expanded = dir && explorer.expanded.has(entry.path);
+        list.push({ type: 'entry', entry, path: entry.path, depth, dir, expanded });
+        if (expanded) walk(entry.path, depth + 1);
+      });
+      if (node.truncated) list.push({ type: 'truncated', path: `${path}/__more__`, depth, total: node.total, shown: node.entries.length });
+    };
+    walk(root, 0);
+    return list;
+  }, [explorer, root, explorer.revision, editing]);
+  // Linhas que acabaram de aparecer entram uma atras da outra. Acima do
+  // limite, como uma pasta enorme, nenhuma anima: so a arvore.
+  const seenPathsRef = useRef(null);
+  const freshPaths = useMemo(() => {
+    const seen = seenPathsRef.current;
+    const fresh = new Set();
+    for (const row of rows) {
+      const path = row.entry ? row.entry.path : row.path;
+      if (!seen || !seen.has(path)) fresh.add(path);
+    }
+    return fresh.size <= FRESH_ROWS_LIMIT ? fresh : new Set();
+  }, [rows]);
+  useEffect(() => {
+    seenPathsRef.current = new Set(rows.map((row) => (row.entry ? row.entry.path : row.path)));
+  }, [rows]);
+  let freshIndex = 0;
+
+  const onTreeKeyDown = (event) => {
+    if (editing) return;
+    const entries = rows.filter((row) => row.type === 'entry');
+    if (!entries.length) return;
+    const index = Math.max(0, entries.findIndex((row) => row.path === focused));
+    const current = entries[index];
+    const focusRow = (row) => {
+      setFocused(row.path);
+      treeRef.current?.querySelector(`[data-path="${CSS.escape(row.path)}"]`)?.scrollIntoView({ block: 'nearest' });
+    };
+    if (event.key === 'ArrowDown') { event.preventDefault(); focusRow(entries[Math.min(entries.length - 1, index + 1)]); }
+    else if (event.key === 'ArrowUp') { event.preventDefault(); focusRow(entries[Math.max(0, index - 1)]); }
+    else if (event.key === 'ArrowRight' && current?.dir) { event.preventDefault(); if (!current.expanded) toggleDir(current.path); }
+    else if (event.key === 'ArrowLeft' && current) {
+      event.preventDefault();
+      if (current.dir && current.expanded) toggleDir(current.path);
+      else { const parent = entries.find((row) => row.path === dirName(current.path)); if (parent) focusRow(parent); }
+    } else if (event.key === 'Enter' && current) { event.preventDefault(); openEntry(current.entry); }
+    else if (event.key === 'Backspace' && event.metaKey && current) {
+      event.preventDefault();
+      onDeleteRequest({ path: current.path, name: current.entry.name, kind: current.dir ? 'dir' : 'file', parent: dirName(current.path) });
+    }
+  };
+
+  const cwdDiffers = shellCwd && shellCwd !== root;
+  const gitStatus = gitIndex.status;
+
+  return (
+    <aside className="terminais-explorer" aria-label="Arquivos do projeto">
+      <div className="terminais-pane__head">
+        <span className="terminais-pane__title">Arquivos</span>
+        <span className="terminais-pane__count" title={shortPath(root)}>{baseName(root)}</span>
+        <span className="terminais-pane__spacer" />
+        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'file')} aria-label="Novo arquivo" title="Novo arquivo"><FilePlus2 size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'dir')} aria-label="Nova pasta" title="Nova pasta"><FolderPlus size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label="Atualizar" title="Atualizar. A árvore também se atualiza sozinha"><RefreshCw size={13} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label="Recolher todas as pastas" title="Recolher todas as pastas"><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
+        <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label="Buscar arquivo por nome" aria-pressed={searching} title="Buscar por nome"><Search size={13} strokeWidth={2} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher arquivos" title="Recolher arquivos, ⇧⌘E"><PanelRightClose size={14} strokeWidth={1.75} /></button>
+      </div>
+      {gitStatus?.isRepo ? (
+        <div className="terminais-explorer__git" title={gitStatus.upstream ? `Acompanha ${gitStatus.upstream}` : 'Sem remoto acompanhado'}>
+          <span className="terminais-explorer__branch">{gitStatus.detached ? 'HEAD solto' : gitStatus.branch}</span>
+          {gitStatus.ahead ? <span>↑{gitStatus.ahead}</span> : null}
+          {gitStatus.behind ? <span>↓{gitStatus.behind}</span> : null}
+          <span className="terminais-explorer__changes">{gitStatus.changes.length === 0 ? 'Limpo' : `${gitStatus.changes.length} ${gitStatus.changes.length === 1 ? 'alteração' : 'alterações'}`}</span>
+        </div>
+      ) : null}
+      {cwdDiffers || explorer.followCwd ? (
+        <div className={`terminais-explorer__cwd${explorer.followCwd ? ' is-following' : ''}`}>
+          <span className="terminais-explorer__cwd-label">Terminal em</span>
+          <span className="terminais-explorer__cwd-path" title={shellCwd || root}>{compactPath(shellCwd || root)}</span>
+          {cwdDiffers ? <button type="button" className="terminais-pane__tool" onClick={() => setExplorerRoot(sessionId, shellCwd)} title="Mostrar esta pasta na árvore" aria-label="Ir para o diretório atual"><Locate size={13} strokeWidth={1.75} /></button> : null}
+          <button type="button" className={`terminais-pane__tool${explorer.followCwd ? ' is-on' : ''}`} onClick={() => setFollowCwd(sessionId, !explorer.followCwd)} aria-pressed={explorer.followCwd} title={explorer.followCwd ? 'Parar de acompanhar o diretório do terminal' : 'Acompanhar o diretório do terminal'} aria-label="Acompanhar diretório atual"><Crosshair size={13} strokeWidth={1.75} /></button>
+        </div>
+      ) : null}
+      {searching ? (
+        <div className="terminais-search terminais-search--explorer">
+          <Search size={13} strokeWidth={2} aria-hidden="true" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Nome do arquivo"
+            aria-label="Buscar arquivo por nome"
+            spellCheck={false}
+            autoCorrect="off"
+            autoCapitalize="off"
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') { event.preventDefault(); setSearching(false); }
+              if (event.key === 'Enter' && results?.items?.[0]) { event.preventDefault(); const first = results.items[0]; if (first.kind === 'dir') { explorer.expanded.add(first.path); markExplorerChanged(sessionId); } else onOpenFile(first.path); }
+            }}
+          />
+          <button type="button" className="terminais-search__clear" onClick={() => setSearching(false)} aria-label="Fechar busca"><X size={12} strokeWidth={2} /></button>
+        </div>
+      ) : null}
+      <div
+        className={`terminais-tree${drop && drop.dir === root ? ' is-drop-root' : ''}`}
+        role="tree"
+        aria-label={`Arquivos de ${baseName(root)}`}
+        ref={treeRef}
+        tabIndex={0}
+        onKeyDown={onTreeKeyDown}
+      >
+        {searching ? (
+          <div className="terminais-results">
+            {results?.error ? <div className="terminais-tree__note">{results.error}</div> : null}
+            {results && !results.error && results.items.length === 0 ? <div className="terminais-tree__note">{query ? 'Nada encontrado' : 'Digite para buscar'}</div> : null}
+            {(results?.items || []).map((item, index) => (
+              <button
+                type="button"
+                key={item.path}
+                style={{ '--i': Math.min(index, 14) }}
+                className="terminais-result"
+                onMouseDown={(event) => startDrag(event, item.path, item.kind === 'dir')}
+                onClick={() => {
+                  if (wasDragged()) return;
+                  if (item.kind === 'dir') { let cursor = item.path; while (isInside(root, cursor) && cursor !== root) { explorer.expanded.add(cursor); cursor = dirName(cursor); } setSearching(false); setFocused(item.path); markExplorerChanged(sessionId); }
+                  else onOpenFile(item.path);
+                }}
+                onContextMenu={(event) => { event.preventDefault(); menuFor({ name: baseName(item.path), path: item.path, kind: item.kind }, anchorFromEvent(event)); }}
+                title={`${item.path}\nArraste para mover, com Option para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão, ou fora do app para copiar`}
+              >
+                <IconFor entry={{ name: baseName(item.path), kind: item.kind }} />
+                <span className="terminais-result__name">{baseName(item.path)}</span>
+                <span className="terminais-result__dir">{dirName(item.relative) === '/' || !item.relative.includes('/') ? '' : dirName(item.relative)}</span>
+              </button>
+            ))}
+            {results?.truncated ? <div className="terminais-tree__note">Projeto grande: a busca parou em 60 mil entradas.</div> : null}
+          </div>
+        ) : rows.map((row) => {
+          if (row.type === 'loading') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Carregando…</div>;
+          if (row.type === 'empty') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Pasta vazia</div>;
+          if (row.type === 'error') return <div key={row.path} className="terminais-tree__note is-error" style={{ '--depth': row.depth }}>{row.message}</div>;
+          if (row.type === 'truncated') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Mostrando {row.shown.toLocaleString('pt-BR')} de {row.total.toLocaleString('pt-BR')} entradas</div>;
+          if (row.type === 'edit') {
+            return (
+              <div key={row.path} className="terminais-row terminais-row--edit" style={{ '--depth': row.depth }}>
+                {editing.kind === 'new-dir' ? <Folder size={14} strokeWidth={1.75} aria-hidden="true" /> : <File size={14} strokeWidth={1.75} aria-hidden="true" />}
+                <InlineInput initial="" placeholder={editing.kind === 'new-dir' ? 'Nome da pasta' : 'Nome do arquivo'} onCommit={commitEditing} onCancel={() => setEditing(null)} />
+              </div>
+            );
+          }
+          const { entry } = row;
+          const change = gitIndex.files.get(entry.path);
+          const dirChanged = row.dir && gitIndex.dirs.has(entry.path);
+          const renaming = editing?.kind === 'rename' && editing.path === entry.path;
+          const isFocused = focused === entry.path;
+          const fresh = freshPaths.has(entry.path);
+          const order = fresh ? freshIndex++ : 0;
+          return (
+            <div
+              key={entry.path}
+              role="treeitem"
+              aria-expanded={row.dir ? row.expanded : undefined}
+              aria-selected={isFocused}
+              data-path={entry.path}
+              data-kind={row.dir ? 'dir' : 'file'}
+              className={`terminais-row${fresh ? ' is-new' : ''}${isFocused ? ' is-focused' : ''}${entry.hidden ? ' is-hidden' : ''}${change ? ` is-git is-git--${change.status}` : ''}${dirChanged ? ' is-git-dir' : ''}${drop && drop.dir === entry.path ? ' is-drop' : ''}`}
+              style={{ '--depth': row.depth, '--i': order }}
+              onMouseDown={(event) => { if (!renaming) startDrag(event, entry.path, row.dir); }}
+              onClick={() => { if (wasDragged()) return; setFocused(entry.path); openEntry(entry); }}
+              onContextMenu={(event) => { event.preventDefault(); setFocused(entry.path); menuFor(entry, anchorFromEvent(event)); }}
+              title={`${change ? `${entry.name}: ${STATUS_LABEL[change.status] || change.status}` : entry.name}\nArraste para mover, com Option para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão, ou fora do app para copiar`}
+            >
+              <span className={`terminais-row__chevron${row.dir ? '' : ' is-blank'}${row.expanded ? ' is-open' : ''}`} aria-hidden="true">
+                {row.dir ? <ChevronRight size={12} strokeWidth={2} /> : null}
+              </span>
+              <span className="terminais-row__icon"><IconFor entry={entry} expanded={row.expanded} /></span>
+              {renaming ? (
+                <InlineInput initial={entry.name} onCommit={commitEditing} onCancel={() => setEditing(null)} />
+              ) : (
+                <span className="terminais-row__name">{entry.name}</span>
+              )}
+              {change ? <span className="terminais-row__git" aria-label={STATUS_LABEL[change.status] || change.status}>{STATUS_LETTER[change.status] || '•'}</span> : null}
+              {!change && dirChanged ? <span className="terminais-row__git terminais-row__git--dir" aria-label="Contém alterações">•</span> : null}
+            </div>
+          );
+        })}
+      </div>
+      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label="Ações do arquivo" /> : null}
+    </aside>
+  );
+}
+
+function InlineInput({ initial, placeholder, onCommit, onCancel }) {
+  const [value, setValue] = useState(initial);
+  const ref = useRef(null);
+  const done = useRef(false);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const input = ref.current;
+      if (!input) return;
+      input.focus();
+      const dot = initial.lastIndexOf('.');
+      input.setSelectionRange(0, dot > 0 ? dot : initial.length);
+    }, 10);
+    return () => clearTimeout(timer);
+  }, [initial]);
+  const commit = () => { if (done.current) return; done.current = true; onCommit(value); };
+  const cancel = () => { if (done.current) return; done.current = true; onCancel(); };
+  return (
+    <input
+      ref={ref}
+      className="terminais-row__input"
+      value={value}
+      placeholder={placeholder}
+      onChange={(event) => setValue(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+      onBlur={() => (value.trim() ? commit() : cancel())}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === 'Enter') { event.preventDefault(); commit(); }
+        if (event.key === 'Escape') { event.preventDefault(); cancel(); }
+      }}
+      spellCheck={false}
+      autoCorrect="off"
+      autoCapitalize="off"
+      aria-label={placeholder || 'Nome'}
+    />
+  );
+}

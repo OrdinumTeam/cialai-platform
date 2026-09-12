@@ -1,14 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
 import { createRoot } from 'react-dom/client';
-import '../shared/scaffold.css';
+import '../styles.css';
+import './macos.css';
+import DesktopApp from './DesktopApp.jsx';
 
-document.documentElement.dataset.platform = navigator.userAgent.includes('Mac') ? 'macos' : 'unknown';
+function platformName() {
+  const agent = navigator.userAgent.toLowerCase();
+  if (agent.includes('mac')) return 'macos';
+  if (agent.includes('win')) return 'windows';
+  if (agent.includes('linux')) return 'linux';
+  return 'unknown';
+}
 
-createRoot(document.getElementById('root')).render(
-  <main className="scaffold">
-    <div className="scaffold__mark" aria-hidden="true" />
-    <h1>Cialai</h1>
-    <p>Casca do desktop pronta. A extração do estúdio começa na próxima tarefa.</p>
-  </main>,
-);
+document.documentElement.dataset.platform = platformName();
+if (new URLSearchParams(window.location.search).get('motion') === '0') document.documentElement.dataset.motion = 'none';
+createRoot(document.getElementById('root')).render(<DesktopApp />);
+
+if (new URLSearchParams(window.location.search).get('cialai_selftest')) {
+  const script = '/scripts/selftest-app.js';
+  import(/* @vite-ignore */ script).catch((error) => console.error('[autoteste]', error));
+}

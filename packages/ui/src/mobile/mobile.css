@@ -1,0 +1,38 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+[data-form-factor="phone"] { -webkit-tap-highlight-color: transparent; }
+[data-form-factor="phone"] body { overflow: hidden; }
+[data-form-factor="phone"] .ios-shell { display: flex; flex-direction: column; height: 100dvh; background: var(--mac-bg); color: var(--mac-label); }
+[data-form-factor="phone"] .ios-header { flex: none; padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: var(--mac-toolbar-bg); border-bottom: 1px solid var(--mac-separator); }
+[data-form-factor="phone"] .ios-header__heading { display: flex; align-items: center; gap: 4px; }
+[data-form-factor="phone"] .ios-header--compact { padding: 4px 12px; }
+[data-form-factor="phone"] .ios-shell--terminal .ios-content { overflow: hidden; padding: 0; }
+[data-form-factor="phone"] .ios-shell--terminal .ios-tabbar { position: static; flex: none; }
+/* Teclado aberto: o WebKit nao encolhe a pagina, so o visualViewport. A casca
+   passa a ocupar exatamente a area visivel e a barra de abas sai, para o
+   prompt e as teclas do terminal ficarem acima do teclado. */
+[data-form-factor="phone"] .ios-shell--keyboard { position: fixed; left: 0; right: 0; top: var(--ios-keyboard-top, 0px); height: var(--ios-keyboard-height, 100dvh); }
+[data-form-factor="phone"] .ios-shell--keyboard .ios-tabbar { display: none; }
+[data-form-factor="phone"] .ios-header__heading > div { flex: 1; min-width: 0; }
+[data-form-factor="phone"] .ios-header h1 { font-size: 1.375rem; line-height: 1.2; margin: 0; font-weight: 600; }
+[data-form-factor="phone"] .ios-header p { margin: 4px 0 0; font-size: .8125rem; color: var(--mac-label-2); }
+[data-form-factor="phone"] .ios-header .ios-readonly { display: flex; align-items: center; gap: 5px; margin-top: 8px; font-size: .75rem; }
+[data-form-factor="phone"] #mac-toolbar-slot { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-form-factor="phone"] #mac-toolbar-slot:empty { display: none; }
+[data-form-factor="phone"] .ios-content { flex: 1; min-height: 0; overflow: auto; padding-bottom: calc(64px + env(safe-area-inset-bottom)); overscroll-behavior: contain; }
+[data-form-factor="phone"] .ios-tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px max(4px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)); background: var(--mac-bg); border-top: 1px solid var(--mac-separator); z-index: 100; }
+[data-form-factor="phone"] .ios-tabbar button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; min-height: 49px; border: 0; background: transparent; color: var(--mac-label-2); font: inherit; font-size: .625rem; }
+[data-form-factor="phone"] [aria-current="page"] { color: var(--mac-accent) !important; }
+[data-form-factor="phone"] button, [data-form-factor="phone"] .btn { min-height: 44px; }
+[data-form-factor="phone"] .mac-tool { min-width: 44px; }
+[data-form-factor="phone"] input, [data-form-factor="phone"] select, [data-form-factor="phone"] textarea { font-size: 16px; }
+[data-form-factor="phone"] .page { padding: 20px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left)); }
+[data-form-factor="phone"] .page-grid--2, [data-form-factor="phone"] .page-grid--hero, [data-form-factor="phone"] .page-grid--charts { grid-template-columns: minmax(0, 1fr); }
+[data-form-factor="phone"] .table-wrap, [data-form-factor="phone"] .fatura-scroll { max-width: 100%; overflow-x: auto; }
+[data-form-factor="phone"] .ios-more { max-height: 85dvh; overscroll-behavior: contain; border-radius: 20px 20px 0 0; padding: 16px 20px calc(20px + env(safe-area-inset-bottom)); background: var(--mac-bg); }
+[data-form-factor="phone"] .ios-more__head { display: flex; align-items: center; justify-content: space-between; }
+[data-form-factor="phone"] .ios-more h2 { margin: 0; font-size: 1.375rem; }
+[data-form-factor="phone"] .ios-more h3 { font-size: .8125rem; color: var(--mac-label-2); margin: 24px 0 8px; }
+[data-form-factor="phone"] .ios-more nav button { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--mac-separator); background: transparent; color: inherit; font: inherit; text-align: left; }
+[data-form-factor="phone"] .ios-more nav button span { flex: 1; }
+[data-form-factor="phone"] :focus-visible { outline: 2px solid var(--mac-accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }

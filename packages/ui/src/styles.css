@@ -1,0 +1,831 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* ============================================================
+   CIALAI — DESIGN SYSTEM
+   ------------------------------------------------------------
+   Single accent: Navy (#1a4fa0) → Sky-blue (#2d7ae0). Stone-tinted
+   neutrals. Flat surfaces with soft shadows. Hero blocks keep
+   their signature radial gradient (linear 160deg navy → blue).
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+*:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+:root{
+/* Layout shell */
+--sidebar-w:260px;
+--sidebar-w-collapsed:72px;
+--topbar-h:60px;
+
+/* Typography */
+--font:'Montserrat',ui-sans-serif,system-ui,-apple-system,sans-serif;
+--font-mono:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;
+
+/* Brand — single accent, navy ramp */
+--navy:#0C204A;
+--navy-light:#1A3A6E;
+--navy-dark:#071d42;
+--brand:#1a4fa0;
+--brand-deep:#15407f;
+--brand-accent:#2d7ae0;
+--brand-soft:rgba(26,79,160,.08);
+--brand-soft-hover:rgba(26,79,160,.14);
+--brand-glow:rgba(45,122,224,.18);
+--hero-gradient:linear-gradient(160deg,#071d42 0%,#0a2a5e 40%,#1a4fa0 100%);
+--hero-shadow:0 10px 28px rgba(7,29,66,.18);
+
+/* Surfaces */
+--bg:#f3f5f9;
+--bg-card:#fff;
+--bg-card-alt:rgba(255,255,255,.82);
+--bg-subtle:rgba(26,79,160,.03);
+
+/* Text scale */
+--text:#1d1d1f;
+--text-secondary:#5a5e6e;
+--text-muted:#9ca3af;
+
+/* Borders */
+--border:rgba(12,32,74,.08);
+--border-strong:rgba(12,32,74,.14);
+
+/* Shadow tier — soft, neutral, monotonic */
+--shadow-xs:0 1px 2px rgba(12,32,74,.04);
+--shadow-sm:0 1px 2px rgba(12,32,74,.04);
+--shadow:0 1px 3px rgba(12,32,74,.05),0 4px 14px rgba(12,32,74,.05);
+--shadow-card:0 1px 2px rgba(12,32,74,.04),0 4px 16px rgba(12,32,74,.04);
+--shadow-card-hover:0 4px 10px rgba(12,32,74,.06),0 16px 32px rgba(12,32,74,.06);
+--shadow-lg:0 4px 6px rgba(12,32,74,.04),0 12px 28px rgba(12,32,74,.08);
+--shadow-dropdown:0 12px 28px rgba(12,32,74,.10);
+
+/* Radius tier — predictable per surface */
+--radius-xs:6px;     /* buttons, inputs, chips */
+--radius-sm:8px;     /* secondary surfaces */
+--radius:12px;       /* cards, modals (default) */
+--radius-lg:16px;    /* feature cards */
+--radius-pill:999px; /* pills, dots */
+
+/* Motion — short, ease-out only */
+--transition:.2s ease;
+--transition-slow:.3s ease;
+
+/* Semantic — status colors only, never decoration */
+--success:#10b981;
+--success-bg:rgba(16,185,129,.10);
+--warning:#f59e0b;
+--warning-bg:rgba(245,158,11,.10);
+--danger:#ef4444;
+--danger-bg:rgba(239,68,68,.10);
+--info:#3b82f6;
+--info-bg:rgba(59,130,246,.10);
+}
+[data-theme="dark"]{
+--bg:#0f1219;
+--bg-card:rgba(22,27,45,.92);
+--bg-card-alt:rgba(30,35,55,.85);
+--bg-subtle:rgba(45,122,224,.05);
+--text:#e8eaf0;
+--text-secondary:#9ca3b8;
+--text-muted:#6b7080;
+--border:rgba(255,255,255,.08);
+--border-strong:rgba(255,255,255,.14);
+--brand-soft:rgba(45,122,224,.12);
+--brand-soft-hover:rgba(45,122,224,.18);
+--shadow-xs:0 1px 2px rgba(0,0,0,.25);
+--shadow-sm:0 1px 2px rgba(0,0,0,.25);
+--shadow:0 1px 4px rgba(0,0,0,.25),0 4px 14px rgba(0,0,0,.18);
+--shadow-card:0 1px 2px rgba(0,0,0,.25),0 4px 16px rgba(0,0,0,.20);
+--shadow-card-hover:0 4px 10px rgba(0,0,0,.30),0 16px 32px rgba(0,0,0,.24);
+--shadow-lg:0 8px 24px rgba(0,0,0,.45);
+--shadow-dropdown:0 12px 28px rgba(0,0,0,.40);
+--success-bg:rgba(16,185,129,.15);
+--warning-bg:rgba(245,158,11,.15);
+--danger-bg:rgba(239,68,68,.15);
+--info-bg:rgba(59,130,246,.15);
+}
+@media (prefers-reduced-motion: reduce){
+*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;transition:background .3s,color .3s;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"cv11","ss01";letter-spacing:-.005em}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border-strong);border-radius:var(--radius-pill);border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:var(--text-muted);background-clip:padding-box;border:2px solid transparent}
+::selection{background:var(--brand-glow);color:var(--text)}
+
+/* SIDEBAR */
+.sidebar{width:var(--sidebar-w);height:100vh;background:var(--hero-gradient);display:flex;flex-direction:column;transition:width .3s cubic-bezier(.4,0,.2,1);position:relative;z-index:100;flex-shrink:0}
+.sidebar::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 300px 400px at 20% 80%,rgba(45,122,224,.15) 0%,transparent 70%),radial-gradient(ellipse 250px 300px at 80% 10%,rgba(36,104,194,.1) 0%,transparent 70%);pointer-events:none}
+.nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--radius-sm);color:rgba(255,255,255,.6);cursor:pointer;transition:all .2s;position:relative;white-space:nowrap;text-decoration:none;font-size:13px;font-weight:500}
+.nav-item:hover{color:rgba(255,255,255,.9);background:rgba(255,255,255,.06)}
+.nav-item.active{color:#fff;background:rgba(255,255,255,.1);box-shadow:inset 3px 0 0 var(--brand-accent),0 0 12px rgba(45,122,224,.08)}
+.nav-item svg{width:20px;height:20px;flex-shrink:0}
+.nav-item span{overflow:hidden;transition:opacity .2s}
+.nav-badge{background:var(--danger);color:#fff;font-size:10px;font-weight:500;padding:2px 6px;border-radius:10px;margin-left:auto}
+
+/* MAIN */
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+.topbar{height:var(--topbar-h);background:var(--bg-card);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 28px;flex-shrink:0;position:relative;z-index:300}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.btn-icon{width:32px;height:32px;border-radius:var(--radius-sm);border:1px solid var(--border);background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s}
+.btn-icon:hover{background:var(--border);color:var(--text)}
+.btn-icon svg{width:14px;height:14px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.content{flex:1;overflow-y:auto;padding:24px 28px;position:relative;z-index:1;isolation:isolate}
+
+/* VIEW */
+.view{display:none;animation:fadeIn .3s ease}
+.view.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* ============================================================
+   SISTEMA UNIVERSAL DE CARDS — macOS-inspired
+   ============================================================ */
+/* Base compartilhada por todos os cards */
+.card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  transition:box-shadow .22s ease,transform .22s ease,border-color .22s ease;
+  position:relative;
+  overflow:hidden;
+}
+/* Hover padrão para cards clicáveis */
+.card:hover{
+  box-shadow:var(--shadow-card-hover);
+  transform:translateY(-3px);
+  border-color:var(--border-strong);
+}
+/* Cursor pointer só em cards clicáveis */
+.card{cursor:pointer}
+
+/* Destaque de foco sutil na borda superior — substituí todos os border-left/top coloridos */
+.card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--brand) 0%,var(--brand-accent) 100%);
+  opacity:0;transition:opacity .22s ease;border-radius:var(--radius) var(--radius) 0 0;
+}
+.card:hover::before{opacity:1}
+
+/* CARDS GRID */
+.cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-bottom:24px}
+.card{padding:20px}
+.card-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.card-title{font-size:14px;font-weight:500;color:var(--text)}
+.card-meta{font-size:11px;color:var(--text-muted);margin-top:2px}
+.card-body{font-size:12px;color:var(--text-secondary);line-height:1.6}
+.card-footer{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.card-tags{display:flex;gap:6px;flex-wrap:wrap}
+
+/* BADGES */
+.badge{font-size:10px;font-weight:500;padding:3px 8px;border-radius:10px;display:inline-flex;align-items:center;gap:4px}
+.badge-success{background:var(--success-bg);color:var(--success)}
+.badge-warning{background:var(--warning-bg);color:var(--warning)}
+.badge-danger{background:var(--danger-bg);color:var(--danger)}
+.badge-info{background:var(--info-bg);color:var(--info)}
+.badge-neutral{background:var(--border);color:var(--text-secondary)}
+
+/* TABLE */
+.table-wrap{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.table{width:100%;border-collapse:collapse;font-size:12px}
+.table th{background:var(--bg);font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;font-size:10px;padding:12px 16px;text-align:left;border-bottom:1px solid var(--border);position:sticky;top:0}
+.table td{padding:12px 16px;border-bottom:1px solid var(--border);color:var(--text-secondary);vertical-align:middle}
+.table tr:last-child td{border-bottom:none}
+.table tr:hover td{background:rgba(26,79,160,.03)}
+.table .code{font-weight:500;color:var(--text);font-size:11px;letter-spacing:.3px}
+.filter-input{height:36px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg-card);color:var(--text);font-family:var(--font);font-size:12px;outline:none;transition:border-color .2s;min-width:180px}
+.filter-input:focus{border-color:var(--brand)}
+.btn{height:36px;padding:0 16px;border-radius:var(--radius-xs);font-family:var(--font);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px;border:none}
+.btn-primary{background:linear-gradient(135deg,#1a4fa0 0%,#2d7ae0 100%);color:#fff;border:none;box-shadow:0 2px 8px rgba(26,79,160,.3)}
+.btn-primary:hover{background:linear-gradient(135deg,#1a4fa0 0%,#2468c2 80%);box-shadow:0 4px 12px rgba(26,79,160,.4)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text-secondary)}
+.btn-ghost:hover{background:var(--border);color:var(--text)}
+.btn-sm{height:30px;padding:0 12px;font-size:11px}
+.btn-icon{width:28px;height:28px;padding:0;justify-content:center;flex-shrink:0}
+.btn-icon svg{width:13px;height:13px}
+
+/* CHARTS */
+.chart-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;box-shadow:var(--shadow-card)}
+.chart-card h3{font-size:13px;font-weight:500;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:var(--text)}
+.chart-card h3 svg{width:16px;height:16px;color:var(--brand)}
+.chart-wrap{position:relative;height:240px;width:100%;isolation:isolate;z-index:0}
+.chart-wrap canvas{position:absolute;inset:0;z-index:0}
+.charts-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:16px;margin-bottom:24px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.form-group input,.form-group textarea{width:100%;height:38px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--bg);color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color .2s}
+.form-group textarea{height:80px;padding:10px 12px;resize:vertical}
+.form-group input:focus,.form-group textarea:focus{border-color:var(--brand)}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes awsSpin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* TIMELINE */
+.timeline{display:flex;flex-direction:column;gap:0}
+.timeline-item{display:flex;gap:12px;padding:10px 0;position:relative}
+.timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--brand);margin-top:5px;flex-shrink:0;position:relative;z-index:1}
+.timeline-item:not(:last-child)::before{content:'';position:absolute;left:3.5px;top:20px;bottom:-5px;width:1px;background:var(--border)}
+.timeline-content{font-size:12px;color:var(--text-secondary);line-height:1.5}
+.timeline-time{font-size:10px;color:var(--text-muted);margin-top:2px}
+
+/* CLIENT LIST & CARDS */
+.view-mode-toggle{display:flex;gap:3px;border:1px solid var(--border);border-radius:var(--radius-xs);padding:3px;background:var(--bg)}
+.view-mode-btn{width:30px;height:26px;border-radius:4px;border:none;background:transparent;color:var(--text-muted);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.view-mode-btn.active{background:var(--bg-card);color:var(--brand);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.view-mode-btn svg{width:14px;height:14px}
+/* NAV GROUP — Hierarquia melhorada */
+.nav-group{margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.06)}
+.nav-group:first-child{border-top:none;padding-top:0}
+.nav-group-header{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:var(--radius-sm);color:rgba(255,255,255,.45);cursor:pointer;transition:all .25s cubic-bezier(.4,0,.2,1);white-space:nowrap;font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:1.2px;user-select:none;position:relative}
+.nav-group-header:hover{color:rgba(255,255,255,.8);background:rgba(255,255,255,.04)}
+.nav-group-header svg{width:18px;height:18px;flex-shrink:0;opacity:.7;transition:opacity .2s}
+.nav-group-header:hover svg{opacity:1}
+.nav-group-header .nav-group-chevron{margin-left:auto;width:14px;height:14px;transition:transform .3s cubic-bezier(.4,0,.2,1);opacity:.45}
+.nav-group.open .nav-group-chevron{transform:rotate(180deg)}
+/* Group with active subitem — highlight parent */
+.nav-group.has-active .nav-group-header{color:rgba(255,255,255,.9);background:rgba(255,255,255,.06)}
+.nav-group.has-active .nav-group-header svg{opacity:1}
+.nav-group-items{overflow:hidden;max-height:0;transition:max-height .35s cubic-bezier(.4,0,.2,1)}
+.nav-group.open .nav-group-items{max-height:300px}
+.nav-subitem{display:flex;align-items:center;gap:10px;padding:8px 12px 8px 44px;border-radius:var(--radius-xs);color:rgba(255,255,255,.42);cursor:pointer;transition:all .2s;white-space:nowrap;text-decoration:none;font-size:12px;font-weight:500;position:relative;margin:1px 0}
+.nav-subitem:hover{color:rgba(255,255,255,.82);background:rgba(255,255,255,.06)}
+.nav-subitem.active{color:#fff;background:rgba(255,255,255,.1);box-shadow:inset 3px 0 0 var(--brand-accent),0 0 10px rgba(45,122,224,.06);font-weight:500}
+.nav-subitem svg{width:15px;height:15px;flex-shrink:0;opacity:.65;transition:opacity .2s}
+.nav-subitem:hover svg{opacity:.9}
+.nav-subitem.active svg{opacity:1}
+.nav-subitem span{overflow:hidden;transition:opacity .2s}
+/* Competência diferente do caixa é o caso do cartão{color:var(--brand);font-weight:600}
+/* Transferencia nao e ganho nem perda{color:var(--text-secondary)}
+
+/* ── Caixa File Preview Overlay ─────────────────────────────────── */
+.caixa-preview-overlay{position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center}
+.caixa-preview-overlay.active{display:flex}
+.caixa-preview-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(4px)}
+.caixa-preview-panel{position:relative;z-index:1;display:flex;flex-direction:column;width:min(92vw,1100px);height:min(90vh,820px);background:var(--bg-card);border-radius:var(--radius);box-shadow:0 24px 80px rgba(0,0,0,.45);overflow:hidden;animation:previewIn .18s ease}
+@keyframes previewIn{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:scale(1)}}
+.caixa-preview-header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--bg-card)}
+.caixa-preview-name{font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
+.caixa-preview-actions{display:flex;gap:4px;flex-shrink:0}
+.caixa-preview-body{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--bg)}
+.caixa-preview-loading{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--text-muted);font-size:13px}
+.caixa-preview-loading svg{width:28px;height:28px;animation:awsSpin 1s linear infinite}
+.caixa-preview-error{display:flex;flex-direction:column;align-items:center;gap:10px;color:var(--danger);font-size:13px}
+.caixa-preview-error svg{width:28px;height:28px}
+.caixa-preview-img-wrap{width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:16px}
+.caixa-preview-img{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;opacity:0;transition:opacity .25s}
+.caixa-preview-iframe{width:100%;height:100%;border:none}
+.caixa-preview-video{max-width:100%;max-height:100%;border-radius:4px}
+.caixa-preview-unsupported{display:flex;flex-direction:column;align-items:center;gap:12px;color:var(--text-muted);font-size:13px;padding:32px}
+.caixa-preview-unsupported svg{width:40px;height:40px;opacity:.3}
+.caixa-preview-unsupported strong{font-size:14px;font-weight:500;color:var(--text)}
+
+@media(max-width:1024px){
+.sidebar{position:fixed;left:0;top:0;z-index:200}
+.main{margin-left:var(--sidebar-w)}
+.content{padding:20px}
+.charts-grid{grid-template-columns:1fr}
+.cards-grid{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+.sidebar{width:var(--sidebar-w-collapsed)}
+.sidebar .nav-item span{opacity:0;width:0}
+.sidebar .nav-item{justify-content:center;padding:10px}
+.sidebar .nav-badge{position:absolute;top:4px;right:4px;margin:0;padding:1px 4px;font-size:9px}
+.main{margin-left:var(--sidebar-w-collapsed)}
+.topbar{padding:0 16px}
+.content{padding:16px}
+}
+.storage-intel-filter-strip{display:flex;gap:8px;flex-wrap:wrap}
+.storage-intel-filter-chip{border:1px solid var(--border);background:var(--card);border-radius:999px;padding:8px 12px;display:inline-flex;align-items:center;gap:10px;font-size:11px;font-weight:500;color:var(--text-secondary);transition:all .18s ease}
+.storage-intel-filter-chip strong{font-size:12px;color:var(--text)}
+.storage-intel-filter-chip.active{border-color:rgba(29,78,216,.28);background:rgba(29,78,216,.09);box-shadow:0 10px 24px rgba(29,78,216,.1);color:var(--brand)}
+
+/* Period chips and form in light (control bar) context */
+.fatura-period-chips{display:flex;gap:6px;flex-wrap:wrap}
+.fatura-period-chip{border:1px solid var(--border);background:var(--bg);color:var(--text-secondary);padding:6px 12px;border-radius:999px;font-size:11px;font-weight:500;cursor:pointer;transition:all .18s ease}
+.fatura-period-chip:hover{background:rgba(26,79,160,.06);color:var(--text);border-color:var(--border-strong)}
+.fatura-period-chip.active{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:0 2px 8px rgba(26,79,160,.24)}
+.fatura-table{min-width:1420px}
+
+.form-label{display:block;font-size:10px;font-weight:500;text-transform:uppercase;letter-spacing:.4px;color:var(--text-muted);margin-bottom:4px}
+.form-input{width:100%;padding:8px 12px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);font-size:13px;font-family:var(--font);background:var(--bg-card);color:var(--text);transition:var(--transition)}
+.form-input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow)}
+@media(max-width:640px){
+.fatura-period-chips{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.fatura-table{min-width:1120px}
+}
+
+/* ============================================================
+   POLISH LAYER — clean corporate baseline
+   ------------------------------------------------------------
+   Cross-cutting refinements applied last so they win the cascade
+   without rewriting every component above.
+   ============================================================ */
+
+/* Headings: cap weight + measured tracking */
+h1,h2,h3,h4,h5,h6{font-weight:500;letter-spacing:-.01em;line-height:1.25;color:var(--text)}
+h1{font-size:17px;font-weight:500}
+h2{font-size:14px;font-weight:500}
+h3{font-size:15px;font-weight:500}
+h4{font-size:13px;font-weight:500}
+p{line-height:1.55}
+
+/* Links: inherit color,brand on hover,no decoration by default */
+a{color:inherit;text-decoration:none}
+a:not([class]):hover{color:var(--brand)}
+
+/* Code & kbd: monospace + subtle surface */
+code,kbd,samp,pre{font-family:var(--font-mono);font-size:.92em}
+kbd{display:inline-flex;align-items:center;padding:1px 6px;border:1px solid var(--border);border-bottom-width:2px;border-radius:var(--radius-xs);font-size:11px;background:var(--bg);color:var(--text-secondary)}
+
+/* Buttons & form controls: inherit font + remove UA tap-highlight */
+button,input,select,textarea{font-family:inherit;color:inherit;-webkit-tap-highlight-color:transparent}
+button{border:none;background:none;cursor:pointer}
+button:disabled,.btn:disabled{opacity:.55;cursor:not-allowed;pointer-events:none}
+
+/* Inputs: standard focus ring using brand */
+input:focus-visible,textarea:focus-visible,select:focus-visible,.filter-input:focus-visible,.form-input:focus-visible{
+  outline:none;
+  border-color:var(--brand);
+  box-shadow:0 0 0 3px var(--brand-glow)
+}
+
+/* Image defaults: never overflow,never blow up */
+img,video,canvas{max-width:100%;height:auto;display:block}
+svg{flex-shrink:0}
+
+/* List defaults inside content (kept reset elsewhere) */
+.content ul:not([class]),.content ol:not([class]){padding-left:1.25rem;line-height:1.6}
+
+/* Standard "card with header" rhythm — works alongside .card */
+.card-section-title{font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.card-section-title svg{width:13px;height:13px}
+
+/* Kicker — reusable section eyebrow used across many screens */
+.kicker{font-size:10px;font-weight:500;letter-spacing:.5px;text-transform:uppercase;color:var(--text-muted)}
+.kicker-inverse{color:rgba(255,255,255,.65)}
+
+/* Tabular numbers — stop "$1{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+
+/* Skeleton — flat pulse,no shimmer */
+.skeleton{background:var(--border);border-radius:var(--radius-xs);animation:skeleton-pulse 1.4s ease-in-out infinite}
+@keyframes skeleton-pulse{0%,100%{opacity:.6}50%{opacity:.3}}
+
+/* Spinner — neutral,no rainbow */
+.spinner{width:18px;height:18px;border-radius:50%;border:2px solid var(--border-strong);border-top-color:var(--brand);animation:awsSpin .9s linear infinite}
+
+/* Standard button rhythm: size variants stay consistent */
+.btn,.btn-primary,.btn-ghost,.btn-sm{font-feature-settings:"cv11";letter-spacing:.005em}
+.btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--brand-glow)}
+.btn-primary:hover{filter:brightness(1.04)}
+
+/* Status pills — semantic color only */
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:var(--radius-pill);font-size:11px;font-weight:500;line-height:1.4;letter-spacing:.1px}
+.pill svg{width:12px;height:12px}
+.pill-success{background:var(--success-bg);color:var(--success)}
+.pill-warning{background:var(--warning-bg);color:var(--warning)}
+.pill-danger{background:var(--danger-bg);color:var(--danger)}
+.pill-info{background:var(--info-bg);color:var(--info)}
+.pill-brand{background:var(--brand-soft);color:var(--brand)}
+.pill-neutral{background:var(--border);color:var(--text-secondary)}
+
+/* Empty-state — plain icon + two lines,no illustrations */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:40px 20px;text-align:center;color:var(--text-secondary)}
+.empty-state svg{width:32px;height:32px;color:var(--text-muted);opacity:.55}
+.empty-state strong{font-size:14px;font-weight:500;color:var(--text)}
+.empty-state span{font-size:12px;max-width:340px;line-height:1.55}
+
+/* Visually hidden but available to screen readers */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* Truncate with ellipsis */
+.truncate{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.sidebar ::selection{background:rgba(255,255,255,.25);color:#fff}
+
+.view-mode-btn:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* Print: nothing fancy,just hide chrome */
+@media print{
+  .sidebar,.topbar,.drawer,.modal-overlay,.toast-container{display:none}
+  .main{margin:0}
+  .content{padding:0;overflow:visible}
+  .card,.aws-hero,.caixa-balance-card,.proj-hero{box-shadow:none;border:1px solid #ddd}
+  body{background:#fff;color:#000}
+}
+
+/* ============================================================
+   CORPORATE STANDARDIZATION — final override layer
+   ------------------------------------------------------------
+   Forces every screen into the same rhythm: weight cap 500,no
+   colored backgrounds on chips,single card padding,no decorative
+   hover gradients,sentence-case discipline.
+   ============================================================ */
+
+/* Cap font weight everywhere — Montserrat 500 is "bold" in this system */
+body,.btn,.btn-primary,.btn-ghost,.btn-sm,.card-title,h1,h2,h3,h4,h5,h6,strong,b,th{font-weight:500}
+
+.kicker{font-weight:500;letter-spacing:.4px}
+
+/* Code/mono elements — keep them readable,not bold */
+code,kbd,samp,pre{font-weight:500}
+
+/* Sidebar nav — restrained weights */
+.nav-item,.nav-subitem,.nav-group-header{font-weight:500}
+.nav-item.active,.nav-subitem.active{font-weight:500}
+
+/* ─── Pills,badges,chips: subtle background,colored text only ────────── */
+.badge,.pill,.fatura-period-chip,.storage-intel-filter-chip{
+  font-weight:500;
+  letter-spacing:.2px;
+  text-transform:none;
+}
+
+/* Soften badge backgrounds — opacity .06 instead of .10/.15 */
+.badge-success,.pill-success{background:rgba(16,185,129,.08);color:#0e7c5d;border:1px solid rgba(16,185,129,.18)}
+.badge-warning,.pill-warning{background:rgba(245,158,11,.08);color:#92670d;border:1px solid rgba(245,158,11,.18)}
+.badge-danger,.pill-danger{background:rgba(239,68,68,.08);color:#a8332f;border:1px solid rgba(239,68,68,.18)}
+.badge-info,.pill-info{background:rgba(59,130,246,.08);color:#1c4f92;border:1px solid rgba(59,130,246,.18)}
+.badge-neutral,.pill-neutral{background:transparent;color:var(--text-secondary);border:1px solid var(--border)}
+
+[data-theme="dark"] .badge-success,[data-theme="dark"] .pill-success{color:#34d399}
+[data-theme="dark"] .badge-warning,[data-theme="dark"] .pill-warning{color:#fbbf24}
+[data-theme="dark"] .badge-danger,[data-theme="dark"] .pill-danger{color:#f87171}
+[data-theme="dark"] .badge-info,[data-theme="dark"] .pill-info{color:#60a5fa}
+
+/* Soften client-op-pill,repo-sig{background:rgba(16,185,129,.08);color:#0e7c5d}
+
+/* Brand pill — subtle{
+  background:var(--brand-soft);
+  color:var(--brand);
+}
+
+/* ─── Card unification — same surface,padding,radius across system ────── */
+.card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow-card);
+  padding:20px;
+}
+
+/* Remove decorative gradient bar on card hover (the ::before colored line) */
+.card::before{
+  display:none;
+}
+
+/* Disable lift transform on hover — flat surfaces stay flat */
+.card:hover{
+  transform:none;
+  box-shadow:var(--shadow-card);
+  border-color:var(--border-strong);
+}
+
+/* Subtle,unified hover background */
+.card:hover{
+  background:var(--bg-card);
+}
+
+.sidebar::before{
+  opacity:.6;
+}
+
+/* Glass cards inside hero — subtle{
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.14);
+  backdrop-filter:none;
+  box-shadow:none;
+}
+
+/* ─── Tables — quiet headers,no gradient stripes ──────────────────────── */
+.table th{
+  background:var(--bg);
+  font-weight:500;
+  color:var(--text-muted);
+  letter-spacing:.4px;
+}
+
+/* Table row hover — quiet */
+.table tr:hover td{background:var(--bg-subtle)}
+
+/* ─── Buttons — flatter primary,no blue glow shadow ───────────────────── */
+.btn-primary{
+  background:var(--brand);
+  box-shadow:none;
+}
+.btn-primary:hover{
+  background:var(--brand-deep);
+  box-shadow:none;
+  filter:none;
+}
+
+/* Period chip — flat */
+.fatura-period-chip.active{background:var(--brand);border-color:var(--brand);box-shadow:none}
+
+/* ─── Filter / search inputs — uniform across screens ─────────────────── */
+.filter-input,.form-input{
+  height:36px;
+  padding:0 12px;
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  background:var(--bg-card);
+  font-size:13px;
+  font-weight:500;
+  box-shadow:none;
+}
+.filter-input:focus,.form-input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow)}
+
+/* ─── Section titles — quiet,.card-title{
+  font-size:14px;
+  font-weight:500;
+  letter-spacing:-.05px;
+  color:var(--text);
+}
+
+/* ─── Stat icons — subtle brand tint{
+  background:var(--brand-soft);
+  color:var(--brand);
+  border:1px solid transparent;
+}
+
+.chart-card h3 svg,.card-section-title svg{color:var(--text-muted)}
+
+/* Top accent bar on sidebar nav active — flatter */
+.nav-item.active{box-shadow:inset 2px 0 0 var(--brand-accent)}
+.nav-subitem.active{box-shadow:inset 2px 0 0 var(--brand-accent)}
+
+/* ─── Toast — flat{box-shadow:var(--shadow-card);font-weight:500}
+
+/* ─── Card section dividers — subtle ──────────────────────────────────── */
+.card-footer{border-top:1px solid var(--border)}
+
+/* ─── Responsive padding tweak — more breathing room on small screens ──── */
+@media(max-width:900px){
+  .card,.kpi-card,.client-card,.repo-card,.storage-card,.aws-card,
+  .aws-kpi-card,.caixa-stat-card,.proj-stat-card{padding:16px}
+}
+
+/* ============================================================
+   PHASE 2 — CORPORATE NORMALIZATION (icons,controls,density)
+   ============================================================ */
+
+/* Sidebar icons -15%: 20px → 17px,group icons 18px → 15px */
+.sidebar .nav-item svg{width:17px;height:17px}
+.sidebar .nav-group-header svg{width:15px;height:15px}
+.sidebar .nav-subitem svg{width:13px;height:13px}
+.nav-item{padding:9px 12px;font-size:12px}
+.nav-subitem{padding:7px 12px 7px 40px;font-size:11.5px}
+.nav-group-header{padding:9px 14px;font-size:10.5px;letter-spacing:1px}
+
+/* Native checkbox normalization — corporate,neutral,dark/light agnostic */
+input[type=checkbox]{
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  appearance:none;
+  width:14px;height:14px;
+  border:1.5px solid var(--border-strong);
+  border-radius:3px;
+  background:var(--bg-card);
+  cursor:pointer;
+  position:relative;
+  flex-shrink:0;
+  vertical-align:middle;
+  transition:border-color .15s,background .15s;
+}
+input[type=checkbox]:hover{border-color:var(--brand)}
+input[type=checkbox]:checked{
+  background:var(--brand);
+  border-color:var(--brand);
+}
+input[type=checkbox]:checked::after{
+  content:'';
+  position:absolute;
+  left:3px;top:0px;
+  width:6px;height:9px;
+  border:solid #fff;
+  border-width:0 2px 2px 0;
+  transform:rotate(45deg);
+}
+input[type=checkbox]:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+input[type=checkbox]:indeterminate{
+  background:var(--brand);
+  border-color:var(--brand);
+}
+input[type=checkbox]:indeterminate::after{
+  content:'';
+  position:absolute;
+  left:2px;top:5px;
+  width:8px;height:2px;
+  background:#fff;
+  border:none;
+  transform:none;
+}
+
+/* AWS chart containers — responsive{
+  width:100%;
+  max-width:100%;
+  position:relative;
+  overflow:hidden;
+}
+.chart-wrap canvas{
+  max-width:100%;
+  height:auto;
+}
+.chart-wrap{height:240px;max-width:100%;overflow:hidden}
+
+/* Hero values — bump back up to read like an executive number{font-size:26px}
+
+/* Refresh button shrink */
+.btn-sm[title="Recarregar"],#clientsReload,#projReload{
+  height:28px;
+  width:28px;
+  padding:0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+}
+.btn-sm[title="Recarregar"] svg,#clientsReload svg,#projReload svg{width:13px;height:13px}
+
+/* Filters — smaller height{gap:8px;margin-bottom:16px;align-items:center}
+
+/* Top action button placement (Novo X{margin-left:auto}
+
+/* Tables — corporate density: tighter rows,smaller font */
+.table th,.table td{padding:9px 14px;font-size:12px}
+.table th{font-size:10px;font-weight:500;letter-spacing:.5px}
+
+/* Storage table — fix overflow{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  word-break:break-word;
+  max-width:100%;
+}
+
+/* Repo cards — tighter{font-size:14px;line-height:1.3}
+.card-title{font-size:13px;font-weight:500}
+
+/* Period chips bar — corporate,with quick presets */
+.fatura-period-chips{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.fatura-period-chip{
+  border:1px solid var(--border);
+  background:var(--bg-card);
+  color:var(--text-secondary);
+  padding:6px 11px;
+  border-radius:var(--radius-pill);
+  font-size:11px;
+  font-weight:500;
+  cursor:pointer;
+  transition:all .15s;
+}
+.fatura-period-chip:hover{border-color:var(--brand);color:var(--brand);background:var(--bg-card)}
+.fatura-period-chip.active{background:var(--brand);color:#fff;border-color:var(--brand)}
+.form-group label{font-size:10px;letter-spacing:.4px;font-weight:500;color:var(--text-muted)}
+.form-group input,.form-group textarea{height:36px;font-size:12.5px}
+.form-group textarea{height:auto;min-height:72px}
+
+/* Empty/loading states — quieter */
+[class*="-empty"]{font-size:12.5px;color:var(--text-muted)}
+
+/* Fatura specific: faturamento total readable */
+#faturaHeroValue{font-size:28px;line-height:1.1}
+
+/* Last polish: ensure topbar and sidebar are visually separated */
+.topbar{box-shadow:var(--shadow-xs)}
+
+/* Compact KPI grid for small viewports */
+@media(max-width:640px){
+  .kpi-grid{grid-template-columns:1fr 1fr}
+  .kpi-value{font-size:18px}
+  .aws-hero,.caixa-balance-card,.proj-hero,.client-page-hero{padding:16px}
+}
+
+/* Caixa filter bar — order: chips first{margin-top:0}
+.topbar{padding:0 24px}
+
+/* Tables — even cleaner header */
+.table thead{background:var(--bg)}
+.table thead th{border-bottom:1px solid var(--border)}
+.table tbody td{border-bottom:1px solid var(--border)}
+.table tbody tr:last-child td{border-bottom:none}
+
+/* Better balance for control / dashboard charts */
+.chart-card{padding:16px}
+.chart-card h3{margin-bottom:10px}
+
+/* Status badges — keep minimum width consistent */
+.badge,.pill{min-width:0;white-space:nowrap}
+
+/* Hero glass cards inside fatura — compact{gap:10px;margin-top:14px;padding-top:14px}
+
+/* Card hover — subtle change,no lift */
+.card{transition:border-color .15s,background .15s}
+.card:hover{
+  border-color:var(--border-strong);
+  background:var(--bg-card);
+  transform:none;
+}
+
+/* Tighten content padding */
+.content{padding:18px 24px}
+
+/* Form input variants */
+input[type=date]{font-family:var(--font);font-size:12.5px}
+
+/* Make sure no card has aggressive border-radius differences */
+.card{border-radius:var(--radius)}
+.content > *,.view{min-width:0;max-width:100%;overflow-x:hidden}
+
+/* Period chips inside fatura — compact */
+.fatura-period-chips{gap:4px;flex-wrap:wrap}
+.fatura-period-chip{padding:5px 9px;font-size:10.5px}
+
+.empty-chart{
+  height:80px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-muted);font-size:11.5px;
+  background:var(--bg);border-radius:var(--radius-sm);
+  border:1px dashed var(--border);
+  margin:14px 18px 18px;
+}
+
+/* Reduce empty card heights */
+.chart-card .chart-wrap:empty,.chart-wrap canvas:not([height]){min-height:auto}
+
+/* Storage intel filter chips below hero */
+.storage-intel-filter-strip{margin-top:0;gap:5px}
+.storage-intel-filter-chip{padding:5px 10px;font-size:10.5px;background:var(--bg-card);border-color:var(--border);color:var(--text-secondary);font-weight:500;box-shadow:none}
+.storage-intel-filter-chip strong{font-size:11px;color:var(--text);font-weight:500}
+.storage-intel-filter-chip.active{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:none}
+.storage-intel-filter-chip.active strong{color:#fff}
+
+/* ─── Generic empty/loading states ─────────────────────────────────────── */
+[data-state="loading"],[data-state="empty"]{min-height:140px;padding:24px}
+
+/* ─── Small viewport tighter ───────────────────────────────────────────── */
+@media(max-width:1180px){
+  .fatura-glass-grid,.storage-intel-kpi-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .aws-overview{grid-template-columns:1fr}
+  .aws-ch-grid{grid-template-columns:1fr}
+}
+
+/* Saldo de conta negativo{color:rgba(252,165,165,.95)}
+
+/* Empty chart card — short,no wasted space */
+.empty-chart{
+  height:64px;
+  margin:10px 14px 14px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--text-muted);font-size:11px;font-weight:500;
+  background:var(--bg);border-radius:var(--radius-xs);
+  border:1px dashed var(--border);
+  letter-spacing:.1px;
+}
+
+/* Control Center storage donut empty — show placeholder */
+#chartHealth ~ .empty-chart,.chart-card .empty-chart{height:80px;margin:8px 14px 14px}
+
+/* Table — better contrast for readable rows */
+.table tbody td{font-size:12px;color:var(--text);line-height:1.5}
+.table tbody td:first-child{font-weight:500}
+.table thead th{
+  background:var(--bg);
+  color:var(--text-muted);
+  font-size:10px;
+  font-weight:500;
+  text-transform:uppercase;
+  letter-spacing:.5px;
+  padding:11px 14px;
+  border-bottom:1px solid var(--border);
+}
+.table tbody tr{transition:background .12s}
+.table tbody tr:hover td{background:var(--bg-subtle)}
+.table tbody tr td{padding:11px 14px}
+.table-wrap{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  overflow:hidden;
+  margin-bottom:18px;
+}
+
+/* Code spans inside tables — corporate mono blue */
+.table .code,.table td.code,.table td > .code{
+  font-family:var(--font-mono);
+  font-size:10.5px;
+  font-weight:500;
+  color:var(--brand);
+  letter-spacing:.2px;
+}
+
+/* Clients table — never overflow horizontally */
+.table-wrap{max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.table{min-width:600px}
+
+/* CAMPOS DE FORMULARIO (.field): select,input e textarea nativos das views.
+   Base neutra; o app macOS refina em desktop/macos.css. */
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field--full{width:100%}
+.field__label{display:block;font-size:11px;font-weight:500;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px}
+.field__control{width:100%;height:36px;padding:0 12px;border:1px solid var(--border-strong);border-radius:var(--radius-xs);background:var(--bg-card);color:var(--text);font-family:var(--font);font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s}
+.field__control:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-glow)}
+.field__control:disabled{opacity:.6}
+.field__control--area{height:auto;min-height:80px;padding:10px 12px;resize:vertical;line-height:1.5}
+.field__control--select{padding-right:32px;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}

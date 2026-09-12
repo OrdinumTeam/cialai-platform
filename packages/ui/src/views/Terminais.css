@@ -1,0 +1,542 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* View Terminais: estudio com sessoes a esquerda, trabalho ao centro e
+   arquivos a direita. So classes terminais-* sobre tokens da camada macOS.
+
+   O estudio ocupa a area de conteudo inteira: o padding padrao de
+   .mac-content e trocado pela altura da toolbar, e as tres regioes cuidam
+   das proprias margens. O terminal e o protagonista: superficie suave com
+   raio de painel, sem borda, e o resto em canvas com fios de cabelo. */
+
+[data-platform="macos"] .mac-content:has(> .terminais-page){padding:52px 0 0;overflow:hidden;scroll-behavior:auto}
+[data-platform="macos"] .view.terminais-page{display:flex;height:100%;min-height:0;max-width:none;margin:0;animation:macFade var(--mac-normal) var(--mac-ease) both}
+[data-platform="macos"] .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
+
+[data-platform="macos"]{
+  --terminais-editor-line:rgba(26,79,160,.045);
+  --terminais-editor-match:rgba(26,79,160,.16);
+  --terminais-editor-search:rgba(194,122,0,.22);
+  --terminais-syn-keyword:#8a3fb2;
+  --terminais-syn-string:#1f7a3e;
+  --terminais-syn-number:#b35c00;
+  --terminais-syn-comment:#8e8e93;
+  --terminais-syn-function:#1a4fa0;
+  --terminais-syn-type:#0f7f8c;
+  --terminais-syn-property:#3b4d7a;
+  --terminais-syn-tag:#b23b3b;
+  --terminais-syn-regexp:#c25e00;
+}
+[data-platform="macos"][data-theme="dark"]{
+  --terminais-editor-line:rgba(74,138,230,.10);
+  --terminais-editor-match:rgba(74,138,230,.26);
+  --terminais-syn-keyword:#d09aee;
+  --terminais-syn-string:#7fd29a;
+  --terminais-syn-number:#f0b070;
+  --terminais-syn-comment:#7f7f86;
+  --terminais-syn-function:#7cb0f2;
+  --terminais-syn-type:#66d3de;
+  --terminais-syn-property:#b9c6e8;
+  --terminais-syn-tag:#ff8a8a;
+  --terminais-syn-regexp:#f0a629;
+}
+
+/* terminais nao exibidos ficam abertos fora da tela; o xterm pausa a
+   renderizacao e continua consumindo a saida */
+.terminais-parking{position:fixed;left:-20000px;top:0;width:960px;height:640px;overflow:hidden;visibility:hidden;pointer-events:none}
+.terminais-parking .xterm{height:100%}
+
+/* ── estrutura ─────────────────────────────────────────────────────── */
+
+.terminais-page{--terminais-sessions:240px;--terminais-explorer:260px}
+.terminais-sessions{display:flex;flex-direction:column;flex:0 0 var(--terminais-sessions);width:var(--terminais-sessions);min-width:0;min-height:0;background:var(--mac-bg)}
+.terminais-explorer{display:flex;flex-direction:column;flex:0 0 var(--terminais-explorer);width:var(--terminais-explorer);min-width:0;min-height:0;background:var(--mac-bg)}
+.terminais-work{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+.terminais-page.is-sessions-collapsed .terminais-sessions,.terminais-page.is-explorer-collapsed .terminais-explorer{display:none}
+
+.terminais-splitter{position:relative;flex:0 0 auto;z-index:2;user-select:none;-webkit-user-select:none}
+.terminais-splitter--vertical{width:7px;margin:0 -3px;cursor:col-resize}
+.terminais-splitter--horizontal{height:7px;margin:-3px 0;cursor:row-resize}
+.terminais-splitter__grip{position:absolute;background:var(--mac-separator);transition:background var(--mac-fast) var(--mac-ease),transform var(--mac-fast) var(--mac-ease)}
+.terminais-splitter--vertical .terminais-splitter__grip{top:0;bottom:0;left:3px;width:1px}
+.terminais-splitter--horizontal .terminais-splitter__grip{left:0;right:0;top:3px;height:1px}
+.terminais-splitter:hover .terminais-splitter__grip,.terminais-splitter:focus-visible .terminais-splitter__grip{background:var(--mac-accent);transform:scaleX(2)}
+.terminais-splitter--horizontal:hover .terminais-splitter__grip,.terminais-splitter--horizontal:focus-visible .terminais-splitter__grip{transform:scaleY(2)}
+.terminais-splitter:focus-visible{outline:none;box-shadow:none}
+body.is-col-resizing,body.is-col-resizing *{cursor:col-resize!important}
+body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
+
+/* alca fina na lateral do centro para reabrir um painel recolhido */
+.terminais-edge{position:relative;flex:0 0 14px;width:14px}
+.terminais-edge__btn{position:absolute;top:50%;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:14px;height:40px;margin-top:-20px;border:0;border-radius:6px;background:transparent;color:var(--mac-label-3);cursor:default;transition:color var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease)}
+.terminais-edge--left .terminais-edge__btn{left:0}
+.terminais-edge--right .terminais-edge__btn{right:0}
+.terminais-edge__btn:hover{background:var(--mac-surface-2);color:var(--mac-label)}
+.terminais-page.is-focus .terminais-edge{width:6px;flex-basis:6px}
+.terminais-page.is-focus .terminais-edge__btn{opacity:0}
+.terminais-page.is-focus .terminais-edge:hover .terminais-edge__btn,.terminais-page.is-focus .terminais-edge__btn:focus-visible{opacity:1}
+
+/* ── cabecalhos de painel ──────────────────────────────────────────── */
+
+.terminais-pane__head{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:34px;padding:0 8px 0 14px}
+.terminais-pane__title{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label)}
+.terminais-pane__count{font-size:11.5px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.terminais-pane__spacer{flex:1}
+.terminais-pane__tool{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-pane__tool:hover{background:var(--mac-hover);color:var(--mac-label)}
+.terminais-pane__tool:active{background:var(--mac-press)}
+.terminais-pane__tool.is-on{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.terminais-pane__tool:disabled{opacity:.4}
+.terminais-pane__chip{display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border:0;border-radius:6px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-pane__chip:hover{background:var(--mac-accent-soft-hover)}
+
+.terminais-search{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:26px;margin:0 10px 6px;padding:0 6px 0 8px;border-radius:7px;background:var(--mac-surface-2);color:var(--mac-label-3)}
+.terminais-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
+.terminais-search input::placeholder{color:var(--mac-label-3)}
+[data-platform="macos"] .terminais-search input:focus-visible{box-shadow:none;outline:none}
+.terminais-search:focus-within{box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-search__clear{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:0;border-radius:4px;background:transparent;color:var(--mac-label-3);cursor:default}
+.terminais-search__clear:hover{background:var(--mac-hover);color:var(--mac-label)}
+.terminais-search--explorer{margin:0 10px 6px}
+
+/* ── tom da sessao ─────────────────────────────────────────────────── */
+/* Cada card e o cabecalho central podem receber uma cor propria. Sem cor,
+   caem no azul do app. As tintas suaves e o gradiente das barras saem do
+   proprio tom com color-mix, entao uma cor so serve ao claro e ao escuro. */
+
+.terminais-card,.terminais-work{--terminais-accent:var(--terminais-accent-light,var(--mac-accent));--terminais-accent-text:var(--terminais-accent-light,var(--mac-accent-text))}
+[data-theme="dark"] .terminais-card,[data-theme="dark"] .terminais-work{--terminais-accent:var(--terminais-accent-dark,var(--mac-accent));--terminais-accent-text:var(--terminais-accent-dark,var(--mac-accent-text))}
+
+/* ── sessoes ───────────────────────────────────────────────────────── */
+
+.terminais-sessions__list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 8px 12px;display:flex;flex-direction:column;gap:4px}
+.terminais-sessions__empty{padding:18px 8px;font-size:12px;color:var(--mac-label-3);text-align:center}
+.terminais-sessions__dropend{flex:0 0 28px}
+.terminais-sessions__reopen{display:flex;align-items:center;gap:6px;margin:0 10px 8px;height:26px;padding:0 9px;border:0;border-radius:7px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11.5px;font-weight:500;text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-sessions__reopen svg{flex:0 0 auto}
+.terminais-sessions__reopen span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-sessions__reopen:hover{background:var(--mac-accent-soft-hover)}
+
+.terminais-card{position:relative;display:flex;flex-direction:column;gap:3px;padding:8px 8px 8px 12px;border-radius:10px;background:transparent;cursor:default;transition:background var(--mac-fast) var(--mac-ease);animation:macRowIn 240ms var(--mac-ease) both}
+.terminais-card::before{content:'';position:absolute;left:4px;top:10px;bottom:10px;width:3px;border-radius:2px;background:linear-gradient(180deg,color-mix(in srgb,var(--terminais-accent) 62%,#fff) 0%,var(--terminais-accent) 100%);opacity:0;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-card:hover{background:var(--mac-hover)}
+.terminais-card:not(.has-color){--terminais-accent:var(--mac-label-3)}
+.terminais-card:not(.has-color).is-selected{background:transparent}
+.terminais-card:not(.has-color):hover{background:var(--mac-hover)}
+.terminais-card.is-selected::before{opacity:1}
+.terminais-card.is-dragging{opacity:.4}
+.terminais-card.is-drop-before{box-shadow:0 -3px 0 -1px var(--mac-accent)}
+.terminais-card.is-drop-after{box-shadow:0 3px 0 -1px var(--mac-accent)}
+.terminais-card.is-drop{box-shadow:inset 0 0 0 2px var(--mac-accent);background:var(--mac-accent-soft)}
+.terminais-sessions__dropend.is-active{border-top:2px solid var(--mac-accent);border-radius:2px}
+.terminais-card:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring)}
+/* Card com cor propria: a tinta fica sempre, num degrade suave, selecionado
+   ou nao. O que marca o selecionado e a barra da esquerda e um tom mais
+   cheio. */
+.terminais-card.has-color{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 10%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 4%,transparent) 100%)}
+.terminais-card.has-color:hover{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 14%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 7%,transparent) 100%)}
+[data-theme="dark"] .terminais-card.has-color{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 15%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 6%,transparent) 100%)}
+[data-theme="dark"] .terminais-card.has-color:hover{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 20%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 10%,transparent) 100%)}
+.terminais-card__row{display:flex;align-items:center;gap:7px;min-width:0}
+.terminais-card__name{flex:1;min-width:0;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__rename{flex:1;min-width:0;height:22px;padding:0 6px;border:1px solid var(--mac-accent);border-radius:6px;background:var(--mac-field);font:inherit;font-size:13px;font-weight:600;color:var(--mac-label);outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-card__pin{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-card__menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;margin:-3px -3px -3px 0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-card:hover .terminais-card__menu,.terminais-card.is-selected .terminais-card__menu,.terminais-card__menu:focus-visible{opacity:1}
+.terminais-card__menu:hover{background:var(--mac-press);color:var(--mac-label)}
+.terminais-card__subtitle{padding-left:17px;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__running-row{display:flex;align-items:baseline;gap:6px;min-width:0;padding-left:17px;font-size:12px;white-space:nowrap;overflow:hidden}
+.terminais-card__running{flex:0 1 auto;min-width:0;font-weight:500;color:var(--mac-label);overflow:hidden;text-overflow:ellipsis}
+.terminais-card__running.is-agent{color:var(--terminais-accent-text)}
+.terminais-card__running-note{font-size:11px;color:var(--mac-label-3)}
+.terminais-card__state{display:flex;align-items:baseline;gap:6px;min-width:0;padding-left:17px;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden}
+.terminais-card__status{overflow:hidden;text-overflow:ellipsis}
+.terminais-card__status--bad{color:var(--mac-bad)}
+.terminais-card__status--warn{color:var(--mac-warn)}
+.terminais-card__elapsed{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+.terminais-card__attention{display:flex;align-items:center;gap:5px;margin:2px 0 0 17px;font-size:11.5px;font-weight:500;color:var(--mac-accent-text)}
+.terminais-card__attention--finished{color:var(--mac-ok)}
+.terminais-card__attention--error{color:var(--mac-bad)}
+.terminais-card__attention--bell,.terminais-card__attention--notify{color:var(--mac-warn)}
+.terminais-card__attention span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__metrics{display:flex;flex-wrap:wrap;gap:2px 10px;padding-left:17px;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.terminais-card__metrics em{font-style:normal;color:var(--mac-label-4)}
+.terminais-card__metrics-off{font-style:italic}
+/* Uso do plano do agente, ao lado de CPU e memoria. O tom acompanha o
+   quanto falta: discreto ate 75%, atento depois, alarmado perto do teto. */
+/* Uso do plano colado no nome do agente, na mesma linha. O tom acompanha o
+   quanto falta: discreto até 75%, atento depois, alarmado perto do teto. */
+.terminais-card__plan{flex:0 0 auto;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+.terminais-card__plan--warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
+/* Modelo e perfil da conta numa linha propria sob o agente, chips neutros;
+   o percentual, na linha do agente, e o unico com tom de alerta. */
+.terminais-card__agent-row{display:flex;align-items:center;gap:4px;min-width:0;padding-left:17px;overflow:hidden;animation:macRowIn 180ms var(--mac-ease) both}
+.terminais-card__model{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__profile{flex:0 0 auto;padding:0 5px;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1px var(--mac-separator-strong);font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);white-space:nowrap}
+.terminais-card__plan--bad{background:var(--mac-bad-bg,var(--mac-warn-bg));color:var(--mac-bad);font-weight:600}
+.terminais-card__dot{width:7px;height:7px;flex:0 0 auto}
+.terminais-card__dot--ok{background:var(--mac-ok)}
+.terminais-card__dot--warn{background:var(--mac-warn)}
+.terminais-card__dot--bad{background:var(--mac-bad)}
+.terminais-card__dot--muted{background:var(--mac-label-4)}
+.terminais-card__dot--busy{background:var(--terminais-accent)}
+.terminais-card.has-attention--bell .terminais-card__dot,.terminais-card.has-attention--notify .terminais-card__dot{box-shadow:0 0 0 3px var(--mac-warn-bg);animation:macPulse 1.6s ease-in-out infinite}
+
+/* barras de atividade: tres traços que respiram */
+.terminais-activity{display:inline-flex;align-items:flex-end;gap:2px;width:11px;height:10px;flex:0 0 auto}
+.terminais-activity i{display:block;width:2px;height:4px;border-radius:1px;background:linear-gradient(180deg,color-mix(in srgb,var(--terminais-accent) 55%,#fff) 0%,var(--terminais-accent) 100%);animation:terminaisBars 1.1s ease-in-out infinite}
+.terminais-activity i:nth-child(2){animation-delay:.18s}
+.terminais-activity i:nth-child(3){animation-delay:.36s}
+.terminais-activity--warn i{background:var(--mac-warn)}
+@keyframes terminaisBars{0%,100%{height:3px;opacity:.55}50%{height:10px;opacity:1}}
+@media (prefers-reduced-motion:reduce){.terminais-activity i{animation:none;height:7px}}
+[data-motion="none"] .terminais-activity i{animation:none;height:7px}
+
+/* ── area de trabalho ──────────────────────────────────────────────── */
+
+.terminais-work__head{display:flex;align-items:center;gap:8px;flex:0 0 auto;height:34px;padding:0 8px 0 12px;min-width:0}
+.terminais-work__dot{width:7px;height:7px}
+.terminais-work__dot--ok{background:var(--mac-ok)}
+.terminais-work__dot--busy{background:var(--terminais-accent)}
+.terminais-work__dot.is-working{animation:macPulse 1.4s ease-in-out infinite}
+.terminais-work__dot--warn{background:var(--mac-warn)}
+.terminais-work__dot--bad{background:var(--mac-bad)}
+.terminais-work__dot--muted{background:var(--mac-label-4)}
+.terminais-work__name{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap}
+.terminais-work__path{min-width:0;font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-work__branch{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:20px;padding:0 7px;border-radius:6px;background:var(--mac-surface-2);font-size:11.5px;font-weight:500;color:var(--mac-label-2);white-space:nowrap}
+.terminais-work__branch em{font-style:normal;color:var(--mac-warn);font-variant-numeric:tabular-nums}
+.terminais-work__running{flex:0 0 auto;font-size:12px;color:var(--mac-label-2);white-space:nowrap}
+.terminais-work__running.is-agent{color:var(--terminais-accent-text);font-weight:500}
+.terminais-work__subtitle{flex:0 1 auto;min-width:0;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-work__actions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
+.terminais-work__sep{width:1px;height:16px;margin:0 4px;background:var(--mac-separator)}
+.terminais-work__font{min-width:16px;text-align:center;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+/* A divisao nunca transborda: o editor pode encolher, os minimos cedem em
+   janela baixa e o corpo corta o que passar. Sem isso, com pouca altura os
+   dois painéis somavam mais que 100% e o terminal subia por cima do texto
+   do editor. */
+.terminais-work__body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0 6px 8px}
+.terminais-work__body.is-split .terminais-editor{flex:0 1 calc(var(--terminais-ratio,.55) * 100%);min-height:min(120px,35%);max-height:max(40%,calc(100% - 140px))}
+.terminais-work__body.is-split .terminais-terminal{flex:1 1 0;min-height:min(120px,30%)}
+.terminais-work__body.is-editor-only .terminais-editor{flex:1}
+
+/* terminal: superficie suave com raio de painel, o mesmo fundo do xterm */
+.terminais-terminal{position:relative;display:flex;flex:1;min-height:0;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface-2);transition:box-shadow var(--mac-fast) var(--mac-ease)}
+.terminais-terminal.is-dropping{box-shadow:inset 0 0 0 2px var(--mac-accent)}
+/* O respiro fica no proprio .xterm, que o fit addon desconta. No host, com
+   box-sizing border-box, ele entraria na altura lida e a ultima linha
+   ficaria escondida atras da borda. */
+.terminais-terminal__host{position:relative;flex:1;min-width:0;min-height:0}
+.terminais-terminal__host .xterm{height:100%;padding:8px 2px 6px 10px;touch-action:none}
+/* No xterm 6 o tema colore o scrollable interno; o viewport externo ainda
+   traz #000 do CSS da biblioteca, visivel ao redor do respiro do terminal. */
+.terminais-terminal__host .xterm-viewport{background-color:var(--mac-surface-2)}
+.terminais-terminal__tobottom{position:absolute;right:16px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--mac-separator-strong);border-radius:7px;background:var(--mac-glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);color:var(--mac-label);font:inherit;font-size:11.5px;font-weight:500;box-shadow:var(--mac-shadow-popover);cursor:default;animation:macPop 160ms var(--mac-ease)}
+.terminais-terminal__tobottom:hover{background:var(--mac-surface)}
+.terminais-terminal__drop{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:var(--mac-accent-soft);color:var(--mac-accent-text);font-size:13px;font-weight:500;pointer-events:none}
+.terminais-terminal__end{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-top:1px solid var(--mac-separator);background:var(--mac-glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font-size:12.5px;line-height:1.4;color:var(--mac-label-2);animation:macFade var(--mac-normal) var(--mac-ease)}
+.terminais-terminal__end-actions{display:flex;gap:6px;flex:0 0 auto}
+.terminais-terminal__disconnected{position:absolute;inset:0;z-index:3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;background:var(--mac-surface-2)}
+.terminais-terminal__disconnected strong{font-size:13px;font-weight:600;color:var(--mac-label)}
+.terminais-terminal__disconnected span{max-width:44ch;font-size:12.5px;color:var(--mac-label-2);text-wrap:balance}
+.terminais-terminal__disconnected .btn{margin-top:8px}
+
+.terminais-find{position:absolute;top:8px;right:14px;z-index:4;display:flex;align-items:center;gap:4px;height:30px;padding:0 4px 0 9px;border-radius:8px;background:var(--mac-glass);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:var(--mac-shadow-popover);color:var(--mac-label-3);animation:macPop 160ms var(--mac-ease)}
+.terminais-find input{width:180px;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
+[data-platform="macos"] .terminais-find input:focus-visible{box-shadow:none}
+.terminais-find input::placeholder{color:var(--mac-label-3)}
+
+/* ── editor ────────────────────────────────────────────────────────── */
+
+.terminais-editor{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;margin-bottom:6px;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface);box-shadow:inset 0 0 0 1px var(--mac-separator)}
+.terminais-editor.is-drop{box-shadow:inset 0 0 0 2px var(--mac-accent)}
+.terminais-tabs{display:flex;align-items:stretch;flex:0 0 auto;height:32px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--mac-separator);scrollbar-width:none}
+.terminais-tabs::-webkit-scrollbar{display:none}
+.terminais-tab{position:relative;display:flex;align-items:center;gap:6px;flex:0 0 auto;max-width:220px;padding:0 6px 0 12px;border-right:1px solid var(--mac-separator);color:var(--mac-label-2);font-size:12px;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-tab:hover{background:var(--mac-hover)}
+.terminais-tab.is-active{color:var(--mac-label);background:var(--mac-surface)}
+.terminais-tab.is-active::after{content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--mac-accent)}
+.terminais-tab.is-diff .terminais-tab__name{font-style:italic}
+.terminais-tab__name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-tab__close{position:relative;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:18px;height:18px;padding:0;border:0;border-radius:4px;background:transparent;color:var(--mac-label-3);cursor:default}
+.terminais-tab__close svg{opacity:0;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-tab:hover .terminais-tab__close svg,.terminais-tab__close:focus-visible svg{opacity:1}
+.terminais-tab__close:hover{background:var(--mac-press);color:var(--mac-label)}
+.terminais-tab__dot{position:absolute;width:7px;height:7px;border-radius:50%;background:var(--mac-accent);opacity:0;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-tab.is-dirty .terminais-tab__dot{opacity:1}
+.terminais-tab.is-dirty:hover .terminais-tab__dot{opacity:0}
+.terminais-editor__body{position:relative;display:flex;flex-direction:column;flex:1;min-height:0}
+.terminais-editor__bar{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:6px 10px;border-bottom:1px solid var(--mac-separator)}
+.terminais-editor__bar .btn{margin-left:auto}
+.terminais-editor__host{flex:1;min-height:0;overflow:hidden}
+.terminais-editor__host .cm-editor{height:100%}
+.terminais-editor__none{display:flex;align-items:center;justify-content:center;flex:1;font-size:12.5px;color:var(--mac-label-3)}
+.terminais-banner{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:6px 10px;border-bottom:1px solid var(--mac-separator);font-size:12px;color:var(--mac-label)}
+.terminais-banner--warn{background:var(--mac-warn-bg)}
+.terminais-banner svg{color:var(--mac-warn);flex:0 0 auto}
+.terminais-banner__actions{display:flex;gap:6px;margin-left:auto;flex:0 0 auto}
+
+.terminais-html{display:flex;flex:1;min-height:0;background:#fff}
+.terminais-html iframe{flex:1;width:100%;height:100%;border:0;background:#fff}
+
+/* ── visualizadores: PDF, planilha e Word ──────────────────────────── */
+.terminais-viewer__meta{display:flex;align-items:center;gap:8px;min-width:0;font-size:12px;color:var(--mac-label-2)}
+.terminais-viewer__meta strong{font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-viewer__meta em{font-style:normal;color:var(--mac-label-3);white-space:nowrap}
+.terminais-viewer__actions{display:flex;align-items:center;gap:4px;margin-left:auto;flex:0 0 auto}
+.terminais-editor__bar .terminais-viewer__actions .btn{margin-left:0}
+.terminais-pdf{display:flex;flex:1;min-height:0;background:var(--mac-surface-2)}
+.terminais-pdf iframe{flex:1;width:100%;height:100%;border:0;background:var(--mac-surface-2)}
+.terminais-sheet{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}
+.terminais-sheet__tabs{display:flex;gap:4px;flex:0 0 auto;padding:6px 10px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--mac-separator)}
+.terminais-sheet__tabs::-webkit-scrollbar{display:none}
+.terminais-sheet__scroll{flex:1;min-height:0;overflow:auto}
+.terminais-sheet table{border-collapse:separate;border-spacing:0;font-size:12px;font-variant-numeric:tabular-nums;color:var(--mac-label)}
+.terminais-sheet th,.terminais-sheet td{height:24px;padding:0 8px;border-right:1px solid var(--mac-separator);border-bottom:1px solid var(--mac-separator);white-space:nowrap;max-width:360px;overflow:hidden;text-overflow:ellipsis;text-align:left;vertical-align:middle}
+.terminais-sheet th{position:sticky;top:0;z-index:2;background:var(--mac-surface-2);color:var(--mac-label-2);font-weight:600;text-align:center}
+.terminais-sheet td:first-child,.terminais-sheet th:first-child{position:sticky;left:0;z-index:1;min-width:34px;background:var(--mac-surface-2);color:var(--mac-label-3);text-align:right}
+.terminais-sheet th:first-child{z-index:3}
+.terminais-sheet td.is-number{text-align:right}
+.terminais-sheet__note{display:flex;align-items:center;gap:10px;flex:0 0 auto;padding:6px 10px;border-top:1px solid var(--mac-separator);font-size:11.5px;color:var(--mac-label-3)}
+.terminais-doc img{max-width:100%;height:auto}
+.terminais-doc table{max-width:100%}
+.terminais-viewer__loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex:1;padding:24px;text-align:center;font-size:12.5px;color:var(--mac-label-2)}
+
+/* ── dev browser ───────────────────────────────────────────────────── */
+.terminais-tab.is-browser .terminais-tab__icon{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-tab.is-browser.is-active .terminais-tab__icon{color:var(--mac-accent-text)}
+.terminais-browser{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}
+.terminais-browser__bar{display:flex;align-items:center;gap:4px;flex:0 0 auto;padding:5px 8px;border-bottom:1px solid var(--mac-separator)}
+.terminais-browser__url{flex:1;min-width:0;display:flex}
+.terminais-browser__url input{flex:1;min-width:0;height:26px;padding:0 10px;border:0;border-radius:7px;background:var(--mac-surface-2);font:inherit;font-size:12.5px;color:var(--mac-label);outline:none;box-shadow:none}
+.terminais-browser__url input::placeholder{color:var(--mac-label-3)}
+[data-platform="macos"] .terminais-browser__url input:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring);outline:none}
+.terminais-browser__port{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:0;border-radius:6px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11.5px;cursor:default;white-space:nowrap;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-browser__port strong{font-weight:600;font-variant-numeric:tabular-nums}
+.terminais-browser__port:hover{background:var(--mac-accent-soft-hover)}
+.terminais-browser__port.is-other{background:var(--mac-surface-2);color:var(--mac-label-2)}
+.terminais-browser__progress{flex:0 0 2px;height:2px;background:transparent;overflow:hidden}
+.terminais-browser__progress.is-loading{background:linear-gradient(90deg,transparent 0%,var(--mac-accent) 50%,transparent 100%);background-size:40% 100%;animation:terminaisBrowserLoad 1.1s linear infinite}
+@keyframes terminaisBrowserLoad{from{background-position:-40% 0}to{background-position:140% 0}}
+.terminais-browser__view{position:relative;flex:1;min-height:0;min-width:0;background:var(--mac-surface-2)}
+.terminais-browser__canvas{display:block;width:100%;height:100%;outline:none;cursor:default}
+.terminais-browser__canvas:focus-visible{box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-browser__overlay{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;background:var(--mac-surface-2);animation:macFade 180ms var(--mac-ease) both}
+.terminais-browser__overlay svg{color:var(--mac-label-3);margin-bottom:4px}
+.terminais-browser__overlay strong{font-size:13px;font-weight:600;color:var(--mac-label)}
+.terminais-browser__overlay span{max-width:46ch;font-size:12.5px;color:var(--mac-label-2);text-wrap:balance;overflow-wrap:anywhere}
+.terminais-browser__overlay .btn{margin-top:8px}
+[data-motion="none"] .terminais-browser__progress.is-loading{animation:none;background:var(--mac-accent)}
+
+.terminais-md{flex:1;min-height:0;overflow:auto;padding:16px 24px 48px;font-size:13.5px;line-height:1.6;color:var(--mac-label);max-width:none}
+.terminais-md>*:first-child{margin-top:0}
+.terminais-md h1,.terminais-md h2,.terminais-md h3,.terminais-md h4{margin:1.4em 0 .5em;line-height:1.25}
+.terminais-md h1{font-size:22px}
+.terminais-md h2{font-size:18px}
+.terminais-md h3{font-size:15px}
+.terminais-md p,.terminais-md ul,.terminais-md ol,.terminais-md blockquote,.terminais-md pre,.terminais-md table{margin:0 0 .9em}
+.terminais-md ul,.terminais-md ol{padding-left:1.4em}
+.terminais-md li+li{margin-top:.2em}
+.terminais-md code{padding:1px 5px;border-radius:5px;background:var(--mac-surface-2);font-size:12px}
+.terminais-md pre{padding:10px 12px;border-radius:8px;background:var(--mac-surface-2);overflow:auto;font-size:12px;line-height:1.5}
+.terminais-md pre code{padding:0;background:transparent}
+.terminais-md blockquote{padding:2px 0 2px 12px;border-left:2px solid var(--mac-separator-strong);color:var(--mac-label-2)}
+.terminais-md a{color:var(--mac-accent-text);text-decoration:none}
+.terminais-md a:hover{text-decoration:underline}
+.terminais-md table{border-collapse:collapse;font-size:12.5px}
+.terminais-md th,.terminais-md td{padding:6px 10px;border-bottom:1px solid var(--mac-separator);text-align:left;vertical-align:top}
+.terminais-md th{font-weight:600;color:var(--mac-label-2)}
+.terminais-md img{max-width:100%;border-radius:8px}
+.terminais-md hr{border:0;border-top:1px solid var(--mac-separator);margin:1.4em 0}
+.terminais-md__raw{color:var(--mac-label-3);font-family:var(--mac-font-mono);font-size:12px;white-space:pre-wrap}
+
+.terminais-image{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;flex:1;min-height:0;overflow:auto;padding:16px;background:var(--mac-surface-2)}
+.terminais-image img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:var(--mac-surface)}
+.terminais-image__meta{font-size:11.5px;color:var(--mac-label-3)}
+.terminais-unsupported{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex:1;padding:24px;text-align:center}
+.terminais-unsupported strong{font-size:13px;font-weight:600;color:var(--mac-label)}
+.terminais-unsupported span{font-size:12.5px;color:var(--mac-label-2)}
+.terminais-unsupported__actions{display:flex;gap:6px;margin-top:8px}
+
+.terminais-diff{flex:1;min-height:0;overflow:auto;padding:10px 0 32px}
+.terminais-diff pre{margin:0;padding:0 12px;font:12px/1.55 var(--mac-font-mono);color:var(--mac-label);white-space:pre}
+.terminais-diff pre span{display:block}
+.terminais-diff pre .is-add{background:var(--mac-ok-bg);color:var(--mac-ok)}
+.terminais-diff pre .is-del{background:var(--mac-bad-bg);color:var(--mac-bad)}
+.terminais-diff pre .is-hunk{color:var(--mac-accent-text);background:var(--mac-accent-row)}
+.terminais-diff pre .is-file,.terminais-diff pre .is-meta{color:var(--mac-label-3)}
+.terminais-diff__note{padding:0 12px 8px;font-size:11.5px;color:var(--mac-label-3)}
+
+/* ── explorador ────────────────────────────────────────────────────── */
+
+.terminais-explorer__git{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:0 14px 6px;font-size:11.5px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.terminais-explorer__branch{display:inline-flex;align-items:center;gap:4px;font-weight:500;color:var(--mac-label-2);overflow:hidden;text-overflow:ellipsis}
+.terminais-explorer__changes{margin-left:auto}
+.terminais-explorer__cwd{display:flex;align-items:center;gap:6px;flex:0 0 auto;margin:0 10px 6px;padding:4px 4px 4px 8px;border-radius:7px;background:var(--mac-surface-2);font-size:11.5px;color:var(--mac-label-2);min-width:0}
+.terminais-explorer__cwd.is-following{background:var(--mac-accent-soft)}
+.terminais-explorer__cwd-label{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-explorer__cwd-path{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-tree{flex:1;min-height:0;overflow:auto;padding:0 6px 16px;outline:none}
+.terminais-tree:focus-visible{box-shadow:none}
+.terminais-tree:focus-visible .terminais-row.is-focused{box-shadow:0 0 0 2px var(--mac-accent-ring) inset}
+.terminais-row{display:flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 calc(6px + var(--depth,0) * 14px);border-radius:6px;font-size:12.5px;color:var(--mac-label);cursor:default;user-select:none;-webkit-user-select:none;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-row:hover{background:var(--mac-hover)}
+.terminais-row.is-focused{background:var(--mac-accent-soft)}
+.terminais-row.is-hidden .terminais-row__name,.terminais-row.is-hidden .terminais-row__icon{opacity:.6}
+/* Fantasma do arraste interno, que acompanha o cursor. O arraste do HTML
+   nao chega a pagina dentro do app, entao a marca e desenhada aqui. */
+.terminais-ghost{position:fixed;top:0;left:0;z-index:9999;max-width:280px;padding:3px 9px;border-radius:7px;background:var(--mac-accent);color:#fff;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:var(--mac-shadow-popover)}
+body.is-dragging-path{cursor:grabbing}
+body.is-dragging-path *{cursor:grabbing !important}
+.terminais-tree.is-drop-root{box-shadow:inset 0 0 0 2px var(--mac-accent);border-radius:8px}
+.terminais-row.is-drop{background:var(--mac-accent-soft);box-shadow:0 0 0 1px var(--mac-accent) inset}
+.terminais-row.is-drop .terminais-row__icon{color:var(--mac-accent)}
+.terminais-row__chevron{display:inline-flex;align-items:center;justify-content:center;flex:0 0 14px;width:14px;height:14px;color:var(--mac-label-3);transition:transform var(--mac-fast) var(--mac-ease)}
+.terminais-row__chevron.is-open{transform:rotate(90deg)}
+.terminais-row__icon{display:inline-flex;flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-row__name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-row.is-git .terminais-row__name{color:var(--mac-warn)}
+.terminais-row.is-git--untracked .terminais-row__name,.terminais-row.is-git--added .terminais-row__name{color:var(--mac-ok)}
+.terminais-row.is-git--deleted .terminais-row__name{color:var(--mac-bad);text-decoration:line-through}
+.terminais-row.is-git--conflict .terminais-row__name{color:var(--mac-bad)}
+.terminais-row__git{flex:0 0 auto;font-size:10.5px;font-weight:600;color:var(--mac-warn);font-variant-numeric:tabular-nums}
+.terminais-row.is-git--untracked .terminais-row__git,.terminais-row.is-git--added .terminais-row__git{color:var(--mac-ok)}
+.terminais-row.is-git--deleted .terminais-row__git,.terminais-row.is-git--conflict .terminais-row__git{color:var(--mac-bad)}
+.terminais-row__git--dir{color:var(--mac-label-3)}
+.terminais-row__input{flex:1;min-width:0;height:20px;padding:0 5px;border:1px solid var(--mac-accent);border-radius:5px;background:var(--mac-field);font:inherit;font-size:12.5px;color:var(--mac-label);outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-row--edit .terminais-row__input{margin-left:18px}
+.terminais-row--edit>svg{margin-left:18px;color:var(--mac-label-3);flex:0 0 auto}
+.terminais-tree__note{padding:4px 6px 4px calc(24px + var(--depth,0) * 14px);font-size:11.5px;color:var(--mac-label-3)}
+.terminais-tree__note.is-error{color:var(--mac-bad)}
+.terminais-results{display:flex;flex-direction:column;gap:1px}
+.terminais-result{display:flex;align-items:center;gap:6px;width:100%;height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12.5px;color:var(--mac-label);text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-result:hover{background:var(--mac-hover)}
+.terminais-result svg{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-result__name{flex:0 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-result__dir{flex:1;min-width:0;font-size:11px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── menu de acoes ─────────────────────────────────────────────────── */
+
+.terminais-menu{position:fixed;z-index:1300;min-width:220px;padding:5px;border-radius:10px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);box-shadow:var(--mac-shadow-popover);outline:none;animation:macPop 140ms var(--mac-ease);transform-origin:top left}
+.terminais-menu__item{display:flex;align-items:center;gap:8px;width:100%;height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12.5px;color:var(--mac-label);text-align:left;cursor:default}
+.terminais-menu__item.is-active{background:var(--mac-accent);color:#fff}
+.terminais-menu__item.is-active svg{color:rgba(255,255,255,.85)}
+.terminais-menu__item.is-danger{color:var(--mac-bad)}
+.terminais-menu__item.is-danger.is-active{background:var(--mac-bad);color:#fff}
+.terminais-menu__item:disabled{opacity:.45}
+.terminais-menu__item svg{flex:0 0 auto;color:var(--mac-label-2)}
+.terminais-menu__spacer{flex:0 0 14px}
+.terminais-menu__swatch{display:inline-block;width:12px;height:12px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+/* grade de amostras do menu de cor: seis por linha, a atual com anel */
+.terminais-menu__swatches{display:grid;grid-template-columns:repeat(6,28px);gap:2px;padding:4px 4px 2px}
+.terminais-menu__swatchbtn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:7px;background:transparent;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-menu__swatchbtn i{display:block;width:16px;height:16px;border-radius:50%;background:var(--swatch);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.terminais-menu__swatchbtn:hover,.terminais-menu__swatchbtn.is-active{background:var(--mac-hover)}
+.terminais-menu__swatchbtn.is-current i{box-shadow:0 0 0 2px var(--mac-glass),0 0 0 3.5px var(--swatch)}
+.terminais-menu__label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-menu__hint{font-size:11px;color:var(--mac-label-3)}
+.terminais-menu__item.is-active .terminais-menu__hint{color:rgba(255,255,255,.75)}
+.terminais-menu__sep{height:1px;margin:4px 6px;background:var(--mac-separator)}
+
+/* ── seletor de pasta da sessao nova ───────────────────────────────── */
+
+.terminais-pop{position:fixed;z-index:60;display:flex;flex-direction:column;width:340px;max-height:min(560px,72vh);overflow:hidden;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);box-shadow:var(--mac-shadow-popover);transform-origin:top right;animation:macPop 160ms var(--mac-ease)}
+.terminais-pop__search{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--mac-separator);color:var(--mac-label-3)}
+.terminais-pop__search input,.terminais-pop__namefield input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:13px;color:var(--mac-label);box-shadow:none}
+.terminais-pop__search input::placeholder,.terminais-pop__namefield input::placeholder{color:var(--mac-label-3)}
+[data-platform="macos"] .terminais-pop__search input:focus-visible,[data-platform="macos"] .terminais-pop__namefield input:focus-visible{box-shadow:none;outline:none}
+.terminais-pop__list{overflow:auto;padding:6px;min-height:80px}
+.terminais-pop__label{padding:8px 8px 4px;font-size:11px;font-weight:500;color:var(--mac-label-3)}
+.terminais-pop__item{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:13px;color:var(--mac-label);text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-pop__item:hover,.terminais-pop__item.is-active{background:var(--mac-hover)}
+.terminais-pop__item svg{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-pop__namefield{display:flex;align-items:center;padding:8px 12px;border-top:1px solid var(--mac-separator)}
+.terminais-pop__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.terminais-pop__meta{font-size:11px;color:var(--mac-label-3);white-space:nowrap}
+.terminais-pop__empty{padding:18px;text-align:center;font-size:13px;color:var(--mac-label-2)}
+.terminais-pop__foot{padding:8px;border-top:1px solid var(--mac-separator)}
+
+/* ── busca rapida e dialogos ───────────────────────────────────────── */
+
+.terminais-quick{max-height:56vh}
+.terminais-dialog__hint{margin-bottom:8px;font-size:12px;color:var(--mac-label-2)}
+
+/* ── estado vazio ──────────────────────────────────────────────────── */
+
+.terminais-empty{min-height:calc(100vh - 220px)}
+.terminais-empty__recent{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;max-width:560px}
+.terminais-empty__recent .btn{max-width:260px}
+.terminais-empty__recent .btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── movimento: surgimento curto, so opacidade e deslocamento ─────────
+   Nada de largura ou altura animada: o terminal nao pode reajustar a cada
+   quadro. Tudo entre 140 e 240 ms, com o ease-out da camada macOS, e
+   desligado por prefers-reduced-motion e data-motion. */
+@keyframes terminaisPaneL{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:none}}
+@keyframes terminaisPaneR{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:none}}
+.terminais-sessions{animation:terminaisPaneL 220ms var(--mac-ease) both}
+.terminais-explorer{animation:terminaisPaneR 220ms var(--mac-ease) both}
+.terminais-card{animation-delay:calc(var(--i,0) * 24ms)}
+.terminais-card::before{transform:scaleY(.4);transition:opacity var(--mac-fast) var(--mac-ease),transform var(--mac-normal) var(--mac-ease)}
+.terminais-card.is-selected::before{transform:none}
+.terminais-card__running-row,.terminais-card__attention,.terminais-card__metrics{animation:macRowIn 180ms var(--mac-ease) both}
+.terminais-sessions__reopen{animation:macPop 160ms var(--mac-ease) both}
+.terminais-work__branch,.terminais-work__running{animation:macFade 180ms var(--mac-ease) both}
+.terminais-tab{animation:macPop 140ms var(--mac-ease) both}
+.terminais-editor__body,.terminais-editor__none,.terminais-editor__host,.terminais-html,.terminais-markdown,.terminais-diff,.terminais-pdf,.terminais-sheet,.terminais-doc{animation:macFade 150ms var(--mac-ease) both}
+.terminais-terminal__disconnected{animation:macFade 180ms var(--mac-ease) both}
+.terminais-row.is-new{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}
+.terminais-result{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}
+.terminais-tree__note{animation:macFade 160ms var(--mac-ease) both}
+
+/* The phone exposes only session selection and the shared terminal. */
+[data-form-factor="phone"] .phone-terminal { height: 100%; min-height: 0; min-width: 0; max-width: 100%; margin: 0; display: flex; flex-direction: column; padding: 0 max(12px, env(safe-area-inset-right)) 8px max(12px, env(safe-area-inset-left)); gap: 8px; overflow: hidden; }
+[data-form-factor="phone"] .phone-terminal__toolbar { display: flex; align-items: center; gap: 4px; }
+[data-form-factor="phone"] .phone-terminal__toolbar select { flex: 1; min-width: 0; height: 44px; border: 1px solid var(--mac-separator); border-radius: 8px; background: var(--mac-field); color: var(--mac-label); padding: 8px; }
+[data-form-factor="phone"] .phone-terminal__state { flex: none; font-size: .75rem; color: var(--mac-label-2); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-terminal__scroll { position: relative; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+[data-form-factor="phone"] .phone-terminal__host { width: 100%; min-width: 0; height: 100%; overflow: hidden; }
+[data-form-factor="phone"] .phone-terminal__host[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+[data-form-factor="phone"] .phone-terminal__ownership { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 20px; text-align: center; }
+[data-form-factor="phone"] .phone-terminal__ownership h2 { margin: 0; font-size: 17px; line-height: 1.4; }
+[data-form-factor="phone"] .phone-terminal__ownership p { max-width: 32ch; margin: 0; font-size: 13px; line-height: 1.5; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-terminal__host .xterm { height: 100%; padding: 2px; touch-action: none; }
+[data-form-factor="phone"] .phone-terminal__host .xterm-viewport { overflow-x: hidden !important; }
+/* Fileira de teclas: uma linha que rola de lado, para nao roubar altura do
+   terminal quando o teclado do iPhone esta aberto. */
+[data-form-factor="phone"] .phone-terminal__keys { display: flex; flex: none; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
+[data-form-factor="phone"] .phone-terminal__keys::-webkit-scrollbar { display: none; }
+[data-form-factor="phone"] .phone-terminal__keys button { flex: 0 0 auto; min-width: 54px; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--mac-surface-2); color: var(--mac-label); font: inherit; font-size: 13px; white-space: nowrap; scroll-snap-align: start; }
+[data-form-factor="phone"] .phone-terminal__keys button:active { background: var(--mac-surface-3, var(--mac-fill)); }
+/* Fora do fim: atalho para voltar e aviso de saida nova enquanto se le. */
+[data-form-factor="phone"] .phone-terminal__tail { position: absolute; left: 50%; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px 0 12px; border: 0; border-radius: 999px; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); color: var(--mac-label); font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap; transform: translateX(-50%); animation: macPop 160ms var(--mac-ease); }
+[data-form-factor="phone"] .phone-terminal__tail.is-fresh { color: var(--mac-accent); }
+[data-form-factor="phone"] .phone-terminal__toolbar { flex: none; min-height: 52px; border-bottom: 1px solid var(--mac-separator); }
+[data-form-factor="phone"] .phone-terminal__heading { flex: 1; min-width: 0; padding: 6px 0; }
+[data-form-factor="phone"] .phone-terminal__heading h1 { font-size: 17px; font-weight: 600; line-height: 22px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-terminal__heading span { display: block; font-size: 11px; line-height: 16px; color: var(--mac-label-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-terminal__search { display: flex; align-items: center; gap: 7px; min-height: 44px; flex: none; padding: 0 10px; background: var(--mac-surface-2); border-radius: 8px; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-terminal__search input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--mac-label); outline-offset: 0; }
+[data-form-factor="phone"] .phone-terminal__sessions { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 2px 2px 12px; }
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card { margin: 0 0 6px; padding: 12px 12px 10px; cursor: pointer; }
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__name { font-size: 14px; }
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__subtitle,
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__status { font-size: 12px; }
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__metrics { font-size: 11px; }
+[data-form-factor="phone"] .phone-terminal__notice { margin: 0; font-size: 13px; padding: 10px 0; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-terminal__take-control { min-height: 44px; padding: 10px 12px; border: 0; border-radius: 8px; background: var(--mac-surface-2); color: var(--mac-accent); font: inherit; font-size: 13px; flex: none; }
+[data-form-factor="phone"] .phone-files { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+[data-form-factor="phone"] .phone-files__bar { display: flex; align-items: center; justify-content: space-between; min-height: 44px; flex: none; color: var(--mac-label-2); font-size: 12px; }
+[data-form-factor="phone"] .phone-files__bar > span { display: flex; align-items: center; gap: 6px; }
+[data-form-factor="phone"] .phone-files__tree,
+[data-form-factor="phone"] .phone-files__preview { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+[data-form-factor="phone"] .phone-files__root { font-size: 12px; color: var(--mac-label-2); margin: 4px 0 8px; overflow-wrap: anywhere; }
+[data-form-factor="phone"] .phone-files__branch { list-style: none; margin: 0; padding: 0; }
+[data-form-factor="phone"] .phone-files__entry { display: flex; align-items: center; gap: 7px; width: 100%; padding: 4px 6px 4px calc(var(--depth) * 12px); border: 0; border-radius: 6px; background: transparent; color: var(--mac-label); font: inherit; font-size: 14px; text-align: left; }
+[data-form-factor="phone"] .phone-files__entry > svg { flex: none; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-files__entry > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-files__entry:active { background: var(--mac-surface-2); }
+[data-form-factor="phone"] .phone-files__spacer { width: 14px; flex: none; }
+[data-form-factor="phone"] .phone-files__message { padding: 8px; font-size: 13px; color: var(--mac-label-2); overflow-wrap: anywhere; }
+[data-form-factor="phone"] .phone-files__path { font-size: 12px; overflow-wrap: anywhere; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-files__preview pre { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; font: 13px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace; tab-size: 2; }
+[data-form-factor="phone"] .terminais-pop { position: fixed; top: max(16px, env(safe-area-inset-top)) !important; left: 12px; right: 12px !important; width: auto; max-height: 75dvh; }

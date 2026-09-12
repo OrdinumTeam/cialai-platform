@@ -32,11 +32,14 @@ for (const [name, expected] of Object.entries(platforms)) {
 }
 
 for (const path of [
-  'index.html', 'mobile.html', 'vite.config.js',
+  'index.html', 'mobile.html', 'vite.config.js', 'src/desktop.jsx', 'src/mobile.jsx',
   'src-tauri/build.rs', 'src-tauri/src/main.rs', 'src-tauri/src/lib.rs',
   'src-tauri/capabilities/default.json', 'src-tauri/icons/icon.icns',
   'src-tauri/icons/icon.ico', 'src-tauri/icons/icon.png',
 ]) assert.ok(existsSync(`${desktop}/${path}`), `Missing desktop scaffold file: ${path}`);
+
+assert.match(readFileSync(`${desktop}/index.html`, 'utf8'), /src="\.\/src\/desktop\.jsx"/);
+assert.match(readFileSync(`${desktop}/mobile.html`, 'utf8'), /src="\.\/src\/mobile\.jsx"/);
 
 const capability = json(`${desktop}/src-tauri/capabilities/default.json`);
 assert.deepEqual(capability.windows, ['main']);
