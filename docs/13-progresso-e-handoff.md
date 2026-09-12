@@ -45,6 +45,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.9 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 | 3.1 API e build gomobile | Código preparado e superfície validada localmente | `packages/tunnel-core/mobile` compõe nó, inspeção e pareamento, perfis, proxy e ciclo de vida sem persistir tokens. `tools/build-tunnel-mobile.sh` tem preflight de Go, Xcode, SDK e NDK e gera hashes SHA 256. Bindings Java e Objective C gerados; XCFramework, AAR e aparelhos continuam pendentes do Codemagic |
 | 3.2 Módulo Expo em Swift | Código preparado, build nativo pendente | Módulo local `cialai-tunnel` expõe a API TypeScript, embrulha `Tunnelcore.xcframework` numa fila serial, encaminha eventos e protege o diretório fora do backup. Podspec e manifesto foram validados estruturalmente; compilação Swift aguarda o Codemagic |
+| 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 
 ## Ambiente observado
 
@@ -321,6 +322,12 @@ O race detector aprovou todos os pacotes, inclusive os três casos novos de `mob
 Criado o módulo Expo local `cialai-tunnel` com manifesto de autolinking, contrato TypeScript e implementação Swift. O wrapper cria um único `MobileTunnel`, serializa chamadas bloqueantes fora do JavaScript, traduz os JSONs do Go em objetos Expo e encaminha os cinco tipos de evento. O diretório de estado usa `Application Support`, é excluído de backup e recebe `NSFileProtectionCompleteUntilFirstUserAuthentication`.
 
 O podspec declara iOS 16.4 e `Tunnelcore.xcframework` como `vendored_frameworks`. O framework não foi gerado nem versionado; o Codemagic deverá colocá lo no diretório do módulo antes do prebuild. `ruby -c apps/mobile/modules/cialai-tunnel/ios/CialaiTunnel.podspec`, a leitura dos dois JSONs pelo Node, `git diff --check` e a conferência dos seletores gerados por `gobind` terminaram com código 0. Não houve compilação Swift, build Xcode nem execução em aparelho.
+
+### 12/09/2026, módulo Kotlin da tarefa 4.1 preparado
+
+Adicionada a implementação Android do módulo `cialai-tunnel`. Ela usa `noBackupFilesDir`, uma fila serial para todas as chamadas bloqueantes, converte JSON do Go para valores Expo e preserva os códigos estáveis ao rejeitar Promises. O Gradle fixa `minSdkVersion 26`, declara o AAR local e reutiliza as versões padrão do Expo Modules Core. O AAR e o XCFramework foram acrescentados ao ignore explícito.
+
+`xmllint --noout` no manifesto, conferência dos métodos contra as classes Java geradas por `gobind`, leitura do Gradle e `git diff --check` terminaram com código 0. Não houve `expo prebuild`, compilação Kotlin, AAR real nem execução Android local; essas provas pertencem ao runner do Codemagic e aos roteiros em aparelho.
 
 ## Arquivos para retomar
 

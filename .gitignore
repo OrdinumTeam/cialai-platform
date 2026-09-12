@@ -17,6 +17,9 @@ secrets/
 android/key.properties
 apps/mobile/ios/
 apps/mobile/android/
+apps/mobile/modules/cialai-tunnel/ios/Tunnelcore.xcframework/
+apps/mobile/modules/cialai-tunnel/ios/Tunnelcore.xcframework.zip
+apps/mobile/modules/cialai-tunnel/android/libs/tunnelcore.aar
 apps/desktop/src-tauri/binaries/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/resources/mobile/
