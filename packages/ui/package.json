@@ -9,7 +9,8 @@
     "./mobile": "./src/mobile/main.jsx"
   },
   "scripts": {
-    "test": "node ../../tools/check/ui-extraction.mjs && node scripts/check-terminal-sync.mjs && node --test scripts/check-brand.mjs scripts/check-file-kinds.mjs scripts/check-platform.mjs scripts/check-preferences.mjs scripts/check-phone-terminal.mjs scripts/check-phone-workbench.mjs scripts/tests/*.test.cjs"
+    "test": "node ../../tools/check/ui-extraction.mjs && node scripts/check-terminal-sync.mjs && node --test scripts/check-brand.mjs scripts/check-file-kinds.mjs scripts/check-platform.mjs scripts/check-preferences.mjs scripts/check-phone-terminal.mjs scripts/check-phone-workbench.mjs scripts/tests/*.test.cjs",
+    "test:visual:phone": "node scripts/check-phone-terminal-visual.mjs"
   },
   "dependencies": {
     "@cialai/protocol": "0.1.0",
