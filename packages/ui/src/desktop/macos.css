@@ -525,9 +525,24 @@
 .mac-prefs__row-title{font-size:13px;color:var(--mac-label)}
 .mac-prefs__row-desc{font-size:11px;color:var(--mac-label-2);margin-top:2px}
 .mac-prefs__row-control{flex:0 0 auto;display:flex;align-items:center}
+.mac-prefs__row--wide{align-items:flex-start}
+.mac-prefs__row--wide .mac-prefs__row-text{padding-top:6px}
+.mac-prefs__input{width:280px}
+.mac-prefs__textarea{width:360px;resize:vertical;font-family:var(--mac-font-mono)}
+.mac-prefs__browser-path{width:360px;font-family:var(--mac-font-mono);font-size:11px}
 .mac-prefs__path{display:block;margin:4px 0 10px;padding:6px 8px;border-radius:7px;background:var(--mac-surface-2);font:11px/1.5 var(--mac-font-mono);color:var(--mac-label-2);word-break:break-all}
 .mac-prefs__actions{display:flex;gap:6px;flex-wrap:wrap}
 .mac-prefs__note{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--mac-label-2)}
+.mac-prefs__roots{margin:10px 0 12px;border-top:1px solid var(--mac-separator)}
+.mac-prefs__root{display:flex;align-items:center;gap:12px;min-height:38px;border-bottom:1px solid var(--mac-separator)}
+.mac-prefs__root code{min-width:0;flex:1;overflow:hidden;color:var(--mac-label);font:11px/1.45 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
+.mac-prefs__error{margin:12px 0 0;color:var(--mac-bad);font-size:12px}
+
+@media (max-width:720px){
+  .mac-prefs__row{align-items:flex-start;flex-direction:column;gap:7px}
+  .mac-prefs__row-control,.mac-prefs__input,.mac-prefs__textarea,.mac-prefs__browser-path{width:100%}
+  .mac-prefs__row--wide .mac-prefs__row-text{padding-top:0}
+}
 
 .mac-segmented{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--mac-neutral-bg)}
 .mac-segmented__option{height:24px;padding:0 12px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12px;font-weight:500;color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}

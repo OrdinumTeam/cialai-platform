@@ -104,6 +104,13 @@ export async function chooseDirectory(options = {}) {
   return typeof picked === 'string' ? picked : null;
 }
 
+export async function chooseFile(options = {}) {
+  if (!isTauri()) return null;
+  const { open } = await import('@tauri-apps/plugin-dialog');
+  const picked = await open({ directory: false, multiple: false, ...options });
+  return typeof picked === 'string' ? picked : null;
+}
+
 // Painel de salvar do sistema, para um arquivo temporario que ainda nao tem
 // lugar no disco. Devolve o caminho escolhido ou null quando o usuario
 // cancela.
