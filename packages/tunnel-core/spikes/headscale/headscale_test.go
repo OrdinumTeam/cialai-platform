@@ -45,6 +45,11 @@ func TestPolicyAndExpiry(t *testing.T) {
 	t.Setenv("TS_NO_LOGS_NO_SUPPORT", "true")
 	t.Setenv("TS_LOGS_DIR", t.TempDir())
 	hs := startHeadscale(t)
+	t.Run("swagger-contract-0.29.3", func(t *testing.T) {
+		hs := *hs
+		hs.t = t
+		hs.assertSwaggerContract()
+	})
 	aliceID := hs.createUser("alice")
 	bobID := hs.createUser("bob")
 	desktop, desktopIP := hs.node("alice-desktop", hs.authKey(aliceID))
@@ -287,6 +292,41 @@ func TestPolicyAndExpiry(t *testing.T) {
 			t.Fatal("file policy changed through API")
 		}
 	})
+}
+
+func (hs *server) assertSwaggerContract() {
+	hs.t.Helper()
+	res, err := hs.http.Get(hs.url + "/swagger/v1/openapiv2.json")
+	if err != nil {
+		hs.t.Fatal("Headscale Swagger transport failed")
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		hs.t.Fatalf("Headscale Swagger returned HTTP %d", res.StatusCode)
+	}
+	var document struct {
+		Paths map[string]map[string]json.RawMessage `json:"paths"`
+	}
+	if err := json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&document); err != nil {
+		hs.t.Fatal("Headscale Swagger response is invalid")
+	}
+	for route, method := range map[string]string{
+		"/api/v1/health":               "get",
+		"/api/v1/user":                 "post",
+		"/api/v1/preauthkey":           "post",
+		"/api/v1/preauthkey/expire":    "post",
+		"/api/v1/node":                 "get",
+		"/api/v1/node/{nodeId}":        "delete",
+		"/api/v1/node/{nodeId}/expire": "post",
+		"/api/v1/node/register":        "post",
+		"/api/v1/apikey":               "post",
+		"/api/v1/apikey/expire":        "post",
+	} {
+		operations, ok := document.Paths[route]
+		if !ok || operations[method] == nil {
+			hs.t.Fatalf("Headscale 0.29.3 Swagger lacks %s %s", strings.ToUpper(method), route)
+		}
+	}
 }
 
 func startHeadscale(t *testing.T) *server {
