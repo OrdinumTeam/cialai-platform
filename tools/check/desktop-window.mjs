@@ -115,6 +115,6 @@ assert.match(css, /\[data-platform="macos"\] \.mac-toolbar\.is-sidebar-hidden\{p
 const platformCss = read(`${ui}/desktop/platform.css`);
 assert.match(platformCss, /\.mac-window-controls/);
 assert.match(platformCss, /\[data-platform="windows"\]/);
-assert.match(read(`${ui}/desktop/main.jsx`), /import '\.\/platform\.css';/);
+assert.match(read(`${ui}/desktop/desktop.css`), /@import '\.\/platform\.css';/);
 
 console.log('PASS desktop window: per-system configs, native backends, Windows controls, DOM menu and macOS-only Escape guard');

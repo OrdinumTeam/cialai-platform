@@ -673,6 +673,24 @@ No Dev Browser Panel da porta 64556, com o Vite na porta 1431, as Preferências 
 
 O comando `app_paths`, o botão de revelar e a troca do Mica ao salvar não foram executados no aplicativo nativo de Linux ou Windows; no navegador eles mostram os locais documentados.
 
+### 13/09/2026, ordem do CSS no build de produção após as tarefas 5.11 e 5.13
+
+A primeira captura real do WebKitGTK, feita pelo self test Linux da tarefa 5.18, mostrou a sidebar e o acento no azul herdado do Control. O Vite dev não reproduzia o problema. No build de produção, o CSS importado pelas duas entradas HTML vai para um chunk carregado antes do `main.css`: `styles.css` e `brand.css` ficavam nesse chunk, enquanto `shell.css` e `platform.css`, agora exclusivos da entrada desktop, ficavam em `main.css`. Com a mesma especificidade, os tokens da casca venciam a marca. O import estático de `Terminais.css` pelo botão de menu da 5.11 também antecipava essa folha em relação à casca. Os três sistemas eram afetados, inclusive o macOS.
+
+A entrada desktop passou a importar somente `packages/ui/src/desktop/desktop.css`, que importa base, casca, sistema, marca e estúdio nessa ordem. A página do celular não mudou. `tools/check/css-cascade.mjs` lê o `dist` na ordem dos links do `index.html` e exige que a última definição de `--mac-accent` e `--mac-sidebar-bg` seja a da marca nos temas claro e escuro e que a regra do estúdio sobre `.mac-content` venha depois da casca. Ela entrou no `npm test` como `check:css-cascade`, logo depois de `test:desktop`, que gera o `dist`. `check:platform-css` e `check:window` passaram a conferir `desktop.css`.
+
+A checagem foi escrita antes da correção e falhou no `dist` existente com `--mac-accent` efetivo `#1a4fa0`. Depois dela passou. `npm run build:ui --workspace @cialai/desktop` gerou `Terminais.css` e `main.css` como as duas folhas da entrada desktop e validou o recurso móvel com 130 assets. O `dist` servido em `127.0.0.1:1432` e aberto no Dev Browser Panel da porta 64556 mostrou acento `#E23B84`, sidebar do rosa claro ao branco, a fonte de cada sistema e o padding de 52 px do estúdio em Linux, Windows e macOS, sem exceções. No binário Linux, a captura seguinte do self test já trouxe a identidade rosa. As capturas estão em `~/.dev-browser/tmp/cialai-css-order-prod-linux.png`, `cialai-css-order-prod-windows.png` e `cialai-css-order-prod-macos.png`.
+
+Comandos concluídos com código 0 depois da correção:
+
+```sh
+node tools/check/platform-css.mjs
+node tools/check/desktop-window.mjs
+npm run build:ui --workspace @cialai/desktop
+node tools/check/css-cascade.mjs
+git diff --check
+```
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.

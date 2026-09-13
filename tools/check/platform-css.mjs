@@ -27,8 +27,12 @@ assert.doesNotMatch(shell.replace(/\[data-platform="macos"\] body\{-webkit-font-
 // macos.css permanece só como entrada de compatibilidade da página do celular.
 assert.equal(read('desktop/macos.css').replace(/\/\*[\s\S]*?\*\//g, '').trim(), "@import './shell.css';");
 const main = read('desktop/main.jsx');
-assert.ok(main.indexOf("import './shell.css';") > 0 && main.indexOf("import './shell.css';") < main.indexOf("import './platform.css';"), 'desktop importa shell.css antes de platform.css');
-assert.ok(!main.includes("import './macos.css';"));
+assert.deepEqual([...main.matchAll(/^import '([^']+\.css)';$/gm)].map((match) => match[1]), ['./desktop.css'], 'a entrada desktop importa só desktop.css');
+assert.deepEqual(
+  [...read('desktop/desktop.css').matchAll(/^@import '([^']+)';$/gm)].map((match) => match[1]),
+  ['../styles.css', './shell.css', './platform.css', './brand.css', '../views/Terminais.css'],
+  'desktop.css precisa manter base, casca, sistema, marca e estúdio nessa ordem',
+);
 
 const terminals = read('views/Terminais.css');
 assert.deepEqual(bareMac(terminals), [], 'Terminais.css não pode depender só do macOS');

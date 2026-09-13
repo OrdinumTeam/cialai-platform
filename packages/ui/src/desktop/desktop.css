@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Entrada única do CSS da casca desktop, na ordem da cascata. No build de
+   produção o Vite põe em chunks anteriores o CSS compartilhado com a página
+   do celular; importar as camadas aqui mantém base, casca, sistema, marca e
+   estúdio na mesma ordem do servidor de desenvolvimento. */
+@import '../styles.css';
+@import './shell.css';
+@import './platform.css';
+@import './brand.css';
+@import '../views/Terminais.css';
