@@ -63,7 +63,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 7.1 Atualizador | Preparado na frente C, assinatura pendente | Plugins Rust e JavaScript, interface em Preferências, artefatos do updater e endpoint `latest.json` configurados. O workflow exige os dois secrets e falha enquanto a chave pública mantiver o marcador. Nenhum artefato foi assinado ou publicado |
 | 7.2 Documentação pública | Implementada na frente C | README em inglês usa três capturas reais com dados fictícios; guias de contribuição e segurança, código de conduta e modelos de issue e PR foram revisados. O contato e o prazo de segurança permanecem marcados para confirmação |
 | 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
-| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.4 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
+| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8, 7.5 e 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -558,6 +559,22 @@ git diff --check
 ```
 
 O check confirmou políticas bilíngues, marcadores de contato, respostas propostas, ausência do termo de risco nos textos de loja, limites de caracteres e tamanhos de captura. Nenhuma loja, conta, formulário, captura nativa ou política pública foi alterada.
+
+### 13/09/2026, pacote de revisão da tarefa 7.4 preparado na frente C
+
+`docs/review/app-review-notes-en.md` contém texto copiável em inglês com propósito, ausência de conta, conexão cifrada, passos de acesso, permissões, declaração de criptografia e campos que o usuário precisa preencher apenas no App Store Connect. O arquivo não contém o termo que o documento 10 proíbe nas notas de revisão.
+
+`desktop-demo-runbook.md` define computador e usuário do sistema dedicados, projeto inteiramente fictício, candidato assinado, Headscale exclusivo, ensaio externo, disponibilidade diária e limpeza. Nenhuma credencial ou endereço de acesso entrou no repositório. `pairing-video-script.md` organiza em até 90 segundos o vínculo, a confirmação, o histórico, um comando, um arquivo e a revogação, com conferência quadro a quadro e registro da evidência.
+
+Comandos concluídos com código 0:
+
+```sh
+npm run check:review-pack
+rg -ni '\bvpn\b' docs/review
+git diff --check
+```
+
+O primeiro comando aprovou os três documentos e seus campos obrigatórios. A busca não encontrou ocorrências e terminou sem saída, como esperado. A máquina de demonstração, o acesso remoto, a gravação, o TestFlight externo, o App Review e a produção do Play continuam pendentes do usuário. Nada foi publicado ou enviado.
 
 ## Arquivos para retomar
 
