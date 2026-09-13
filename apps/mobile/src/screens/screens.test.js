@@ -6,6 +6,7 @@ import { Desktops } from './Desktops';
 import { Offline } from './Offline';
 import { Pair } from './Pair';
 import { Settings } from './Settings';
+import { Shell } from './Shell';
 import { getLocale, setLocale } from '../i18n';
 
 jest.mock('cialai-tunnel', () => ({
@@ -17,6 +18,7 @@ jest.mock('expo-camera', () => ({
   useCameraPermissions: () => [{ granted: false }, jest.fn()]
 }));
 jest.mock('expo-clipboard', () => ({ getStringAsync: jest.fn(async () => '') }));
+jest.mock('react-native-webview', () => ({ WebView: 'WebView' }));
 
 const text = tree => tree.root.findAllByType(Text).map(node => node.props.children).flat(Infinity).join(' ');
 
@@ -83,4 +85,19 @@ test('Settings offers and persists the three supported languages', async () => {
   await act(async () => { await spanishChoice.props.onPress(); });
   expect(getLocale()).toBe('es');
   await act(async () => tree.unmount());
+});
+
+test('Shell passes the selected locale to the mobile page', async () => {
+  jest.useFakeTimers();
+  await setLocale('es-MX');
+  let tree;
+  await act(async () => {
+    tree = create(<Shell url="http://127.0.0.1:47400/?k=test" desktopId="desktop-1" desktopName="Studio"
+      version="1.0.0" biometricSession={{ authorize: async () => true, lock: () => false }} lockSignal={0}
+      tunnelOnline onOffline={() => {}} onDesktops={() => {}} />);
+  });
+  const webView = tree.root.findAll(node => typeof node.props.injectedJavaScriptBeforeContentLoaded === 'string')[0];
+  expect(webView.props.injectedJavaScriptBeforeContentLoaded).toContain('"locale":"es"');
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
 });

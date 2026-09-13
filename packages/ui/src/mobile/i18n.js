@@ -8,6 +8,8 @@ function initialLocale() {
   // Fora do navegador e da WebView, como nos testes em Node, o idioma do
   // processo não representa o celular: vale o padrão em português.
   if (typeof globalThis.document === 'undefined') return 'pt-BR';
+  const shellLocale = globalThis.__CIALAI_SHELL__?.locale;
+  if (shellLocale) return shellLocale;
   try {
     const stored = globalThis.localStorage?.getItem(LANGUAGE_STORAGE_KEY);
     if (stored) return stored;

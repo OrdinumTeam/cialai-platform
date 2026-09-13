@@ -16,6 +16,14 @@ const bundle = await build({
   external: ['react'],
 });
 
+const i18nBundle = await build({
+  entryPoints: ['src/mobile/i18n.js'],
+  bundle: true,
+  write: false,
+  format: 'cjs',
+  external: ['react'],
+});
+
 function header(connection) {
   const context = vm.createContext({ module: { exports: {} }, exports: {}, require: createRequire(import.meta.url) });
   vm.runInContext(bundle.outputFiles[0].text, context);
@@ -24,11 +32,29 @@ function header(connection) {
   }));
 }
 
+function mobileTranslation(shellLocale, storedLocale) {
+  const context = vm.createContext({
+    module: { exports: {} },
+    exports: {},
+    require: createRequire(import.meta.url),
+    document: { documentElement: { lang: '' } },
+    localStorage: { getItem: () => storedLocale, setItem() {} },
+    navigator: { language: 'pt-BR', languages: ['pt-BR'] },
+    __CIALAI_SHELL__: { locale: shellLocale },
+  });
+  vm.runInContext(i18nBundle.outputFiles[0].text, context);
+  return context.module.exports.translate('navigation.more');
+}
+
 test('o cabecalho mostra computador e estado em todos os momentos', () => {
   assert.match(header('connected'), /MacBook de Foco/);
   assert.match(header('connected'), /Conectado/);
   assert.match(header('connecting'), /Conectando/);
   assert.match(header('removed'), /Celular removido/);
+});
+
+test('o idioma enviado pelo aplicativo prevalece na pagina do celular', () => {
+  assert.equal(mobileTranslation('es-MX', 'pt-BR'), 'Más');
 });
 
 test('a composicao do celular contem somente Terminais', async () => {

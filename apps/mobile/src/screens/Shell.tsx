@@ -28,7 +28,7 @@ export function Shell({
   url, desktopId, desktopName, version, biometricSession, lockSignal, tunnelOnline, onOffline, onDesktops
 }: Props) {
   const palette = usePalette();
-  const { t } = useI18n();
+  const { locale, t } = useI18n();
   const webView = useRef<WebView>(null);
   const loaded = useRef(false);
   const downloadBusy = useRef(false);
@@ -123,8 +123,8 @@ export function Shell({
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
-      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName
-    })}; true;`, [desktopId, desktopName, version]);
+      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName, locale
+    })}; true;`, [desktopId, desktopName, locale, version]);
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>

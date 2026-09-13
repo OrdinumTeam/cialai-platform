@@ -762,6 +762,12 @@ As telas de pareamento, computadores, estado sem conexão, shell e ajustes passa
 
 Os testes começaram falhando pela ausência de hidratação, persistência, espanhol e seletor. A suíte final do workspace móvel aprovou 104 testes em 16 suítes. `typecheck`, lint sem advertências, `npm run test:i18n` e `git diff --check` também passaram com Node 22.23.2 e npm 10.9.8. Nenhum build nativo ou teste em aparelho foi executado.
 
+### 13/09/2026, espanhol propagado para a página web do celular na tarefa 6.6
+
+A casca React Native inclui o locale normalizado no objeto de bootstrap do WebView. O adaptador de `packages/ui/src/mobile` dá prioridade a esse valor sobre o armazenamento próprio da página, mantendo o idioma escolhido em Ajustes também dentro do estúdio servido pelo computador.
+
+Os testes começaram falhando porque o bootstrap não tinha locale e a página preferia português guardado. `npm run test:ui` aprovou 17 casos de sincronização e 57 casos restantes, incluindo a precedência do espanhol. O workspace móvel aprovou 105 testes em 16 suítes. `npm run test:i18n`, typecheck e lint também passaram com Node 22.23.2 e npm 10.9.8. A integração não foi executada em WebView de aparelho real.
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
