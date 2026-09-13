@@ -14,7 +14,7 @@ for (const path of [
   'prefs.rs',
   'platform/mod.rs',
   'tunnel/mod.rs',
-  'window.rs',
+  'window/mod.rs',
   'bridge/mod.rs',
   'bridge/protocol.rs',
   'workspace/terminal.rs',
