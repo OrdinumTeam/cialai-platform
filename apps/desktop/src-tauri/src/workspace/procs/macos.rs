@@ -17,6 +17,49 @@ use std::sync::OnceLock;
 
 use super::{CommandLine, ENV_OF_INTEREST, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage};
 
+#[derive(Debug, Default)]
+pub(super) struct Backend;
+
+impl Backend {
+    pub(super) fn refresh(&self) {}
+
+    pub(super) fn children(&self, pid: u32) -> Vec<u32> {
+        children(pid)
+    }
+
+    pub(super) fn descendants(&self, pid: u32) -> Vec<u32> {
+        descendants(pid)
+    }
+
+    pub(super) fn usage(&self, pid: u32) -> Option<Usage> {
+        usage(pid)
+    }
+
+    pub(super) fn info(&self, pid: u32) -> Option<ProcInfo> {
+        info(pid)
+    }
+
+    pub(super) fn name(&self, pid: u32) -> Option<String> {
+        name(pid)
+    }
+
+    pub(super) fn exe_path(&self, pid: u32) -> Option<String> {
+        exe_path(pid)
+    }
+
+    pub(super) fn cwd(&self, pid: u32) -> Option<String> {
+        cwd(pid)
+    }
+
+    pub(super) fn open_files(&self, pid: u32) -> Vec<String> {
+        open_files(pid)
+    }
+
+    pub(super) fn command_line(&self, pid: u32) -> Option<CommandLine> {
+        command_line(pid)
+    }
+}
+
 #[repr(C)]
 struct MachTimebaseInfo {
     numer: u32,

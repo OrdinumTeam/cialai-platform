@@ -44,7 +44,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.8 Ponte com identidade | Em andamento, parcial | `bridge/mod.rs` e `bridge/protocol.rs` já têm `BridgeControl`, identidade do dispositivo e do computador no `welcome`, exigência de `x-cialai-node-key` e fechamento por revogação com 4401. O supervisor ainda não chama essa API: Clippy com `-D warnings` falha por código não usado e por `serve` com oito argumentos, e o teste `bridge::tests::proxy_secret_marks_the_connection_as_a_device` falha porque não envia a chave do nó |
 | 2.9 a 4.8 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 | 5.1 Fonte de processos | Concluída localmente no macOS | `procs/` separa contrato portável, backend macOS e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. Linux e Windows continuam apenas preparados para 5.2 e 5.3 |
-| 5.2 a 7.6 | Não iniciadas | Os backends Linux e Windows, a matriz remota e os testes físicos continuam pendentes |
+| 5.2 Processos Linux | Implementada, execução Linux pendente | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`; os testes Linux serão executados no contêiner Ubuntu 22.04 da validação da fase |
+| 5.3 a 7.6 | Não iniciadas | O backend Windows, a matriz remota e os testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -302,6 +303,12 @@ Resultado real depois da correção, com Node 22.23.2 e npm 10.9.8: fundação, 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
 
 Com `CARGO_TARGET_DIR=~/.cache/cialai-target`, os testes direcionados `workspace::procs::tests::detects_agents_on_posix_and_windows_command_lines` e `workspace::terminal::tests::metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo fmt --check` e `git diff --check` passaram. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados de `bridge/` da tarefa 2.8 parcial; não houve aviso fora de `bridge/`. Os arquivos Linux e Windows ainda são stubs declarados e não contam como backend implementado.
+
+### 12/09/2026, backend de processos Linux da tarefa 5.2
+
+O stub Linux foi substituído por um snapshot compartilhado de `sysinfo` 0.36.1. `/proc/<pid>/task/*/children` fornece filhos quando legível, com fallback para o mapa de pais do snapshot; `/proc/<pid>/stat` preserva grupo e estados `T` e `t`; `smaps_rollup` fornece PSS com fallback para RSS; `cwd`, argv, ambiente permitido, executável e tempo acumulado de CPU vêm do mesmo snapshot; e `fd/*` fornece os arquivos abertos. O nome prefere o basename do executável ao `comm` truncado.
+
+No macOS, `cargo test --locked --lib workspace::procs` passou 10 casos e o teste de métricas com `FakeProcs` passou isoladamente. O Clippy com `-D warnings` voltou a apontar somente os seis diagnósticos conhecidos de `bridge/`, sem aviso no código da Fase 5. A execução real do backend e dos três testes condicionais a Linux foi deliberadamente deixada pendente para o contêiner Ubuntu 22.04 exigido na validação; até lá a tarefa está implementada, não verificada no Linux.
 
 ## Arquivos para retomar
 

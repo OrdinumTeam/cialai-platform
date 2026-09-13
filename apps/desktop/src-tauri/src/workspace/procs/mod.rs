@@ -75,6 +75,8 @@ pub struct CommandLine {
 /// Fonte unica consumida pelas metricas. Implementacoes devem devolver
 /// ausencia quando o sistema negar acesso, sem fabricar valores.
 pub trait ProcSource: Send + Sync {
+    fn refresh(&self) {}
+
     fn children(&self, pid: u32) -> Vec<u32>;
     fn usage(&self, pid: u32) -> Option<Usage>;
     fn info(&self, pid: u32) -> Option<ProcInfo>;
@@ -90,86 +92,110 @@ pub trait ProcSource: Send + Sync {
 }
 
 /// Backend real selecionado em compilacao.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct SystemProcs;
+#[derive(Debug, Default)]
+pub struct SystemProcs {
+    backend: backend::Backend,
+}
 
 impl ProcSource for SystemProcs {
+    fn refresh(&self) {
+        self.backend.refresh();
+    }
+
     fn children(&self, pid: u32) -> Vec<u32> {
-        backend::children(pid)
+        self.backend.children(pid)
     }
 
     fn descendants(&self, pid: u32) -> Vec<u32> {
-        backend::descendants(pid)
+        self.backend.descendants(pid)
     }
 
     fn usage(&self, pid: u32) -> Option<Usage> {
-        backend::usage(pid)
+        self.backend.usage(pid)
     }
 
     fn info(&self, pid: u32) -> Option<ProcInfo> {
-        backend::info(pid)
+        self.backend.info(pid)
     }
 
     fn name(&self, pid: u32) -> Option<String> {
-        backend::name(pid)
+        self.backend.name(pid)
     }
 
     fn exe_path(&self, pid: u32) -> Option<String> {
-        backend::exe_path(pid)
+        self.backend.exe_path(pid)
     }
 
     fn cwd(&self, pid: u32) -> Option<String> {
-        backend::cwd(pid)
+        self.backend.cwd(pid)
     }
 
     fn open_files(&self, pid: u32) -> Vec<String> {
-        backend::open_files(pid)
+        self.backend.open_files(pid)
     }
 
     fn command_line(&self, pid: u32) -> Option<CommandLine> {
-        backend::command_line(pid)
+        self.backend.command_line(pid)
     }
 }
 
 pub fn system() -> &'static SystemProcs {
-    static SYSTEM: SystemProcs = SystemProcs;
-    &SYSTEM
+    static SYSTEM: std::sync::OnceLock<SystemProcs> = std::sync::OnceLock::new();
+    SYSTEM.get_or_init(SystemProcs::default)
 }
 
 pub fn children(pid: u32) -> Vec<u32> {
-    system().children(pid)
+    let source = system();
+    source.refresh();
+    source.children(pid)
 }
 
 pub fn descendants(pid: u32) -> Vec<u32> {
-    system().descendants(pid)
+    let source = system();
+    source.refresh();
+    source.descendants(pid)
 }
 
 pub fn usage(pid: u32) -> Option<Usage> {
-    system().usage(pid)
+    let source = system();
+    source.refresh();
+    source.usage(pid)
 }
 
 pub fn info(pid: u32) -> Option<ProcInfo> {
-    system().info(pid)
+    let source = system();
+    source.refresh();
+    source.info(pid)
 }
 
 pub fn name(pid: u32) -> Option<String> {
-    system().name(pid)
+    let source = system();
+    source.refresh();
+    source.name(pid)
 }
 
 pub fn exe_path(pid: u32) -> Option<String> {
-    system().exe_path(pid)
+    let source = system();
+    source.refresh();
+    source.exe_path(pid)
 }
 
 pub fn cwd(pid: u32) -> Option<String> {
-    system().cwd(pid)
+    let source = system();
+    source.refresh();
+    source.cwd(pid)
 }
 
 pub fn open_files(pid: u32) -> Vec<String> {
-    system().open_files(pid)
+    let source = system();
+    source.refresh();
+    source.open_files(pid)
 }
 
 pub fn command_line(pid: u32) -> Option<CommandLine> {
-    system().command_line(pid)
+    let source = system();
+    source.refresh();
+    source.command_line(pid)
 }
 
 pub(super) fn bounded_descendants(pid: u32, mut children: impl FnMut(u32) -> Vec<u32>) -> Vec<u32> {

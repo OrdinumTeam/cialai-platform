@@ -525,7 +525,7 @@ impl TerminalManager {
             }),
             prefs,
             home,
-            Arc::new(SystemProcs),
+            Arc::new(SystemProcs::default()),
         );
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
@@ -547,7 +547,7 @@ impl TerminalManager {
             std::env::var_os("HOME")
                 .map(PathBuf::from)
                 .unwrap_or_else(std::env::temp_dir),
-            Arc::new(SystemProcs),
+            Arc::new(SystemProcs::default()),
         )
     }
 
@@ -1246,6 +1246,7 @@ impl TerminalManager {
         let now = Instant::now();
         let home = self.home.clone();
         let source = self.procs.as_ref();
+        source.refresh();
         let mut samples = lock(&self.samples);
         let mut commands = lock(&self.commands);
         let mut alive = Vec::new();
