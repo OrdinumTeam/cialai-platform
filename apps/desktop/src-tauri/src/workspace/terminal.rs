@@ -30,14 +30,12 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{
-    ChildKiller, CommandBuilder, ExitStatus, MasterPty, PtySize, native_pty_system,
-};
+use portable_pty::{ChildKiller, CommandBuilder, ExitStatus, MasterPty, PtySize};
 use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::platform::{self, ShellFlavor, ShellSpec};
+use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
 #[cfg(test)]
@@ -45,6 +43,7 @@ use super::DEFAULT_SHELL;
 use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, ProcSource, ProcState, SystemProcs};
+use super::pty::{self, ShellFlavor};
 use super::resume;
 
 const READ_BUFFER: usize = 16 * 1024;
@@ -408,14 +407,20 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: SyncSender<Vec<u8>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
-    #[cfg(target_os = "windows")]
-    _job: Option<crate::platform::win_job::JobHandle>,
+    tree: Option<pty::ProcessTree>,
     link: Arc<OutputLink>,
     spawned_at: Instant,
     view_owner: SubscriberKey,
     view_deadline: Option<Instant>,
     local_size: Option<(u16, u16)>,
 }
+
+type KillTarget = (
+    u32,
+    Box<dyn ChildKiller + Send + Sync>,
+    Option<u32>,
+    Option<pty::ProcessTree>,
+);
 
 const VIEW_LEASE: Duration = Duration::from_secs(15);
 type ViewNotifier = Arc<dyn Fn(TerminalView) + Send + Sync>;
@@ -746,15 +751,6 @@ impl TerminalManager {
         let cols = cols.max(2);
         let rows = rows.max(1);
 
-        let pair = native_pty_system()
-            .openpty(PtySize {
-                rows,
-                cols,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|error| format!("Não foi possível abrir o PTY: {error}"))?;
-
         let mut command = CommandBuilder::new(&shell.path);
         for arg in &shell.args {
             command.arg(arg);
@@ -782,10 +778,18 @@ impl TerminalManager {
             }
         }
 
-        let mut child = pair
-            .slave
-            .spawn_command(command)
-            .map_err(|error| format!("Não foi possível iniciar o shell: {error}"))?;
+        let spawned = pty::spawn_shell(
+            command,
+            PtySize {
+                rows,
+                cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            },
+        )?;
+        let pair = spawned.pair;
+        let mut child = spawned.child;
+        let tree = spawned.tree;
         // Sem soltar o slave aqui a leitora nunca ve EOF quando o shell sai.
         drop(pair.slave);
 
@@ -799,20 +803,6 @@ impl TerminalManager {
             .map_err(|error| error.to_string())?;
         let killer = child.clone_killer();
         let pid = child.process_id();
-        #[cfg(target_os = "windows")]
-        let job = match pid {
-            Some(pid) => match crate::platform::win_job::assign(pid) {
-                Ok(job) => Some(job),
-                Err(error) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return Err(format!(
-                        "Não foi possível isolar a árvore do terminal: {error}"
-                    ));
-                }
-            },
-            None => None,
-        };
 
         let id = {
             let mut guard = self.lock();
@@ -885,8 +875,7 @@ impl TerminalManager {
                 master: pair.master,
                 writer: write_tx,
                 killer,
-                #[cfg(target_os = "windows")]
-                _job: job,
+                tree,
                 link,
                 spawned_at: Instant::now(),
                 view_owner: SubscriberKey::Webview,
@@ -1135,18 +1124,22 @@ impl TerminalManager {
     /// SIGHUP no shell, que repassa aos jobs. Se em 400 ms a sessao ainda
     /// existe, SIGKILL. O fim chega ao webview pela thread de lote.
     pub fn kill(&self, id: u32) -> Result<(), String> {
-        let (mut killer, pid) = {
+        let (mut killer, pid, tree) = {
             let guard = self.lock();
             let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
             session.link.drain();
-            (session.killer.clone_killer(), session.info.pid)
+            (
+                session.killer.clone_killer(),
+                session.info.pid,
+                session.tree.clone(),
+            )
         };
-        let _ = killer.kill();
+        pty::graceful_kill(killer.as_mut());
         let manager = self.clone();
         thread::spawn(move || {
             thread::sleep(KILL_GRACE);
             if manager.lock().sessions.contains_key(&id) {
-                force_kill(pid);
+                pty::force_kill_tree(pid, tree.as_ref());
             }
         });
         Ok(())
@@ -1156,7 +1149,7 @@ impl TerminalManager {
     /// graca de encerramento, para nao segurar a saida.
     pub fn kill_all_blocking(&self) {
         self.closing.store(true, Ordering::SeqCst);
-        let targets: Vec<(u32, Box<dyn ChildKiller + Send + Sync>, Option<u32>)> = {
+        let targets: Vec<KillTarget> = {
             let guard = self.lock();
             guard
                 .sessions
@@ -1167,6 +1160,7 @@ impl TerminalManager {
                         session.info.id,
                         session.killer.clone_killer(),
                         session.info.pid,
+                        session.tree.clone(),
                     )
                 })
                 .collect()
@@ -1174,17 +1168,17 @@ impl TerminalManager {
         if targets.is_empty() {
             return;
         }
-        for (_, mut killer, _) in targets
+        for (_, mut killer, _, _) in targets
             .iter()
-            .map(|(id, killer, pid)| (*id, killer.clone_killer(), *pid))
+            .map(|(id, killer, pid, tree)| (*id, killer.clone_killer(), *pid, tree.clone()))
         {
-            let _ = killer.kill();
+            pty::graceful_kill(killer.as_mut());
         }
         thread::sleep(KILL_GRACE);
         let mut guard = self.lock();
-        for (id, _, pid) in targets {
+        for (id, _, pid, tree) in targets {
             if guard.sessions.remove(&id).is_some() {
-                force_kill(pid);
+                pty::force_kill_tree(pid, tree.as_ref());
             }
         }
     }
@@ -1241,20 +1235,19 @@ impl TerminalManager {
     /// Amostra CPU, memoria, primeiro plano e diretorio de cada sessao viva.
     /// As chamadas ao kernel ficam fora do lock das sessoes.
     pub fn metrics(&self) -> Vec<SessionMetrics> {
+        let source = self.procs.as_ref();
+        source.refresh();
         let targets: Vec<(u32, String, Option<u32>, Option<u32>)> = {
             let guard = self.lock();
             guard
                 .sessions
                 .values()
                 .map(|session| {
-                    #[cfg(target_os = "windows")]
-                    let foreground = None;
-                    #[cfg(not(target_os = "windows"))]
-                    let foreground = session
-                        .master
-                        .process_group_leader()
-                        .filter(|pgid| *pgid > 0)
-                        .map(|pgid| pgid as u32);
+                    let foreground = pty::foreground_pid(
+                        session.master.as_ref(),
+                        session.info.pid,
+                        self.procs.as_ref(),
+                    );
                     (
                         session.info.id,
                         session.info.tag.clone(),
@@ -1266,8 +1259,6 @@ impl TerminalManager {
         };
         let now = Instant::now();
         let home = self.home.clone();
-        let source = self.procs.as_ref();
-        source.refresh();
         let mut samples = lock(&self.samples);
         let mut commands = lock(&self.commands);
         let mut alive = Vec::new();
@@ -1291,8 +1282,6 @@ impl TerminalManager {
                 });
                 continue;
             };
-            #[cfg(target_os = "windows")]
-            let foreground_pgid = source.foreground_pid(pid);
             let mut tree = vec![pid];
             tree.extend(source.descendants(pid));
             alive.extend_from_slice(&tree);
@@ -1566,16 +1555,6 @@ fn describe_foreground(
         profile: profile.as_ref().map(|value| value.slug.clone()),
         profile_name: profile.as_ref().and_then(|value| value.name.clone()),
     })
-}
-
-fn force_kill(pid: Option<u32>) {
-    if let Some(pid) = pid {
-        // SAFETY: kill(2) com um pid que este processo criou; o pior caso e o
-        // pid ja ter sido reaproveitado, e o erro e ignorado.
-        unsafe {
-            libc::kill(pid as libc::pid_t, libc::SIGKILL);
-        }
-    }
 }
 
 fn needs_lang() -> bool {
@@ -2018,13 +1997,26 @@ mod tests {
     #[test]
     fn spawns_a_shell_streams_output_and_reports_exit() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
         let (tx, rx) = channel::<InvokeResponseBody>();
         let sink = Channel::new(move |body| {
             let _ = tx.send(body);
             Ok(())
         });
 
-        let info = manager.spawn("/tmp", 80, 24, "t1", sink).expect("spawn");
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                "t1",
+                SubscriberKey::Webview,
+                sink,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
         assert!(info.alive);
         assert_eq!(info.shell_flavor, ShellFlavor::from_path(&info.shell));
         assert_eq!(
@@ -2034,7 +2026,7 @@ mod tests {
         assert_eq!(manager.list().len(), 1);
         manager.resize(info.id, 100, 30).expect("resize");
         manager
-            .write(info.id, b"printf 'pty-ok-%s\\n' $((40+2)); exit 3\n")
+            .write(info.id, &shell.print_and_exit("pty-ok-42", 3))
             .expect("write");
 
         let (output, exit) = collect_until_exit(&rx);
@@ -2094,12 +2086,25 @@ mod tests {
     #[test]
     fn kill_ends_the_session() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
         let (tx, rx) = channel::<InvokeResponseBody>();
         let sink = Channel::new(move |body| {
             let _ = tx.send(body);
             Ok(())
         });
-        let info = manager.spawn("/tmp", 80, 24, "t1", sink).expect("spawn");
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                "t1",
+                SubscriberKey::Webview,
+                sink,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
         manager.kill(info.id).expect("kill");
         let (_, exit) = collect_until_exit(&rx);
         assert!(exit.is_some(), "o fim da sessao deve chegar pelo canal");

@@ -46,7 +46,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.1 Fonte de processos | Concluída localmente no macOS | `procs/` separa contrato portável, backend macOS e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. Linux e Windows continuam apenas preparados para 5.2 e 5.3 |
 | 5.2 Processos Linux | Implementada, execução Linux pendente | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`; os testes Linux serão executados no contêiner Ubuntu 22.04 da validação da fase |
 | 5.3 Processos Windows | Implementada, compilação Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin` não está instalado neste host; a tentativa de compilação fica pendente da validação final ou da CI remota |
-| 5.4 a 7.6 | Não iniciadas | PTY portável, demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.4 PTY por sistema | Concluída localmente no macOS; Windows pendente | `pty/` centraliza spawn, foreground e encerramento; `TestShell` elimina perfis nos testes e o Windows usa Job Object com encerramento gracioso seguido de término forçado após 400 ms. A variante Windows ainda não foi compilada nem executada |
+| 5.5 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -316,6 +317,12 @@ No macOS, `cargo test --locked --lib workspace::procs` passou 10 casos e o teste
 O backend Windows usa o mesmo snapshot `sysinfo` para pais, CPU acumulada, cwd, argv, ambiente permitido, executável, início e estado. A memória prefere `PROCESS_MEMORY_COUNTERS_EX2::PrivateWorkingSetSize` e cai para o working set do `sysinfo`. A árvore une descendentes por ppid aos ids do Job Object; o primeiro plano estimado é a folha viva mais nova e nunca informa processo parado.
 
 `platform/win_job.rs` cria um Job Object anônimo com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, atribui o shell assim que o ConPTY nasce, mantém um registro fraco por pid e expõe membros e término da árvore. No macOS, os 10 testes de `procs` e o caso de métricas por `FakeProcs` continuaram verdes, sem alteração dos avisos conhecidos de `bridge/`. `cargo-xwin` não está instalado e só o alvo `aarch64-apple-darwin` está presente; portanto o código Windows está preparado, mas ainda não foi compilado nem executado, e não é declarado como testado.
+
+### 12/09/2026, PTY portável da tarefa 5.4
+
+O spawn, a descoberta do processo em primeiro plano e o encerramento saíram de `terminal.rs` para `workspace/pty/{mod,unix,windows}.rs`. No Unix, o encerramento forçado usa `SIGKILL`; no Windows, cada ConPTY conserva o Job Object criado na 5.3 e a segunda etapa termina a árvore inteira depois dos 400 ms de graça. `TestShell` seleciona `/bin/sh` sem perfil no Unix e `%COMSPEC% /Q` no Windows, com comandos portáveis de saída e carga de CPU. As métricas atualizam `ProcSource` antes de estimar a folha em primeiro plano no Windows.
+
+No macOS, `cargo fmt --check` e `git diff --check` passaram. Os filtros `workspace::pty`, `spawns_a_shell_streams_output_and_reports_exit`, `kill_ends_the_session` e `metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo clippy --all-targets -- -D warnings` falhou exclusivamente nos seis diagnósticos conhecidos de `bridge/`; não houve aviso fora dessa pasta. Antes dessa validação, o preflight chegou a 4,6 GiB livres e a compilação iniciada na mesma sequência foi interrompida; `cargo clean --manifest-path apps/desktop/src-tauri/Cargo.toml -p cialai-desktop` removeu 3,1 GiB de artefatos recompiláveis do alvo compartilhado e restaurou 6,3 GiB. A validação registrada acima começou com 6,0 GiB livres. O código Windows permanece sem compilação ou execução real.
 
 ## Arquivos para retomar
 

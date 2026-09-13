@@ -128,14 +128,14 @@ pub(crate) fn members_for(shell_pid: u32) -> Vec<u32> {
 fn query_members(job: HANDLE) -> io::Result<Vec<u32>> {
     let bytes = std::mem::size_of::<JOBOBJECT_BASIC_PROCESS_ID_LIST>()
         + (MEMBER_CAPACITY - 1) * std::mem::size_of::<usize>();
-    let mut buffer = vec![0u8; bytes];
+    let mut buffer = vec![0usize; bytes.div_ceil(std::mem::size_of::<usize>())];
     // SAFETY: o buffer tem espaco para o cabecalho e MEMBER_CAPACITY ids.
     let ok = unsafe {
         QueryInformationJobObject(
             job,
             JobObjectBasicProcessIdList,
             buffer.as_mut_ptr() as *mut c_void,
-            buffer.len() as u32,
+            bytes as u32,
             std::ptr::null_mut(),
         )
     };

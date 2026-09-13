@@ -54,6 +54,7 @@ pub mod mobile_files;
 pub mod office;
 pub mod preview;
 pub mod procs;
+pub mod pty;
 pub mod repos;
 pub mod resume;
 pub mod terminal;
