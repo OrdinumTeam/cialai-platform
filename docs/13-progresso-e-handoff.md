@@ -14,6 +14,8 @@ Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução
 
 Execução em andamento. A implementação local e os critérios automatizáveis da Fase 1 estão concluídos no macOS; o aceite humano de paridade permanece pendente. A Fase 0 ainda depende de infraestrutura e aparelhos externos.
 
+Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge**.
+
 | Tarefa | Estado | Evidência e próximo passo |
 | --- | --- | --- |
 | 0.1 Fundação | Base implementada e validada localmente | Git local em `main`, cinco workspaces, lockfile npm, Apache 2.0, NOTICE, guias, modelos, ignores, crate Rust e módulo Go. E-mail e prazo de segurança ainda precisam de confirmação antes da publicação |
@@ -60,8 +62,21 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
+| 5.1 Fonte de processos | Verificada no macOS e Linux; Windows compilado | `procs/` separa contrato portável, backends nativos e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. `TestChild` passou no macOS e no Ubuntu, enquanto o braço Windows passou no cross check sem execução nativa |
+| 5.2 Processos Linux | Concluída e verificada no Ubuntu 22.04 arm64 | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`. Os três testes próprios do backend e o `TestChild` nativo passaram no contêiner da tarefa 5.15 |
+| 5.3 Processos Windows | Compilada, execução Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin check --all-targets` passou para `x86_64-pc-windows-msvc`; nenhum executável Windows ou recurso `.rc` foi executado ou compilado neste host |
+| 5.4 PTY por sistema | Verificada no macOS e Linux; execução Windows pendente | `pty/` centraliza spawn, foreground e encerramento; `TestShell` elimina perfis nos testes e o Windows usa Job Object com encerramento gracioso seguido de término forçado após 400 ms. O braço Windows compilou pelo `cargo-xwin`, sem execução nativa |
+| 5.5 Retomada por shell | Verificada no macOS e Linux; execução Windows pendente | Comandos de retomada cobrem POSIX, PowerShell e cmd; wrappers `.exe` e `.cmd` são reconhecidos, e a reserva do Codex seleciona rollout por cwd canônico e mtime. Os testes Windows compilaram pelo `cargo-xwin`, sem execução nativa |
+| 5.6 Observador de arquivos | Verificada no macOS e Linux; execução Windows pendente | `watch/` mantém contagem de referências e coalescimento comum, usa kqueue no macOS e `notify` 8 no Linux e Windows. Escrita, troca atômica e remoção passaram no macOS e no Ubuntu; o braço Windows compilou, sem execução nativa |
+| 5.7 Arquivos portáveis | Verificada no macOS e Linux; execução Windows pendente | Caminhos devolvidos usam barras normais, entradas preservam as duas formas aceitas no Windows, a sujeira é filtrada por sistema e links são recriados somente no Unix. A lixeira passou no macOS e no Ubuntu; o braço Windows compilou, sem execução nativa |
+| 5.8 Prévia portável | Testes Rust verificados no macOS e Linux; WebView2 pendente | O handler aceita `preview://` e `http://preview.localhost`, `native.js` escolhe a forma do Windows e `dunce::canonicalize` protege raiz e alvo. O código Windows compilou, mas a forma local ainda não foi aberta no WebView2 |
+| 5.9 Browser e Office | Testes Rust verificados no macOS e Linux; execução real pendente | Descoberta e instalador por sistema passaram no macOS e no Ubuntu após tornar o fixture do cache específico ao sistema. Chromium, WebView2 e LibreOffice reais ainda não foram executados no Linux ou Windows |
+| 5.10 Diagnóstico e hook | Testes Rust verificados no macOS e Linux; execução Windows pendente | O log usa `app_log_dir`, Unix redireciona stderr por `dup2` e Windows usa `SetStdHandle`; o hook tem instaladores POSIX e PowerShell. Rust passou no Ubuntu e compilou para Windows, mas o instalador PowerShell não foi executado nativamente |
 | 5.12 Atalhos por sistema | Concluída localmente na main | Rótulos e handlers usam um contrato único no desktop, no Workbench, nos painéis, na paleta, no editor e no xterm. O Dev Browser da porta 64552 confirmou Windows, Linux e macOS detectado sem o parâmetro; não houve execução nativa em Windows ou Linux |
-| 3.9, 3.10, 4.7, 4.8, 5.1 a 5.11 e 5.13 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
+| 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
+| 5.19 Guia por plataforma | Concluída localmente | README traz preparação específica de macOS, Ubuntu e Windows; o guia 14 reúne janela, menu, fontes, terminal, processos, atalhos, caminhos, integrações, pacotes e o estado real de verificação |
+| 3.9, 3.10, 4.7, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18 e 6.1 a 7.6 | Não iniciadas na main | Demais backends, release, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -529,6 +544,146 @@ O cache do Playwright estava vazio e a preferência do VS Code apontava para a r
 No Dev Browser Panel indicado pelo usuário, porta 64552, a URL exata `?platform=windows` renderizou com `data-platform="windows"` e sem exceções. As demos Windows e Linux exibiram rótulos Ctrl Shift. No terminal Windows, Ctrl F não abriu a busca do aplicativo e Ctrl Shift F abriu. A demo sem `platform` detectou macOS e mostrou ⌘, ⇧, ⌃ e ⌥, inclusive na paleta aberta por ⌘K. As capturas temporárias ficaram em `~/.dev-browser/tmp/cialai-5-12-windows-palette.png`, `cialai-5-12-linux-demo.png`, `cialai-5-12-macos-demo.png` e `cialai-5-12-macos-palette.png`.
 
 `npm run test:ui` terminou com código 0, com 17 casos de sincronização e 54 testes Node. `npm run build:ui --workspace @cialai/desktop` terminou com código 0, gerou as duas entradas e validou o recurso móvel com 130 assets. `git diff --check` também passou. O override de plataforma só é aceito fora do Tauri. Essa evidência não representa compilação ou execução nativa em Windows ou Linux.
+
+### 12/09/2026, fonte de processos da tarefa 5.1
+
+`workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
+
+Com `CARGO_TARGET_DIR=~/.cache/cialai-target`, os testes direcionados `workspace::procs::tests::detects_agents_on_posix_and_windows_command_lines` e `workspace::terminal::tests::metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo fmt --check` e `git diff --check` passaram. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados de `bridge/` da tarefa 2.8 parcial; não houve aviso fora de `bridge/`. Os arquivos Linux e Windows ainda eram stubs declarados nessa etapa e não contavam como backend implementado.
+
+### 12/09/2026, backend de processos Linux da tarefa 5.2
+
+O stub Linux foi substituído por um snapshot compartilhado de `sysinfo` 0.36.1. `/proc/<pid>/task/*/children` fornece filhos quando legível, com fallback para o mapa de pais do snapshot; `/proc/<pid>/stat` preserva grupo e estados `T` e `t`; `smaps_rollup` fornece PSS com fallback para RSS; `cwd`, argv, ambiente permitido, executável e tempo acumulado de CPU vêm do mesmo snapshot; e `fd/*` fornece os arquivos abertos. O nome prefere o basename do executável ao `comm` truncado.
+
+No macOS, `cargo test --locked --lib workspace::procs` passou 10 casos e o teste de métricas com `FakeProcs` passou isoladamente. O Clippy com `-D warnings` voltou a apontar somente os seis diagnósticos conhecidos de `bridge/`, sem aviso no código da Fase 5. A execução real do backend ficou para o contêiner Ubuntu 22.04 da tarefa 5.15.
+
+### 12/09/2026, backend de processos Windows da tarefa 5.3
+
+O backend Windows usa o mesmo snapshot `sysinfo` para pais, CPU acumulada, cwd, argv, ambiente permitido, executável, início e estado. A memória prefere `PROCESS_MEMORY_COUNTERS_EX2::PrivateWorkingSetSize` e cai para o working set do `sysinfo`. A árvore une descendentes por ppid aos ids do Job Object; o primeiro plano estimado é a folha viva mais nova e nunca informa processo parado.
+
+`platform/win_job.rs` cria um Job Object anônimo com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, atribui o shell assim que o ConPTY nasce, mantém um registro fraco por pid e expõe membros e término da árvore. No macOS, os 10 testes de `procs` e o caso de métricas por `FakeProcs` continuaram verdes, sem alteração dos avisos conhecidos de `bridge/`. A compilação cruzada posterior está registrada na tarefa 5.15; execução nativa Windows permanece pendente.
+
+### 12/09/2026, PTY portável da tarefa 5.4
+
+O spawn, a descoberta do processo em primeiro plano e o encerramento saíram de `terminal.rs` para `workspace/pty/{mod,unix,windows}.rs`. No Unix, o encerramento forçado usa `SIGKILL`; no Windows, cada ConPTY conserva o Job Object criado na 5.3 e a segunda etapa termina a árvore inteira depois dos 400 ms de graça. `TestShell` seleciona `/bin/sh` sem perfil no Unix e `%COMSPEC% /Q` no Windows, com comandos portáveis de saída e carga de CPU. As métricas atualizam `ProcSource` antes de estimar a folha em primeiro plano no Windows.
+
+No macOS, `cargo fmt --check` e `git diff --check` passaram. Os filtros `workspace::pty`, `spawns_a_shell_streams_output_and_reports_exit`, `kill_ends_the_session` e `metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo clippy --all-targets -- -D warnings` falhou exclusivamente nos seis diagnósticos conhecidos de `bridge/`; não houve aviso fora dessa pasta. Antes dessa validação, o preflight chegou a 4,6 GiB livres e a compilação iniciada na mesma sequência foi interrompida; `cargo clean --manifest-path apps/desktop/src-tauri/Cargo.toml -p cialai-desktop` removeu 3,1 GiB de artefatos recompiláveis do alvo compartilhado e restaurou 6,3 GiB. A validação registrada começou com 6,0 GiB livres.
+
+### 12/09/2026, retomada por sabor de shell da tarefa 5.5
+
+`resume_command` agora recebe `ShellFlavor`: POSIX preserva `cd` e variáveis prefixadas; PowerShell usa `Set-Location -LiteralPath` e `$env:`; cmd usa `cd /d` e `set "CHAVE=valor"`. No cmd essas variáveis intencionalmente permanecem no ambiente do shell depois que o agente encerra. `program_args` normaliza nomes sem distinguir caixa e reconhece `node.exe` e executáveis `.cmd`. O fallback necessário no Windows percorre no máximo 4096 entradas sob `<CODEX_HOME>/sessions`, ignora links, exige `session_meta` na primeira linha, cwd canônico igual e mtime não anterior ao processo, então escolhe o rollout mais recente; duas instâncias do Codex na mesma pasta permanecem uma ambiguidade documentada.
+
+`packages/ui/src/terminals/files.js::shellQuote(path, flavor)`, que já tinha os três braços preparados, passou a também citar valores iniciados por `=` de modo coerente com o Rust. O teste Node `check-platform.mjs` passou 3/3 com Node 22.23.2. No macOS, `cargo test ... workspace::resume` passou 11/11 e `cargo fmt --check` e `git diff --check` passaram; o Clippy completo voltou a falhar somente nos seis diagnósticos conhecidos de `bridge/`, sem aviso desta tarefa. Dois preflights ficaram poucos MiB abaixo de 5 GiB depois das compilações; nenhuma compilação grande foi iniciada nessas condições. Duas limpezas limitadas ao pacote `cialai-desktop` removeram respectivamente 1,5 e 1,7 GiB de artefatos recompiláveis antes de retomar com mais de 6 GiB. PowerShell e cmd foram verificados como strings em testes portáveis, não executados no Windows.
+
+### 12/09/2026, observador de arquivos multiplataforma da tarefa 5.6
+
+O contrato de `workspace::watch` foi movido para um módulo comum com contagem de referências, coalescimento de 80 ms e limite de rajada de 400 ms. O backend macOS conserva kqueue e reabre o caminho depois de troca atômica. Linux e Windows usam `notify` 8, com inotify por caminho não recursivo no Linux e observação da pasta pai filtrada pelo nome no Windows.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib workspace::watch` passou 2/2 no macOS, cobrindo escrita, troca atômica, remoção, coalescimento e referências. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados em `bridge/`; não houve aviso em `workspace/watch`. `cargo fmt` e `git diff --check` passaram. A tarefa 5.15 validou o backend `notify` no Ubuntu e compilou o braço Windows.
+
+### 12/09/2026, arquivos portáveis da tarefa 5.7
+
+Todos os caminhos estruturados devolvidos por `workspace::files` passam por `platform::to_portable`, inclusive listagem, estatística, leitura, escrita, imagem e busca. A tabela de sujeira distingue macOS, Linux e Windows; Linux acrescenta `.directory` e `.Trash-*`, enquanto Windows filtra os quatro artefatos de sistema previstos. A cópia recria links simbólicos somente no Unix. A lixeira continua nativa pelo `NSFileManager` no macOS e usa `trash` 5 no Linux e Windows, sempre devolvendo o erro `trash` sem exclusão definitiva quando o sistema recusa.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib workspace::files` passou 9/9 no macOS, incluindo a lixeira real e a preservação do arquivo se ela recusasse. `node packages/ui/scripts/check-platform.mjs`, executado com Node 22.23.2 e npm 10.9.8, passou 3/3 para separadores e citações dos três shells. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis diagnósticos conhecidos de `bridge/`. A lixeira Linux passou depois na 5.15; Windows continua sem execução.
+
+### 12/09/2026, prévia portável da tarefa 5.8
+
+`PreviewRoots` e o alvo servido usam `dunce::canonicalize`. O handler extrai o token tanto de `preview://<token>/<caminho>` quanto de `http://preview.localhost/<token>/<caminho>`, rejeita outras origens e conserva a verificação de contenção depois da canonização. `native.js::previewAddress` escolhe a segunda forma somente no Windows e mantém o protocolo próprio no macOS e Linux.
+
+Com 9,9 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::preview` passou 2/2. O teste serve HTML e CSS pelas duas formas, recusa caminho externo e token desconhecido e confere a decodificação percentual. `node packages/ui/scripts/check-platform.mjs` com Node 22.23.2 e npm 10.9.8 passou 4/4, incluindo as três URLs por sistema. `cargo fmt`, `git diff --check` e o código da tarefa no Clippy passaram; o Clippy completo parou somente nos seis erros conhecidos de `bridge/`. A URL Windows ainda não foi exercitada em WebView2 real.
+
+### 12/09/2026, browser e Office portáveis da tarefa 5.9
+
+`platform` passou a concentrar o cache do Playwright, a consulta de processo vivo, a configuração de processo auxiliar e o encerramento de reserva. O browser procura os layouts headless e completos do Playwright para macOS, Linux e Windows, depois Chrome, Chromium ou Edge instalados. O instalador usa zsh no macOS, o shell do usuário no Linux e `cmd.exe` com `npx.cmd` no Windows. No Windows, Chromium e instalador recebem `CREATE_NO_WINDOW` e Job Object. A origem local `http://tauri.localhost` entrou na lista estrita.
+
+O LibreOffice agora é descoberto em Homebrew e aplicativos no macOS, PATH, `/usr`, `/opt` e Snap no Linux, e Program Files ou PATH no Windows. A URL do perfil emite `file:///C:/...` corretamente, o PATH usa o separador nativo, `HOME` só é definido no Unix e o processo recebe `CREATE_NO_WINDOW` no Windows. As mensagens de instalação não recomendam Homebrew fora do macOS.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::browser` passou 13 casos e manteve apenas o download real ignorado. O filtro `workspace::office` passou 5 casos e manteve só a conversão real ignorada. Os testes incluem layouts artificiais Linux e Windows, URLs do Windows, instalação simulada, prazo e origens. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis erros conhecidos de `bridge/`, sem aviso novo. Browser, instalador e LibreOffice ainda não foram executados no Linux ou Windows.
+
+### 13/09/2026, diagnóstico e hook portáveis da tarefa 5.10
+
+O diagnóstico resolve `app.log` pela pasta de logs do Tauri. Fora de um terminal, Unix redireciona stderr com `dup2` e Windows usa `SetStdHandle`; o hook de panic e as linhas de ciclo de vida permanecem comuns. `workspace/mobile_files.rs` inteiro ficou restrito ao Unix e os dois comandos devolvem indisponibilidade explícita no Windows até a implementação Win32 da tarefa 6.4.
+
+O hook do Claude agora fica em `scripts/claude-statusline.py`, publica por perfil na pasta de dados própria de cada sistema, faz troca atômica e usa `fcntl` ou `msvcrt` para exclusão mútua. Os instaladores `.sh` e `.ps1` preservam uma `statusLine` própria sem `--force`, criam backup antes da alteração e oferecem `--dry-run`. O PowerShell conserva no hook o launcher realmente encontrado, inclusive `py -3` quando `python` não existe. A interface indica o instalador `.ps1` no Windows e o `.sh` no macOS e Linux. O primeiro teste detectou que uma janela `five_hour` sem `window_minutes` era ordenada depois da semana; a ordenação passou a reconhecer as durações canônicas sem mudar o rótulo Sessão.
+
+Comandos concluídos com código 0:
+
+```sh
+python3 scripts/test-claude-statusline.py
+sh -n scripts/install-claude-statusline.sh
+node --test packages/ui/scripts/tests/claude-hook-help.test.cjs
+npm test --workspace @cialai/ui
+npm run sidecar --workspace @cialai/desktop
+cargo --config build.jobs=2 fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2 workspace::ai
+git diff --check
+```
+
+Os seis testes Python, o caso Node do instalador, os 17 testes de sincronização e os 40 testes Node da UI passaram. A compilação Rust no macOS levou quatro minutos e os seis testes de `workspace::ai` passaram; permaneceram somente cinco avisos conhecidos de `bridge/` da tarefa 2.8 parcial. O branch da Fase 5 nasceu antes do script `sidecar`; por isso o comando obrigatório foi executado na `main` imediatamente antes de cada invocação Cargo sobre o manifesto deste worktree. Uma limpeza Cargo do alvo compartilhado removeu 5,7 GiB de artefatos recompiláveis quando o disco chegou a 4,7 GiB livres; a compilação só começou depois de recuperar 8,8 GiB. Não houve compilação nem execução Linux ou Windows nesta tarefa.
+
+### 13/09/2026, parte Rust dos testes multiplataforma da tarefa 5.15
+
+`TestShell` oferece escrita, saída e carga de CPU próprias para POSIX, PowerShell e cmd. Os testes de terminal deixaram de depender de `/tmp`, `zsh -f`, `printf`, `yes` e caminhos POSIX fixos. `TestChild` abre o próprio binário de testes como processo real e prova filhos, descendentes, pai, uso, cwd, ambiente permitido e redação de segredo pelo backend nativo. O supervisor usa um sidecar falso `.sh` no Unix e `.cmd` no Windows. Links dos testes de arquivos ficam restritos ao Unix.
+
+O journal omite no ConPTY as sequências de saída sincronizada e teclado estendido não aceitas, e abre o log Windows com compartilhamento de leitura, escrita e exclusão para permitir a troca atômica durante a compactação. O snapshot de retomada recebe a pasta pessoal já resolvida pelo aplicativo em vez de depender de `HOME`. O teste do instalador do browser passou a criar o layout Playwright próprio do Unix em execução; a primeira suíte Linux encontrou o caminho macOS fixo e forneceu o teste vermelho desta correção.
+
+No macOS, a suíte de biblioteca passou 151 casos, manteve dois ensaios externos ignorados e filtrou somente `bridge::tests::proxy_secret_marks_the_connection_as_a_device`, que ainda estava parcial na base dessa branch. Depois da correção do fixture do browser, o caso alterado passou isoladamente. O Clippy final com `-D warnings` passou em todos os alvos depois de suprimir somente `dead_code` e `clippy::too_many_arguments`, débitos então atribuídos à ponte parcial.
+
+No Windows, `cargo-xwin` 0.23.1 e o alvo `x86_64-pc-windows-msvc` foram instalados. Uma tentativa sem desvio chegou à compilação de recursos do Tauri e parou porque `llvm-rc` não existe no macOS. O modo explícito `CIALAI_SKIP_WINDOWS_RESOURCES=1` pula apenas o build script de recursos quando o alvo contém `windows`; com ele, `cargo-xwin check --all-targets` terminou com código 0 em 3 min 58 s e os cinco avisos da ponte parcial. Isso prova compilação cruzada do código e dos testes, não execução Windows, WebView2, ConPTY nem recursos `.rc`. `macOSPrivateApi` foi movido para a configuração base porque o verificador de manifesto do Tauri exige coerência com o recurso Cargo global. O cache descartável de 1,1 GiB do SDK do `cargo-xwin` foi removido depois da prova e pode ser baixado novamente.
+
+No Linux, o comando final usou Ubuntu 22.04 arm64, Rust 1.98.1, dois CPUs, `--memory 6g`, `--memory-swap 6g` e `--rm`. A primeira reconstrução foi interrompida quando o disco caiu a 4,9 GiB e o contêiner saiu com 137. Uma montagem somente leitura provou que o Tauri gera esquemas ao lado do manifesto; a cópia isolada apenas do crate perdeu as fixtures compartilhadas. A montagem completa encontrou um erro real no fixture Playwright, com 144 casos aprovados e um reprovado. Depois da correção, a suíte terminou com 145 aprovados, zero reprovados, dois ignorados e um filtrado. `procs` Linux, `TestChild`, `TestShell`, terminal, arquivos, lixeira, retomada, watch, browser e o sidecar falso foram executados. O contêiner foi removido e o `linux-schema.json` ignorado, criado somente pelo build, também foi removido.
+
+Comandos concluídos com código 0:
+
+```sh
+npm run sidecar --workspace @cialai/desktop
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib -j 2 -- --skip bridge::tests::proxy_secret_marks_the_connection_as_a_device
+CIALAI_SKIP_WINDOWS_RESOURCES=1 CARGO_TARGET_DIR=~/.cache/cialai-target cargo-xwin check --manifest-path apps/desktop/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --locked -j 2
+docker run --rm --name cialai-rust-linux-fase5 --memory 6g --memory-swap 6g --cpus 2 --tmpfs /var/lib/apt/lists:rw,size=128m --tmpfs /var/cache/apt:rw,size=512m -v '/Users/focoamorim/Github Projects/OrdinumTeam/cialai-lane-b:/workspace' ubuntu:22.04 bash -lc 'apt-get update; apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev zsh; curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.98.1 --profile minimal; source /root/.cargo/env; CARGO_TARGET_DIR=/tmp/cialai-target CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 cargo test --manifest-path /workspace/apps/desktop/src-tauri/Cargo.toml --locked --lib -j 2 -- --skip bridge::tests::proxy_secret_marks_the_connection_as_a_device'
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib -j 2 workspace::browser::tests::install_reports_progress_and_leaves_the_binary
+cargo --config build.jobs=2 fmt --manifest-path apps/desktop/src-tauri/Cargo.toml
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --all-targets -j 2 -- -A dead_code -A clippy::too_many_arguments -D warnings
+git diff --check
+```
+
+A parte Playwright de `tools/browser/run-browser-checks.mjs` não pertenceu a esta entrega Rust. A execução Windows nativa e a matriz remota continuam pendentes.
+
+### 13/09/2026, matriz local de CI da tarefa 5.16
+
+O job `desktop` de `.github/workflows/ci.yml` usa a matriz `ubuntu-22.04`, `windows-2022` e `macos-14`, com falha rápida desativada e prazo de 60 minutos. Rust 1.98.1 recebe rustfmt e Clippy, Go segue o `go.mod` e Node segue `.nvmrc` com npm 10.9.8. Ubuntu instala as dependências Tauri e WebKitGTK previstas no documento 10. `CARGO_BUILD_JOBS=2` mantém o limite das compilações Rust também nos runners.
+
+Depois de `npm ci`, cada sistema compila seu sidecar antes de `npm test`. Somente com a suíte verde o workflow chama o build Tauri sem credenciais. `actions/upload-artifact@v4` exige pelo menos um arquivo e cobre dmg, AppImage, deb, rpm, nsis e msi sob nomes distintos por sistema e arquitetura. Não há referência a `secrets` nesse workflow de push e PR.
+
+`tools/check/ci-matrix.mjs` fixa localmente os três runners, as oito dependências Linux, toolchains, ordem sidecar, suíte e bundle, limite de jobs e seis grupos de artefatos. A guarda foi adicionada a `npm test`. O teste foi escrito antes da mudança e falhou inicialmente em `libwebkit2gtk-4.1-dev`, então passou com a matriz nova. O parser YAML do Ruby também aceitou o arquivo.
+
+Comandos concluídos com código 0:
+
+```sh
+node tools/check/ci-matrix.mjs
+ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml"); puts "PASS yaml"'
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run check:ci
+git diff --check
+```
+
+Nenhuma execução remota foi iniciada e nenhum artefato foi publicado. A parte `release.yml` da tarefa 5.16 não estava no escopo desta entrega da matriz e segue pendente. Os passos Playwright e `check:text` serão ligados depois que seus scripts existirem; até lá o workflow executa apenas comandos reais do repositório.
+
+### 13/09/2026, documentação por sistema da tarefa 5.19
+
+O README deixou de descrever crates vazios e passou a trazer preparação comum e instruções próprias para macOS, Ubuntu 22.04 e Windows. O novo documento `14-diferencas-por-plataforma.md` consolida diferenças de janela, menu, fontes, shell, processos, atalhos, caminhos, Dev Browser, LibreOffice e empacotamento. O índice aponta para essa referência.
+
+A tabela de evidências separa execução nativa, teste em contêiner e cross check. Windows continua explicitamente sem execução nativa, recursos do bundle, WebView2, ConPTY, instaladores ou assinatura validados. Linux visível, CI remota e instaladores também não foram promovidos a aprovados.
+
+`tools/check/platform-docs.mjs` foi escrito primeiro e falhou porque o guia ainda não existia. Depois da documentação, a guarda passou cobrindo as três seções de preparo, os comandos comuns, o índice e os principais contratos por sistema.
+
+Comandos concluídos com código 0:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run check:platform-docs
+git diff --check
+```
+
+Com isso, a parte Rust da branch `fase-5/rust-multiplataforma`, formada pelas tarefas 5.10, parte Rust da 5.15, matriz da 5.16 e 5.19, ficou pronta para merge.
 
 ## Arquivos para retomar
 

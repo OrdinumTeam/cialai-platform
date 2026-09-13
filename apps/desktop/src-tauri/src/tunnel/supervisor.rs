@@ -76,6 +76,7 @@ impl BridgeSession {
 #[derive(Clone)]
 struct LaunchConfig {
     binary: PathBuf,
+    binary_args: Vec<String>,
     state_dir: PathBuf,
     static_dir: PathBuf,
     bridge: BridgeSession,
@@ -126,6 +127,7 @@ impl Supervisor {
         Ok(Self::new(
             LaunchConfig {
                 binary,
+                binary_args: Vec::new(),
                 state_dir: state_dir.clone(),
                 static_dir: mobile_site.static_dir().to_path_buf(),
                 bridge,
@@ -441,7 +443,9 @@ impl Inner {
         self.emit_local("tunnel.state", json!({"state":"starting"}));
         let binary = validate_binary(&self.launch.binary)
             .map_err(|message| RpcProblem::local("tunnel_start", message, true))?;
-        let mut child = Command::new(binary)
+        let mut command = Command::new(binary);
+        let mut child = command
+            .args(&self.launch.binary_args)
             .arg("serve-stdio")
             .arg("--state-dir")
             .arg(&self.launch.state_dir)
@@ -846,6 +850,7 @@ mod tests {
     fn fixture(root: &Path, binary: PathBuf, bridge: BridgeSession) -> LaunchConfig {
         LaunchConfig {
             binary,
+            binary_args: Vec::new(),
             state_dir: root.join("state"),
             static_dir: root.join("mobile"),
             bridge,
@@ -1007,22 +1012,19 @@ printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
         fs::remove_dir_all(root).unwrap();
     }
 
-    #[cfg(unix)]
-    #[test]
-    fn real_child_negotiates_serves_a_call_and_shuts_down() {
-        use std::os::unix::fs::PermissionsExt;
+    struct TestChild {
+        binary: PathBuf,
+        args: Vec<String>,
+    }
 
-        let root = std::env::temp_dir().join(format!(
-            "cialai-supervisor-{}-{}",
-            std::process::id(),
-            std::thread::current().name().unwrap_or("test")
-        ));
-        let _ = fs::remove_dir_all(&root);
-        fs::create_dir_all(root.join("mobile")).unwrap();
-        let script = root.join("fake-sidecar.sh");
-        fs::write(
-            &script,
-            r#"#!/bin/sh
+    impl TestChild {
+        fn sidecar(root: &Path) -> Self {
+            #[cfg(unix)]
+            {
+                let script = root.join("fake-sidecar.sh");
+                fs::write(
+                    &script,
+                    r#"#!/bin/sh
 printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":42},"ts":"2026-09-12T20:00:00Z"}'
 IFS= read -r hello
 printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["control","edge","pairing","devices"]}}'
@@ -1031,20 +1033,52 @@ printf '%s\n' '{"id":2,"ok":true,"result":{"lines":[]}}'
 IFS= read -r shutdown
 printf '%s\n' '{"id":3,"ok":true,"result":{}}'
 "#,
-        )
-        .unwrap();
-        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+                )
+                .unwrap();
+                Self {
+                    binary: PathBuf::from("/bin/sh"),
+                    args: vec![script.to_string_lossy().into_owned()],
+                }
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let script = root.join("fake-sidecar.cmd");
+                fs::write(
+                    &script,
+                    "@echo off\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"control\",\"edge\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"lines\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\n",
+                )
+                .unwrap();
+                Self {
+                    binary: script,
+                    args: Vec::new(),
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn real_child_negotiates_serves_a_call_and_shuts_down() {
+        let root = std::env::temp_dir().join(format!(
+            "cialai-supervisor-{}-{}",
+            std::process::id(),
+            std::thread::current().name().unwrap_or("test")
+        ));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("mobile")).unwrap();
+        let child = TestChild::sidecar(&root);
         let events = Arc::new(Mutex::new(Vec::new()));
         let captured = events.clone();
+        let mut launch = fixture(
+            &root,
+            child.binary,
+            BridgeSession {
+                port: 3720,
+                secret: "fixture".into(),
+            },
+        );
+        launch.binary_args = child.args;
         let supervisor = Supervisor::new(
-            fixture(
-                &root,
-                script,
-                BridgeSession {
-                    port: 3720,
-                    secret: "fixture".into(),
-                },
-            ),
+            launch,
             Arc::new(move |channel, value| {
                 lock(&captured).push((channel.to_owned(), value));
             }),

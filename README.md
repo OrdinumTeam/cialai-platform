@@ -1,45 +1,103 @@
 # Cialai
 
-Cialai é um estúdio de terminais open source, mantido pela Ordinum. No computador, cada sessão é um shell numa pasta, com um card que mostra o que está rodando, se precisa de atenção e quanto consome. No celular, a pessoa acompanha e controla esses terminais por um túnel cifrado ponta a ponta, coordenado por um Headscale que ela mesma hospeda, com o vínculo entre os aparelhos criado por um QR code.
-
-O produto nasce do estúdio de terminais do Ordinum Control, preservando sua experiência: criação e organização de sessões, cores, aparência, interações, histórico que volta depois de fechar o app e retomada de conversas de Claude Code e Codex.
+Cialai é um estúdio de terminais open source, mantido pela Ordinum. Cada sessão
+é um shell numa pasta, com contexto de arquivos, prévias e Dev Browser. Um
+celular pareado acompanha e controla essas sessões por um túnel cifrado ponta a
+ponta, coordenado por um Headscale que a própria pessoa hospeda.
 
 ## Estado
 
-Fase 0 aberta e Fase 1 em execução desde 12/09/2026 por autorização do usuário. O scaffold Tauri, o núcleo Rust, a interface de Terminais, a camada multiplataforma e o recurso web do celular compilam e passam nas suítes locais e nos checks visíveis no macOS. Isso não equivale a aplicativo final nem aprova os ensaios físicos pendentes. A execução segue [o roadmap](./docs/11-roadmap-de-execucao.md), com tarefas e evidências em [progresso e handoff](./docs/13-progresso-e-handoff.md).
+A portabilidade desktop da Fase 5 está em execução. O núcleo Rust foi executado
+nativamente no macOS e no Ubuntu 22.04. O alvo Windows passou no `cargo-xwin`,
+sem execução nativa. Isso não equivale a aplicativo final, instalador aprovado
+ou matriz remota concluída.
 
-Para validar a fundação com Node 22 e npm 10:
+O [roadmap](./docs/11-roadmap-de-execucao.md) define o aceite e o
+[progresso e handoff](./docs/13-progresso-e-handoff.md) registra os comandos e
+resultados observados. O
+[guia de diferenças por plataforma](./docs/14-diferencas-por-plataforma.md)
+explica os comportamentos de macOS, Linux e Windows.
+
+## Preparação comum
+
+Use Git, Node 22, npm 10, Rust 1.98.1 e Go 1.26.5. O Go pode baixar a versão
+declarada no módulo quando `GOTOOLCHAIN=auto` estiver ativo.
 
 ```sh
 npm ci
+npm run sidecar --workspace @cialai/desktop
 npm test
 ```
 
-Requisitos e instruções em [CONTRIBUTING.md](./CONTRIBUTING.md).
+Compile o sidecar novamente antes de chamar Cargo diretamente ou iniciar o app.
+Neste repositório, compilações Rust usam no máximo dois jobs.
 
-## Plataformas
+```sh
+npm run sidecar --workspace @cialai/desktop
+CARGO_BUILD_JOBS=2 npm run dev:desktop
+```
 
-| Plataforma | Papel |
-| --- | --- |
-| macOS, Linux e Windows | Desktop em Tauri 2 e Rust, onde os terminais são criados e executados |
-| iOS e Android | Apps em Expo que acompanham e controlam os terminais do computador |
-| Servidor próprio | Headscale auto hospedado, com receita pronta em `infra/headscale` |
+### macOS
+
+Requer macOS 13 ou mais novo e as ferramentas de linha de comando do Xcode. O
+shell detectado recebe argumentos de login. O pacote local usa `app` e `dmg`.
+
+```sh
+xcode-select --install
+npm run sidecar --workspace @cialai/desktop
+CARGO_BUILD_JOBS=2 npm run dev:desktop
+```
+
+Assinatura Developer ID e notarização não fazem parte do fluxo local.
+
+### Linux
+
+A referência de build é Ubuntu 22.04 com WebKitGTK 4.1. Instale as dependências
+do Tauri antes da preparação comum.
+
+```sh
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev zsh
+npm run sidecar --workspace @cialai/desktop
+CARGO_BUILD_JOBS=2 npm run dev:desktop
+```
+
+Os pacotes previstos são `deb`, `rpm` e `AppImage`. Em problemas de composição
+do WebKitGTK, consulte o guia por plataforma antes de alterar o ambiente.
+
+### Windows
+
+Requer Windows 10 21H2 ou mais novo, WebView2 Runtime e Visual Studio Build Tools
+com Desktop development with C++. PowerShell 7 é preferido; Windows PowerShell
+e `cmd.exe` permanecem reservas suportadas.
+
+```powershell
+npm ci
+npm run sidecar --workspace @cialai/desktop
+$env:CARGO_BUILD_JOBS = "2"
+npm run dev:desktop
+```
+
+Os pacotes previstos são `nsis` e `msi`. Execução nativa no Windows segue
+pendente; o resultado disponível é um cross check do código Rust, sem validar
+WebView2, ConPTY, recursos do instalador ou assinatura.
 
 ## Documentação
 
-Índice e ordem de leitura em [docs/README.md](./docs/README.md).
+Índice e ordem de leitura em [docs/README.md](./docs/README.md). Instruções para
+contribuir em [CONTRIBUTING.md](./CONTRIBUTING.md).
 
-## Estrutura prevista
+## Estrutura
 
-```
-apps/desktop        Tauri 2 e Rust
-apps/mobile         Expo, iOS e Android, módulo nativo do túnel
-packages/ui         React: estúdio, casca desktop, casca do celular
-packages/protocol   contrato da ponte e do pareamento
-packages/tunnel-core  Go: tsnet, borda, proxy, pareamento, Headscale
-infra/headscale     docker compose, config, política
-tools               verificações, capturas, self test, release
-docs                planejamento e documentação viva
+```text
+apps/desktop          Tauri 2 e Rust
+apps/mobile           Expo, iOS e Android, módulo nativo do túnel
+packages/ui           React, estúdio e cascas desktop e celular
+packages/protocol     Contrato da ponte e do pareamento
+packages/tunnel-core  Go, tsnet, borda, proxy, pareamento e Headscale
+infra/headscale       Docker Compose, configuração e política
+tools                 Verificações, capturas, autoteste e release
+docs                  Planejamento e documentação viva
 ```
 
 ## Licença

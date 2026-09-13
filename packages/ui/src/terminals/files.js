@@ -199,11 +199,11 @@ export function shellQuote(path, flavor = platform().defaultShellFlavor) {
   const text = String(path ?? '');
   if (flavor === 'cmd') {
     if (text === '') return '""';
-    if (/^[A-Za-z0-9_./\\~+@%:,=-]+$/.test(text) && !text.startsWith('-')) return text;
+    if (/^[A-Za-z0-9_./\\~+@%:,=-]+$/.test(text) && !/^[=~-]/.test(text)) return text;
     return `"${text.replace(/"/g, '""')}"`;
   }
   if (text === '') return "''";
-  if (/^[A-Za-z0-9_./~+@%:,=-]+$/.test(text) && !text.startsWith('~') && !text.startsWith('-')) return text;
+  if (/^[A-Za-z0-9_./~+@%:,=-]+$/.test(text) && !/^[=~-]/.test(text)) return text;
   if (flavor === 'powershell') return `'${text.replace(/'/g, "''")}'`;
   return `'${text.replace(/'/g, "'\\''")}'`;
 }

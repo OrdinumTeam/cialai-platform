@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Contratos portaveis de sistema, shell, locale e caminhos.
 
+#[cfg(unix)]
 use std::ffi::CStr;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use serde::Serialize;
 
 use crate::prefs::Preferences;
+
+#[cfg(target_os = "windows")]
+pub mod win_job;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -102,6 +107,97 @@ pub fn to_portable(path: impl AsRef<Path>) -> String {
         rest.to_string()
     } else {
         value
+    }
+}
+
+pub fn playwright_cache(home: &Path) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    return home.join("Library/Caches/ms-playwright");
+    #[cfg(all(unix, not(target_os = "macos")))]
+    return home.join(".cache/ms-playwright");
+    #[cfg(target_os = "windows")]
+    return std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join("AppData/Local"))
+        .join("ms-playwright");
+}
+
+#[cfg(unix)]
+pub fn process_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: o sinal zero apenas consulta a existencia e a permissao.
+    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
+}
+
+#[cfg(target_os = "windows")]
+pub fn process_alive(pid: u32) -> bool {
+    use windows_sys::Win32::Foundation::{CloseHandle, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+
+    if pid == 0 {
+        return false;
+    }
+    // SAFETY: o handle e apenas consultado e sempre fechado nesta funcao.
+    let process = unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid) };
+    if process.is_null() {
+        return false;
+    }
+    let mut code = 0_u32;
+    // SAFETY: `process` e `code` sao validos durante a chamada.
+    let running =
+        unsafe { GetExitCodeProcess(process, &mut code) } != 0 && code == STILL_ACTIVE as u32;
+    // SAFETY: o handle foi aberto acima e nao escapa.
+    unsafe { CloseHandle(process) };
+    running
+}
+
+/// Configura processos auxiliares sem janela. No Unix eles tambem ganham um
+/// grupo proprio para que filhos sejam recolhidos no prazo.
+pub fn configure_background_command(command: &mut Command) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+}
+
+/// Encerra um grupo auxiliar no Unix. No Windows o Job Object cuida da arvore;
+/// esta reserva cobre somente um processo orfao de uma versao anterior.
+pub fn terminate_background_process(pid: u32, force: bool) {
+    if pid == 0 {
+        return;
+    }
+    #[cfg(unix)]
+    {
+        let signal = if force { libc::SIGKILL } else { libc::SIGTERM };
+        // SAFETY: o processo foi criado como lider do proprio grupo.
+        unsafe { libc::kill(-(pid as libc::pid_t), signal) };
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, PROCESS_TERMINATE, TerminateProcess,
+        };
+        // SAFETY: o handle e usado apenas nesta funcao e sempre fechado.
+        let process = unsafe { OpenProcess(PROCESS_TERMINATE, 0, pid) };
+        if !process.is_null() {
+            unsafe {
+                TerminateProcess(process, 1);
+                CloseHandle(process);
+            }
+        }
+        let _ = force;
     }
 }
 

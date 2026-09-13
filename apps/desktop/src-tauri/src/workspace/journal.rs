@@ -29,6 +29,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::platform::ShellFlavor;
+
 use super::resume::{self, AgentSession};
 
 /// Historico mantido depois de reescrever o arquivo.
@@ -47,7 +49,10 @@ const LINE_SEARCH: usize = 64 * 1024;
 /// mostra o cursor, desliga teclas de aplicacao, mouse, foco, colagem entre
 /// colchetes e teclado estendido, e desce ao fim da tela para a linha
 /// seguinte nao cobrir nada.
+#[cfg(not(target_os = "windows"))]
 pub const TERMINAL_RESET: &[u8] = b"\x1b[?2026l\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1004l\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?7h\x1b[0m\x1b[999B\r\n";
+#[cfg(target_os = "windows")]
+pub const TERMINAL_RESET: &[u8] = b"\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1004l\x1b[?2004l\x1b[>4;0m\x1b[?7h\x1b[0m\x1b[999B\r\n";
 
 /// Estado gravado de uma sessao.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,7 +198,7 @@ impl JournalStore {
     }
 
     /// Estado guardado, com o comando de retomada ja validado.
-    pub fn saved(&self, tag: &str) -> Option<SavedTerminal> {
+    pub fn saved(&self, tag: &str, flavor: ShellFlavor) -> Option<SavedTerminal> {
         if !self.accepts(tag) {
             return None;
         }
@@ -212,7 +217,7 @@ impl JournalStore {
             });
         };
         let resume = meta.agent.as_ref().and_then(|agent| {
-            resume::resume_command(agent, &meta.cwd).map(|command| ResumePlan {
+            resume::resume_command(agent, &meta.cwd, flavor).map(|command| ResumePlan {
                 agent: agent.agent.clone(),
                 session_id: agent.session_id.clone(),
                 command,
@@ -302,7 +307,7 @@ pub struct JournalWriter {
 
 impl JournalWriter {
     fn open(path: PathBuf) -> Option<Self> {
-        match OpenOptions::new().create(true).append(true).open(&path) {
+        match open_append(&path, true) {
             Ok(file) => {
                 let size = file.metadata().map(|meta| meta.len()).unwrap_or(0);
                 Some(Self {
@@ -360,8 +365,22 @@ fn compact(path: &Path) -> io::Result<(File, u64)> {
     let (tail, _) = read_tail(path, LOG_KEEP)?;
     let kept = &tail[line_start(&tail)..];
     write_atomic(path, kept)?;
-    let file = OpenOptions::new().append(true).open(path)?;
+    let file = open_append(path, false)?;
     Ok((file, kept.len() as u64))
+}
+
+fn open_append(path: &Path, create: bool) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(create).append(true);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // A compactação troca o arquivo enquanto o handle anterior ainda está
+        // vivo. Sem compartilhamento de exclusão, o rename falha no Windows.
+        const SHARE_READ_WRITE_DELETE: u32 = 0x0000_0001 | 0x0000_0002 | 0x0000_0004;
+        options.share_mode(SHARE_READ_WRITE_DELETE);
+    }
+    options.open(path)
 }
 
 /// Ultimos `limit` bytes do arquivo e se houve corte.
@@ -450,6 +469,19 @@ mod tests {
     }
 
     #[test]
+    fn terminal_reset_avoids_sequences_unsupported_by_conpty() {
+        assert_eq!(
+            contains(TERMINAL_RESET, b"\x1b[?2026l").is_some(),
+            !cfg!(target_os = "windows")
+        );
+        assert_eq!(
+            contains(TERMINAL_RESET, b"\x1b[<u").is_some(),
+            !cfg!(target_os = "windows")
+        );
+        assert!(contains(TERMINAL_RESET, b"\x1b[?1049l").is_some());
+    }
+
+    #[test]
     fn long_history_keeps_the_tail_from_a_line_start() {
         let dir = scratch("tail");
         let store = JournalStore::new(dir.clone());
@@ -502,7 +534,7 @@ mod tests {
             &SavedMeta::sample("s_m", "/tmp", 120, 40, Some(agent.clone())),
             || true,
         );
-        let saved = store.saved("s_m").unwrap();
+        let saved = store.saved("s_m", ShellFlavor::Posix).unwrap();
         assert_eq!((saved.cols, saved.rows, saved.history_bytes), (120, 40, 0));
         assert!(saved.updated_at_ms > 0);
         let plan = saved.resume.unwrap();
@@ -518,11 +550,17 @@ mod tests {
             &SavedMeta::sample("s_m", "/tmp", 120, 40, Some(agent)),
             || true,
         );
-        assert!(store.saved("s_m").is_none());
+        assert!(store.saved("s_m", ShellFlavor::Posix).is_none());
         store.write_meta(&SavedMeta::sample("s_m", "/tmp", 120, 40, None), || false);
-        assert!(store.saved("s_m").is_none());
+        assert!(store.saved("s_m", ShellFlavor::Posix).is_none());
         store.write_meta(&SavedMeta::sample("s_m", "/tmp", 120, 40, None), || true);
-        assert!(store.saved("s_m").unwrap().resume.is_none());
+        assert!(
+            store
+                .saved("s_m", ShellFlavor::Posix)
+                .unwrap()
+                .resume
+                .is_none()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -536,7 +574,13 @@ mod tests {
         });
         fs::write(dir.join("s_t.json"), body.to_string()).unwrap();
         let store = JournalStore::new(dir.clone());
-        assert!(store.saved("s_t").unwrap().resume.is_none());
+        assert!(
+            store
+                .saved("s_t", ShellFlavor::Posix)
+                .unwrap()
+                .resume
+                .is_none()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -549,17 +593,17 @@ mod tests {
             store.write_meta(&SavedMeta::sample(tag, "/tmp", 80, 24, None), || true);
         }
         store.forget("s_closed");
-        assert!(store.saved("s_closed").is_none());
+        assert!(store.saved("s_closed", ShellFlavor::Posix).is_none());
         store.write_meta(
             &SavedMeta::sample("s_closed", "/tmp", 100, 30, None),
             || true,
         );
         assert!(store.writer("s_closed").is_none());
-        assert!(store.saved("s_closed").is_none());
+        assert!(store.saved("s_closed", ShellFlavor::Posix).is_none());
         let keep: HashSet<String> = ["s_keep".to_string()].into_iter().collect();
         assert_eq!(store.prune(&keep), 2);
-        assert!(store.saved("s_keep").is_some());
-        assert!(store.saved("s_gone").is_none());
+        assert!(store.saved("s_keep", ShellFlavor::Posix).is_some());
+        assert!(store.saved("s_gone", ShellFlavor::Posix).is_none());
         assert!(store.writer("../fora").is_none());
         let _ = fs::remove_dir_all(dir);
     }

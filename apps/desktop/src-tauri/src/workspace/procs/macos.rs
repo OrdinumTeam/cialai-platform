@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Inspecao de processos no macOS por libproc e sysctl, sem crate extra:
+//! Backend macOS de inspecao de processos por libproc e sysctl:
 //! arvore de filhos de um pid, tempo de CPU e memoria residente, diretorio
 //! atual e linha de comando. E a fonte das medicoes reais mostradas nos
 //! cards de sessao. Nada aqui inventa valor: quando uma leitura falha, o
@@ -12,26 +12,57 @@
 //! a fazer depois do bug com os M1. Memoria: `ri_phys_footprint`, a mesma
 //! coluna Memoria do Monitor de Atividade.
 
-use std::collections::HashMap;
 use std::os::raw::{c_char, c_int, c_void};
-use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-/// Limite de processos percorridos por arvore, para uma sessao com muitos
-/// filhos nao custar um tick inteiro.
-const MAX_TREE: usize = 512;
-const MAX_DEPTH: usize = 16;
-/// Teto de entradas do ambiente lidas de um processo.
-const MAX_ENV_ENTRIES: usize = 4096;
-/// Variaveis de ambiente que o estudio guarda de um processo: as que dizem
-/// qual perfil de agente ele usa. Lista fechada, porque o bloco de ambiente
-/// traz chaves e segredos de outros programas, e nada fora daqui e retido.
-const ENV_OF_INTEREST: &[&str] = &[
-    "CLAUDE_CONFIG_DIR",
-    "CLAUDE_PROFILE",
-    "CODEX_HOME",
-    "CODEX_PROFILE",
-];
+use super::{CommandLine, ENV_OF_INTEREST, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage};
+
+#[derive(Debug, Default)]
+pub(super) struct Backend;
+
+impl Backend {
+    pub(super) fn refresh(&self) {}
+
+    pub(super) fn children(&self, pid: u32) -> Vec<u32> {
+        children(pid)
+    }
+
+    pub(super) fn descendants(&self, pid: u32) -> Vec<u32> {
+        descendants(pid)
+    }
+
+    pub(super) fn usage(&self, pid: u32) -> Option<Usage> {
+        usage(pid)
+    }
+
+    pub(super) fn info(&self, pid: u32) -> Option<ProcInfo> {
+        info(pid)
+    }
+
+    pub(super) fn name(&self, pid: u32) -> Option<String> {
+        name(pid)
+    }
+
+    pub(super) fn exe_path(&self, pid: u32) -> Option<String> {
+        exe_path(pid)
+    }
+
+    pub(super) fn cwd(&self, pid: u32) -> Option<String> {
+        cwd(pid)
+    }
+
+    pub(super) fn open_files(&self, pid: u32) -> Vec<String> {
+        open_files(pid)
+    }
+
+    pub(super) fn command_line(&self, pid: u32) -> Option<CommandLine> {
+        command_line(pid)
+    }
+
+    pub(super) fn foreground_pid(&self, _shell_pid: u32) -> Option<u32> {
+        None
+    }
+}
 
 #[repr(C)]
 struct MachTimebaseInfo {
@@ -58,14 +89,14 @@ fn timebase() -> (u64, u64) {
 }
 
 /// Converte unidades do relogio absoluto do Mach em nanossegundos.
-pub fn mach_to_nanos(ticks: u64) -> u64 {
+pub(super) fn mach_to_nanos(ticks: u64) -> u64 {
     let (numer, denom) = timebase();
     ((ticks as u128 * numer as u128) / denom as u128) as u64
 }
 
 /// Filhos diretos de um pid. `proc_listchildpids` devolve a quantidade de
 /// pids gravados, nao bytes, ao contrario do que a assinatura sugere.
-pub fn children(pid: u32) -> Vec<u32> {
+pub(super) fn children(pid: u32) -> Vec<u32> {
     let mut capacity = 256usize;
     loop {
         let mut buffer = vec![0i32; capacity];
@@ -95,33 +126,11 @@ pub fn children(pid: u32) -> Vec<u32> {
     }
 }
 
-/// Arvore inteira abaixo de um pid, em largura, sem o proprio pid.
-pub fn descendants(pid: u32) -> Vec<u32> {
-    let mut result = Vec::new();
-    let mut frontier = vec![(pid, 0usize)];
-    while let Some((current, depth)) = frontier.pop() {
-        if depth >= MAX_DEPTH {
-            continue;
-        }
-        for child in children(current) {
-            if result.len() >= MAX_TREE {
-                return result;
-            }
-            result.push(child);
-            frontier.push((child, depth + 1));
-        }
-    }
-    result
+pub(super) fn descendants(pid: u32) -> Vec<u32> {
+    super::bounded_descendants(pid, children)
 }
 
-/// Tempo de CPU acumulado em nanossegundos e memoria fisica em bytes.
-#[derive(Clone, Copy, Debug)]
-pub struct Usage {
-    pub cpu_nanos: u64,
-    pub footprint: u64,
-}
-
-pub fn usage(pid: u32) -> Option<Usage> {
+pub(super) fn usage(pid: u32) -> Option<Usage> {
     let mut info: libc::rusage_info_v4 = unsafe { std::mem::zeroed() };
     // SAFETY: o buffer e uma rusage_info_v4 zerada e o flavor pede essa versao.
     let status = unsafe {
@@ -140,19 +149,7 @@ pub fn usage(pid: u32) -> Option<Usage> {
     })
 }
 
-/// Informacao basica do BSD: grupo de processos, estado e nome curto.
-#[derive(Clone, Debug)]
-pub struct BsdInfo {
-    pub pid: u32,
-    pub ppid: u32,
-    pub pgid: u32,
-    pub status: u32,
-    pub comm: String,
-    pub name: String,
-    pub start_sec: u64,
-}
-
-pub fn bsd_info(pid: u32) -> Option<BsdInfo> {
+pub(super) fn info(pid: u32) -> Option<ProcInfo> {
     let mut info: libc::proc_bsdinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_bsdinfo>() as c_int;
     // SAFETY: buffer do tamanho da struct pedida pelo flavor.
@@ -168,11 +165,18 @@ pub fn bsd_info(pid: u32) -> Option<BsdInfo> {
     if written != size {
         return None;
     }
-    Some(BsdInfo {
+    let state = match info.pbi_status {
+        libc::SRUN => ProcState::Running,
+        libc::SSLEEP => ProcState::Sleeping,
+        libc::SSTOP => ProcState::Stopped,
+        libc::SZOMB => ProcState::Zombie,
+        _ => ProcState::Other,
+    };
+    Some(ProcInfo {
         pid: info.pbi_pid,
         ppid: info.pbi_ppid,
         pgid: info.pbi_pgid,
-        status: info.pbi_status,
+        state,
         comm: chars_to_string(&info.pbi_comm),
         name: chars_to_string(&info.pbi_name),
         start_sec: info.pbi_start_tvsec,
@@ -180,7 +184,7 @@ pub fn bsd_info(pid: u32) -> Option<BsdInfo> {
 }
 
 /// Nome do executavel, como o Monitor de Atividade mostra.
-pub fn name(pid: u32) -> Option<String> {
+pub(super) fn name(pid: u32) -> Option<String> {
     let mut buffer = [0u8; 256];
     // SAFETY: buffer valido de 256 bytes, tamanho passado junto.
     let written = unsafe {
@@ -200,7 +204,7 @@ pub fn name(pid: u32) -> Option<String> {
 }
 
 /// Caminho completo do executavel.
-pub fn exe_path(pid: u32) -> Option<String> {
+pub(super) fn exe_path(pid: u32) -> Option<String> {
     let mut buffer = vec![0u8; libc::PROC_PIDPATHINFO_MAXSIZE as usize];
     // SAFETY: buffer valido, tamanho passado junto.
     let written = unsafe {
@@ -218,7 +222,7 @@ pub fn exe_path(pid: u32) -> Option<String> {
 
 /// Diretorio atual do processo, lido do vnode do kernel. Funciona para os
 /// processos do proprio usuario sem hook no shell.
-pub fn cwd(pid: u32) -> Option<String> {
+pub(super) fn cwd(pid: u32) -> Option<String> {
     let mut info: libc::proc_vnodepathinfo = unsafe { std::mem::zeroed() };
     let size = std::mem::size_of::<libc::proc_vnodepathinfo>() as c_int;
     // SAFETY: buffer do tamanho da struct pedida pelo flavor.
@@ -264,7 +268,7 @@ struct VnodeFdInfoWithPath {
 /// Caminhos dos arquivos que o processo mantem abertos, lidos dos
 /// descritores de vnode. E como o estudio acha a conversa de um agente que
 /// segura o proprio arquivo, como o Codex.
-pub fn open_files(pid: u32) -> Vec<String> {
+pub(super) fn open_files(pid: u32) -> Vec<String> {
     let entry = std::mem::size_of::<libc::proc_fdinfo>();
     // SAFETY: com buffer nulo o kernel so devolve o tamanho necessario.
     let needed = unsafe {
@@ -327,17 +331,8 @@ pub fn open_files(pid: u32) -> Vec<String> {
     paths
 }
 
-/// Linha de comando: caminho do executavel e argv, por `KERN_PROCARGS2`,
-/// mais as variaveis de ambiente de [`ENV_OF_INTEREST`] que o processo
-/// recebeu no exec.
-#[derive(Clone, Debug, Default)]
-pub struct CommandLine {
-    pub exe: String,
-    pub argv: Vec<String>,
-    pub env: HashMap<String, String>,
-}
-
-pub fn command_line(pid: u32) -> Option<CommandLine> {
+/// Linha de comando e ambiente permitido por `KERN_PROCARGS2`.
+pub(super) fn command_line(pid: u32) -> Option<CommandLine> {
     let argmax = {
         let mut mib = [libc::CTL_KERN, libc::KERN_ARGMAX];
         let mut value: c_int = 0;
@@ -401,7 +396,7 @@ fn parse_procargs(buffer: &[u8]) -> Option<CommandLine> {
     // Depois do argv vem o ambiente, `NOME=valor` com NUL, ate uma string
     // vazia; depois dela ficam as "apple strings" do carregador, que nao
     // interessam. So as chaves da lista fechada sao guardadas.
-    let mut env = HashMap::new();
+    let mut env = std::collections::HashMap::new();
     let mut seen = 0usize;
     while cursor < buffer.len() && seen < MAX_ENV_ENTRIES {
         let end = buffer[cursor..]
@@ -431,151 +426,6 @@ fn parse_procargs(buffer: &[u8]) -> Option<CommandLine> {
     Some(CommandLine { exe, argv, env })
 }
 
-/// Slug do perfil a partir da pasta de configuracao: `~/.claude` vira
-/// `claude`, `~/.claude-webrota` vira `claude-webrota`, `~/.codex-amorim`
-/// vira `codex-amorim`. A mesma regra vale no hook de linha de estado em
-/// Python, para os dois lados baterem.
-pub fn profile_slug(dir: &Path) -> String {
-    let name = dir
-        .file_name()
-        .map(|value| value.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let slug: String = name
-        .trim_start_matches('.')
-        .to_ascii_lowercase()
-        .chars()
-        .filter(|value| value.is_ascii_alphanumeric() || matches!(value, '.' | '_' | '-'))
-        .collect();
-    if slug.is_empty() {
-        "perfil".to_string()
-    } else {
-        slug
-    }
-}
-
-/// Perfil de conta que um agente esta usando, lido do ambiente do processo.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AgentProfile {
-    /// Pasta de configuracao resolvida: `~/.claude-webrota` ou `~/.codex`.
-    pub config_dir: String,
-    /// Slug estavel, o mesmo do arquivo publicado pelo hook.
-    pub slug: String,
-    /// Nome dado pelo usuario, como `WebRota`, quando a variavel existe.
-    pub name: Option<String>,
-    /// A pasta veio de uma variavel de ambiente; falso no padrao.
-    pub explicit: bool,
-}
-
-/// Claude Code le `CLAUDE_CONFIG_DIR` e o Codex `CODEX_HOME`; sem a
-/// variavel, cada um usa a pasta padrao na home. Outros agentes nao tem
-/// perfil conhecido.
-pub fn agent_profile(command: &CommandLine, agent: &str, home: &Path) -> Option<AgentProfile> {
-    let (dir_key, name_key, default) = match agent {
-        "Claude Code" => ("CLAUDE_CONFIG_DIR", "CLAUDE_PROFILE", ".claude"),
-        "Codex" => ("CODEX_HOME", "CODEX_PROFILE", ".codex"),
-        _ => return None,
-    };
-    let configured = command
-        .env
-        .get(dir_key)
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(PathBuf::from);
-    let explicit = configured.is_some();
-    let dir = configured.unwrap_or_else(|| home.join(default));
-    let resolved = dir.canonicalize().unwrap_or(dir);
-    Some(AgentProfile {
-        config_dir: resolved.to_string_lossy().to_string(),
-        slug: profile_slug(&resolved),
-        name: command
-            .env
-            .get(name_key)
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty()),
-        explicit,
-    })
-}
-
-/// Agentes de codigo conhecidos, pelo nome com que aparecem na linha de
-/// comando: o binario, o script executado pelo node ou o modulo do python.
-const AGENTS: &[(&str, &[&str])] = &[
-    ("Claude Code", &["claude", "claude-code"]),
-    ("Codex", &["codex", "codex-cli"]),
-    ("Gemini CLI", &["gemini", "gemini-cli"]),
-    ("Aider", &["aider", "aider-chat"]),
-    ("OpenCode", &["opencode", "opencode-ai"]),
-    ("Cursor Agent", &["cursor-agent"]),
-    ("Copilot CLI", &["copilot", "github-copilot-cli"]),
-    ("Goose", &["goose"]),
-    ("Amp", &["amp", "amp-cli"]),
-    ("Crush", &["crush"]),
-    ("Kiro", &["kiro", "kiro-cli"]),
-    ("Droid", &["droid"]),
-    ("Cline", &["cline"]),
-    ("Qwen Code", &["qwen", "qwen-code"]),
-    ("Ollama", &["ollama"]),
-];
-
-/// Interpretadores cujo primeiro argumento e o programa de verdade.
-const RUNTIMES: &[&str] = &[
-    "node", "bun", "deno", "python", "python3", "npx", "uv", "uvx", "tsx", "ts-node",
-];
-
-fn segment_key(segment: &str) -> String {
-    let lower = segment.to_ascii_lowercase();
-    lower
-        .rsplit_once('.')
-        .filter(|(_, ext)| matches!(*ext, "js" | "mjs" | "cjs" | "py" | "ts" | "sh"))
-        .map(|(stem, _)| stem.to_string())
-        .unwrap_or(lower)
-}
-
-fn agent_for_segment(segment: &str) -> Option<&'static str> {
-    let key = segment_key(segment);
-    AGENTS
-        .iter()
-        .find(|(_, names)| names.iter().any(|name| *name == key))
-        .map(|(label, _)| *label)
-}
-
-/// Nome do agente quando a linha de comando e de um agente conhecido.
-pub fn agent_of(command: &CommandLine) -> Option<&'static str> {
-    let first = command
-        .argv
-        .first()
-        .map(|value| basename(value))
-        .unwrap_or_default();
-    if let Some(agent) =
-        agent_for_segment(&basename(&command.exe)).or_else(|| agent_for_segment(&first))
-    {
-        return Some(agent);
-    }
-    let runtime = RUNTIMES.contains(&segment_key(&first).as_str())
-        || RUNTIMES.contains(&segment_key(&basename(&command.exe)).as_str());
-    if !runtime {
-        return None;
-    }
-    // node .../@anthropic-ai/claude-code/cli.js, python -m aider, uv run codex
-    for argument in command.argv.iter().skip(1).take(4) {
-        if argument.starts_with('-') && !argument.starts_with("--") {
-            continue;
-        }
-        for segment in argument.split('/').filter(|segment| !segment.is_empty()) {
-            if let Some(agent) = agent_for_segment(segment) {
-                return Some(agent);
-            }
-        }
-    }
-    None
-}
-
-pub fn basename(path: &str) -> String {
-    Path::new(path)
-        .file_name()
-        .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| path.to_string())
-}
-
 fn chars_to_string(chars: &[c_char]) -> String {
     let bytes: Vec<u8> = chars
         .iter()
@@ -585,34 +435,10 @@ fn chars_to_string(chars: &[c_char]) -> String {
     String::from_utf8_lossy(&bytes).to_string()
 }
 
-/// Cache de linhas de comando por pid e instante de inicio. A linha nao
-/// muda durante a vida do processo, e o instante de inicio evita confundir
-/// um pid reaproveitado com o anterior.
-#[derive(Default)]
-pub struct CommandCache {
-    entries: HashMap<u32, (u64, Option<CommandLine>)>,
-}
-
-impl CommandCache {
-    pub fn get(&mut self, pid: u32, start_sec: u64) -> Option<CommandLine> {
-        if let Some((known_start, command)) = self.entries.get(&pid) {
-            if *known_start == start_sec {
-                return command.clone();
-            }
-        }
-        let command = command_line(pid);
-        self.entries.insert(pid, (start_sec, command.clone()));
-        command
-    }
-
-    pub fn retain(&mut self, alive: &[u32]) {
-        self.entries.retain(|pid, _| alive.contains(pid));
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::Path;
 
     #[test]
     fn lists_the_files_the_process_keeps_open() {
@@ -632,7 +458,7 @@ mod tests {
     #[test]
     fn reads_own_process() {
         let pid = std::process::id();
-        let info = bsd_info(pid).expect("bsd info do proprio processo");
+        let info = info(pid).expect("bsd info do proprio processo");
         assert_eq!(info.pid, pid);
         assert!(usage(pid).is_some());
         assert!(cwd(pid).is_some());
@@ -662,7 +488,7 @@ mod tests {
             .copied()
             .find(|pid| name(*pid).as_deref() == Some("sleep"));
         assert!(sleep_pid.is_some(), "sleep na arvore: {tree:?}");
-        assert_eq!(bsd_info(sleep_pid.unwrap()).unwrap().ppid, child.id());
+        assert_eq!(info(sleep_pid.unwrap()).unwrap().ppid, child.id());
         let _ = child.kill();
         let _ = child.wait();
     }
@@ -681,7 +507,10 @@ mod tests {
             parsed.argv,
             vec!["node", "/x/@anthropic-ai/claude-code/cli.js"]
         );
-        assert_eq!(agent_of(&parsed), Some("Claude Code"));
+        assert_eq!(
+            crate::workspace::procs::agent_of(&parsed),
+            Some("Claude Code")
+        );
         // So as chaves de interesse ficam; o segredo e as apple strings nao.
         assert_eq!(
             parsed.env.get("CLAUDE_CONFIG_DIR").map(String::as_str),
@@ -692,11 +521,6 @@ mod tests {
             Some("WebRota")
         );
         assert_eq!(parsed.env.len(), 2, "{:?}", parsed.env);
-        let profile = agent_profile(&parsed, "Claude Code", Path::new("/x")).unwrap();
-        assert_eq!(profile.slug, "claude-webrota");
-        assert_eq!(profile.config_dir, "/x/.claude-webrota");
-        assert_eq!(profile.name.as_deref(), Some("WebRota"));
-        assert!(profile.explicit);
     }
 
     #[test]
@@ -733,85 +557,6 @@ mod tests {
         assert!(!command.env.contains_key("SEGREDO_QUALQUER"));
         let _ = child.kill();
         let _ = child.wait();
-    }
-
-    #[test]
-    fn agent_profile_defaults_to_home_dirs() {
-        let plain = CommandLine {
-            exe: "/opt/homebrew/bin/claude".into(),
-            argv: vec!["claude".into()],
-            env: HashMap::new(),
-        };
-        let claude = agent_profile(&plain, "Claude Code", Path::new("/Users/x")).unwrap();
-        assert_eq!(claude.slug, "claude");
-        assert_eq!(claude.config_dir, "/Users/x/.claude");
-        assert!(!claude.explicit);
-        assert_eq!(claude.name, None);
-        let codex = agent_profile(&plain, "Codex", Path::new("/Users/x")).unwrap();
-        assert_eq!(codex.slug, "codex");
-        assert_eq!(codex.config_dir, "/Users/x/.codex");
-        assert!(agent_profile(&plain, "Gemini CLI", Path::new("/Users/x")).is_none());
-        let mut env = HashMap::new();
-        env.insert(
-            "CODEX_HOME".to_string(),
-            "/Users/x/.codex-amorim".to_string(),
-        );
-        env.insert("CODEX_PROFILE".to_string(), "amorim".to_string());
-        let with_env = CommandLine {
-            exe: "/usr/bin/codex".into(),
-            argv: vec!["codex".into()],
-            env,
-        };
-        let codex = agent_profile(&with_env, "Codex", Path::new("/Users/x")).unwrap();
-        assert_eq!(codex.slug, "codex-amorim");
-        assert_eq!(codex.name.as_deref(), Some("amorim"));
-        assert!(codex.explicit);
-    }
-
-    #[test]
-    fn profile_slug_rules() {
-        assert_eq!(profile_slug(Path::new("/Users/x/.claude")), "claude");
-        assert_eq!(
-            profile_slug(Path::new("/Users/x/.claude-webrota")),
-            "claude-webrota"
-        );
-        assert_eq!(
-            profile_slug(Path::new("/Users/x/.codex-aamorim/")),
-            "codex-aamorim"
-        );
-        assert_eq!(
-            profile_slug(Path::new("/Users/x/.Claude Teste!")),
-            "claudeteste"
-        );
-        assert_eq!(profile_slug(Path::new("/")), "perfil");
-    }
-
-    #[test]
-    fn detects_agents_by_command_line() {
-        let direct = CommandLine {
-            exe: "/opt/homebrew/bin/claude".into(),
-            argv: vec!["claude".into(), "--resume".into()],
-            ..Default::default()
-        };
-        assert_eq!(agent_of(&direct), Some("Claude Code"));
-        let python = CommandLine {
-            exe: "/usr/bin/python3".into(),
-            argv: vec!["python3".into(), "-m".into(), "aider".into()],
-            ..Default::default()
-        };
-        assert_eq!(agent_of(&python), Some("Aider"));
-        let plain = CommandLine {
-            exe: "/usr/bin/vim".into(),
-            argv: vec!["vim".into(), "claude.txt".into()],
-            ..Default::default()
-        };
-        assert_eq!(agent_of(&plain), None);
-        let server = CommandLine {
-            exe: "/usr/local/bin/node".into(),
-            argv: vec!["node".into(), "server.js".into()],
-            ..Default::default()
-        };
-        assert_eq!(agent_of(&server), None);
     }
 
     #[test]

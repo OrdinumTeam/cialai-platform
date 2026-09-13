@@ -50,10 +50,38 @@ pub mod dragout;
 pub mod files;
 pub mod git;
 pub mod journal;
+#[cfg(unix)]
 pub mod mobile_files;
+#[cfg(target_os = "windows")]
+pub mod mobile_files {
+    use std::path::Path;
+
+    fn unavailable() -> String {
+        "Arquivos móveis indisponíveis neste sistema.".into()
+    }
+
+    pub fn list(
+        _home: &Path,
+        _project_roots: &[String],
+        _cwd: &Path,
+        _path: &str,
+    ) -> Result<serde_json::Value, String> {
+        Err(unavailable())
+    }
+
+    pub fn read(
+        _home: &Path,
+        _project_roots: &[String],
+        _cwd: &Path,
+        _path: &str,
+    ) -> Result<serde_json::Value, String> {
+        Err(unavailable())
+    }
+}
 pub mod office;
 pub mod preview;
 pub mod procs;
+pub mod pty;
 pub mod repos;
 pub mod resume;
 pub mod terminal;
@@ -61,6 +89,3 @@ pub mod watch;
 
 /// Evento global emitido quando o shell de uma sessao termina.
 pub const EVENT_PTY_EXIT: &str = "pty://exit";
-
-/// Shell das sessoes, aberto como login shell para herdar o PATH do usuario.
-pub const DEFAULT_SHELL: &str = "/bin/zsh";

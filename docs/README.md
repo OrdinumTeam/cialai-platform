@@ -21,6 +21,7 @@ Cialai é o estúdio de terminais do Ordinum Control transformado em produto ope
 | 11 | [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md) | Fases, tarefas numeradas, critérios de aceite, dependências e riscos |
 | 12 | [12-decisoes.md](./12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
 | Continuidade | [13-progresso-e-handoff.md](./13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
+| Referência | [14-diferencas-por-plataforma.md](./14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
 
 ## Convenções destes documentos
 
