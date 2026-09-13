@@ -731,6 +731,12 @@ Nenhum workflow foi disparado e nada foi executado no Windows. A instalação do
 
 O teste foi escrito primeiro e falhou pela ausência de `es`. Depois da implementação, `npm run test:i18n` com Node 22.23.2 e npm 10.9.8 aprovou os três casos, incluindo paridade, normalização, troca observável e fallback fechado. `git diff --check` também passou nos arquivos do pacote.
 
+### 13/09/2026, dicionários organizados por idioma e área na tarefa 6.6
+
+Os textos saíram do ponto de entrada de `@cialai/i18n` para módulos próprios de português do Brasil, inglês e espanhol. Cada idioma agora separa as áreas comum, celular e desktop. Os índices recompõem os objetos congelados, então a API pública de dicionários, normalização, tradução, assinatura e troca de locale permaneceu inalterada.
+
+`npm run test:i18n` com Node 22.23.2 e npm 10.9.8 continuou aprovando os três casos de comportamento e paridade. `git diff --check` passou no pacote reorganizado.
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
