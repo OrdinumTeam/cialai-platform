@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useReducer, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, View } from 'react-native';
+import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
@@ -8,6 +9,7 @@ import {
   closeDesktop,
   forgetProfile,
   notifyForeground,
+  notifyNetworkChange,
   openDesktop as openTunnelDesktop,
   setLogLevel as setNativeLogLevel,
   startProfile,
@@ -20,6 +22,7 @@ import {
 
 import { authenticateWithDevice, BiometricSession } from './src/auth/biometrics';
 import { getAppVersion } from './src/config/env';
+import { validateControlUrl } from './src/config/url';
 import { checkControlHealth } from './src/network/health';
 import {
   deleteDeviceToken,
@@ -100,12 +103,13 @@ function AppContent() {
       const token = await readDeviceToken(desktop.id);
       if (!token) throw new Error('device_token_missing');
       const opened = await openTunnelDesktop(desktop.id, token, desktop.port);
+      const localUrl = validateControlUrl(opened.url);
       const next = markDesktopUsed(profiles, profile.id, desktop.id);
       await persist(next);
       await refreshStatus();
-      const healthy = await checkControlHealth(opened.url);
+      const healthy = await checkControlHealth(localUrl);
       dispatch(healthy
-        ? { type: 'desktop-opened', desktopId: desktop.id, url: opened.url }
+        ? { type: 'desktop-opened', desktopId: desktop.id, url: localUrl }
         : { type: 'desktop-offline', desktopId: desktop.id, reason });
       return healthy;
     } catch {
@@ -139,11 +143,12 @@ function AppContent() {
           return;
         }
         const opened = await openTunnelDesktop(desktop.id, token, desktop.port);
-        const healthy = await checkControlHealth(opened.url);
+        const localUrl = validateControlUrl(opened.url);
+        const healthy = await checkControlHealth(localUrl);
         if (!cancelled) {
           await refreshStatus();
           dispatch(healthy
-            ? { type: 'desktop-opened', desktopId: desktop.id, url: opened.url }
+            ? { type: 'desktop-opened', desktopId: desktop.id, url: localUrl }
             : { type: 'desktop-offline', desktopId: desktop.id, reason: 'desktop' });
         }
       } catch (caught) {
@@ -161,9 +166,19 @@ function AppContent() {
     const subscription = AppState.addEventListener('change', nextState => {
       if (biometricSession.handleAppState(nextState)) setLockSignal(value => value + 1);
       notifyForeground(nextState === 'active');
+      if (nextState === 'active' && screen.kind === 'shell') {
+        void checkControlHealth(screen.url).then(healthy => {
+          if (!healthy) dispatch({ type: 'desktop-offline', desktopId: screen.desktopId, reason: 'desktop' });
+        });
+      }
     });
     return () => subscription.remove();
-  }, [biometricSession]);
+  }, [biometricSession, screen]);
+
+  useEffect(() => NetInfo.addEventListener(network => {
+    const reachable = network.isConnected === true && network.isInternetReachable !== false;
+    notifyNetworkChange(reachable);
+  }), []);
 
   useEffect(() => {
     const subscription = addTunnelListener(event => {
@@ -183,9 +198,10 @@ function AppContent() {
     const next = recordPair(profiles, inspection, result);
     await persist(next);
     const opened = await openTunnelDesktop(result.desktopId, result.token, result.desktop.port);
+    const localUrl = validateControlUrl(opened.url);
     await refreshStatus();
-    dispatch(await checkControlHealth(opened.url)
-      ? { type: 'desktop-opened', desktopId: result.desktopId, url: opened.url }
+    dispatch(await checkControlHealth(localUrl)
+      ? { type: 'desktop-opened', desktopId: result.desktopId, url: localUrl }
       : { type: 'desktop-offline', desktopId: result.desktopId, reason: 'desktop' });
   }, [persist, profiles, refreshStatus]);
 

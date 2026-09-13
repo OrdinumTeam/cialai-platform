@@ -46,6 +46,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.1 API e build gomobile | Código preparado e superfície validada localmente | `packages/tunnel-core/mobile` compõe nó, inspeção e pareamento, perfis, proxy e ciclo de vida sem persistir tokens. `tools/build-tunnel-mobile.sh` tem preflight de Go, Xcode, SDK e NDK e gera hashes SHA 256. Bindings Java e Objective C gerados; XCFramework, AAR e aparelhos continuam pendentes do Codemagic |
 | 3.2 Módulo Expo em Swift | Código preparado, build nativo pendente | Módulo local `cialai-tunnel` expõe a API TypeScript, embrulha `Tunnelcore.xcframework` numa fila serial, encaminha eventos e protege o diretório fora do backup. Podspec e manifesto foram validados estruturalmente; compilação Swift aguarda o Codemagic |
 | 3.3 Aplicativo Expo | Scaffold implementado e validado estaticamente | Expo 57 e React Native 0.86.3 com estados de pareamento, computadores, shell, offline e ajustes; perfis sem segredos e tokens no Secure Store. `typecheck` e lint passaram; Jest fica para 3.7 e execução nativa permanece pendente |
+| 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 
 ## Ambiente observado
@@ -346,6 +347,12 @@ git diff --check
 ```
 
 O primeiro `npm install` recusou a versão inexistente `expo-camera ~57.0.7`; o mapa `bundledNativeModules.json` do Expo 57 corrigiu câmera para 57.0.4, NetInfo para 12.0.1, build properties para 57.0.17 e dev client para 57.0.18. A instalação final terminou com código 0. `npm audit --omit=dev --audit-level=moderate` encontrou onze ocorrências transitivas do aviso de `uuid` abaixo de 11.1.1 pela ferramenta `xcode` dos config plugins do Expo. O único reparo sugerido força downgrade incompatível de `expo-sharing`; ele não foi aplicado. Jest ainda não foi criado nem executado nesta tarefa.
+
+### 12/09/2026, rede da tarefa 3.4 integrada
+
+`validateControlUrl` agora recusa qualquer origem de produção que não seja `http://127.0.0.1` com porta explícita, raiz e um único nonce `k` de 32 bytes em base64url. Toda URL devolvida por `OpenDesktop` passa por essa validação antes da saúde ou da WebView. A lista de origens da WebView contém somente a origem local exata e a saúde aceita apenas `status: ok` com `service: cialai`.
+
+O observador global de `AppState` chama `NotifyForeground`, preserva o bloqueio biométrico e executa uma sondagem imediata ao voltar com o shell aberto. NetInfo calcula alcance conservador e chama `NotifyNetworkChange`. `npm run typecheck --workspace @cialai/mobile`, `npm run lint --workspace @cialai/mobile` e `git diff --check` terminaram com código 0. As transições serão cobertas por Jest em 3.7; troca real de rede e suspensão continuam pendentes dos aparelhos.
 
 ## Arquivos para retomar
 

@@ -19,7 +19,7 @@ export async function checkControlHealth(
     });
     if (!response.ok) return false;
     const body = (await response.json()) as { status?: unknown; service?: unknown };
-    return body.status === 'ok' && body.service === 'workplace';
+    return body.status === 'ok' && body.service === 'cialai';
   } catch {
     return false;
   } finally {
