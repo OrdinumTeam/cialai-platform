@@ -1,0 +1,10 @@
+{
+  "name": "cialai-tunnel",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "peerDependencies": {
+    "expo-modules-core": "~57.0.17"
+  }
+}

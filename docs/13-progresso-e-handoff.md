@@ -46,7 +46,21 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.10 Receita Headscale | Concluída localmente | `infra/headscale` com Compose fixado por digest, modelo do `config.yaml` do documento 06, `policy.json` com `autogroup:self`, `bootstrap.sh` validado e README com guia, diagnóstico e atualização com backup. Check estrutural, `shellcheck`, `configtest` e smoke em contêiner descartável passaram; certificado Let's Encrypt real não foi emitido |
 | 2.11 Integração Docker | Concluída localmente | `packages/tunnel-core/integration` dirige o sidecar real pelo protocolo stdio, um celular tsnet com o proxy e o Headscale 0.29.3 em Docker: pareamento, replay recusado na borda e no Headscale, sessão expirada, eco WebSocket de texto, binário e 1 MiB, isolamento entre usuários, revogação em menos de 2 s com remoção do nó e rotação da chave da API. Verde em 26,7 s no macOS; `headscale-integration.yml` sem execução remota |
 | 2.12 Sidecars de release | Concluída localmente | `tools/build-tunnel.mjs` compila os cinco triplos com `CGO_ENABLED=0`, grava e confere `SHA256SUMS`; `release.yml` compila, publica como artefato, verifica por alvo e gera rascunho sem assinatura com `tauri-action`; `externalBin` aponta para `binaries/cialai-tunnel`. Cinco binários compilados localmente, suíte raiz verde e build Tauri copiando o sidecar; execução remota do workflow pendente |
-| 3.1 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 3.1 API e build gomobile | Código preparado e superfície validada localmente | `packages/tunnel-core/mobile` compõe nó, inspeção e pareamento, perfis, proxy e ciclo de vida sem persistir tokens. `tools/build-tunnel-mobile.sh` tem preflight de Go, Xcode, SDK e NDK e gera hashes SHA 256. Bindings Java e Objective C gerados; XCFramework, AAR e aparelhos continuam pendentes do Codemagic |
+| 3.2 Módulo Expo em Swift | Código preparado, build nativo pendente | Módulo local `cialai-tunnel` expõe a API TypeScript, embrulha `Tunnelcore.xcframework` numa fila serial, encaminha eventos e protege o diretório fora do backup. Podspec e manifesto foram validados estruturalmente; compilação Swift aguarda o Codemagic |
+| 3.3 Aplicativo Expo | Scaffold implementado e validado estaticamente | Expo 57 e React Native 0.86.3 com estados de pareamento, computadores, shell, offline e ajustes; perfis sem segredos e tokens no Secure Store. `typecheck` e lint passaram; Jest fica para 3.7 e execução nativa permanece pendente |
+| 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
+| 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
+| 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
+| 3.7 Testes Jest | Concluída localmente | Os 65 casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação e transições somam 99 casos em 14 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
+| 3.8 Distribuição iOS | Preparada localmente, serviços externos pendentes | `ios-testflight` e `ios-archive` compilam o XCFramework com Go 1.26.5 e `gomobile` no runner, validam a casca e preparam assinatura e IPA. Contrato YAML e scripts passaram localmente; app, integração, credenciais, assinatura, archive e upload não foram criados nem executados |
+| 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
+| 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
+| 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
+| 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
+| 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
+| 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
+| 3.9, 3.10, 4.7, 4.8 e 5.1 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -356,6 +370,146 @@ O teste prova que o mesmo QR recebe `pair_consumed` na borda e que a chave de en
 Para o QR aceitar o controle HTTP do loopback, `sidecar.Options` ganhou `AllowLoopbackHTTP`, repassado a `pairing.NewSessions`. O padrão continua falso e a CLI não expõe a opção; só desenvolvimento e esta suíte a usam, conforme o documento 06. O caminho TLS com `caFile` permanece coberto pelos testes unitários do cliente Headscale, não por esta integração. Headscale parado por 60 s, aprovação por código e rotação de token de 30 dias também ficaram fora do cenário de ponta a ponta.
 
 Validação: `go mod tidy` tornou `github.com/coder/websocket` dependência direta e `go mod tidy -diff` ficou limpo; `gofmt`, `go vet ./...`, `go vet -tags=integration ./integration ./testutil`, `go test -race` do sidecar e `go test ./...` passaram. `go test -tags=integration -count=1 ./integration` terminou com `--- PASS: TestDesktopPairsPhoneThroughHeadscale (26.72s)` e nenhum contêiner com o rótulo da suíte permaneceu. `npm run test:integration:headscale` e `.github/workflows/headscale-integration.yml` repetem os mesmos comandos; o workflow não foi executado no GitHub.
+
+### 12/09/2026, API gomobile da tarefa 3.1 preparada
+
+Criado `packages/tunnel-core/mobile` com a superfície do documento 06. O pacote valida o QR sem devolver segredos, cria ou retoma um perfil `tsnet`, espera o peer pela chave do nó, troca a prova de uso único no endpoint `/pair`, abre somente o proxy de loopback já existente e serializa mudanças de perfil. O estado Go persiste apenas URL, identidade e metadados de desktops; chaves de entrada, segredos do QR e tokens de dispositivo não entram no arquivo. Nenhum arquivo de `internal/` foi alterado.
+
+`tools/build-tunnel-mobile.sh` fixa o contrato de saída `Tunnelcore.xcframework.zip` e `tunnelcore.aar`, executa preflight explícito de Go 1.26.5, Xcode, SDK, NDK e gera SHA 256. O script não foi usado para compilar os artefatos neste Mac porque o build pertence ao runner `mac_mini_m2` do Codemagic. Isso não foi registrado como impedimento e não prova XCFramework, AAR ou execução em aparelho.
+
+Comandos concluídos com código 0:
+
+```sh
+cd packages/tunnel-core
+go vet ./...
+go test -race -mod=readonly ./...
+bash -n ../../tools/build-tunnel-mobile.sh
+mkdir -p build/spikes/_bindings
+go tool gobind -lang=java,objc -outdir=build/spikes/_bindings ./mobile
+```
+
+O race detector aprovou todos os pacotes, inclusive os três casos novos de `mobile`. `gobind` gerou as interfaces Java e Objective C com todos os métodos documentados. Os gerados ficaram sob `build/`, ignorados pelo Git.
+
+### 12/09/2026, módulo Swift da tarefa 3.2 preparado
+
+Criado o módulo Expo local `cialai-tunnel` com manifesto de autolinking, contrato TypeScript e implementação Swift. O wrapper cria um único `MobileTunnel`, serializa chamadas bloqueantes fora do JavaScript, traduz os JSONs do Go em objetos Expo e encaminha os cinco tipos de evento. O diretório de estado usa `Application Support`, é excluído de backup e recebe `NSFileProtectionCompleteUntilFirstUserAuthentication`.
+
+O podspec declara iOS 16.4 e `Tunnelcore.xcframework` como `vendored_frameworks`. O framework não foi gerado nem versionado; o Codemagic deverá colocá lo no diretório do módulo antes do prebuild. `ruby -c apps/mobile/modules/cialai-tunnel/ios/CialaiTunnel.podspec`, a leitura dos dois JSONs pelo Node, `git diff --check` e a conferência dos seletores gerados por `gobind` terminaram com código 0. Não houve compilação Swift, build Xcode nem execução em aparelho.
+
+### 12/09/2026, módulo Kotlin da tarefa 4.1 preparado
+
+Adicionada a implementação Android do módulo `cialai-tunnel`. Ela usa `noBackupFilesDir`, uma fila serial para todas as chamadas bloqueantes, converte JSON do Go para valores Expo e preserva os códigos estáveis ao rejeitar Promises. O Gradle fixa `minSdkVersion 26`, declara o AAR local e reutiliza as versões padrão do Expo Modules Core. O AAR e o XCFramework foram acrescentados ao ignore explícito.
+
+`xmllint --noout` no manifesto, conferência dos métodos contra as classes Java geradas por `gobind`, leitura do Gradle e `git diff --check` terminaram com código 0. Não houve `expo prebuild`, compilação Kotlin, AAR real nem execução Android local; essas provas pertencem ao runner do Codemagic e aos roteiros em aparelho.
+
+### 12/09/2026, scaffold Expo da tarefa 3.3 implementado
+
+`apps/mobile` agora usa Expo 57, React Native 0.86.3 e dev client. A máquina de estados cobre carregamento, pareamento, computadores, shell, offline e ajustes. `Pair` desliga a leitura depois do primeiro QR, permite colar o texto, inspeciona antes de confirmar e mostra progresso. A lista troca perfis, abre computadores e oferece renomear ou esquecer. O shell preserva WebView, biometria, downloads, abertura externa e guarda de origem do Control, com `__CIALAI_SHELL__`, nome do computador e estado do túnel.
+
+`profiles.json` guarda somente perfis e metadados. Cada token usa `expo-secure-store` sob `cialai.device.<desktopId>` com `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; a rotação recebida pelo evento nativo substitui o valor seguro. Esquecer um perfil apaga seus tokens e solicita a remoção do estado Go. Textos visíveis novos não usam parênteses nem traços como separadores.
+
+Comandos concluídos com código 0:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm install
+npm run lint --workspace @cialai/mobile
+npm run typecheck --workspace @cialai/mobile
+git diff --check
+```
+
+O primeiro `npm install` recusou a versão inexistente `expo-camera ~57.0.7`; o mapa `bundledNativeModules.json` do Expo 57 corrigiu câmera para 57.0.4, NetInfo para 12.0.1, build properties para 57.0.17 e dev client para 57.0.18. A instalação final terminou com código 0. `npm audit --omit=dev --audit-level=moderate` encontrou onze ocorrências transitivas do aviso de `uuid` abaixo de 11.1.1 pela ferramenta `xcode` dos config plugins do Expo. O único reparo sugerido força downgrade incompatível de `expo-sharing`; ele não foi aplicado. Jest ainda não foi criado nem executado nesta tarefa.
+
+### 12/09/2026, rede da tarefa 3.4 integrada
+
+`validateControlUrl` agora recusa qualquer origem de produção que não seja `http://127.0.0.1` com porta explícita, raiz e um único nonce `k` de 32 bytes em base64url. Toda URL devolvida por `OpenDesktop` passa por essa validação antes da saúde ou da WebView. A lista de origens da WebView contém somente a origem local exata e a saúde aceita apenas `status: ok` com `service: cialai`.
+
+O observador global de `AppState` chama `NotifyForeground`, preserva o bloqueio biométrico e executa uma sondagem imediata ao voltar com o shell aberto. NetInfo calcula alcance conservador e chama `NotifyNetworkChange`. `npm run typecheck --workspace @cialai/mobile`, `npm run lint --workspace @cialai/mobile` e `git diff --check` terminaram com código 0. As transições serão cobertas por Jest em 3.7; troca real de rede e suspensão continuam pendentes dos aparelhos.
+
+### 12/09/2026, configuração iOS da tarefa 3.5 preparada
+
+`app.config.ts` define Cialai, esquema `cialai`, bundle `br.com.ordinum.cialai`, iOS 16.4 herdado do podspec, câmera, rede local e Face ID. `usesNonExemptEncryption` está verdadeiro e o entitlement de proteção padrão usa `NSFileProtectionCompleteUntilFirstUserAuthentication`; o módulo Swift também exclui seu estado do backup em runtime. O ícone aponta para o PNG opaco de 1024 pixels já aprovado e versionado em `apps/desktop/design`, sem duplicar o binário.
+
+`npm run typecheck --workspace @cialai/mobile`, `npm run lint --workspace @cialai/mobile` e `npm exec --workspace @cialai/mobile -- expo config --type public --json` terminaram com código 0. A variante `--type prebuild` confirmou bundle, criptografia não isenta e proteção de dados. Nenhum projeto Xcode, assinatura, archive ou aparelho foi usado.
+
+### 12/09/2026, página do celular da tarefa 3.6 concluída localmente
+
+`MobileApp` monta somente `VIEW_COMPONENTS.terminais`; `TabBar` e `MoreSheet` foram removidos. O cabeçalho compacto permanece visível com o nome recebido no `welcome` ou pela casca nativa e traduz conectado, conectando, removido, incompatível e desconectado. O bootstrap da WebView agora inclui `desktopName` em `__CIALAI_SHELL__`.
+
+Adicionado `check-mobile-shell.mjs` para renderizar o cabeçalho e impedir a volta das abas. `npm run test:ui` terminou com código 0: sincronização 17 de 17 e demais checks Node 40 de 40. `npm run typecheck --workspace @cialai/mobile` e lint também passaram antes da entrega. Isso prova composição e contratos locais, não carregamento em WKWebView ou WebView Android.
+
+### 12/09/2026, retorno Android da tarefa 4.3 implementado
+
+No Android, o `BackHandler` da casca injeta `{type: navigate-back}` na página. `PhoneWorkbench` usa a mesma transição do botão visível para voltar de prévia a arquivos, de arquivos a terminal e de terminal à lista. Quando já está na lista, a página devolve a mensagem à casca e o app abre Computadores. Mensagens com campos extras são recusadas.
+
+O novo caso bidirecional de `check-mobile-shell.mjs` passou. A suíte UI terminou com 17 casos de sincronização e 41 demais casos; typecheck e lint do app também passaram. O botão físico e o histórico real da WebView não foram executados em Android.
+
+### 12/09/2026, segurança Android da tarefa 4.2 preparada
+
+O plugin `with-loopback-network-security.cjs` escreve uma política com texto claro negado na base e uma única exceção sem subdomínios para `127.0.0.1`. Ele liga o arquivo no manifesto, mantém `usesCleartextTraffic` falso e desliga backup. O config usa teclado `resize`, `compileSdkVersion` e `targetSdkVersion` 36 e mínimo 26. Permissões herdadas de armazenamento e impressão digital legada foram bloqueadas, restando câmera, internet e biometria.
+
+Typecheck e lint passaram. `expo config --type prebuild` confirmou as três permissões finais e `expo config --type introspect` confirmou os três atributos do manifesto e SDKs 36, 36 e 26. O XML exportado pelo plugin foi conferido pela execução Node. Nenhum projeto Gradle, WebView real ou relatório de pré lançamento foi executado.
+
+### 12/09/2026, ciclo Android da tarefa 4.4 preparado
+
+O wrapper Kotlin mantém o núcleo por 120 segundos após perder o primeiro plano e então chama `Stop`. Perfil ativo, desktop, porta preferida e token permanecem somente em memória. Ao voltar, a fila nativa emite reconectando, executa `StartProfile`, abre um novo proxy com `OpenDesktop` e entrega a nova URL à casca; falhas retornam apenas código estável. Fechamento, troca e esquecimento limpam essa abertura.
+
+A casca mede o tempo fora, mostra a tela Reconectando depois do limite e só retorna ao shell quando a URL reaberta passa pela validação local e pela saúde. Também foi corrigido o uso do terceiro argumento de `OpenDesktop`: a porta remota do desktop não é mais confundida com a porta preferida do proxy local. Typecheck, lint, `git diff --check` e a conferência estrutural do prazo, `Stop`, `StartProfile` e `OpenDesktop` terminaram com código 0. Suspensão real por dez minutos e reconexão em dois a quatro segundos continuam pendentes de Android físico.
+
+### 12/09/2026, proteção Android da tarefa 4.5 preparada
+
+O mesmo `BiometricSession` do Control governa iOS e Android por `expo-local-authentication`: sessão após abertura ou cinco minutos fora e autorização por ação sempre nova. Tokens continuam separados por desktop em `expo-secure-store`; o plugin agora recebe `configureAndroidBackup: false`, além de `allowBackup` falso no manifesto e estado Go em `noBackupFilesDir`.
+
+Typecheck, lint e `expo config --type introspect` terminaram com código 0 e mantiveram biometria permitida, backup falso e armazenamento externo bloqueado. Os testes unitários herdados serão executados em 3.7. Nenhuma impressão digital, reconhecimento facial, fallback por código ou inspeção do Android Keystore ocorreu neste Mac, portanto 4.5 permanece preparada e não verificada em aparelho.
+
+### 12/09/2026, Jest da tarefa 3.7 concluído localmente
+
+Os 65 casos da casca do Control foram preservados e ampliados para QR, armazenamento de perfis sem tokens, URL de loopback, saúde `cialai`, telas, máquina de estados, primeiro e segundo plano e alcance de rede. A lista ampla do WebView agora deixa toda navegação chegar à guarda da aplicação, que continua aceitando somente a origem local exata ou links HTTPS seguros. Erros desconhecidos do QR não devolvem a mensagem nativa e não podem expor o payload.
+
+Com Node 22.23.2 e npm 10.9.8, `npm run typecheck`, `npm run lint` e `npm test` em `apps/mobile` terminaram com código 0. Jest aprovou 99 casos em 14 suítes, sem snapshots. `git diff --check` também passou. Nenhum módulo nativo foi compilado e nenhum aparelho foi usado nesta tarefa.
+
+### 12/09/2026, distribuição iOS da tarefa 3.8 preparada
+
+Criados `ios-testflight` e `ios-archive` sem disparo automático. Ambos usam `mac_mini_m2`, Node 22.23.2, npm 10.9.8, Xcode atual e CocoaPods padrão. O runner instala Go 1.26.5 com o checksum do índice oficial, executa `tools/build-tunnel-mobile.sh ios`, valida o SHA 256, coloca o XCFramework no módulo Expo, roda as validações da casca, faz o prebuild e prepara assinatura e IPA. O primeiro workflow publica somente pela integração `Cialai ASC API Key`, sem solicitar TestFlight externo ou revisão da loja; o segundo conserva o IPA como artefato.
+
+Os atalhos locais de Codemagic e App Store foram espelhados dos modelos somente leitura, com a proteção nova que não envia o token da API a storage externo depois de redirecionamento. `bash -n`, análise sintática dos dois arquivos Python, três testes Node do YAML, quatro casos do próximo número de build, quatro casos de download e o verificador Swift do ícone terminaram com código 0. Nenhum build Codemagic, assinatura, archive, upload ou alteração no App Store Connect foi executado.
+
+### 12/09/2026, distribuição Android da tarefa 4.6 preparada
+
+Adicionado `android-play` no mesmo runner macOS, com NDK 28.2, Java 17 e Go 1.26.5. O workflow compila o AAR com `gomobile`, confere seu SHA 256, executa as validações móveis, gera o projeto Android e grava keystore e `key.properties` somente no runner com umask privado. Um plugin idempotente liga esse arquivo à assinatura release do Gradle, e `PROJECT_BUILD_NUMBER` governa o `versionCode`. A publicação está configurada para a faixa interna com o grupo `google_play`.
+
+O prebuild Android local terminou com código 0 e confirmou o bloco de assinatura, sem criar `key.properties`. Typecheck e lint passaram; Jest aprovou 101 casos em 15 suítes. Os quatro testes Node do YAML, os testes de número e download, `bash -n`, a análise sintática dos três arquivos Python e `git diff --check` também passaram. Nenhum segredo de projeto de referência foi aberto ou copiado. Nenhum build no Codemagic, AAB assinado, upload ou alteração no Google Play foi executado.
+
+Parte celular pronta para merge.
+
+Próximas ações do usuário:
+
+1. Criar o repositório `OrdinumTeam/cialai-platform` no GitHub e fazer o push depois de integrar os commits locais.
+2. Criar o app no Codemagic apontando para esse repositório e reconhecer o `codemagic.yaml` da raiz.
+3. Criar os apps com o identificador `br.com.ordinum.cialai` no App Store Connect e no Google Play.
+4. Configurar a integração `Cialai ASC API Key`, os grupos `appstore_credentials`, `android_credentials` e `google_play` e as variáveis simples documentadas.
+5. Só então disparar `ios-archive`, `ios-testflight` e `android-play`, conferir os artefatos e avançar para os roteiros em aparelhos e lojas.
+
+### 12/09/2026, integração da Fase 2 e dos aplicativos na main
+
+`fase-2/tunel` entrou por merge sem conflitos no commit `ade22a6`; a árvore resultante é idêntica à de `e8e1257`, já validada na frente. `mobile/apps` entrou em seguida a partir de `6b2a67e`, com três conflitos esperados: este documento manteve as linhas e o diário das duas frentes e passou a 2.8 para concluída; `packages/ui/package.json` roda `check-network.mjs` e `check-mobile-shell.mjs` e conserva `qrcode`; `package-lock.json` partiu do lado móvel e foi regenerado por `npm install` com Node 22.23.2 e npm 10.9.8.
+
+Validação na main integrada: `npm install` terminou com código 0; `npm test` da raiz terminou com código 0, incluindo 143 testes Rust aprovados, zero falhas e dois ignorados, a suíte UI, o protocolo, a receita Headscale, o sidecar de release e 101 casos Jest em 15 suítes do aplicativo; `go vet ./...` e `go test -race -mod=readonly ./...` passaram em todo o `tunnel-core`, inclusive `mobile`; typecheck e lint de `apps/mobile` e `git diff --check` terminaram com código 0. O primeiro lote de validação foi interrompido pelo sistema por falta de memória durante o lint, com a máquina de 16 GiB dividida com a compilação da frente da Fase 5; o lint foi repetido isoladamente e passou.
+
+`fase-5/rust-multiplataforma` ainda não entrou: a frente tem seis commits e alterações sem commit e não registrou que está pronta para merge.
+
+Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testados em aparelho só no Codemagic:
+
+| Fase | Situação na main | Percentual |
+| --- | --- | --- |
+| 0 Fundação e spikes | Base, CI local e spike 3; demais spikes absorvidos pelas Fases 3 e 4 ou pendentes de assinatura e soak | 47% |
+| 1 Desktop macOS | Implementação e evidência local completas; aceite humano pendente | 97% |
+| 2 Túnel e pareamento | Implementação e evidência local completas; CI remota e aceite manual com Headscale real pendentes | 95% |
+| 3 iOS | Código de 3.1 a 3.8 pronto; builds nativos, roteiros em iPhone e revisão pendentes | 70% |
+| 4 Android | Código de 4.1 a 4.6 pronto; build, roteiros em aparelho e relatório do Play pendentes | 57% |
+| 5 Linux e Windows | Em andamento fora da main | 0% na main |
+| 6 Todas as plataformas | Não iniciada | 0% |
+| 7 Lançamento | Não iniciada | 0% |
+| Total | Soma ponderada | cerca de 48%, ou 57% quando a frente da Fase 5 entrar com o que já tem |
 
 ## Arquivos para retomar
 

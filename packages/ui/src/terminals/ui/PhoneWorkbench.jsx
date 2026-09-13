@@ -3,6 +3,7 @@ import React, { useEffect, useReducer, useRef, useState } from 'react';
 import { ArrowDown, ChevronLeft, ClipboardPaste, FolderOpen, Plus, Power, RotateCcw, Search } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, NATIVE_ONLY_MESSAGE } from '../../lib/native.js';
+import { onNavigateBack, requestNavigateBack } from '../../lib/shell.js';
 import { closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, openSession, orderedSessions, pasteText, releaseTerminal, reopen, requestTerminalControl, scrollToBottom, selectSession, sendKey, subscribe, supportsPhoneTerminal, terminalHasFocus, viewMounted, watchTail } from '../runtime.js';
 import { phoneRoute, phoneRouteStorage, readPhoneRoute, writePhoneRoute } from '../phone-navigation.js';
 import { useRuntimeEvents } from '../hooks.js';
@@ -77,6 +78,10 @@ export default function PhoneWorkbench() {
   };
   useEffect(() => { heading.current?.focus(); }, [pane]);
   useEffect(() => { writePhoneRoute(phoneRouteStorage(), route); }, [route]);
+  useEffect(() => onNavigateBack(() => {
+    if (pane === 'list') requestNavigateBack();
+    else navigate({ type: 'back' });
+  }), [pane]);
   // Rota restaurada depois de recarregar: a sessao aparece com a hidratacao.
   useEffect(() => { if (selected) selectSession(selected.id); }, [selected?.id]);
   useEffect(() => {
