@@ -17,11 +17,17 @@ import {
 } from './preferences-model.js';
 import NetworkSetup from './NetworkSetup.jsx';
 import Updater from './Updater.jsx';
+import { getLocale, setLocale, translate } from './i18n.js';
 
-const APPEARANCE_OPTIONS = [
-  { value: 'system', label: 'Sistema' },
-  { value: 'light', label: 'Claro' },
-  { value: 'dark', label: 'Escuro' },
+const APPEARANCE_OPTIONS = () => [
+  { value: 'system', label: translate('desktop.appearance.systemShort') },
+  { value: 'light', label: translate('desktop.appearance.lightShort') },
+  { value: 'dark', label: translate('desktop.appearance.darkShort') },
+];
+export const LANGUAGE_OPTIONS = () => [
+  { value: 'pt-BR', label: translate('language.portuguese') },
+  { value: 'en', label: translate('language.english') },
+  { value: 'es', label: translate('language.spanish') },
 ];
 
 function Segmented({ value, options, onChange, ariaLabel }) {
@@ -67,15 +73,15 @@ export default function Preferences({ open, onClose, appearance }) {
       setEffectiveShell(shell?.path ? shell : null);
       setAppPaths(paths);
     }).catch((loadError) => {
-      if (!cancelled) setError(`Não foi possível carregar as preferências: ${loadError?.message || loadError}`);
+      if (!cancelled) setError(translate('desktop.preferences.loadError', { error: loadError?.message || loadError }));
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, native]);
 
   const hints = platformPreferenceHints(platform().os, effectiveShell?.flavor || platform().defaultShellFlavor);
   const shownPaths = appPaths
-    ? [['Preferências', appPaths.preferences], ['Dados e jornais', appPaths.data], ['Registros', appPaths.logs]].map(([label, path]) => [label, path, shortPath(path)])
-    : [['Preferências', hints.paths.preferences], ['Dados e jornais', hints.paths.data], ['Registros', hints.paths.logs]].map(([label, path]) => [label, null, path]);
+    ? [[translate('desktop.preferences.filePreferences'), appPaths.preferences], [translate('desktop.preferences.fileData'), appPaths.data], [translate('desktop.preferences.fileLogs'), appPaths.logs]].map(([label, path]) => [label, path, shortPath(path)])
+    : [[translate('desktop.preferences.filePreferences'), hints.paths.preferences], [translate('desktop.preferences.fileData'), hints.paths.data], [translate('desktop.preferences.fileLogs'), hints.paths.logs]].map(([label, path]) => [label, null, path]);
 
   const currentKey = useMemo(() => draft ? snapshotKey(draft) : '', [draft]);
   const dirty = Boolean(draft && currentKey !== savedKey);
@@ -95,12 +101,12 @@ export default function Preferences({ open, onClose, appearance }) {
   };
 
   const addProjectRoot = async () => {
-    const picked = await chooseDirectory({ title: 'Adicionar pasta de projetos', defaultPath: draft?.projectRoots?.[0] || undefined });
+    const picked = await chooseDirectory({ title: translate('desktop.preferences.addProjectFolder'), defaultPath: draft?.projectRoots?.[0] || undefined });
     if (picked) setDraft((current) => ({ ...current, projectRoots: addUniquePath(current.projectRoots, picked) }));
   };
 
   const pickChromium = async () => {
-    const picked = await chooseFile({ title: 'Escolher o executável do Chromium', defaultPath: draft?.devBrowser?.chromiumPath || undefined, filters: hints.chromiumFilters });
+    const picked = await chooseFile({ title: translate('desktop.preferences.chooseChromium'), defaultPath: draft?.devBrowser?.chromiumPath || undefined, filters: hints.chromiumFilters });
     if (picked) setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: picked } }));
   };
 
@@ -108,14 +114,14 @@ export default function Preferences({ open, onClose, appearance }) {
     try {
       await invoke('fs_reveal', { path });
     } catch (revealError) {
-      notify(`Não foi possível abrir: ${revealError?.message || revealError}`, 'warning');
+      notify(translate('desktop.preferences.openError', { error: revealError?.message || revealError }), 'warning');
     }
   };
 
   const save = async () => {
     const next = sanitizePreferences(draft);
     if (next.projectRoots.length === 0) {
-      setError('Adicione pelo menos uma pasta de projetos.');
+      setError(translate('desktop.preferences.projectRequired'));
       return;
     }
     setSaving(true);
@@ -126,55 +132,56 @@ export default function Preferences({ open, onClose, appearance }) {
       setDraft(normalized);
       setSavedKey(snapshotKey(normalized));
       appearance.setMode(normalized.appearance);
-      notify(native ? 'Preferências salvas' : 'Prévia atualizada', 'success');
+      notify(native ? translate('desktop.preferences.saved') : translate('desktop.preferences.previewUpdated'), 'success');
     } catch (saveError) {
-      setError(`Não foi possível salvar: ${saveError?.message || saveError}`);
+      setError(translate('desktop.preferences.saveError', { error: saveError?.message || saveError }));
     } finally { setSaving(false); }
   };
 
-  const footer = draft ? <><button type="button" className="btn btn-quiet" disabled={saving} onClick={close}>Cancelar</button><button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={save}>{saving ? 'Salvando…' : 'Salvar alterações'}</button></> : null;
+  const footer = draft ? <><button type="button" className="btn btn-quiet" disabled={saving} onClick={close}>{translate('desktop.action.cancel')}</button><button type="button" className="btn btn-primary" disabled={!dirty || saving} onClick={save}>{saving ? translate('desktop.preferences.saving') : translate('desktop.preferences.saveChanges')}</button></> : null;
 
-  return <AppModal open={open} title="Preferências" onClose={close} maxWidth="md" footer={footer}><div className="mac-prefs">
-    {loading ? <p className="mac-prefs__note" role="status">Carregando preferências…</p> : null}
-    {!loading && !native ? <p className="mac-prefs__note">Esta prévia não grava arquivos. O aplicativo desktop salva todas as opções localmente.</p> : null}
+  return <AppModal open={open} title={translate('desktop.preferences.title')} onClose={close} maxWidth="md" footer={footer}><div className="mac-prefs">
+    {loading ? <p className="mac-prefs__note" role="status">{translate('desktop.preferences.loading')}</p> : null}
+    {!loading && !native ? <p className="mac-prefs__note">{translate('desktop.preferences.previewNote')}</p> : null}
     {draft ? <>
-      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Aparência</h3>
-        <Row title="Tema da janela" description="Sistema acompanha o modo claro ou escuro do computador."><Segmented value={draft.appearance} options={APPEARANCE_OPTIONS} onChange={changeAppearance} ariaLabel="Tema da janela" /></Row>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.appearance')}</h3>
+        <Row title={translate('desktop.preferences.windowTheme')} description={translate('desktop.preferences.windowThemeDescription')}><Segmented value={draft.appearance} options={APPEARANCE_OPTIONS()} onChange={changeAppearance} ariaLabel={translate('desktop.preferences.windowTheme')} /></Row>
+        <Row title={translate('language.label')} description={translate('desktop.preferences.languageDescription')}><Segmented value={getLocale()} options={LANGUAGE_OPTIONS()} onChange={setLocale} ariaLabel={translate('language.label')} /></Row>
       </section>
 
-      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Terminal</h3>
-        <Row title="Shell" description={effectiveShell ? `Detectado: ${effectiveShell.path}` : hints.shellDescription}><input className="field__control mac-prefs__input" value={draft.terminal.shell || ''} placeholder={effectiveShell?.path || hints.shellPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ shell: event.target.value || null })} aria-label="Caminho do shell" /></Row>
-        <Row title="Argumentos" description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label="Argumentos do shell" /></Row>
-        {hints.showLang ? <Row title="Idioma" description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label="Idioma do terminal" /></Row> : null}
-        <Row title="Prefixos do PATH" description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label="Prefixos do PATH" /></Row>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.terminal')}</h3>
+        <Row title="Shell" description={effectiveShell ? translate('desktop.preferences.detected', { path: effectiveShell.path }) : hints.shellDescription}><input className="field__control mac-prefs__input" value={draft.terminal.shell || ''} placeholder={effectiveShell?.path || hints.shellPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ shell: event.target.value || null })} aria-label={translate('desktop.preferences.shellPath')} /></Row>
+        <Row title={translate('desktop.preferences.arguments')} description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.shellArguments')} /></Row>
+        {hints.showLang ? <Row title={translate('language.label')} description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label={translate('desktop.preferences.terminalLanguage')} /></Row> : null}
+        <Row title={translate('desktop.preferences.pathPrefixes')} description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.pathPrefixes')} /></Row>
       </section>
 
-      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Projetos</h3>
-        <p className="mac-prefs__note">Estas pastas alimentam o seletor de sessões e delimitam os arquivos disponíveis no celular.</p>
-        <div className="mac-prefs__roots" aria-label="Pastas de projetos">{draft.projectRoots.map((path) => <div className="mac-prefs__root" key={path}><code>{path}</code><button type="button" className="btn btn-quiet btn-sm" disabled={draft.projectRoots.length === 1} onClick={() => setDraft((current) => ({ ...current, projectRoots: removePath(current.projectRoots, path) }))} aria-label={`Remover ${path}`}><Trash2 aria-hidden="true" />Remover</button></div>)}</div>
-        <button type="button" className="btn btn-secondary btn-sm" onClick={addProjectRoot}><FolderPlus aria-hidden="true" />Adicionar pasta</button>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.projects')}</h3>
+        <p className="mac-prefs__note">{translate('desktop.preferences.projectsDescription')}</p>
+        <div className="mac-prefs__roots" aria-label={translate('desktop.preferences.projectFolders')}>{draft.projectRoots.map((path) => <div className="mac-prefs__root" key={path}><code>{path}</code><button type="button" className="btn btn-quiet btn-sm" disabled={draft.projectRoots.length === 1} onClick={() => setDraft((current) => ({ ...current, projectRoots: removePath(current.projectRoots, path) }))} aria-label={translate('desktop.preferences.removePath', { path })}><Trash2 aria-hidden="true" />{translate('desktop.action.remove')}</button></div>)}</div>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={addProjectRoot}><FolderPlus aria-hidden="true" />{translate('desktop.preferences.addFolder')}</button>
       </section>
 
-      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Rede</h3>
-        <p className="mac-prefs__note">Conecte este computador ao seu Headscale para abrir o estúdio pelo celular.</p>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.network')}</h3>
+        <p className="mac-prefs__note">{translate('desktop.preferences.networkDescription')}</p>
         <NetworkSetup value={draft.network} onChange={(network) => setDraft((current) => ({ ...current, network }))} />
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>
-        <Row title="Executável do Chromium" description="Vazio procura uma instalação compatível automaticamente." wide><input className="field__control mac-prefs__browser-path" value={draft.devBrowser.chromiumPath || ''} placeholder={hints.chromiumPlaceholder} spellCheck="false" onChange={(event) => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: event.target.value || null } }))} aria-label="Executável do Chromium" /></Row>
-        <div className="mac-prefs__actions">{draft.devBrowser.chromiumPath ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: null } }))}><RotateCcw aria-hidden="true" />Detectar automaticamente</button> : null}<button type="button" className="btn btn-secondary btn-sm" onClick={pickChromium}>Escolher executável</button></div>
+        <Row title={translate('desktop.preferences.chromiumExecutable')} description={translate('desktop.preferences.chromiumDescription')} wide><input className="field__control mac-prefs__browser-path" value={draft.devBrowser.chromiumPath || ''} placeholder={hints.chromiumPlaceholder} spellCheck="false" onChange={(event) => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: event.target.value || null } }))} aria-label={translate('desktop.preferences.chromiumExecutable')} /></Row>
+        <div className="mac-prefs__actions">{draft.devBrowser.chromiumPath ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: null } }))}><RotateCcw aria-hidden="true" />{translate('desktop.preferences.detectAutomatically')}</button> : null}<button type="button" className="btn btn-secondary btn-sm" onClick={pickChromium}>{translate('desktop.preferences.chooseExecutable')}</button></div>
       </section>
 
-      {hints.windowSection ? <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Janela</h3>
-        <Row title="Material Mica" description="Aplica o Mica do Windows 11 atrás da janela quando o sistema permite. Desligado, a janela usa fundo sólido."><input type="checkbox" className="mac-switch" checked={draft.window.backdrop === 'auto'} onChange={(event) => setDraft((current) => ({ ...current, window: { ...current.window, backdrop: event.target.checked ? 'auto' : 'solid' } }))} aria-label="Material Mica" /></Row>
+      {hints.windowSection ? <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.window')}</h3>
+        <Row title="Material Mica" description={translate('desktop.preferences.micaDescription')}><input type="checkbox" className="mac-switch" checked={draft.window.backdrop === 'auto'} onChange={(event) => setDraft((current) => ({ ...current, window: { ...current.window, backdrop: event.target.checked ? 'auto' : 'solid' } }))} aria-label="Material Mica" /></Row>
       </section> : null}
 
-      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Arquivos do aplicativo</h3>
-        <p className="mac-prefs__note">{native ? 'Onde o Cialai guarda seus arquivos neste computador.' : 'Locais usados pelo aplicativo desktop neste sistema.'}</p>
-        <div className="mac-prefs__roots" aria-label="Arquivos do aplicativo">{shownPaths.map(([label, path, shown]) => <div className="mac-prefs__root" key={label}><span className="mac-prefs__root-label">{label}</span><code title={shown}>{shown}</code>{path ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => reveal(path)} aria-label={`${hints.revealLabel}: ${label}`}><FolderOpen aria-hidden="true" />{hints.revealLabel}</button> : null}</div>)}</div>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.appFiles')}</h3>
+        <p className="mac-prefs__note">{native ? translate('desktop.preferences.appFilesNative') : translate('desktop.preferences.appFilesPreview')}</p>
+        <div className="mac-prefs__roots" aria-label={translate('desktop.preferences.appFiles')}>{shownPaths.map(([label, path, shown]) => <div className="mac-prefs__root" key={label}><span className="mac-prefs__root-label">{label}</span><code title={shown}>{shown}</code>{path ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => reveal(path)} aria-label={`${hints.revealLabel}: ${label}`}><FolderOpen aria-hidden="true" />{hints.revealLabel}</button> : null}</div>)}</div>
       </section>
 
-      <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">Atualizações</h3>
+      <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">{translate('desktop.preferences.updates')}</h3>
         <Updater />
       </section>
 

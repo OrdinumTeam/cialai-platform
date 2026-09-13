@@ -21,7 +21,8 @@ import Splash from './Splash.jsx';
 import { buildMacTheme } from './theme.macos.js';
 import Toolbar from './Toolbar.jsx';
 import { TunnelProvider, useTunnel } from './TunnelContext.jsx';
-import { DESKTOP_VIEWS, DESKTOP_VIEW_COMPONENTS, getDesktopView, useDesktopViewRoute } from './views.js';
+import { useI18n } from './i18n.js';
+import { DESKTOP_VIEW_COMPONENTS, desktopViews, getDesktopView, useDesktopViewRoute } from './views.js';
 import { windowChrome } from './window-chrome.js';
 
 const BOOT_RUNTIME_LIMIT_MS = 1500;
@@ -86,6 +87,8 @@ function useBoot() {
 }
 
 function DesktopShell() {
+  const { locale } = useI18n();
+  const views = useMemo(desktopViews, [locale]);
   const appearance = useAppearance();
   const tunnel = useTunnel();
   const theme = useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
@@ -146,9 +149,9 @@ function DesktopShell() {
   actionsRef.current = actions;
 
   useEffect(() => {
-    installNativeMenu(actionsRef, DESKTOP_VIEWS).catch((error) => console.error('[menu]', error));
-    return installDomShortcuts(actionsRef, DESKTOP_VIEWS);
-  }, []);
+    installNativeMenu(actionsRef, views, locale).catch((error) => console.error('[menu]', error));
+    return installDomShortcuts(actionsRef, views);
+  }, [locale, views]);
   useEffect(() => {
     installShellBridge({ setSidebarHidden: setSidebarHiddenTransient, openPalette, navigate }, { sidebarHidden });
   }, [setSidebarHiddenTransient, openPalette, navigate, sidebarHidden]);
@@ -169,7 +172,7 @@ function DesktopShell() {
     return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-preferences', network); };
   }, []);
 
-  const active = getDesktopView(view);
+  const active = getDesktopView(view, views);
   const ViewComponent = DESKTOP_VIEW_COMPONENTS[active.id];
   return (
     <AppearanceContext.Provider value={appearance}>
@@ -177,12 +180,12 @@ function DesktopShell() {
         <CssBaseline enableColorScheme />
         <ToastProvider>
           <div className={`mac-window${sidebarHidden ? ' mac-window--sidebar-hidden' : ''}${boot === 'ready' ? ' is-booted' : ''}${boot === 'splash' ? ' is-booting' : ''}`}>
-            <Sidebar views={DESKTOP_VIEWS} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
+            <Sidebar views={views} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
-              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={DESKTOP_VIEWS} />
+              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={views} />
               <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
             </div>
-            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={DESKTOP_VIEWS} actions={actions} appearance={appearance} />
+            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={views} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} onClose={() => setPrefsOpen(false)} appearance={appearance} />
             <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} onConfigure={openPreferences} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}

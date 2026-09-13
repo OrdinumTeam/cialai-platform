@@ -22,8 +22,8 @@ for (const command of [
 
 for (const channel of ['tunnel://state', 'tunnel://pair', 'tunnel://devices']) assert.match(context, new RegExp(channel.replaceAll('/', '\\/')), `Missing tunnel event: ${channel}`);
 assert.match(setup, /NetworkSetup/);
-assert.match(onboarding, /'Rede'/);
-assert.match(onboarding, /Configurar agora/);
+assert.match(onboarding, /desktop\.onboarding\.step\.\$\{step\}/);
+assert.match(onboarding, /desktop\.onboarding\.configureNow/);
 assert.match(pair, /QRCode\.toCanvas/);
 assert.match(pair, /width:\s*280/);
 assert.match(pair, /PAIR_ROTATION_SECONDS/);

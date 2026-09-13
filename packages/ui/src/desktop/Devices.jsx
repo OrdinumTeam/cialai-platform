@@ -7,6 +7,7 @@ import { Activity, KeyRound, Link2, Monitor, Pencil, RefreshCw, ShieldOff, Smart
 import { AppModal, DataState, useToast } from '../components/ui.jsx';
 import { useTunnel, tunnelErrorMessage } from './TunnelContext.jsx';
 import { formatLastSeen, networkIsConfigured } from './tunnel-model.js';
+import { getLocale, translate } from './i18n.js';
 
 function ToolbarActions({ children }) {
   const [slot, setSlot] = useState(null);
@@ -15,7 +16,7 @@ function ToolbarActions({ children }) {
 }
 
 function Detail({ label, value, mono = false }) {
-  return <div className="mac-device-detail"><dt>{label}</dt><dd className={mono ? 'is-mono' : ''}>{value || 'Não disponível'}</dd></div>;
+  return <div className="mac-device-detail"><dt>{label}</dt><dd className={mono ? 'is-mono' : ''}>{value || translate('desktop.common.unavailable')}</dd></div>;
 }
 
 function DeviceRow({ device, onRename, onRevoke }) {
@@ -33,11 +34,11 @@ function DeviceRow({ device, onRename, onRevoke }) {
   return <li className="mac-device-row">
     <span className="mac-device-row__icon" aria-hidden="true"><Smartphone /></span>
     <div className="mac-device-row__identity">
-      {editing ? <div className="mac-device-row__rename"><input className="field__control" value={name} maxLength="48" autoFocus onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') save(); if (event.key === 'Escape') { setName(device.name); setEditing(false); } }} /><button type="button" className="btn btn-primary btn-sm" disabled={busy || !name.trim()} onClick={save}>Salvar</button><button type="button" className="btn btn-quiet btn-sm" disabled={busy} onClick={() => { setName(device.name); setEditing(false); }}>Cancelar</button></div> : <><strong>{device.name}</strong><span>{device.model || 'Modelo não informado'}</span></>}
+      {editing ? <div className="mac-device-row__rename"><input className="field__control" value={name} maxLength="48" autoFocus onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') save(); if (event.key === 'Escape') { setName(device.name); setEditing(false); } }} /><button type="button" className="btn btn-primary btn-sm" disabled={busy || !name.trim()} onClick={save}>{translate('desktop.action.save')}</button><button type="button" className="btn btn-quiet btn-sm" disabled={busy} onClick={() => { setName(device.name); setEditing(false); }}>{translate('desktop.action.cancel')}</button></div> : <><strong>{device.name}</strong><span>{device.model || translate('desktop.devices.modelMissing')}</span></>}
     </div>
-    <div className="mac-device-row__platform"><span>{String(device.platform || 'dispositivo').toUpperCase()}</span><small>{device.ip4 || 'Sem endereço'}</small></div>
-    <div className="mac-device-row__seen"><span><i className={`mac-dot${device.online ? ' is-ok' : ''}`} aria-hidden="true" />{device.online ? 'Online' : 'Offline'}</span><small>{formatLastSeen(device.lastSeenAt)}</small></div>
-    <div className="mac-device-row__actions"><button type="button" className="mac-tool" title={`Renomear ${device.name}`} aria-label={`Renomear ${device.name}`} onClick={() => setEditing(true)}><Pencil aria-hidden="true" /></button><button type="button" className="mac-tool is-danger" title={`Revogar ${device.name}`} aria-label={`Revogar ${device.name}`} onClick={() => onRevoke(device)}><ShieldOff aria-hidden="true" /></button></div>
+    <div className="mac-device-row__platform"><span>{String(device.platform || translate('desktop.devices.device')).toUpperCase()}</span><small>{device.ip4 || translate('desktop.devices.noAddress')}</small></div>
+    <div className="mac-device-row__seen"><span><i className={`mac-dot${device.online ? ' is-ok' : ''}`} aria-hidden="true" />{device.online ? translate('desktop.devices.online') : translate('desktop.devices.offline')}</span><small>{formatLastSeen(device.lastSeenAt)}</small></div>
+    <div className="mac-device-row__actions"><button type="button" className="mac-tool" title={translate('desktop.devices.rename', { name: device.name })} aria-label={translate('desktop.devices.rename', { name: device.name })} onClick={() => setEditing(true)}><Pencil aria-hidden="true" /></button><button type="button" className="mac-tool is-danger" title={translate('desktop.devices.revoke', { name: device.name })} aria-label={translate('desktop.devices.revoke', { name: device.name })} onClick={() => onRevoke(device)}><ShieldOff aria-hidden="true" /></button></div>
   </li>;
 }
 
@@ -48,7 +49,7 @@ function RevokeDialog({ device, onClose, onConfirm }) {
     setBusy(true);
     try { await onConfirm(device.id, networkToo); onClose(); } catch (_error) { /* the page owns the visible error */ } finally { setBusy(false); }
   };
-  return <AppModal open={Boolean(device)} title="Revogar dispositivo" onClose={busy ? undefined : onClose} maxWidth="xs" footer={<><button type="button" className="btn btn-quiet" disabled={busy} onClick={onClose}>Cancelar</button><button type="button" className="btn btn-danger" disabled={busy} onClick={confirm}>{busy ? 'Revogando…' : 'Revogar acesso'}</button></>}><div className="mac-revoke"><p><strong>{device.name}</strong> perderá o acesso ao estúdio imediatamente.</p><label><input type="checkbox" checked={networkToo} onChange={(event) => setNetworkToo(event.target.checked)} /><span><strong>Remover também da rede</strong><small>Expira e apaga o nó deste dispositivo no Headscale.</small></span></label></div></AppModal>;
+  return <AppModal open={Boolean(device)} title={translate('desktop.devices.revokeTitle')} onClose={busy ? undefined : onClose} maxWidth="xs" footer={<><button type="button" className="btn btn-quiet" disabled={busy} onClick={onClose}>{translate('desktop.action.cancel')}</button><button type="button" className="btn btn-danger" disabled={busy} onClick={confirm}>{busy ? translate('desktop.devices.revoking') : translate('desktop.devices.revokeAccess')}</button></>}><div className="mac-revoke"><p>{translate('desktop.devices.revokeDescription', { name: device.name })}</p><label><input type="checkbox" checked={networkToo} onChange={(event) => setNetworkToo(event.target.checked)} /><span><strong>{translate('desktop.devices.removeNetwork')}</strong><small>{translate('desktop.devices.removeNetworkDescription')}</small></span></label></div></AppModal>;
 }
 
 export default function Devices() {
@@ -73,39 +74,40 @@ export default function Devices() {
     try {
       const result = await tunnel.runDiagnostics();
       setDiagnostic({ checkedAt: Date.now(), lines: result.lines.length, healthy: result.doctor?.ok === true && (result.node.health || []).length === 0 });
-      notify('Diagnóstico atualizado', 'success');
+      notify(translate('desktop.devices.diagnosticUpdated'), 'success');
     } catch (diagnosticError) { setError(tunnelErrorMessage(diagnosticError)); }
     finally { setLoading(false); }
   };
 
   const rename = async (deviceId, name) => {
-    try { await tunnel.renameDevice(deviceId, name); notify('Dispositivo renomeado', 'success'); }
+    try { await tunnel.renameDevice(deviceId, name); notify(translate('desktop.devices.renamed'), 'success'); }
     catch (renameError) { setError(tunnelErrorMessage(renameError)); throw renameError; }
   };
 
   const revokeDevice = async (deviceId, networkToo) => {
-    try { await tunnel.revokeDevice(deviceId, networkToo); notify('Acesso revogado', 'success'); }
+    try { await tunnel.revokeDevice(deviceId, networkToo); notify(translate('desktop.devices.revoked'), 'success'); }
     catch (revokeError) { setError(tunnelErrorMessage(revokeError)); throw revokeError; }
   };
 
   const node = tunnel.snapshot.node || {};
-  const derp = useMemo(() => node.derp?.name || (node.derp?.regionId ? `Região ${node.derp.regionId}` : null), [node.derp]);
+  const locale = getLocale();
+  const derp = useMemo(() => node.derp?.name || (node.derp?.regionId ? translate('desktop.devices.region', { id: node.derp.regionId }) : null), [node.derp, locale]);
   const configured = networkIsConfigured(tunnel.network);
   const keyExpiry = Date.parse(tunnel.secretStatus?.expiresAt || '');
   const apiKeyValue = Number.isFinite(keyExpiry)
-    ? `Válida até ${new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(keyExpiry))}`
-    : tunnel.secretStatus?.prefix || (tunnel.secretStatus?.present ? 'Protegida' : 'Não encontrada');
+    ? translate('desktop.devices.validUntil', { date: new Intl.DateTimeFormat(getLocale(), { dateStyle: 'short' }).format(new Date(keyExpiry)) })
+    : tunnel.secretStatus?.prefix || (tunnel.secretStatus?.present ? translate('desktop.devices.protected') : translate('desktop.devices.notFound'));
 
   return <div className="view active page mac-devices" id="view-dispositivos">
-    <ToolbarActions><button type="button" className="mac-tool mac-tool--label" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}><Link2 aria-hidden="true" /><span>Vincular celular</span></button></ToolbarActions>
-    <header className="mac-devices__head"><div><p className="mac-devices__eyebrow">Rede privada</p><h2>Dispositivos</h2><p>Gerencie os celulares que podem abrir este estúdio.</p></div><div className={`mac-network-badge is-${tunnel.status.tone}`}><span className={`mac-dot is-${tunnel.status.tone}`} aria-hidden="true" />{tunnel.status.label}</div></header>
+    <ToolbarActions><button type="button" className="mac-tool mac-tool--label" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}><Link2 aria-hidden="true" /><span>{translate('desktop.action.pairPhone')}</span></button></ToolbarActions>
+    <header className="mac-devices__head"><div><p className="mac-devices__eyebrow">{translate('desktop.devices.privateNetwork')}</p><h2>{translate('desktop.view.devices.label')}</h2><p>{translate('desktop.devices.description')}</p></div><div className={`mac-network-badge is-${tunnel.status.tone}`}><span className={`mac-dot is-${tunnel.status.tone}`} aria-hidden="true" />{tunnel.status.label}</div></header>
 
-    {!configured ? <DataState type="empty" message="A rede ainda não foi configurada." action={<button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:network-preferences'))}>Configurar Rede</button>} /> : <>
-      <section className="mac-machine" aria-labelledby="machine-title"><div className="mac-machine__title"><span><Monitor aria-hidden="true" /></span><div><h3 id="machine-title">{tunnel.network.desktopName}</h3><p>Este computador na rede do Cialai</p></div></div><dl className="mac-machine__details"><Detail label="IP na rede" value={node.ip4} mono /><Detail label="Nome no Headscale" value={node.dnsName} mono /><Detail label="DERP em uso" value={derp ? `${derp}${node.derp?.latencyMs ? `  ${node.derp.latencyMs} ms` : ''}` : null} /><Detail label="Chave da API" value={apiKeyValue} /></dl><div className="mac-machine__actions"><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={diagnose}><Activity aria-hidden="true" />Executar diagnóstico</button><button type="button" className="btn btn-quiet btn-sm" disabled={loading} onClick={refresh}><RefreshCw aria-hidden="true" />Atualizar</button></div>{diagnostic ? <p className={`mac-machine__diagnostic${diagnostic.healthy ? ' is-ok' : ' is-warn'}`} role="status"><KeyRound aria-hidden="true" />{diagnostic.healthy ? 'Nó saudável' : 'O nó informou avisos'}<span>{diagnostic.lines} linhas recentes verificadas</span></p> : null}</section>
+    {!configured ? <DataState type="empty" message={translate('desktop.devices.networkMissing')} action={<button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:network-preferences'))}>{translate('desktop.devices.configureNetwork')}</button>} /> : <>
+      <section className="mac-machine" aria-labelledby="machine-title"><div className="mac-machine__title"><span><Monitor aria-hidden="true" /></span><div><h3 id="machine-title">{tunnel.network.desktopName}</h3><p>{translate('desktop.devices.thisComputer')}</p></div></div><dl className="mac-machine__details"><Detail label={translate('desktop.devices.networkIp')} value={node.ip4} mono /><Detail label={translate('desktop.devices.headscaleName')} value={node.dnsName} mono /><Detail label={translate('desktop.devices.derp')} value={derp ? `${derp}${node.derp?.latencyMs ? `  ${node.derp.latencyMs} ms` : ''}` : null} /><Detail label={translate('desktop.network.apiKey')} value={apiKeyValue} /></dl><div className="mac-machine__actions"><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={diagnose}><Activity aria-hidden="true" />{translate('desktop.devices.runDiagnostic')}</button><button type="button" className="btn btn-quiet btn-sm" disabled={loading} onClick={refresh}><RefreshCw aria-hidden="true" />{translate('desktop.action.refresh')}</button></div>{diagnostic ? <p className={`mac-machine__diagnostic${diagnostic.healthy ? ' is-ok' : ' is-warn'}`} role="status"><KeyRound aria-hidden="true" />{diagnostic.healthy ? translate('desktop.devices.healthy') : translate('desktop.devices.warnings')}<span>{translate('desktop.devices.checkedLines', { count: diagnostic.lines })}</span></p> : null}</section>
 
-      <section className="mac-devices__list-section" aria-labelledby="paired-title"><div className="mac-devices__section-head"><div><h3 id="paired-title">Celulares vinculados</h3><p>{tunnel.devices.length} {tunnel.devices.length === 1 ? 'dispositivo autorizado' : 'dispositivos autorizados'}</p></div><button type="button" className="btn btn-primary btn-sm" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}><Link2 aria-hidden="true" />Vincular celular</button></div>
-        {loading && tunnel.devices.length === 0 ? <DataState type="loading" message="Carregando dispositivos…" /> : null}
-        {!loading && tunnel.devices.length === 0 ? <DataState type="empty" message="Nenhum celular foi vinculado." action={<button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}>Gerar código de pareamento</button>} /> : null}
+      <section className="mac-devices__list-section" aria-labelledby="paired-title"><div className="mac-devices__section-head"><div><h3 id="paired-title">{translate('desktop.devices.pairedPhones')}</h3><p>{translate(tunnel.devices.length === 1 ? 'desktop.devices.authorizedOne' : 'desktop.devices.authorizedMany', { count: tunnel.devices.length })}</p></div><button type="button" className="btn btn-primary btn-sm" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}><Link2 aria-hidden="true" />{translate('desktop.action.pairPhone')}</button></div>
+        {loading && tunnel.devices.length === 0 ? <DataState type="loading" message={translate('desktop.devices.loading')} /> : null}
+        {!loading && tunnel.devices.length === 0 ? <DataState type="empty" message={translate('desktop.devices.empty')} action={<button type="button" className="btn btn-primary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}>{translate('desktop.pair.generate')}</button>} /> : null}
         {tunnel.devices.length ? <ul className="mac-device-list">{tunnel.devices.map((device) => <DeviceRow key={device.id} device={device} onRename={rename} onRevoke={setRevoke} />)}</ul> : null}
       </section>
     </>}

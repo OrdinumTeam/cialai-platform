@@ -1,27 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isTauri } from '../lib/native.js';
 import { currentOs, isAppShortcut, isShortcut, isTerminalFocused } from '../lib/keys.js';
+import { translate } from './i18n.js';
 
-let installed = false;
-export async function installNativeMenu(actionsRef, views = []) {
-  if (!isTauri() || document.documentElement.dataset.platform !== 'macos' || installed) return;
-  installed = true;
+let installedLocale = '';
+export async function installNativeMenu(actionsRef, views = [], locale = '') {
+  if (!isTauri() || document.documentElement.dataset.platform !== 'macos' || installedLocale === locale) return;
+  installedLocale = locale;
   const { Menu, Submenu, MenuItem, PredefinedMenuItem } = await import('@tauri-apps/api/menu');
   const run = (name, ...args) => () => actionsRef.current?.[name]?.(...args);
   const item = (id, text, accelerator, name, ...args) => MenuItem.new({ id, text, accelerator, action: run(name, ...args) });
   const predefined = (kind, text) => PredefinedMenuItem.new(text ? { item: kind, text } : { item: kind });
   const separator = () => predefined('Separator');
   const appMenu = await Submenu.new({ text: 'Cialai', items: [
-    await PredefinedMenuItem.new({ item: { About: { name: 'Cialai', comments: 'Estúdio de terminais e projetos', copyright: 'Ordinum' } }, text: 'Sobre o Cialai' }),
-    await separator(), await item('preferences', 'Preferências…', 'CmdOrCtrl+Comma', 'openPreferences'), await separator(), await predefined('Services', 'Serviços'), await separator(), await predefined('Hide', 'Ocultar o Cialai'), await predefined('HideOthers', 'Ocultar Outros'), await predefined('ShowAll', 'Mostrar Tudo'), await separator(), await item('quit', 'Sair do Cialai', 'CmdOrCtrl+Q', 'quitApp'),
+    await PredefinedMenuItem.new({ item: { About: { name: 'Cialai', comments: translate('desktop.menu.aboutComment'), copyright: 'Ordinum' } }, text: translate('desktop.menu.about') }),
+    await separator(), await item('preferences', translate('desktop.preferences.title'), 'CmdOrCtrl+Comma', 'openPreferences'), await separator(), await predefined('Services', translate('desktop.menu.services')), await separator(), await predefined('Hide', translate('desktop.menu.hide')), await predefined('HideOthers', translate('desktop.menu.hideOthers')), await predefined('ShowAll', translate('desktop.menu.showAll')), await separator(), await item('quit', translate('desktop.action.quit'), 'CmdOrCtrl+Q', 'quitApp'),
   ] });
-  const fileMenu = await Submenu.new({ text: 'Arquivo', items: [await item('new-file', 'Novo Arquivo', 'CmdOrCtrl+N', 'newFile'), await item('new-terminal', 'Novo Terminal', 'CmdOrCtrl+T', 'newTerminal'), await item('close-terminal', 'Fechar', 'CmdOrCtrl+W', 'closeActiveTerminalOrWindow'), await separator(), await item('reload-data', 'Recarregar Navegador', 'CmdOrCtrl+R', 'reloadData'), await separator(), await item('close-window', 'Fechar Janela', 'CmdOrCtrl+Shift+W', 'closeWindow')] });
-  const editMenu = await Submenu.new({ text: 'Editar', items: [await predefined('Undo', 'Desfazer'), await predefined('Redo', 'Refazer'), await separator(), await predefined('Cut', 'Recortar'), await predefined('Copy', 'Copiar'), await predefined('Paste', 'Colar'), await predefined('SelectAll', 'Selecionar Tudo')] });
-  const appearanceMenu = await Submenu.new({ text: 'Aparência', items: [await item('appearance-system', 'Sistema', undefined, 'setAppearance', 'system'), await item('appearance-light', 'Claro', undefined, 'setAppearance', 'light'), await item('appearance-dark', 'Escuro', undefined, 'setAppearance', 'dark')] });
+  const fileMenu = await Submenu.new({ text: translate('desktop.menu.file'), items: [await item('new-file', translate('desktop.action.newFile'), 'CmdOrCtrl+N', 'newFile'), await item('new-terminal', translate('desktop.action.newTerminal'), 'CmdOrCtrl+T', 'newTerminal'), await item('close-terminal', translate('desktop.action.close'), 'CmdOrCtrl+W', 'closeActiveTerminalOrWindow'), await separator(), await item('reload-data', translate('desktop.action.reloadBrowserShort'), 'CmdOrCtrl+R', 'reloadData'), await separator(), await item('close-window', translate('desktop.action.closeWindow'), 'CmdOrCtrl+Shift+W', 'closeWindow')] });
+  const editMenu = await Submenu.new({ text: translate('desktop.menu.edit'), items: [await predefined('Undo', translate('desktop.menu.undo')), await predefined('Redo', translate('desktop.menu.redo')), await separator(), await predefined('Cut', translate('desktop.menu.cut')), await predefined('Copy', translate('desktop.menu.copy')), await predefined('Paste', translate('desktop.menu.paste')), await predefined('SelectAll', translate('desktop.menu.selectAll'))] });
+  const appearanceMenu = await Submenu.new({ text: translate('desktop.preferences.appearance'), items: [await item('appearance-system', translate('desktop.appearance.systemShort'), undefined, 'setAppearance', 'system'), await item('appearance-light', translate('desktop.appearance.lightShort'), undefined, 'setAppearance', 'light'), await item('appearance-dark', translate('desktop.appearance.darkShort'), undefined, 'setAppearance', 'dark')] });
   const sections = [];
   for (let index = 0; index < views.length; index += 1) sections.push(await item(`view-${views[index].id}`, views[index].label, `CmdOrCtrl+${index + 1}`, 'navigate', views[index].id));
-  const viewMenu = await Submenu.new({ text: 'Visualizar', items: [await item('toggle-sidebar', 'Mostrar ou Ocultar Barra Lateral', 'Ctrl+Cmd+S', 'toggleSidebar'), await item('command-palette', 'Buscar Comandos…', 'CmdOrCtrl+K', 'openPalette'), await separator(), appearanceMenu, await separator(), ...sections, await separator(), await predefined('Fullscreen', 'Tela Cheia')] });
-  const windowMenu = await Submenu.new({ text: 'Janela', items: [await predefined('Minimize', 'Minimizar'), await predefined('Maximize', 'Zoom')] });
+  const viewMenu = await Submenu.new({ text: translate('desktop.menu.view'), items: [await item('toggle-sidebar', translate('desktop.action.toggleSidebar'), 'Ctrl+Cmd+S', 'toggleSidebar'), await item('command-palette', translate('desktop.palette.title'), 'CmdOrCtrl+K', 'openPalette'), await separator(), appearanceMenu, await separator(), ...sections, await separator(), await predefined('Fullscreen', translate('desktop.menu.fullscreen'))] });
+  const windowMenu = await Submenu.new({ text: translate('desktop.menu.window'), items: [await predefined('Minimize', translate('desktop.window.minimize')), await predefined('Maximize', translate('desktop.menu.zoom'))] });
   await (await Menu.new({ items: [appMenu, fileMenu, editMenu, viewMenu, windowMenu] })).setAsAppMenu();
 }
 

@@ -8,10 +8,11 @@ import { platform } from '../lib/platform.js';
 import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
 import NetworkSetup from './NetworkSetup.jsx';
 import { networkIsConfigured } from './tunnel-model.js';
+import { translate } from './i18n.js';
 
 export const ONBOARDING_KEY = 'cialai_onboarding_complete';
 const ROOT_NAMES = ['Projects', 'Developer', 'src', 'dev', 'code', 'Github Projects'];
-const STEPS = ['Boas-vindas', 'Pastas', 'Shell', 'Rede', 'Pronto'];
+const onboardingSteps = () => ['welcome', 'folders', 'shell', 'network', 'ready'].map((step) => translate(`desktop.onboarding.step.${step}`));
 
 const DEFAULT_PREFS = {
   appearance: 'system',
@@ -76,8 +77,8 @@ function cleanPrompt(value) {
 }
 
 function StepRail({ step }) {
-  return <ol className="mac-onboarding__steps" aria-label="Etapas da configuração">
-    {STEPS.map((label, index) => <li key={label} className={`${index === step ? 'is-current' : ''}${index < step ? ' is-done' : ''}`} aria-current={index === step ? 'step' : undefined}>
+  return <ol className="mac-onboarding__steps" aria-label={translate('desktop.onboarding.steps')}>
+    {onboardingSteps().map((label, index) => <li key={label} className={`${index === step ? 'is-current' : ''}${index < step ? ' is-done' : ''}`} aria-current={index === step ? 'step' : undefined}>
       <span className="mac-onboarding__step-dot" aria-hidden="true">{index < step ? <Check size={12} /> : index + 1}</span>
       <span>{label}</span>
     </li>)}
@@ -87,27 +88,27 @@ function StepRail({ step }) {
 function Welcome({ next }) {
   return <div className="mac-onboarding__welcome mac-onboarding__screen">
     <img className="mac-onboarding__mark" src={logo} alt="" draggable="false" />
-    <p className="mac-onboarding__eyebrow">Seu estúdio local</p>
-    <h1 id="onboarding-title">Boas-vindas ao Cialai</h1>
-    <p className="mac-onboarding__lead">Mantenha terminais, arquivos e ferramentas de projeto juntos, sem mover o seu código para outro lugar.</p>
-    <button type="button" className="btn btn-primary mac-onboarding__primary" onClick={next}>Configurar o estúdio</button>
+    <p className="mac-onboarding__eyebrow">{translate('desktop.onboarding.localStudio')}</p>
+    <h1 id="onboarding-title">{translate('desktop.onboarding.welcome')}</h1>
+    <p className="mac-onboarding__lead">{translate('desktop.onboarding.welcomeDescription')}</p>
+    <button type="button" className="btn btn-primary mac-onboarding__primary" onClick={next}>{translate('desktop.onboarding.configureStudio')}</button>
   </div>;
 }
 
 function Folders({ roots, selected, toggle, add, busy, error }) {
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__icon" aria-hidden="true"><FolderOpen /></div>
-    <p className="mac-onboarding__eyebrow">Pastas de projetos</p>
-    <h1 id="onboarding-title">Onde você trabalha?</h1>
-    <p className="mac-onboarding__lead">O Cialai usa estas raízes no seletor de projetos. Sessões fora delas continuam funcionando, mas os arquivos não ficam disponíveis no celular.</p>
-    <div className="mac-onboarding__roots" role="group" aria-label="Pastas encontradas">
+    <p className="mac-onboarding__eyebrow">{translate('desktop.onboarding.projectFolders')}</p>
+    <h1 id="onboarding-title">{translate('desktop.onboarding.whereWork')}</h1>
+    <p className="mac-onboarding__lead">{translate('desktop.onboarding.foldersDescription')}</p>
+    <div className="mac-onboarding__roots" role="group" aria-label={translate('desktop.onboarding.foundFolders')}>
       {roots.map((root) => <label key={root.path} className={`mac-onboarding__root${selected.includes(root.path) ? ' is-selected' : ''}${!root.exists ? ' is-missing' : ''}`}>
         <input type="checkbox" checked={selected.includes(root.path)} disabled={!root.exists} onChange={() => toggle(root.path)} />
         <span className="mac-onboarding__root-copy"><strong>{root.label}</strong><span>{root.path}</span></span>
-        <span className="mac-onboarding__root-state">{root.exists ? (selected.includes(root.path) ? 'Incluída' : 'Encontrada') : 'Não encontrada'}</span>
+        <span className="mac-onboarding__root-state">{root.exists ? (selected.includes(root.path) ? translate('desktop.onboarding.included') : translate('desktop.onboarding.found')) : translate('desktop.onboarding.notFound')}</span>
       </label>)}
     </div>
-    <button type="button" className="btn btn-secondary mac-onboarding__add" disabled={busy} onClick={add}><FolderPlus size={15} />Adicionar pasta…</button>
+    <button type="button" className="btn btn-secondary mac-onboarding__add" disabled={busy} onClick={add}><FolderPlus size={15} />{translate('desktop.preferences.addFolder')}</button>
     {error ? <p className="mac-onboarding__error" role="alert">{error}</p> : null}
   </div>;
 }
@@ -116,15 +117,15 @@ function ShellStep({ shell, setShell, probe, test }) {
   const currentPassed = probe.status === 'pass' && probe.shell === shell.trim();
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__icon" aria-hidden="true"><Terminal /></div>
-    <p className="mac-onboarding__eyebrow">Terminal</p>
-    <h1 id="onboarding-title">Confirme o seu shell</h1>
-    <p className="mac-onboarding__lead">Detectamos o shell do sistema. Você pode ajustar o caminho e abrir um PTY descartável para conferir o prompt.</p>
-    <label className="mac-onboarding__field"><span>Caminho do shell</span><input autoFocus className="field__control" value={shell} spellCheck="false" onChange={(event) => setShell(event.target.value)} /></label>
+    <p className="mac-onboarding__eyebrow">{translate('desktop.preferences.terminal')}</p>
+    <h1 id="onboarding-title">{translate('desktop.onboarding.confirmShell')}</h1>
+    <p className="mac-onboarding__lead">{translate('desktop.onboarding.shellDescription')}</p>
+    <label className="mac-onboarding__field"><span>{translate('desktop.preferences.shellPath')}</span><input autoFocus className="field__control" value={shell} spellCheck="false" onChange={(event) => setShell(event.target.value)} /></label>
     <div className="mac-onboarding__probe">
-      <div className="mac-onboarding__probe-head"><span>Teste do PTY</span><span className={`mac-onboarding__probe-state is-${probe.status}`}>{probe.status === 'running' ? 'Abrindo…' : currentPassed ? 'Aprovado' : probe.status === 'error' ? 'Falhou' : 'Não executado'}</span></div>
-      <pre aria-live="polite">{probe.output || 'O prompt aparecerá aqui.'}</pre>
+      <div className="mac-onboarding__probe-head"><span>{translate('desktop.onboarding.ptyTest')}</span><span className={`mac-onboarding__probe-state is-${probe.status}`}>{probe.status === 'running' ? translate('desktop.onboarding.opening') : currentPassed ? translate('desktop.onboarding.approved') : probe.status === 'error' ? translate('desktop.onboarding.failed') : translate('desktop.onboarding.notRun')}</span></div>
+      <pre aria-live="polite">{probe.output || translate('desktop.onboarding.promptHere')}</pre>
     </div>
-    <button type="button" className="btn btn-secondary" disabled={!shell.trim() || probe.status === 'running'} onClick={test}>{probe.status === 'running' ? 'Testando…' : 'Testar shell'}</button>
+    <button type="button" className="btn btn-secondary" disabled={!shell.trim() || probe.status === 'running'} onClick={test}>{probe.status === 'running' ? translate('desktop.onboarding.testing') : translate('desktop.onboarding.testShell')}</button>
   </div>;
 }
 
@@ -132,27 +133,27 @@ function NetworkStep({ network, onChange, expanded, onExpand }) {
   if (expanded) return <div className="mac-onboarding__screen mac-onboarding__network"><NetworkSetup value={network} onChange={onChange} startExpanded /></div>;
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__icon" aria-hidden="true"><Network /></div>
-    <p className="mac-onboarding__eyebrow">Rede privada</p>
-    <h1 id="onboarding-title">Quer acessar pelo celular?</h1>
-    <p className="mac-onboarding__lead">Conecte o Cialai ao seu Headscale para abrir terminais e arquivos com segurança fora deste computador. Você também pode fazer isso depois.</p>
-    <button type="button" className="btn btn-primary" onClick={onExpand}>Configurar agora</button>
+    <p className="mac-onboarding__eyebrow">{translate('desktop.devices.privateNetwork')}</p>
+    <h1 id="onboarding-title">{translate('desktop.onboarding.mobileAccess')}</h1>
+    <p className="mac-onboarding__lead">{translate('desktop.onboarding.networkDescription')}</p>
+    <button type="button" className="btn btn-primary" onClick={onExpand}>{translate('desktop.onboarding.configureNow')}</button>
   </div>;
 }
 
 function Ready({ selected, shell, network, saving, error }) {
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__ready-mark" aria-hidden="true"><Check /></div>
-    <p className="mac-onboarding__eyebrow">Tudo certo</p>
-    <h1 id="onboarding-title">Seu estúdio está pronto</h1>
-    <p className="mac-onboarding__lead">Vamos abrir a primeira sessão na pasta principal. Você pode mudar estas escolhas em Preferências.</p>
+    <p className="mac-onboarding__eyebrow">{translate('desktop.onboarding.allSet')}</p>
+    <h1 id="onboarding-title">{translate('desktop.onboarding.studioReady')}</h1>
+    <p className="mac-onboarding__lead">{translate('desktop.onboarding.readyDescription')}</p>
     <dl className="mac-onboarding__summary">
-      <div><dt>Pasta inicial</dt><dd>{selected[0]}</dd></div>
+      <div><dt>{translate('desktop.onboarding.initialFolder')}</dt><dd>{selected[0]}</dd></div>
       <div><dt>Shell</dt><dd>{shell}</dd></div>
-      <div><dt>Arquivos móveis</dt><dd>{selected.length} {selected.length === 1 ? 'raiz permitida' : 'raízes permitidas'}</dd></div>
-      <div><dt>Rede</dt><dd>{networkIsConfigured(network) ? `${network.desktopName} acessível` : 'Configurar depois'}</dd></div>
+      <div><dt>{translate('desktop.onboarding.mobileFiles')}</dt><dd>{translate(selected.length === 1 ? 'desktop.onboarding.rootOne' : 'desktop.onboarding.rootMany', { count: selected.length })}</dd></div>
+      <div><dt>{translate('desktop.preferences.network')}</dt><dd>{networkIsConfigured(network) ? translate('desktop.onboarding.networkAccessible', { name: network.desktopName }) : translate('desktop.onboarding.configureLater')}</dd></div>
     </dl>
     {error ? <p className="mac-onboarding__error" role="alert">{error}</p> : null}
-    {saving ? <p className="mac-onboarding__saving" role="status">Salvando preferências…</p> : null}
+    {saving ? <p className="mac-onboarding__saving" role="status">{translate('desktop.preferences.saving')}</p> : null}
   </div>;
 }
 
@@ -195,7 +196,7 @@ export default function Onboarding({ onComplete }) {
         setSelected(existingConfigured.length ? existingConfigured : (firstDetected ? [firstDetected] : []));
         setShellValue(data.shell?.path || '');
       } catch (loadError) {
-        if (!cancelled) setError(`Não foi possível ler a configuração: ${loadError?.message || loadError}`);
+        if (!cancelled) setError(translate('desktop.onboarding.loadError', { error: loadError?.message || loadError }));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -223,13 +224,13 @@ export default function Onboarding({ onComplete }) {
     setBusy(true);
     setError('');
     try {
-      const path = await chooseDirectory({ title: 'Adicionar pasta de projetos' });
+      const path = await chooseDirectory({ title: translate('desktop.preferences.addProjectFolder') });
       if (!path) return;
       const label = path.replaceAll('\\', '/').split('/').filter(Boolean).at(-1) || path;
       setRoots((current) => mergeRoots(current, [{ label, path, exists: true }]));
       setSelected((current) => current.includes(path) ? current : [...current, path]);
     } catch (pickError) {
-      setError(`Não foi possível abrir a pasta: ${pickError?.message || pickError}`);
+      setError(translate('desktop.onboarding.folderError', { error: pickError?.message || pickError }));
     } finally { setBusy(false); }
   };
   const testShell = async () => {
@@ -239,8 +240,8 @@ export default function Onboarding({ onComplete }) {
     try {
       const result = native
         ? await invoke('shell_probe', { shell: value, cwd: selected[0] })
-        : { output: 'Cialai PTY de demonstração\nexemplo@mac Projects %' };
-      setProbe({ status: 'pass', shell: value, output: cleanPrompt(result?.output) || 'PTY aberto sem texto inicial.' });
+        : { output: translate('desktop.onboarding.demoOutput') };
+      setProbe({ status: 'pass', shell: value, output: cleanPrompt(result?.output) || translate('desktop.onboarding.emptyPty') });
     } catch (probeError) {
       const message = probeError?.message || String(probeError);
       setProbe({ status: 'error', shell: value, output: cleanPrompt(message) });
@@ -259,16 +260,16 @@ export default function Onboarding({ onComplete }) {
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_error) { /* storage unavailable */ }
       onComplete(selected[0], { openPair });
     } catch (saveError) {
-      setError(`Não foi possível salvar: ${saveError?.message || saveError}`);
+      setError(translate('desktop.preferences.saveError', { error: saveError?.message || saveError }));
       setSaving(false);
     }
   };
 
   return <div className="mac-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <aside className="mac-onboarding__rail"><div className="mac-onboarding__brand"><img src={logo} alt="" /><span>Cialai</span></div><StepRail step={step} /><p>Configuração local<br />Você pode mudar depois.</p></aside>
+    <aside className="mac-onboarding__rail"><div className="mac-onboarding__brand"><img src={logo} alt="" /><span>Cialai</span></div><StepRail step={step} /><p>{translate('desktop.onboarding.localConfiguration')}<br />{translate('desktop.onboarding.changeLater')}</p></aside>
     <section className="mac-onboarding__canvas">
       <div className="mac-onboarding__content" key={step}>
-        {loading ? <div className="mac-onboarding__loading" role="status">Preparando o estúdio…</div> : null}
+        {loading ? <div className="mac-onboarding__loading" role="status">{translate('desktop.onboarding.preparingStudio')}</div> : null}
         {!loading && step === 0 ? <Welcome next={() => setStep(1)} /> : null}
         {!loading && step === 1 ? <Folders roots={roots} selected={selected} toggle={toggle} add={add} busy={busy} error={error} /> : null}
         {!loading && step === 2 ? <ShellStep shell={shell} setShell={setShell} probe={probe} test={testShell} /> : null}
@@ -276,8 +277,8 @@ export default function Onboarding({ onComplete }) {
         {!loading && step === 4 ? <Ready selected={selected} shell={shell} network={prefs.network} saving={saving} error={error} /> : null}
       </div>
       {!loading && step > 0 ? <footer className="mac-onboarding__footer">
-        <button type="button" className="btn btn-quiet" disabled={saving} onClick={() => { setError(''); setStep((current) => current - 1); }}><ChevronLeft size={15} />Voltar</button>
-        {step < 4 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>{step === 3 && !networkIsConfigured(prefs.network) ? 'Depois' : 'Continuar'}</button> : <div className="mac-onboarding__final-actions"><button type="button" className="btn btn-secondary" disabled={saving} onClick={() => { if (networkIsConfigured(prefs.network)) finish(true); else { setNetworkSetupOpen(true); setStep(3); } }}>Vincular celular</button><button type="button" className="btn btn-primary" disabled={saving} onClick={() => finish(false)}>{saving ? 'Abrindo…' : 'Abrir primeira sessão'}</button></div>}
+        <button type="button" className="btn btn-quiet" disabled={saving} onClick={() => { setError(''); setStep((current) => current - 1); }}><ChevronLeft size={15} />{translate('desktop.action.back')}</button>
+        {step < 4 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>{step === 3 && !networkIsConfigured(prefs.network) ? translate('desktop.onboarding.later') : translate('desktop.action.continue')}</button> : <div className="mac-onboarding__final-actions"><button type="button" className="btn btn-secondary" disabled={saving} onClick={() => { if (networkIsConfigured(prefs.network)) finish(true); else { setNetworkSetupOpen(true); setStep(3); } }}>{translate('desktop.action.pairPhone')}</button><button type="button" className="btn btn-primary" disabled={saving} onClick={() => finish(false)}>{saving ? translate('desktop.onboarding.opening') : translate('desktop.onboarding.openFirstSession')}</button></div>}
       </footer> : null}
     </section>
   </div>;

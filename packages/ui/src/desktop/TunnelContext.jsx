@@ -15,6 +15,7 @@ import {
   tunnelPresentation,
   updateDevicesFromEvent,
 } from './tunnel-model.js';
+import { translate, useI18n } from './i18n.js';
 
 const DESKTOP_ID_KEY = 'cialai_desktop_id';
 const TunnelContext = createContext(null);
@@ -57,7 +58,7 @@ function problemCode(error) {
 
 export function tunnelErrorMessage(error) {
   if (error && typeof error === 'object') return error.message || error.error?.message || String(error);
-  return String(error || 'O túnel não respondeu.');
+  return String(error || translate('desktop.tunnel.noResponse'));
 }
 
 function getOrCreateDesktopId() {
@@ -87,6 +88,7 @@ function demoResponse(command, args, devices) {
 }
 
 export function TunnelProvider({ children }) {
+  const { locale } = useI18n();
   const demo = previewMode();
   const native = isTauri();
   const [network, setNetwork] = useState(demo ? demoNetwork : null);
@@ -105,7 +107,7 @@ export function TunnelProvider({ children }) {
 
   const call = useCallback(async (command, args = {}) => {
     if (demo) return demoResponse(command, args, devicesRef.current);
-    if (!native) throw new Error('Abra o aplicativo desktop para usar a rede.');
+    if (!native) throw new Error(translate('desktop.tunnel.desktopOnly'));
     return invoke('tunnel_call', { command, args });
   }, [demo, native]);
 
@@ -161,7 +163,7 @@ export function TunnelProvider({ children }) {
 
   const connectNetwork = useCallback(async (value, options = {}) => {
     const config = normalizeNetworkConfig(value);
-    if (!networkIsConfigured(config)) throw new Error('Complete o servidor, o usuário e o nome deste computador.');
+    if (!networkIsConfigured(config)) throw new Error(translate('desktop.tunnel.completeConfiguration'));
     setNetwork(config);
     setSnapshot((current) => ({ ...current, configured: true, supervisor: 'starting' }));
     setLastError('');
@@ -271,7 +273,7 @@ export function TunnelProvider({ children }) {
     call, configureControl, configureSavedControl, connectNetwork, refreshDevices,
     beginPair, cancelPair, decidePair, renameDevice, revokeDevice, runDiagnostics,
     clearPairEvent,
-  }), [demo, native, network, snapshot, devices, pairEvent, controlHealth, secretStatus, lastError, call, configureControl, configureSavedControl, connectNetwork, refreshDevices, beginPair, cancelPair, decidePair, renameDevice, revokeDevice, runDiagnostics, clearPairEvent]);
+  }), [demo, native, network, snapshot, devices, pairEvent, controlHealth, secretStatus, lastError, call, configureControl, configureSavedControl, connectNetwork, refreshDevices, beginPair, cancelPair, decidePair, renameDevice, revokeDevice, runDiagnostics, clearPairEvent, locale]);
 
   return <TunnelContext.Provider value={value}>{children}</TunnelContext.Provider>;
 }

@@ -1049,6 +1049,12 @@ A frente partiu de `ba1b828`. Durante a execução, a main avançou para `842491
 
 Parte C pronta para merge
 
+### 13/09/2026, interface desktop em três idiomas concluída na frente B
+
+O desktop agora detecta o idioma do sistema, usa português como fallback e guarda a escolha localmente. Preferências oferece Português, English e Español com mudança imediata. Toolbar, sidebar, paleta, onboarding, rede, dispositivos, pareamento, atualizador, controles de janela e menus da interface usam o dicionário compartilhado. Os textos em espanhol seguem tratamento neutro e os nomes Cialai e Codex permanecem inalterados.
+
+`npm run test:i18n` aprovou a paridade dos três dicionários e as normalizações. `npm run test:ui` aprovou 17 cenários de sincronização e 59 checks restantes, incluindo detecção, persistência e renderização em espanhol. `npm run build:ui` do workspace desktop concluiu e validou 130 assets do recurso móvel. A menubar criada em `packages/ui` acompanha o idioma, sem mudanças em `apps/desktop/src-tauri`. Os menus definidos diretamente no código nativo permanecem pendentes até o registro de Parte A pronta.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |

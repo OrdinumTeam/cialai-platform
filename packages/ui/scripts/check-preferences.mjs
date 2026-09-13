@@ -11,15 +11,19 @@ import {
 
 const source = readFileSync(fileURLToPath(new URL('../src/desktop/Preferences.jsx', import.meta.url)), 'utf8');
 const updater = readFileSync(fileURLToPath(new URL('../src/desktop/Updater.jsx', import.meta.url)), 'utf8');
-for (const section of ['Aparência', 'Terminal', 'Projetos', 'Rede', 'Dev Browser', 'Atualizações']) {
-  assert.match(source, new RegExp(`>${section}<`), `Missing preferences section: ${section}`);
+for (const section of ['appearance', 'terminal', 'projects', 'network', 'updates']) {
+  assert.match(source, new RegExp(`desktop\\.preferences\\.${section}`), `Missing translated preferences section: ${section}`);
 }
+assert.match(source, />Dev Browser</, 'Missing Dev Browser section');
 for (const field of ['args', 'lang', 'pathPrefix', 'projectRoots', 'chromiumPath']) {
   assert.match(source, new RegExp(field), `Missing preference field: ${field}`);
 }
 assert.match(source, /chooseDirectory/);
 assert.match(source, /chooseFile/);
 assert.match(source, /<Updater \/>/);
+assert.match(source, /LANGUAGE_OPTIONS/);
+assert.match(source, /language\.label/);
+assert.match(source, /setLocale/);
 assert.match(updater, /@tauri-apps\/plugin-updater/);
 assert.match(updater, /downloadAndInstall/);
 assert.match(updater, /@tauri-apps\/plugin-process/);

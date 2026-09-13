@@ -3,14 +3,15 @@
 
 import React, { useEffect, useState } from 'react';
 import { isTauri } from '../lib/native.js';
+import { translate } from './i18n.js';
 
 const initialStatus = {
   kind: 'idle',
-  message: 'Busque uma nova versão quando quiser.',
+  message: '',
 };
 
 function errorMessage(error) {
-  return error?.message || String(error || 'erro desconhecido');
+  return error?.message || String(error || translate('desktop.common.unknownError'));
 }
 
 export default function Updater() {
@@ -23,13 +24,13 @@ export default function Updater() {
   useEffect(() => {
     let cancelled = false;
     if (!native) {
-      setVersion('prévia do navegador');
+      setVersion(translate('desktop.updater.browserPreview'));
       return undefined;
     }
     import('@tauri-apps/api/app')
       .then(({ getVersion }) => getVersion())
       .then((current) => { if (!cancelled) setVersion(current); })
-      .catch(() => { if (!cancelled) setVersion('indisponível'); });
+      .catch(() => { if (!cancelled) setVersion(translate('desktop.common.unavailable')); });
     return () => { cancelled = true; };
   }, [native]);
 
@@ -37,18 +38,18 @@ export default function Updater() {
     if (!native) return;
     setAvailable(null);
     setProgress(null);
-    setStatus({ kind: 'checking', message: 'Buscando atualização…' });
+    setStatus({ kind: 'checking', message: translate('desktop.updater.checking') });
     try {
       const { check } = await import('@tauri-apps/plugin-updater');
       const update = await check();
       if (!update) {
-        setStatus({ kind: 'current', message: 'O Cialai está atualizado.' });
+        setStatus({ kind: 'current', message: translate('desktop.updater.current') });
         return;
       }
       setAvailable(update);
-      setStatus({ kind: 'available', message: `Versão ${update.version} disponível.` });
+      setStatus({ kind: 'available', message: translate('desktop.updater.available', { version: update.version }) });
     } catch (error) {
-      setStatus({ kind: 'error', message: `Não foi possível buscar atualizações: ${errorMessage(error)}` });
+      setStatus({ kind: 'error', message: translate('desktop.updater.checkError', { error: errorMessage(error) }) });
     }
   };
 
@@ -56,7 +57,7 @@ export default function Updater() {
     if (!available) return;
     let received = 0;
     let total = 0;
-    setStatus({ kind: 'downloading', message: `Baixando a versão ${available.version}…` });
+    setStatus({ kind: 'downloading', message: translate('desktop.updater.downloading', { version: available.version }) });
     try {
       await available.downloadAndInstall((event) => {
         if (event.event === 'Started') {
@@ -66,13 +67,13 @@ export default function Updater() {
           received += event.data.chunkLength;
           setProgress({ received, total });
         } else if (event.event === 'Finished') {
-          setStatus({ kind: 'installed', message: 'Atualização instalada. Reiniciando o Cialai…' });
+          setStatus({ kind: 'installed', message: translate('desktop.updater.installed') });
         }
       });
       const { relaunch } = await import('@tauri-apps/plugin-process');
       await relaunch();
     } catch (error) {
-      setStatus({ kind: 'error', message: `Não foi possível instalar a atualização: ${errorMessage(error)}` });
+      setStatus({ kind: 'error', message: translate('desktop.updater.installError', { error: errorMessage(error) }) });
     }
   };
 
@@ -83,14 +84,14 @@ export default function Updater() {
 
   return <div className="mac-prefs__update">
     <div className="mac-prefs__row-text">
-      <div className="mac-prefs__row-title">Versão atual</div>
-      <div className="mac-prefs__row-desc">{version || 'Carregando…'}</div>
-      <div className={`mac-prefs__row-desc${status.kind === 'error' ? ' mac-prefs__error' : ''}`} role="status" aria-live="polite">{native ? status.message : 'A busca funciona somente no aplicativo instalado.'}</div>
-      {progress ? <progress aria-label="Progresso da atualização" value={progress.received} max={progress.total || undefined}>{percent === null ? 'Baixando' : `${percent}%`}</progress> : null}
+      <div className="mac-prefs__row-title">{translate('desktop.updater.currentVersion')}</div>
+      <div className="mac-prefs__row-desc">{version || translate('desktop.common.loading')}</div>
+      <div className={`mac-prefs__row-desc${status.kind === 'error' ? ' mac-prefs__error' : ''}`} role="status" aria-live="polite">{native ? (status.message || translate('desktop.updater.idle')) : translate('desktop.updater.installedOnly')}</div>
+      {progress ? <progress aria-label={translate('desktop.updater.progress')} value={progress.received} max={progress.total || undefined}>{percent === null ? translate('desktop.updater.downloadingShort') : `${percent}%`}</progress> : null}
     </div>
     <div className="mac-prefs__actions">
-      {available ? <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={installUpdate}>Instalar versão {available.version}</button> : null}
-      <button type="button" className="btn btn-secondary btn-sm" disabled={!native || busy} onClick={checkForUpdate}>Buscar atualização</button>
+      {available ? <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={installUpdate}>{translate('desktop.updater.install', { version: available.version })}</button> : null}
+      <button type="button" className="btn btn-secondary btn-sm" disabled={!native || busy} onClick={checkForUpdate}>{translate('desktop.updater.check')}</button>
     </div>
   </div>;
 }

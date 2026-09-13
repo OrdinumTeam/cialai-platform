@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Pure preference helpers shared by the UI and its contract tests.
+import { translate } from './i18n.js';
 
 const APPEARANCES = new Set(['system', 'light', 'dark']);
 // Fundo da janela no Windows: automático aplica o Mica quando o sistema
@@ -90,15 +91,13 @@ export function sanitizePreferences(value) {
 const SYSTEM_HINTS = {
   macos: {
     shellPlaceholder: '/bin/zsh',
-    shellDescription: 'Vazio usa o shell da sua conta.',
     showLang: true,
     langPlaceholder: 'pt_BR.UTF-8',
     pathPrefixPlaceholder: '/opt/homebrew/bin',
-    pathPrefixDescription: 'Um diretório em cada linha. Vazio acrescenta /opt/homebrew/bin e /usr/local/bin quando existem.',
     chromiumPlaceholder: '/Applications/Chromium.app/Contents/MacOS/Chromium',
     chromiumFilters: [],
     windowSection: false,
-    revealLabel: 'Mostrar no Finder',
+    revealKey: 'desktop.preferences.revealFinder',
     paths: {
       preferences: '~/Library/Application Support/br.com.ordinum.cialai/preferences.json',
       data: '~/Library/Application Support/br.com.ordinum.cialai',
@@ -107,15 +106,13 @@ const SYSTEM_HINTS = {
   },
   linux: {
     shellPlaceholder: '/bin/bash',
-    shellDescription: 'Vazio usa o shell da sua conta.',
     showLang: true,
     langPlaceholder: 'C.UTF-8',
     pathPrefixPlaceholder: '~/.local/bin',
-    pathPrefixDescription: 'Um diretório em cada linha. Vazio acrescenta ~/.local/bin, /usr/local/bin, Linuxbrew e Snap quando existem.',
     chromiumPlaceholder: '/usr/bin/chromium',
     chromiumFilters: [],
     windowSection: false,
-    revealLabel: 'Mostrar em Arquivos',
+    revealKey: 'desktop.preferences.revealFiles',
     paths: {
       preferences: '~/.config/br.com.ordinum.cialai/preferences.json',
       data: '~/.local/share/br.com.ordinum.cialai',
@@ -124,15 +121,13 @@ const SYSTEM_HINTS = {
   },
   windows: {
     shellPlaceholder: 'pwsh.exe',
-    shellDescription: 'Vazio procura o PowerShell 7, depois o Windows PowerShell e por fim o cmd.',
     showLang: false,
     langPlaceholder: '',
     pathPrefixPlaceholder: 'C:\\Tools\\bin',
-    pathPrefixDescription: 'Um diretório em cada linha. Vazio mantém o PATH do Windows.',
     chromiumPlaceholder: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-    chromiumFilters: [{ name: 'Executável', extensions: ['exe'] }],
+    chromiumFilters: [{ name: '', extensions: ['exe'] }],
     windowSection: true,
-    revealLabel: 'Mostrar no Explorer',
+    revealKey: 'desktop.preferences.revealExplorer',
     paths: {
       preferences: '%APPDATA%\\br.com.ordinum.cialai\\preferences.json',
       data: '%APPDATA%\\br.com.ordinum.cialai',
@@ -142,9 +137,9 @@ const SYSTEM_HINTS = {
 };
 
 const ARGUMENT_HINTS = {
-  posix: { placeholder: '-l', description: 'Um argumento em cada linha. Vazio usa -l nos shells de login conhecidos.' },
-  powershell: { placeholder: '-NoLogo', description: 'Um argumento em cada linha. Vazio usa -NoLogo.' },
-  cmd: { placeholder: '', description: 'Um argumento em cada linha. Vazio não acrescenta argumentos.' },
+  posix: { placeholder: '-l', descriptionKey: 'desktop.preferences.argsPosix' },
+  powershell: { placeholder: '-NoLogo', descriptionKey: 'desktop.preferences.argsPowerShell' },
+  cmd: { placeholder: '', descriptionKey: 'desktop.preferences.argsCmd' },
 };
 
 export function platformPreferenceHints(os, shellFlavor) {
@@ -152,11 +147,14 @@ export function platformPreferenceHints(os, shellFlavor) {
   const flavor = ARGUMENT_HINTS[shellFlavor] || (os === 'windows' ? ARGUMENT_HINTS.powershell : ARGUMENT_HINTS.posix);
   return {
     ...system,
-    chromiumFilters: system.chromiumFilters.map((filter) => ({ ...filter, extensions: [...filter.extensions] })),
+    shellDescription: translate(os === 'windows' ? 'desktop.preferences.shellWindows' : 'desktop.preferences.shellAccount'),
+    pathPrefixDescription: translate(`desktop.preferences.pathPrefix.${os === 'macos' || os === 'windows' ? os : 'linux'}`),
+    revealLabel: translate(system.revealKey),
+    chromiumFilters: system.chromiumFilters.map((filter) => ({ ...filter, name: translate('desktop.preferences.executable'), extensions: [...filter.extensions] })),
     paths: { ...system.paths },
     argsPlaceholder: flavor.placeholder,
-    argsDescription: flavor.description,
-    langDescription: 'Vazio usa o idioma do sistema.',
+    argsDescription: translate(flavor.descriptionKey),
+    langDescription: translate('desktop.preferences.systemLanguage'),
   };
 }
 

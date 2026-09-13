@@ -7,6 +7,7 @@ import { Menu as MenuIcon } from 'lucide-react';
 import Menu from '../terminals/ui/Menu.jsx';
 import '../views/Terminais.css';
 import { shortcutLabel } from '../lib/keys.js';
+import { translate } from './i18n.js';
 import { appMenuItems } from './window-chrome.js';
 
 const REOPEN_GUARD_MS = 250;
@@ -22,7 +23,7 @@ export default function AppMenuButton({ actions, views }) {
     setAnchor((current) => current ? null : { x: rect.right, y: rect.bottom + 6, align: 'right' });
   };
   return <>
-    <button type="button" className={`mac-tool mac-tool--menu${anchor ? ' is-open' : ''}`} onClick={toggle} title="Menu do aplicativo" aria-label="Menu do aplicativo" aria-haspopup="menu" aria-expanded={Boolean(anchor)}><MenuIcon size={16} strokeWidth={1.75} /></button>
-    {anchor ? <Menu anchor={anchor} items={appMenuItems(actions, views, { label: shortcutLabel })} onClose={close} label="Menu do aplicativo" /> : null}
+    <button type="button" className={`mac-tool mac-tool--menu${anchor ? ' is-open' : ''}`} onClick={toggle} title={translate('desktop.menu.app')} aria-label={translate('desktop.menu.app')} aria-haspopup="menu" aria-expanded={Boolean(anchor)}><MenuIcon size={16} strokeWidth={1.75} /></button>
+    {anchor ? <Menu anchor={anchor} items={appMenuItems(actions, views, { label: shortcutLabel, t: translate })} onClose={close} label={translate('desktop.menu.app')} /> : null}
   </>;
 }

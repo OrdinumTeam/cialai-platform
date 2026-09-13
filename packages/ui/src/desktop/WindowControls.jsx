@@ -5,7 +5,8 @@
 import React, { useEffect, useState } from 'react';
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { windowControls } from '../lib/native.js';
-import { WINDOW_CONTROL_LABELS } from './window-chrome.js';
+import { windowControlLabels } from './window-chrome.js';
+import { translate } from './i18n.js';
 
 export default function WindowControls() {
   const [maximized, setMaximized] = useState(false);
@@ -19,10 +20,11 @@ export default function WindowControls() {
     return () => { disposed = true; off?.(); };
   }, []);
 
-  const maximizeLabel = maximized ? WINDOW_CONTROL_LABELS.restore : WINDOW_CONTROL_LABELS.maximize;
-  return <div className="mac-window-controls" role="group" aria-label="Controles da janela">
-    <button type="button" className="mac-window-control" onClick={() => { windowControls.minimize().catch(() => {}); }} title={WINDOW_CONTROL_LABELS.minimize} aria-label={WINDOW_CONTROL_LABELS.minimize}><Minus aria-hidden="true" /></button>
+  const labels = windowControlLabels();
+  const maximizeLabel = maximized ? labels.restore : labels.maximize;
+  return <div className="mac-window-controls" role="group" aria-label={translate('desktop.window.controls')}>
+    <button type="button" className="mac-window-control" onClick={() => { windowControls.minimize().catch(() => {}); }} title={labels.minimize} aria-label={labels.minimize}><Minus aria-hidden="true" /></button>
     <button type="button" className="mac-window-control" onClick={() => { windowControls.toggleMaximize().catch(() => {}); }} title={maximizeLabel} aria-label={maximizeLabel}>{maximized ? <Copy aria-hidden="true" /> : <Square aria-hidden="true" />}</button>
-    <button type="button" className="mac-window-control is-close" onClick={() => { windowControls.close().catch(() => {}); }} title={WINDOW_CONTROL_LABELS.close} aria-label={WINDOW_CONTROL_LABELS.close}><X aria-hidden="true" /></button>
+    <button type="button" className="mac-window-control is-close" onClick={() => { windowControls.close().catch(() => {}); }} title={labels.close} aria-label={labels.close}><X aria-hidden="true" /></button>
   </div>;
 }

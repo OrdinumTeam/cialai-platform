@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Pure state and validation helpers for the desktop tunnel interface.
+import { getLocale, translate } from './i18n.js';
 
 export const PAIR_ROTATION_SECONDS = 90;
 export const PAIR_TTL_SECONDS = 600;
@@ -25,14 +26,14 @@ export function networkIsConfigured(value = {}) {
 }
 
 export function validateControlInput(rawUrl, rawApiKey) {
-  if (!text(rawApiKey)) return 'Informe a chave da API do Headscale.';
+  if (!text(rawApiKey)) return translate('desktop.network.error.apiKey');
   let parsed;
-  try { parsed = new URL(text(rawUrl)); } catch (_error) { return 'Informe uma URL válida para o Headscale.'; }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) return 'Use a URL base do Headscale sem credenciais ou parâmetros.';
+  try { parsed = new URL(text(rawUrl)); } catch (_error) { return translate('desktop.network.error.url'); }
+  if (parsed.username || parsed.password || parsed.search || parsed.hash) return translate('desktop.network.error.baseUrl');
   if (parsed.protocol === 'https:') return '';
   const loopback = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(parsed.hostname);
   if (parsed.protocol === 'http:' && loopback) return '';
-  return 'Use HTTPS para acessar o Headscale fora deste computador.';
+  return translate('desktop.network.error.https');
 }
 
 export function createDesktopId(fill = (buffer) => crypto.getRandomValues(buffer)) {
@@ -83,12 +84,12 @@ export function reduceTunnelEvent(snapshot, frame = {}) {
 }
 
 export function tunnelPresentation(snapshot = initialTunnelSnapshot()) {
-  if (!snapshot.configured) return { tone: 'idle', label: 'Rede não configurada' };
-  if (snapshot.supervisor === 'failed' || snapshot.node?.state === 'offline' || snapshot.edge?.state === 'failed') return { tone: 'bad', label: 'Indisponível' };
-  if (snapshot.supervisor === 'restarting') return { tone: 'busy', label: 'Reconectando' };
-  if (snapshot.node?.state === 'running' && snapshot.edge?.state === 'running') return { tone: 'ok', label: 'Acessível' };
-  if (snapshot.node?.state === 'needs-login') return { tone: 'bad', label: 'Acesso necessário' };
-  return { tone: 'busy', label: 'Preparando acesso' };
+  if (!snapshot.configured) return { tone: 'idle', label: translate('desktop.tunnel.notConfigured') };
+  if (snapshot.supervisor === 'failed' || snapshot.node?.state === 'offline' || snapshot.edge?.state === 'failed') return { tone: 'bad', label: translate('desktop.tunnel.unavailable') };
+  if (snapshot.supervisor === 'restarting') return { tone: 'busy', label: translate('desktop.tunnel.reconnecting') };
+  if (snapshot.node?.state === 'running' && snapshot.edge?.state === 'running') return { tone: 'ok', label: translate('desktop.tunnel.accessible') };
+  if (snapshot.node?.state === 'needs-login') return { tone: 'bad', label: translate('desktop.tunnel.loginRequired') };
+  return { tone: 'busy', label: translate('desktop.tunnel.preparing') };
 }
 
 export function updateDevicesFromEvent(devices = [], data = {}) {
@@ -107,10 +108,10 @@ export function formatPairTime(seconds) {
 
 export function formatLastSeen(value, now = Date.now()) {
   const when = Date.parse(value);
-  if (!Number.isFinite(when)) return 'Sem registro';
+  if (!Number.isFinite(when)) return translate('desktop.time.noRecord');
   const elapsed = Math.max(0, Number(now) - when);
-  if (elapsed < 60_000) return 'Agora';
-  if (elapsed < 3_600_000) return `Há ${Math.floor(elapsed / 60_000)} min`;
-  if (elapsed < 86_400_000) return `Há ${Math.floor(elapsed / 3_600_000)} h`;
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(when));
+  if (elapsed < 60_000) return translate('desktop.time.now');
+  if (elapsed < 3_600_000) return translate('desktop.time.minutesAgo', { count: Math.floor(elapsed / 60_000) });
+  if (elapsed < 86_400_000) return translate('desktop.time.hoursAgo', { count: Math.floor(elapsed / 3_600_000) });
+  return new Intl.DateTimeFormat(getLocale(), { dateStyle: 'short', timeStyle: 'short' }).format(new Date(when));
 }

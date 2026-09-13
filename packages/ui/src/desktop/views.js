@@ -3,23 +3,28 @@
 
 import { lazy, useCallback, useEffect, useState } from 'react';
 import { MonitorSmartphone, SquareTerminal } from 'lucide-react';
+import { translate } from './i18n.js';
 
 export const DEFAULT_DESKTOP_VIEW = 'terminais';
 export const DESKTOP_VIEW_COMPONENTS = {
   terminais: lazy(() => import('../views/Terminais.jsx')),
   dispositivos: lazy(() => import('./Devices.jsx')),
 };
-export const DESKTOP_VIEWS = [
-  { id: 'terminais', label: 'Terminais', sub: 'Sessões, arquivos e navegador', icon: SquareTerminal },
-  { id: 'dispositivos', label: 'Dispositivos', sub: 'Rede privada e celulares', icon: MonitorSmartphone },
-];
+export function desktopViews() {
+  return [
+    { id: 'terminais', label: translate('view.terminais.label'), sub: translate('view.terminais.sub'), icon: SquareTerminal },
+    { id: 'dispositivos', label: translate('desktop.view.devices.label'), sub: translate('desktop.view.devices.sub'), icon: MonitorSmartphone },
+  ];
+}
+
+export const DESKTOP_VIEWS = desktopViews();
 
 export function sanitizeDesktopView(id) {
   return DESKTOP_VIEW_COMPONENTS[id] ? id : DEFAULT_DESKTOP_VIEW;
 }
 
-export function getDesktopView(id) {
-  return DESKTOP_VIEWS.find((view) => view.id === sanitizeDesktopView(id)) || DESKTOP_VIEWS[0];
+export function getDesktopView(id, views = DESKTOP_VIEWS) {
+  return views.find((view) => view.id === sanitizeDesktopView(id)) || views[0];
 }
 
 function initialView() {
