@@ -46,7 +46,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC'],
       blockedPermissions: [
         'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.SYSTEM_ALERT_WINDOW',
         'android.permission.USE_FINGERPRINT',
+        'android.permission.VIBRATE',
         'android.permission.WRITE_EXTERNAL_STORAGE'
       ]
     },
@@ -57,7 +59,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         recordAudioAndroid: false,
         barcodeScannerEnabled: true
       }],
-      'expo-secure-store',
+      ['expo-secure-store', { configureAndroidBackup: false }],
       ['expo-local-authentication', { faceIDPermission }],
       ['./plugins/with-loopback-network-security.cjs'],
       ['expo-build-properties', {

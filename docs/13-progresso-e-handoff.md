@@ -53,6 +53,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
 | 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
+| 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 
 ## Ambiente observado
 
@@ -388,6 +389,12 @@ Typecheck e lint passaram. `expo config --type prebuild` confirmou as três perm
 O wrapper Kotlin mantém o núcleo por 120 segundos após perder o primeiro plano e então chama `Stop`. Perfil ativo, desktop, porta preferida e token permanecem somente em memória. Ao voltar, a fila nativa emite reconectando, executa `StartProfile`, abre um novo proxy com `OpenDesktop` e entrega a nova URL à casca; falhas retornam apenas código estável. Fechamento, troca e esquecimento limpam essa abertura.
 
 A casca mede o tempo fora, mostra a tela Reconectando depois do limite e só retorna ao shell quando a URL reaberta passa pela validação local e pela saúde. Também foi corrigido o uso do terceiro argumento de `OpenDesktop`: a porta remota do desktop não é mais confundida com a porta preferida do proxy local. Typecheck, lint, `git diff --check` e a conferência estrutural do prazo, `Stop`, `StartProfile` e `OpenDesktop` terminaram com código 0. Suspensão real por dez minutos e reconexão em dois a quatro segundos continuam pendentes de Android físico.
+
+### 12/09/2026, proteção Android da tarefa 4.5 preparada
+
+O mesmo `BiometricSession` do Control governa iOS e Android por `expo-local-authentication`: sessão após abertura ou cinco minutos fora e autorização por ação sempre nova. Tokens continuam separados por desktop em `expo-secure-store`; o plugin agora recebe `configureAndroidBackup: false`, além de `allowBackup` falso no manifesto e estado Go em `noBackupFilesDir`.
+
+Typecheck, lint e `expo config --type introspect` terminaram com código 0 e mantiveram biometria permitida, backup falso e armazenamento externo bloqueado. Os testes unitários herdados serão executados em 3.7. Nenhuma impressão digital, reconhecimento facial, fallback por código ou inspeção do Android Keystore ocorreu neste Mac, portanto 4.5 permanece preparada e não verificada em aparelho.
 
 ## Arquivos para retomar
 
