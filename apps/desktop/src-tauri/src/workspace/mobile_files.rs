@@ -2,11 +2,18 @@
 //! Read-only file access rooted in a subscribed terminal's project directory.
 
 use serde::Serialize;
-use std::ffi::{CStr, CString, OsStr};
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::ffi::{CStr, CString};
+#[cfg(unix)]
 use std::fs::File;
+#[cfg(unix)]
 use std::io::Read;
+#[cfg(unix)]
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd};
-use std::os::unix::ffi::OsStrExt;
+#[cfg(unix)]
+use std::os::unix::ffi::OsStrExt as _;
+#[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
 use std::path::{Component, Path};
 
@@ -70,6 +77,7 @@ fn relative(path: &str) -> Result<Vec<&OsStr>, String> {
         .collect()
 }
 
+#[cfg(unix)]
 fn open_at(parent: i32, name: &OsStr, directory: bool) -> Result<File, String> {
     let name = CString::new(name.as_bytes()).map_err(|_| denied())?;
     let flags = libc::O_RDONLY
@@ -86,6 +94,7 @@ fn open_at(parent: i32, name: &OsStr, directory: bool) -> Result<File, String> {
     Ok(unsafe { File::from_raw_fd(fd) })
 }
 
+#[cfg(unix)]
 fn root(home: &Path, project_roots: &[String], cwd: &Path) -> Result<File, String> {
     if !cwd.is_absolute()
         || !crate::workspace::repos::project_roots(home, project_roots)
@@ -112,6 +121,7 @@ fn root(home: &Path, project_roots: &[String], cwd: &Path) -> Result<File, Strin
     Ok(dir)
 }
 
+#[cfg(unix)]
 fn open(
     home: &Path,
     project_roots: &[String],
@@ -130,6 +140,7 @@ fn open(
     Ok(file)
 }
 
+#[cfg(unix)]
 pub fn read(home: &Path, project_roots: &[String], cwd: &Path, path: &str) -> Result<Text, String> {
     let file = open(home, project_roots, cwd, path, false)?;
     let metadata = file.metadata().map_err(|_| denied())?;
@@ -158,7 +169,9 @@ pub fn read(home: &Path, project_roots: &[String], cwd: &Path, path: &str) -> Re
     })
 }
 
+#[cfg(unix)]
 struct Directory(*mut libc::DIR);
+#[cfg(unix)]
 impl Drop for Directory {
     fn drop(&mut self) {
         unsafe {
@@ -167,6 +180,7 @@ impl Drop for Directory {
     }
 }
 
+#[cfg(unix)]
 pub fn list(
     home: &Path,
     project_roots: &[String],
@@ -237,7 +251,7 @@ pub fn list(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::symlink;
@@ -394,3 +408,8 @@ mod tests {
         assert!(list(&f.home, &f.roots, &f.home.join("Projects"), "").is_ok());
     }
 }
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use windows::{list, read};

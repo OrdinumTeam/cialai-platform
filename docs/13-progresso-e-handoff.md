@@ -56,7 +56,9 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.10 a 5.19 | Não iniciadas nesta base | Demais backends e matriz remota continuam dependentes da integração das outras raias |
 | 6.1 Dev Browser no Linux | Preparado; imagem Ubuntu validada; testes Linux e Windows pendentes | A imagem Ubuntu 22.04 com Rust 1.98.1, Node 22.23.2 e dependências Tauri foi construída. O runner limita Docker a 6 GiB, usa Cargo com dois jobs, testa descoberta e baixa o Chromium real pelo Playwright. A compilação no contêiner não começou porque o disco caiu abaixo de 5 GiB; Windows permanece pendente |
 | 6.2 Prévias Office | Validada no macOS; Linux e Windows pendentes | O LibreOffice real converteu a fixture RTF em PDF válido de 17.799 bytes no macOS. O runner Ubuntu 22.04 está preparado com contêiner efêmero e limite de 6 GiB, mas parou no preflight de disco antes de executar |
-| 6.3 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
+| 6.3 Uso do plano | Não iniciada nesta raia | Depende da integração dos backends da Fase 5 |
+| 6.4 `mobile_files` no Windows | Implementada; compilação e execução Windows pendentes | Usa `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT`, recusa reparse points e hard links e confere o caminho final de cada handle dentro da raiz. O check estrutural passou; `cargo-xwin` não está instalado e o disco está abaixo do piso para instalar ou compilar |
+| 6.5 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -392,6 +394,12 @@ Antes de qualquer comando Cargo desta raia, `npm run sidecar --workspace @cialai
 Adicionados uma fixture RTF mínima e `tools/test-office-conversion.sh`. No macOS, o script descobre `soffice`, converte em diretório temporário e exige conteúdo não vazio com assinatura `%PDF`. A execução real com `/opt/homebrew/bin/soffice` terminou com código 0 e produziu PDF de 17.799 bytes; o temporário foi removido pelo próprio runner.
 
 No Linux, o mesmo script prepara um contêiner efêmero Ubuntu 22.04, instala `libreoffice-writer`, converte a fixture e valida a assinatura. O comando usa `docker run --rm --memory 6g`. A tentativa terminou no preflight com código 2 e `Espaço livre abaixo de 5 GiB`, portanto nenhum contêiner foi criado e a conversão Linux não foi executada. LibreOffice no Windows não foi executado. O runner e `sh -n` estão aprovados; só o comportamento macOS foi verificado.
+
+### 13/09/2026, `mobile_files` Windows da tarefa 6.4
+
+O código comum de `workspace/mobile_files.rs` ficou restrito a Unix e o novo backend `workspace/mobile_files/windows.rs` implementa as mesmas operações de lista e leitura. Cada raiz, cwd e alvo é aberto por `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT` e `FILE_FLAG_BACKUP_SEMANTICS`; atributos vindos do handle recusam reparse points, `GetFinalPathNameByHandleW` prova a contenção depois da resolução e `GetFileInformationByHandle` recusa arquivos com mais de um hard link. Permanecem os limites de 200 entradas, 128 KiB, texto válido e nomes ou conteúdos sensíveis.
+
+`node tools/check/mobile-files-windows.mjs` passou e confirmou o feature do `windows-sys`, as APIs, flags, contenção final, proteção de hard links e ausência do stub indisponível. `cargo fmt` e `git diff --check` passaram. `cargo-xwin` não foi encontrado no PATH; como o host tinha somente 4,2 GiB livres, sua instalação e a compilação Windows não foram iniciadas. O backend está implementado, mas não foi compilado nem executado no Windows.
 
 ## Arquivos para retomar
 
