@@ -8,6 +8,9 @@ use serde::Serialize;
 
 use crate::prefs::Preferences;
 
+#[cfg(target_os = "windows")]
+pub mod win_job;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ShellFlavor {

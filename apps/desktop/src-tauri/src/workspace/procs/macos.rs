@@ -58,6 +58,10 @@ impl Backend {
     pub(super) fn command_line(&self, pid: u32) -> Option<CommandLine> {
         command_line(pid)
     }
+
+    pub(super) fn foreground_pid(&self, _shell_pid: u32) -> Option<u32> {
+        None
+    }
 }
 
 #[repr(C)]

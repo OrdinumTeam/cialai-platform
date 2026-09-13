@@ -408,6 +408,8 @@ struct Session {
     master: Box<dyn MasterPty + Send>,
     writer: SyncSender<Vec<u8>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
+    #[cfg(target_os = "windows")]
+    _job: Option<crate::platform::win_job::JobHandle>,
     link: Arc<OutputLink>,
     spawned_at: Instant,
     view_owner: SubscriberKey,
@@ -797,6 +799,20 @@ impl TerminalManager {
             .map_err(|error| error.to_string())?;
         let killer = child.clone_killer();
         let pid = child.process_id();
+        #[cfg(target_os = "windows")]
+        let job = match pid {
+            Some(pid) => match crate::platform::win_job::assign(pid) {
+                Ok(job) => Some(job),
+                Err(error) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "Não foi possível isolar a árvore do terminal: {error}"
+                    ));
+                }
+            },
+            None => None,
+        };
 
         let id = {
             let mut guard = self.lock();
@@ -869,6 +885,8 @@ impl TerminalManager {
                 master: pair.master,
                 writer: write_tx,
                 killer,
+                #[cfg(target_os = "windows")]
+                _job: job,
                 link,
                 spawned_at: Instant::now(),
                 view_owner: SubscriberKey::Webview,
@@ -1229,6 +1247,9 @@ impl TerminalManager {
                 .sessions
                 .values()
                 .map(|session| {
+                    #[cfg(target_os = "windows")]
+                    let foreground = None;
+                    #[cfg(not(target_os = "windows"))]
                     let foreground = session
                         .master
                         .process_group_leader()
@@ -1270,6 +1291,8 @@ impl TerminalManager {
                 });
                 continue;
             };
+            #[cfg(target_os = "windows")]
+            let foreground_pgid = source.foreground_pid(pid);
             let mut tree = vec![pid];
             tree.extend(source.descendants(pid));
             alive.extend_from_slice(&tree);

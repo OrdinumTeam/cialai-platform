@@ -86,6 +86,10 @@ pub trait ProcSource: Send + Sync {
     fn open_files(&self, pid: u32) -> Vec<String>;
     fn command_line(&self, pid: u32) -> Option<CommandLine>;
 
+    fn foreground_pid(&self, _shell_pid: u32) -> Option<u32> {
+        None
+    }
+
     fn descendants(&self, pid: u32) -> Vec<u32> {
         bounded_descendants(pid, |current| self.children(current))
     }
@@ -136,6 +140,10 @@ impl ProcSource for SystemProcs {
 
     fn command_line(&self, pid: u32) -> Option<CommandLine> {
         self.backend.command_line(pid)
+    }
+
+    fn foreground_pid(&self, shell_pid: u32) -> Option<u32> {
+        self.backend.foreground_pid(shell_pid)
     }
 }
 

@@ -158,6 +158,10 @@ impl Backend {
         let env = allowed_environment(process.environ());
         Some(CommandLine { exe, argv, env })
     }
+
+    pub(super) fn foreground_pid(&self, shell_pid: u32) -> Option<u32> {
+        read_stat(&self.proc_root, shell_pid)?.foreground_pgid
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -223,11 +227,6 @@ fn parse_stat(text: &str) -> Option<LinuxStat> {
         pgid,
         foreground_pgid,
     })
-}
-
-#[allow(dead_code)]
-pub(super) fn foreground_pid(pid: u32) -> Option<u32> {
-    read_stat(Path::new("/proc"), pid)?.foreground_pgid
 }
 
 fn state_from_code(code: char) -> ProcState {

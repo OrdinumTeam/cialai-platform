@@ -45,7 +45,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.9 a 4.8 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 | 5.1 Fonte de processos | Concluída localmente no macOS | `procs/` separa contrato portável, backend macOS e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. Linux e Windows continuam apenas preparados para 5.2 e 5.3 |
 | 5.2 Processos Linux | Implementada, execução Linux pendente | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`; os testes Linux serão executados no contêiner Ubuntu 22.04 da validação da fase |
-| 5.3 a 7.6 | Não iniciadas | O backend Windows, a matriz remota e os testes físicos continuam pendentes |
+| 5.3 Processos Windows | Implementada, compilação Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin` não está instalado neste host; a tentativa de compilação fica pendente da validação final ou da CI remota |
+| 5.4 a 7.6 | Não iniciadas | PTY portável, demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -309,6 +310,12 @@ Com `CARGO_TARGET_DIR=~/.cache/cialai-target`, os testes direcionados `workspace
 O stub Linux foi substituído por um snapshot compartilhado de `sysinfo` 0.36.1. `/proc/<pid>/task/*/children` fornece filhos quando legível, com fallback para o mapa de pais do snapshot; `/proc/<pid>/stat` preserva grupo e estados `T` e `t`; `smaps_rollup` fornece PSS com fallback para RSS; `cwd`, argv, ambiente permitido, executável e tempo acumulado de CPU vêm do mesmo snapshot; e `fd/*` fornece os arquivos abertos. O nome prefere o basename do executável ao `comm` truncado.
 
 No macOS, `cargo test --locked --lib workspace::procs` passou 10 casos e o teste de métricas com `FakeProcs` passou isoladamente. O Clippy com `-D warnings` voltou a apontar somente os seis diagnósticos conhecidos de `bridge/`, sem aviso no código da Fase 5. A execução real do backend e dos três testes condicionais a Linux foi deliberadamente deixada pendente para o contêiner Ubuntu 22.04 exigido na validação; até lá a tarefa está implementada, não verificada no Linux.
+
+### 12/09/2026, backend de processos Windows da tarefa 5.3
+
+O backend Windows usa o mesmo snapshot `sysinfo` para pais, CPU acumulada, cwd, argv, ambiente permitido, executável, início e estado. A memória prefere `PROCESS_MEMORY_COUNTERS_EX2::PrivateWorkingSetSize` e cai para o working set do `sysinfo`. A árvore une descendentes por ppid aos ids do Job Object; o primeiro plano estimado é a folha viva mais nova e nunca informa processo parado.
+
+`platform/win_job.rs` cria um Job Object anônimo com `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, atribui o shell assim que o ConPTY nasce, mantém um registro fraco por pid e expõe membros e término da árvore. No macOS, os 10 testes de `procs` e o caso de métricas por `FakeProcs` continuaram verdes, sem alteração dos avisos conhecidos de `bridge/`. `cargo-xwin` não está instalado e só o alvo `aarch64-apple-darwin` está presente; portanto o código Windows está preparado, mas ainda não foi compilado nem executado, e não é declarado como testado.
 
 ## Arquivos para retomar
 
