@@ -62,7 +62,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
 | 7.1 Atualizador | Preparado na frente C, assinatura pendente | Plugins Rust e JavaScript, interface em Preferências, artefatos do updater e endpoint `latest.json` configurados. O workflow exige os dois secrets e falha enquanto a chave pública mantiver o marcador. Nenhum artefato foi assinado ou publicado |
 | 7.2 Documentação pública | Implementada na frente C | README em inglês usa três capturas reais com dados fictícios; guias de contribuição e segurança, código de conduta e modelos de issue e PR foram revisados. O contato e o prazo de segurança permanecem marcados para confirmação |
-| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.3 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
+| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.4 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -540,6 +541,23 @@ O README público foi reescrito em inglês com descrição, recursos, estado hon
 `CONTRIBUTING.md` agora descreve toolchains, desenvolvimento, testes, Cargo com sidecar, commits, PRs, segurança e a distinção entre código preparado e evidência externa. `SECURITY.md` mantém contato, prazo de confirmação e versões suportadas marcados como `TO BE CONFIRMED BEFORE PUBLICATION`. `CODE_OF_CONDUCT.md` foi alinhado ao Contributor Covenant 2.1 com o contato também pendente. Os três modelos de issue e o modelo de PR passaram a pedir ambiente, evidência sanitizada e classificação dos testes.
 
 A skill `dev-browser-panel` orientou a tentativa de captura. Não havia porta local desta lane, e a porta global pertencia a outro workspace; nenhum navegador alheio foi controlado. Como o conteúdo principal não mudou desde a evidência versionada, as imagens existentes foram inspecionadas diretamente e reutilizadas. `npm run check:public-docs` terminou com código 0 e confirmou idioma, links, imagens com conteúdo real, marcadores de contato e modelos. `git diff --check` também passou. Nenhum dado privado foi aberto ou copiado.
+
+### 13/09/2026, materiais das lojas da tarefa 7.3 preparados na frente C
+
+Criadas políticas de privacidade em português e inglês em `docs/legal`. Elas descrevem processamento local, conexão entre aparelhos, responsabilidade da operação do Headscale, atualização manual pelo GitHub Releases, armazenamento, exclusão, permissões e contato ainda a confirmar. Os documentos distinguem dados que transitam a pedido da pessoa de coleta pela Ordinum.
+
+`docs/stores/app-store-privacy.md` propõe a resposta sem coleta do questionário da Apple. `docs/stores/google-play-data-safety.md` propõe ausência de coleta e compartilhamento para o AAB atual. As duas propostas exigem nova auditoria dos SDKs e do binário enviado. As orientações oficiais da Apple e do Google foram consultadas e ligadas nos documentos. Nenhuma resposta foi publicada.
+
+Os textos de loja seguem a separação do Advoris entre versão curta e longa. Há conteúdo em `pt-BR` e inglês para nome, subtítulo, promoção, descrição, novidades e campos dependentes do usuário. O check mediu 67 e 63 caracteres nas descrições breves, 1373 e 1282 nas descrições longas e 363 e 350 nas notas curtas. Todos ficam dentro dos limites registrados. O plano de capturas lista seis telas prioritárias e matrizes para iPhone, telefone Android, tablets e arte gráfica, todas pendentes do build nativo real e da interface em inglês.
+
+Comandos concluídos com código 0:
+
+```sh
+npm run check:store-metadata
+git diff --check
+```
+
+O check confirmou políticas bilíngues, marcadores de contato, respostas propostas, ausência do termo de risco nos textos de loja, limites de caracteres e tamanhos de captura. Nenhuma loja, conta, formulário, captura nativa ou política pública foi alterada.
 
 ## Arquivos para retomar
 
