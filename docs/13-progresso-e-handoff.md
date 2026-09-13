@@ -14,6 +14,8 @@ Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução
 
 Execução em andamento. A implementação local e os critérios automatizáveis da Fase 1 estão concluídos no macOS; o aceite humano de paridade permanece pendente. A Fase 0 ainda depende de infraestrutura e aparelhos externos.
 
+Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge**.
+
 | Tarefa | Estado | Evidência e próximo passo |
 | --- | --- | --- |
 | 0.1 Fundação | Base implementada e validada localmente | Git local em `main`, cinco workspaces, lockfile npm, Apache 2.0, NOTICE, guias, modelos, ignores, crate Rust e módulo Go. E-mail e prazo de segurança ainda precisam de confirmação antes da publicação |
@@ -55,7 +57,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.10 Diagnóstico e hook | Testes Rust verificados no macOS e Linux; execução Windows pendente | O log usa `app_log_dir`, Unix redireciona stderr por `dup2` e Windows usa `SetStdHandle`; o hook tem instaladores POSIX e PowerShell. Rust passou no Ubuntu e compilou para Windows, mas o instalador PowerShell não foi executado nativamente |
 | 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados e o teste parcial da 2.8 foi filtrado. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
 | 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
-| 5.11 a 5.14 e 5.17 a 7.6 | Não iniciadas | Demais backends, release, matriz remota e testes físicos continuam pendentes |
+| 5.19 Guia por plataforma | Concluída localmente | README traz preparação específica de macOS, Ubuntu e Windows; o guia 14 reúne janela, menu, fontes, terminal, processos, atalhos, caminhos, integrações, pacotes e o estado real de verificação |
+| 5.11 a 5.14, 5.17, 5.18 e 6.1 a 7.6 | Não iniciadas | Demais backends, release, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -432,6 +435,33 @@ git diff --check
 ```
 
 Nenhuma execução remota foi iniciada e nenhum artefato foi publicado. A parte `release.yml` da tarefa 5.16 não estava no escopo desta entrega da matriz e segue pendente. Os passos Playwright e `check:text` serão ligados depois que seus scripts existirem; até lá o workflow executa apenas comandos reais do repositório.
+
+### 13/09/2026, documentação por sistema da tarefa 5.19
+
+O README deixou de descrever crates vazios e passou a trazer preparação comum e
+instruções próprias para macOS, Ubuntu 22.04 e Windows. O novo documento
+`14-diferencas-por-plataforma.md` consolida diferenças de janela, menu, fontes,
+shell, processos, atalhos, caminhos, Dev Browser, LibreOffice e empacotamento.
+O índice aponta para essa referência.
+
+A tabela de evidências separa execução nativa, teste em contêiner e cross check.
+Windows continua explicitamente sem execução nativa, recursos do bundle,
+WebView2, ConPTY, instaladores ou assinatura validados. Linux visível, CI remota
+e instaladores também não foram promovidos a aprovados.
+
+`tools/check/platform-docs.mjs` foi escrito primeiro e falhou porque o guia ainda
+não existia. Depois da documentação, a guarda passou cobrindo as três seções de
+preparo, os comandos comuns, o índice e os principais contratos por sistema.
+
+Comandos concluídos com código 0:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run check:platform-docs
+git diff --check
+```
+
+Com isso, a parte Rust da branch `fase-5/rust-multiplataforma`, formada pelas
+tarefas 5.10, parte Rust da 5.15, matriz da 5.16 e 5.19, está pronta para merge.
 
 ## Arquivos para retomar
 
