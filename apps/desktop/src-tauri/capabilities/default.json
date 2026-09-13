@@ -13,6 +13,8 @@
     "dialog:allow-message",
     "dialog:allow-ask",
     "opener:default",
+    "updater:default",
+    "process:allow-restart",
     "window-state:default"
   ]
 }

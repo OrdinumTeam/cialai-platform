@@ -13,6 +13,7 @@ const jobs = {
       ['node', 'tools/check/onboarding.mjs'],
       ['node', 'tools/check/selftest.mjs'],
       ['node', 'tools/check/release-sidecar.mjs'],
+      ['node', 'tools/release/check-updater.mjs'],
       ['node', 'tools/build-tunnel.mjs', '--local'],
       ['npm', 'run', 'build:ui', '--workspace', '@cialai/desktop'],
       ['cargo', 'fmt', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--check'],

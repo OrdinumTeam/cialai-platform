@@ -29,11 +29,12 @@ assert.deepEqual(desktopTargets, ['aarch64-apple-darwin', 'x86_64-apple-darwin',
 assert.match(release, /--verify --target \$\{\{ matrix\.target \}\}/);
 assert.match(release, /tauri-apps\/tauri-action@v0/);
 assert.match(release, /releaseDraft: true/);
-assert.ok(!/secrets\.APPLE_|secrets\.AZURE_|TAURI_SIGNING/.test(release), 'Signing secrets belong to tasks 5.17 and 7.1');
+assert.match(release, /TAURI_SIGNING_PRIVATE_KEY/);
+assert.match(release, /check-updater\.mjs --release/);
 
 const desktopPackage = JSON.parse(read('apps/desktop/package.json'));
 assert.match(desktopPackage.scripts.dev, /^npm run sidecar && /);
 assert.match(desktopPackage.scripts.build, /^npm run sidecar && /);
 assert.equal(desktopPackage.scripts.sidecar, 'node ../../tools/build-tunnel.mjs --local');
 
-console.log('PASS release sidecar: five Go targets, Tauri externalBin, checksum verification and unsigned draft release');
+console.log('PASS release sidecar: five Go targets, Tauri externalBin, checksum verification and signed updater release');

@@ -60,7 +60,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
-| 3.9, 3.10, 4.7, 4.8 e 5.1 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 7.1 Atualizador | Preparado na frente C, assinatura pendente | Plugins Rust e JavaScript, interface em Preferências, artefatos do updater e endpoint `latest.json` configurados. O workflow exige os dois secrets e falha enquanto a chave pública mantiver o marcador. Nenhum artefato foi assinado ou publicado |
+| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.2 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -510,6 +511,26 @@ Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testa
 | 6 Todas as plataformas | Não iniciada | 0% |
 | 7 Lançamento | Não iniciada | 0% |
 | Total | Soma ponderada | cerca de 48%, ou 57% quando a frente da Fase 5 entrar com o que já tem |
+
+### 13/09/2026, atualizador da tarefa 7.1 preparado na frente C
+
+Adicionados `tauri-plugin-updater` 2.11.0 e `tauri-plugin-process` 2.3.1 ao desktop e os pacotes JavaScript correspondentes à interface. Preferências mostra a versão atual, busca sob demanda, disponibilidade, progresso da transferência, instalação assinada e reinício. `tauri.conf.json` cria os artefatos do updater e aponta para `latest.json` na release mais recente do GitHub. O workflow recebe `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` somente pelos secrets.
+
+A chave pública continua com o marcador `REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY`. `tools/release/check-updater.mjs` aprovou o contrato local e, com `--release`, falhou de propósito nesse marcador antes de qualquer build. O comando para gerar o par fora do repositório e a configuração dos secrets estão em `tools/release/README.md`.
+
+Comandos concluídos com código 0:
+
+```sh
+node tools/release/check-updater.mjs
+npm run test:ui
+npm run sidecar --workspace @cialai/desktop
+npm run build:mobile-resource --workspace @cialai/desktop
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2
+git diff --check
+```
+
+Resultados: 17 casos de sincronização e 46 checks de UI passaram; o recurso móvel teve 130 assets validados; o sidecar local foi recompilado; o crate com os plugins novos compilou. A release do GitHub, a assinatura, o download de `latest.json` e a instalação de uma atualização não foram executados e continuam dependentes do usuário e da infraestrutura externa.
 
 ## Arquivos para retomar
 

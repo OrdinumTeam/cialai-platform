@@ -26,6 +26,8 @@ pub fn run() {
     diagnostics::install();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .register_uri_scheme_protocol(workspace::preview::SCHEME, |context, request| {
             let roots = context
                 .app_handle()
