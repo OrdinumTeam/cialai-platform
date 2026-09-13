@@ -2,6 +2,7 @@
 import * as remote from './remote.js';
 import { createNativeBridge, NATIVE_ONLY_MESSAGE } from '@cialai/protocol/native';
 import { authorizeNative, resetTerminalAuthorization } from './sensitive.js';
+import { platform } from './platform.js';
 export { NATIVE_ONLY_MESSAGE };
 remote.subscribeState((value) => { if (value.status !== 'connected') resetTerminalAuthorization(); });
 
@@ -151,10 +152,15 @@ export async function closeCurrentWindow() {
 // projeto, usada pelo visualizador de HTML: a raiz vira o host, entao
 // caminhos absolutos e relativos da pagina resolvem como num servidor.
 // Fora do app devolve null.
+export function previewAddress(token, relative, os = platform().os) {
+  const path = String(relative || '').split('/').map((part) => encodeURIComponent(part)).join('/');
+  if (os === 'windows') return `http://preview.localhost/${encodeURIComponent(token)}/${path}`;
+  return `preview://${encodeURIComponent(token)}/${path}`;
+}
+
 export async function previewUrl(root, relative) {
   if (!isTauri()) return null;
   const token = await invoke('preview_register', { root });
   if (!token) return null;
-  const path = String(relative || '').split('/').map((part) => encodeURIComponent(part)).join('/');
-  return `preview://${token}/${path}`;
+  return previewAddress(token, relative);
 }

@@ -31,7 +31,7 @@ impl PreviewRoots {
         if !path.is_absolute() || !path.is_dir() {
             return Err("Pasta do projeto não encontrada".to_string());
         }
-        let canonical = path.canonicalize().map_err(|error| error.to_string())?;
+        let canonical = dunce::canonicalize(&path).map_err(|error| error.to_string())?;
         let token = token_for(&canonical);
         let mut roots = self
             .roots
@@ -124,14 +124,27 @@ fn respond(status: StatusCode, mime: &str, body: Vec<u8>) -> Response<Cow<'stati
         .unwrap_or_else(|_| Response::new(Cow::Borrowed(&[][..])))
 }
 
-/// Atende `preview://<token>/<caminho>`. Pasta vira `index.html`.
+/// Atende `preview://<token>/<caminho>` e a forma que o WebView2 entrega no
+/// Windows, `http://preview.localhost/<token>/<caminho>`. Pasta vira
+/// `index.html`.
 pub fn handle(roots: &PreviewRoots, request: Request<Vec<u8>>) -> Response<Cow<'static, [u8]>> {
     let uri = request.uri();
-    let Some(token) = uri.host() else {
+    let route = if uri.scheme_str() == Some(SCHEME) {
+        uri.host().map(|token| (token, uri.path()))
+    } else if uri.scheme_str() == Some("http") && uri.host() == Some("preview.localhost") {
+        let mut parts = uri.path().trim_start_matches('/').splitn(2, '/');
+        parts.next().filter(|token| !token.is_empty()).map(|token| {
+            let path = parts.next().unwrap_or_default();
+            (token, path)
+        })
+    } else {
+        None
+    };
+    let Some((token, request_path)) = route else {
         return respond(
             StatusCode::BAD_REQUEST,
             "text/plain; charset=utf-8",
-            b"host ausente".to_vec(),
+            b"origem invalida".to_vec(),
         );
     };
     let Some(root) = roots.resolve(token) else {
@@ -141,13 +154,13 @@ pub fn handle(roots: &PreviewRoots, request: Request<Vec<u8>>) -> Response<Cow<'
             b"projeto nao registrado".to_vec(),
         );
     };
-    let raw_path = percent_decode(uri.path());
+    let raw_path = percent_decode(request_path);
     let relative = raw_path.trim_start_matches('/');
     let mut target = root.join(relative);
     if relative.is_empty() || raw_path.ends_with('/') || target.is_dir() {
         target = target.join("index.html");
     }
-    let Ok(canonical) = target.canonicalize() else {
+    let Ok(canonical) = dunce::canonicalize(&target) else {
         return respond(
             StatusCode::NOT_FOUND,
             "text/plain; charset=utf-8",
@@ -205,6 +218,13 @@ mod tests {
         assert_eq!(css.status(), StatusCode::OK);
         assert_eq!(css.headers()["Content-Type"], "text/css; charset=utf-8");
         assert_eq!(&css.body()[..], b"body{}");
+        let windows_request = Request::builder()
+            .uri(format!(
+                "http://preview.localhost/{token}/assets/css/main.css"
+            ))
+            .body(Vec::new())
+            .unwrap();
+        assert_eq!(handle(&roots, windows_request).status(), StatusCode::OK);
         assert_ne!(
             get("/../segredo.txt").status(),
             StatusCode::OK,
