@@ -9,7 +9,7 @@
 //!
 //! Gravacao: `write_text` compara a data de modificacao que o editor leu com
 //! a atual e recusa quando o arquivo mudou por fora, sem tocar no disco.
-//! Excluir move para a Lixeira pelo `NSFileManager`, como o Finder.
+//! Excluir move para a Lixeira nativa de cada sistema.
 
 use std::collections::HashMap;
 use std::fs;
@@ -20,6 +20,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use base64::Engine;
 use serde::Serialize;
+
+use crate::platform::to_portable;
 
 /// Teto de entradas devolvidas por diretorio. Pastas maiores vem cortadas e
 /// marcadas, para o webview nao montar milhares de linhas de uma vez.
@@ -69,10 +71,7 @@ const SKIP_DIRS: &[&str] = &[
 ];
 const KEEP_HIDDEN_DIRS: &[&str] = &[".github", ".vscode", ".claude", ".codex", ".agents", ".ia"];
 
-/// Sujeira que o macOS espalha e que nunca interessa na arvore: o `.DS_Store`
-/// que o Finder grava em toda pasta visitada, os arquivos de recurso `._nome`
-/// de volumes sem metadados, e os indices de Spotlight e da Lixeira. Some da
-/// listagem e da busca; nada e apagado.
+/// Sujeira do sistema que some da listagem e da busca. Nada e apagado.
 const MACOS_NOISE: &[&str] = &[
     ".DS_Store",
     ".localized",
@@ -85,9 +84,32 @@ const MACOS_NOISE: &[&str] = &[
     ".VolumeIcon.icns",
     "Icon\r",
 ];
+const LINUX_NOISE: &[&str] = &[".directory"];
+const WINDOWS_NOISE: &[&str] = &[
+    "Thumbs.db",
+    "desktop.ini",
+    "$RECYCLE.BIN",
+    "System Volume Information",
+];
 
-fn is_macos_noise(name: &str) -> bool {
-    MACOS_NOISE.contains(&name) || name.starts_with("._")
+fn is_noise_for(os: &str, name: &str) -> bool {
+    match os {
+        "macos" => MACOS_NOISE.contains(&name) || name.starts_with("._"),
+        "linux" => {
+            MACOS_NOISE.contains(&name)
+                || name.starts_with("._")
+                || LINUX_NOISE.contains(&name)
+                || name.starts_with(".Trash-")
+        }
+        "windows" => WINDOWS_NOISE
+            .iter()
+            .any(|noise| noise.eq_ignore_ascii_case(name)),
+        _ => false,
+    }
+}
+
+fn is_noise(name: &str) -> bool {
+    is_noise_for(std::env::consts::OS, name)
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -251,7 +273,7 @@ pub fn list_dir(path: &str, limit: Option<usize>) -> FsResult<Listing> {
     let mut entries: Vec<Entry> = Vec::new();
     let mut total = 0usize;
     for item in read.flatten() {
-        if is_macos_noise(&item.file_name().to_string_lossy()) {
+        if is_noise(&item.file_name().to_string_lossy()) {
             continue;
         }
         total += 1;
@@ -279,7 +301,7 @@ pub fn list_dir(path: &str, limit: Option<usize>) -> FsResult<Listing> {
         let name = item.file_name().to_string_lossy().to_string();
         entries.push(Entry {
             hidden: name.starts_with('.'),
-            path: full.to_string_lossy().to_string(),
+            path: to_portable(&full),
             name,
             kind,
             target_kind,
@@ -298,7 +320,7 @@ pub fn list_dir(path: &str, limit: Option<usize>) -> FsResult<Listing> {
     let truncated = entries.len() > limit;
     entries.truncate(limit);
     Ok(Listing {
-        path: dir.to_string_lossy().to_string(),
+        path: to_portable(&dir),
         entries,
         total,
         truncated,
@@ -309,14 +331,14 @@ pub fn stat(path: &str) -> FsResult<FileStat> {
     let target = absolute(path)?;
     match fs::metadata(&target) {
         Ok(meta) => Ok(FileStat {
-            path: target.to_string_lossy().to_string(),
+            path: to_portable(&target),
             exists: true,
             kind: Some(kind_of(meta.file_type())),
             size: meta.len(),
             modified_ms: modified_ms(&meta),
         }),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(FileStat {
-            path: target.to_string_lossy().to_string(),
+            path: to_portable(&target),
             exists: false,
             kind: None,
             size: 0,
@@ -374,7 +396,7 @@ pub fn read_text(path: &str) -> FsResult<TextFile> {
         "lf"
     };
     Ok(TextFile {
-        path: target.to_string_lossy().to_string(),
+        path: to_portable(&target),
         size: meta.len(),
         modified_ms: modified_ms(&meta),
         line_ending: line_ending.to_string(),
@@ -406,7 +428,7 @@ pub fn write_text(
     let meta = fs::metadata(&target)
         .map_err(|error| FsError::io(error, "Não foi possível conferir o arquivo salvo"))?;
     Ok(WriteResult {
-        path: target.to_string_lossy().to_string(),
+        path: to_portable(&target),
         size: meta.len(),
         modified_ms: modified_ms(&meta),
     })
@@ -445,7 +467,7 @@ pub fn read_image(path: &str) -> FsResult<ImageFile> {
         fs::read(&target).map_err(|error| FsError::io(error, "Não foi possível ler a imagem"))?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     Ok(ImageFile {
-        path: target.to_string_lossy().to_string(),
+        path: to_portable(&target),
         data_url: format!("data:{mime};base64,{encoded}"),
         size: meta.len(),
         modified_ms: modified_ms(&meta),
@@ -492,7 +514,7 @@ pub fn create_file(path: &str) -> FsResult<FileStat> {
     }
     fs::write(&target, b"")
         .map_err(|error| FsError::io(error, "Não foi possível criar o arquivo"))?;
-    stat(&target.to_string_lossy())
+    stat(&to_portable(&target))
 }
 
 pub fn create_dir(path: &str) -> FsResult<FileStat> {
@@ -500,14 +522,14 @@ pub fn create_dir(path: &str) -> FsResult<FileStat> {
     ensure_missing(&target)?;
     fs::create_dir_all(&target)
         .map_err(|error| FsError::io(error, "Não foi possível criar a pasta"))?;
-    stat(&target.to_string_lossy())
+    stat(&to_portable(&target))
 }
 
 pub fn rename(from: &str, to: &str) -> FsResult<FileStat> {
     let source = absolute(from)?;
     let target = absolute(to)?;
     if source == target {
-        return stat(&target.to_string_lossy());
+        return stat(&to_portable(&target));
     }
     ensure_not_inside(&source, &target, "mover")?;
     // Trocar so a caixa do nome e valido num sistema de arquivos que nao
@@ -518,7 +540,7 @@ pub fn rename(from: &str, to: &str) -> FsResult<FileStat> {
         ensure_missing(&target)?;
     }
     fs::rename(&source, &target).map_err(|error| FsError::io(error, "Não foi possível mover"))?;
-    stat(&target.to_string_lossy())
+    stat(&to_portable(&target))
 }
 
 /// Uma pasta nunca pode ir para dentro dela mesma. O `rename` do sistema ja
@@ -557,7 +579,7 @@ pub fn copy(from: &str, to: &str) -> FsResult<FileStat> {
     ensure_not_inside(&source, &target, "copiar")?;
     ensure_missing(&target)?;
     copy_entry(&source, &target, metadata.file_type(), 0)?;
-    stat(&target.to_string_lossy())
+    stat(&to_portable(&target))
 }
 
 fn copy_entry(source: &Path, target: &Path, file_type: fs::FileType, depth: usize) -> FsResult<()> {
@@ -567,8 +589,19 @@ fn copy_entry(source: &Path, target: &Path, file_type: fs::FileType, depth: usiz
     if file_type.is_symlink() {
         let link = fs::read_link(source)
             .map_err(|error| FsError::io(error, "Não foi possível ler o link"))?;
-        return std::os::unix::fs::symlink(link, target)
-            .map_err(|error| FsError::io(error, "Não foi possível recriar o link"));
+        #[cfg(unix)]
+        {
+            return std::os::unix::fs::symlink(link, target)
+                .map_err(|error| FsError::io(error, "Não foi possível recriar o link"));
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = link;
+            return Err(FsError::new(
+                "unsupported",
+                "Cópia de links simbólicos indisponível neste sistema",
+            ));
+        }
     }
     if !file_type.is_dir() {
         fs::copy(source, target)
@@ -592,8 +625,8 @@ fn copy_entry(source: &Path, target: &Path, file_type: fs::FileType, depth: usiz
     Ok(())
 }
 
-/// Move para a Lixeira pelo Finder. Se o NSFileManager recusar, o erro volta
-/// ao frontend; nada e apagado em definitivo por aqui.
+/// Move para a Lixeira nativa. Se o sistema recusar, o erro volta ao frontend
+/// e nada e apagado em definitivo por aqui.
 pub fn trash(path: &str) -> FsResult<()> {
     let target = absolute(path)?;
     if fs::symlink_metadata(&target).is_err() {
@@ -614,11 +647,8 @@ fn trash_native(target: &Path) -> FsResult<()> {
 }
 
 #[cfg(not(target_os = "macos"))]
-fn trash_native(_target: &Path) -> FsResult<()> {
-    Err(FsError::new(
-        "unsupported",
-        "Lixeira disponível só no macOS",
-    ))
+fn trash_native(target: &Path) -> FsResult<()> {
+    trash::delete(target).map_err(|error| FsError::new("trash", error.to_string()))
 }
 
 /* ── busca por nome ────────────────────────────────────────────────── */
@@ -675,14 +705,14 @@ fn build_index(root: &Path) -> RootIndex {
                 continue;
             };
             let name = item.file_name().to_string_lossy().to_string();
-            if is_macos_noise(&name) {
+            if is_noise(&name) {
                 continue;
             }
             let path = item.path();
             let relative = path
                 .strip_prefix(root)
-                .map(|value| value.to_string_lossy().to_string())
-                .unwrap_or_else(|_| path.to_string_lossy().to_string());
+                .map(to_portable)
+                .unwrap_or_else(|_| to_portable(&path));
             if file_type.is_dir() {
                 if skip_dir(&name) {
                     continue;
@@ -802,13 +832,13 @@ pub fn find(
         .into_iter()
         .take(limit)
         .map(|(_, entry)| Found {
-            path: root.join(&entry.relative).to_string_lossy().to_string(),
+            path: to_portable(root.join(&entry.relative)),
             relative: entry.relative.clone(),
             kind: entry.kind,
         })
         .collect();
     Ok(FindResult {
-        root: root.to_string_lossy().to_string(),
+        root: to_portable(&root),
         items,
         truncated: index.truncated,
     })
@@ -860,7 +890,21 @@ mod tests {
     }
 
     #[test]
-    fn hides_macos_noise() {
+    fn noise_table_is_specific_to_each_system() {
+        assert!(is_noise_for("macos", ".DS_Store"));
+        assert!(is_noise_for("macos", "._nota.md"));
+        assert!(!is_noise_for("macos", ".directory"));
+        assert!(is_noise_for("linux", ".directory"));
+        assert!(is_noise_for("linux", ".Trash-1000"));
+        assert!(!is_noise_for("linux", "Thumbs.db"));
+        assert!(is_noise_for("windows", "Thumbs.db"));
+        assert!(is_noise_for("windows", "desktop.ini"));
+        assert!(is_noise_for("windows", "$RECYCLE.BIN"));
+        assert!(!is_noise_for("windows", ".directory"));
+    }
+
+    #[test]
+    fn hides_current_platform_noise() {
         let dir = sandbox("lixo");
         fs::write(dir.join(".DS_Store"), "x").unwrap();
         fs::write(dir.join("._nota.md"), "x").unwrap();

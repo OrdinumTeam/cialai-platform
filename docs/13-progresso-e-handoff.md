@@ -49,7 +49,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.4 PTY por sistema | Concluída localmente no macOS; Windows pendente | `pty/` centraliza spawn, foreground e encerramento; `TestShell` elimina perfis nos testes e o Windows usa Job Object com encerramento gracioso seguido de término forçado após 400 ms. A variante Windows ainda não foi compilada nem executada |
 | 5.5 Retomada por shell | Concluída localmente no macOS; Windows pendente | Comandos de retomada cobrem POSIX, PowerShell e cmd; wrappers `.exe` e `.cmd` são reconhecidos, e a reserva do Codex seleciona rollout por cwd canônico e mtime. `shellQuote` compartilha os três contratos no frontend |
 | 5.6 Observador de arquivos | Concluída localmente no macOS; Linux e Windows pendentes | `watch/` mantém contagem de referências e coalescimento comum, usa kqueue no macOS e `notify` 8 com observação não recursiva no Linux e Windows. Escrita, troca atômica e remoção passaram no macOS; os outros backends aguardam a matriz da fase |
-| 5.7 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.7 Arquivos portáveis | Concluída localmente no macOS; lixeira Linux e Windows pendente | Caminhos devolvidos usam barras normais, entradas preservam as duas formas aceitas no Windows, a sujeira é filtrada por sistema, links são recriados somente no Unix e `trash` 5 cobre Linux e Windows sem apagar quando a lixeira recusa |
+| 5.8 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -337,6 +338,12 @@ No macOS, `cargo fmt --check` e `git diff --check` passaram. Os filtros `workspa
 O contrato de `workspace::watch` foi movido para um módulo comum com contagem de referências, coalescimento de 80 ms e limite de rajada de 400 ms. O backend macOS conserva kqueue e reabre o caminho depois de troca atômica. Linux e Windows usam `notify` 8, com inotify por caminho não recursivo no Linux e observação da pasta pai filtrada pelo nome no Windows.
 
 Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib workspace::watch` passou 2/2 no macOS, cobrindo escrita, troca atômica, remoção, coalescimento e referências. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados em `bridge/`; não houve aviso em `workspace/watch`. `cargo fmt` e `git diff --check` passaram. Os backends `notify` ainda não foram compilados nem executados e serão validados no Ubuntu e, se viável, por `cargo-xwin`.
+
+### 12/09/2026, arquivos portáveis da tarefa 5.7
+
+Todos os caminhos estruturados devolvidos por `workspace::files` passam por `platform::to_portable`, inclusive listagem, estatística, leitura, escrita, imagem e busca. A tabela de sujeira distingue macOS, Linux e Windows; Linux acrescenta `.directory` e `.Trash-*`, enquanto Windows filtra os quatro artefatos de sistema previstos. A cópia recria links simbólicos somente no Unix. A lixeira continua nativa pelo `NSFileManager` no macOS e usa `trash` 5 no Linux e Windows, sempre devolvendo o erro `trash` sem exclusão definitiva quando o sistema recusa.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib workspace::files` passou 9/9 no macOS, incluindo a lixeira real e a preservação do arquivo se ela recusasse. `node packages/ui/scripts/check-platform.mjs`, executado com Node 22.23.2 e npm 10.9.8, passou 3/3 para separadores e citações dos três shells. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis diagnósticos conhecidos de `bridge/`. A lixeira Linux e Windows ainda não foi executada.
 
 ## Arquivos para retomar
 
