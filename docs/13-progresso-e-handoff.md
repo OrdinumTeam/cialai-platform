@@ -48,7 +48,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.3 Processos Windows | Implementada, compilação Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin` não está instalado neste host; a tentativa de compilação fica pendente da validação final ou da CI remota |
 | 5.4 PTY por sistema | Concluída localmente no macOS; Windows pendente | `pty/` centraliza spawn, foreground e encerramento; `TestShell` elimina perfis nos testes e o Windows usa Job Object com encerramento gracioso seguido de término forçado após 400 ms. A variante Windows ainda não foi compilada nem executada |
 | 5.5 Retomada por shell | Concluída localmente no macOS; Windows pendente | Comandos de retomada cobrem POSIX, PowerShell e cmd; wrappers `.exe` e `.cmd` são reconhecidos, e a reserva do Codex seleciona rollout por cwd canônico e mtime. `shellQuote` compartilha os três contratos no frontend |
-| 5.6 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.6 Observador de arquivos | Concluída localmente no macOS; Linux e Windows pendentes | `watch/` mantém contagem de referências e coalescimento comum, usa kqueue no macOS e `notify` 8 com observação não recursiva no Linux e Windows. Escrita, troca atômica e remoção passaram no macOS; os outros backends aguardam a matriz da fase |
+| 5.7 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -330,6 +331,12 @@ No macOS, `cargo fmt --check` e `git diff --check` passaram. Os filtros `workspa
 `resume_command` agora recebe `ShellFlavor`: POSIX preserva `cd` e variáveis prefixadas; PowerShell usa `Set-Location -LiteralPath` e `$env:`; cmd usa `cd /d` e `set "CHAVE=valor"`. No cmd essas variáveis intencionalmente permanecem no ambiente do shell depois que o agente encerra. `program_args` normaliza nomes sem distinguir caixa e reconhece `node.exe` e executáveis `.cmd`. O fallback necessário no Windows percorre no máximo 4096 entradas sob `<CODEX_HOME>/sessions`, ignora links, exige `session_meta` na primeira linha, cwd canônico igual e mtime não anterior ao processo, então escolhe o rollout mais recente; duas instâncias do Codex na mesma pasta permanecem uma ambiguidade documentada.
 
 `packages/ui/src/terminals/files.js::shellQuote(path, flavor)`, que já tinha os três braços preparados, passou a também citar valores iniciados por `=` de modo coerente com o Rust. O teste Node `check-platform.mjs` passou 3/3 com Node 22.23.2. No macOS, `cargo test ... workspace::resume` passou 11/11 e `cargo fmt --check`/`git diff --check` passaram; o Clippy completo voltou a falhar somente nos seis diagnósticos conhecidos de `bridge/`, sem aviso desta tarefa. Dois preflights ficaram poucos MiB abaixo de 5 GiB depois das compilações; nenhuma compilação grande foi iniciada nessas condições. Duas limpezas limitadas ao pacote `cialai-desktop` removeram respectivamente 1,5 e 1,7 GiB de artefatos recompiláveis antes de retomar com mais de 6 GiB. PowerShell e cmd foram verificados como strings em testes portáveis, não executados no Windows.
+
+### 12/09/2026, observador de arquivos multiplataforma da tarefa 5.6
+
+O contrato de `workspace::watch` foi movido para um módulo comum com contagem de referências, coalescimento de 80 ms e limite de rajada de 400 ms. O backend macOS conserva kqueue e reabre o caminho depois de troca atômica. Linux e Windows usam `notify` 8, com inotify por caminho não recursivo no Linux e observação da pasta pai filtrada pelo nome no Windows.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --lib workspace::watch` passou 2/2 no macOS, cobrindo escrita, troca atômica, remoção, coalescimento e referências. `cargo clippy --locked --all-targets -- -D warnings` chegou ao crate e falhou somente nos seis diagnósticos já registrados em `bridge/`; não houve aviso em `workspace/watch`. `cargo fmt` e `git diff --check` passaram. Os backends `notify` ainda não foram compilados nem executados e serão validados no Ubuntu e, se viável, por `cargo-xwin`.
 
 ## Arquivos para retomar
 
