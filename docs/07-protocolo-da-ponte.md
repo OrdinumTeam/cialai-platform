@@ -2,6 +2,18 @@
 
 A ponte é o servidor WebSocket em Rust, em `macos/src-tauri/src/bridge/` no Control, que expõe à página do celular os mesmos comandos que o webview do desktop chama por IPC do Tauri. O Cialai preserva o protocolo da versão 1 e o estende com autenticação por dispositivo. Este documento é a fonte única do contrato; `packages/protocol` guarda fixtures JSON compartilhadas pelos testes em Go, Rust e JavaScript.
 
+## Estado em 13/09/2026
+
+| Parte | Estado | Situação atual |
+| --- | --- | --- |
+| Servidor e protocolo Rust | Implementado | Handshake, limites, lista permitida, ordem, replay e códigos de fechamento passam na suíte local |
+| Segredo da borda e identidade do dispositivo | Implementado | Cabeçalhos, autenticação e `welcome` estendido estão integrados e testados |
+| Esquema e fixtures compartilhados | Implementado | `packages/protocol` valida mensagens e compatibilidade da versão 1 |
+| Transporte remoto JavaScript | Implementado | Delegação, canais, reconexão e recusa após revogação passam nos checks Node |
+| Extensão `terminal-mobile-v1` | Implementado | Apresentação, concessão e leitura restrita de arquivos têm testes locais |
+| Revogação ponta a ponta simulada | Implementado | Fechamento 4401 e ausência de retentativa foram verificados sem aparelho |
+| Verificação com celular e rede reais | Pendente | Os roteiros imprimíveis não têm resultados de iPhone ou Android |
+
 ## Onde vive
 
 | Parte | Origem no Control | Destino no Cialai |

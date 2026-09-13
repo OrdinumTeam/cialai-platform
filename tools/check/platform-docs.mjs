@@ -17,7 +17,7 @@ for (const heading of ['### macOS', '### Linux', '### Windows']) {
 for (const required of [
   'npm run sidecar --workspace @cialai/desktop',
   'npm test',
-  'Execução nativa no Windows segue pendente',
+  'Windows has only a Rust cross check so far',
   'docs/14-diferencas-por-plataforma.md',
 ]) {
   assert.ok(

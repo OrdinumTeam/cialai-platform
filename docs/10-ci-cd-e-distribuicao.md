@@ -1,20 +1,39 @@
 # CI, CD e distribuição
 
-Desktop, núcleo do túnel e interface passam pelo GitHub Actions, gratuito para repositório público e com `tauri-action`. Os celulares passam pelo Codemagic, o padrão da Ordinum para as lojas, copiando os workflows do Control e do Advoris. Nenhum valor de credencial aparece aqui; a seção de credenciais diz onde cada valor vive.
+A distribuição foi desenhada com GitHub Actions para desktop, núcleo do túnel e interface, e Codemagic para os celulares. Nenhum valor de credencial aparece aqui; a seção de credenciais registra somente nomes, destinos e responsabilidades.
 
-Estado da execução em 13/09/2026: `ci.yml` tem a matriz local de produto para Ubuntu, Windows e macOS, com bundle sem assinatura e artefatos; `spike-headscale.yml` cobre o experimento da Fase 0. Ambos permanecem sem execução remota. Go usa a versão do `go.mod` e Rust está fixado em 1.98.1. Os checks Playwright e de texto entram quando seus scripts forem entregues. Release, Codemagic e lojas continuam planejados.
+## Estado em 13/09/2026
+
+| Item | Estado | Situação atual |
+| --- | --- | --- |
+| `ci.yml` | Preparado | Matriz Ubuntu 22.04, Windows 2022 e macOS 14 com sidecar local, `npm test`, bundle sem assinatura e artefatos por sistema está versionada; nenhuma execução remota foi observada |
+| `spike-headscale.yml` | Preparado | Contrato existe e o spike passou localmente; execução no GitHub não foi observada |
+| `headscale-integration.yml` | Preparado | Workflow e integração Docker existem; o gate remoto no SHA da candidata está pendente |
+| `release.yml` | Preparado | Matriz desktop, cinco sidecars, updater e rascunho existem; assinaturas de plataforma, publicação dos sidecars brutos e execução por tag continuam pendentes |
+| `nightly-e2e.yml` | Pendente | O workflow ainda não existe nesta linha |
+| `mobile-artifacts.yml` | Pendente | O workflow dedicado ao XCFramework e ao AAR ainda não existe; Codemagic pode compilar os bindings no runner |
+| `ios-testflight`, `ios-archive` e `android-play` | Preparado | Configuração e checks locais existem; apps, integrações, credenciais, builds e uploads não foram executados |
+| Scripts em `tools/release` | Implementado | Contratos locais, modo de ensaio e guardas estão versionados e testados sem credenciais reais |
+| Atualizador do desktop | Preparado | Plugin, artefatos, endpoint e secrets estão configurados; a chave pública provisória bloqueia a release |
+| Identificadores públicos | Preparado | Bundle, Team ID e nomes estão documentados; os registros dos apps e ids resultantes dependem do usuário |
+| Credenciais | Pendente | Somente nomes e locais esperados estão versionados; nenhum valor foi criado ou copiado para o repositório |
+| Materiais das lojas | Preparado | Políticas, respostas, textos, capturas planejadas e notas de revisão existem; URLs publicadas e formulários estão pendentes |
+| Release `v1.0.0` | Preparado | `CHANGELOG.md`, procedimento e guarda existem com seis gates pendentes; nenhuma tag ou release foi criada |
+
+Go está fixado em 1.26.5 pela decisão 022 e Rust em 1.98.1. As tabelas seguintes descrevem o contrato completo. O estado acima prevalece quando um workflow ou serviço ainda não foi executado.
 
 ## GitHub Actions
 
 | Workflow | Gatilho | Passos |
 | --- | --- | --- |
-| `ci.yml` | push, PR e manual | Matriz `ubuntu-22.04`, `windows-2022`, `macos-14`; `actions/setup-node` 22, `dtolnay/rust-toolchain` 1.98.1, `actions/setup-go` pela versão do `go.mod`; no Linux instala `libwebkit2gtk-4.1-dev`, GTK, AppIndicator, SVG, `patchelf`, XDo, OpenSSL e zsh; `npm ci`; build do sidecar local; `npm test` para as suítes existentes; `tauri build` sem assinatura; dmg, AppImage, deb, rpm, nsis e msi anexados ao run. `CARGO_BUILD_JOBS=2` limita Rust. Playwright e `check:text` ainda aguardam seus scripts |
-| `release.yml` | tag `v*` | Compila o sidecar para os cinco triplos com `CGO_ENABLED=0 -trimpath -ldflags="-s -w"`; matriz `macos-14`, `macos-13`, `ubuntu-22.04`, `windows-2022`; `tauri-apps/tauri-action` gerando dmg, nsis, msi, AppImage, deb e rpm; assinatura Developer ID e notarização por `notarytool` no macOS; Authenticode por Azure Trusted Signing no Windows; assinatura do updater; release no GitHub com `latest.json`, SHA-256 e notas do `CHANGELOG.md` |
-| `headscale-integration.yml` | push em `packages/tunnel-core` e diário | `ubuntu-22.04` com Docker; `go test -tags integration ./integration` contra `headscale/headscale:0.29.3` |
-| `nightly-e2e.yml` | diário | `selftest-app.js` por `tauri-driver` sob `xvfb-run` no Linux e com `msedgedriver` no Windows; capturas da demo por Playwright anexadas |
-| `mobile-artifacts.yml` | tag `v*` e manual | `gomobile bind` para iOS no `macos-14` e Android no `ubuntu-22.04`; publica `Tunnelcore.xcframework.zip` e `tunnelcore.aar` com SHA-256 como artefatos da release, consumidos pelo Codemagic |
+| `ci.yml` | push, PR e manual | Matriz `ubuntu-22.04`, `windows-2022` e `macos-14`; Node, npm, Rust 1.98.1 e Go pelo `go.mod`; no Linux instala WebKitGTK 4.1, GTK, AppIndicator, SVG, `patchelf`, XDo, OpenSSL e zsh; `npm ci`; build do sidecar local; `npm test`; `tauri build` sem assinatura; dmg, AppImage, deb, rpm, nsis e msi anexados ao run. `CARGO_BUILD_JOBS=2` limita Rust. Playwright e `check:text` ainda aguardam seus scripts, e o workflow não substitui os testes físicos |
+| `release.yml` | tag `v*` e manual | Bloqueia a chave pública provisória e secrets vazios; testa e compila cinco sidecars; entrega o artefato à matriz `macos-14`, `macos-13`, `ubuntu-22.04` e `windows-2022`; `tauri-action` compila os bundles e mantém a release em rascunho. Assinatura de plataforma, sidecars brutos, hashes, notas do changelog e artefatos móveis ainda não estão completos no workflow |
+| `headscale-integration.yml` | mudanças no túnel, diário e manual | `ubuntu-22.04` com Docker; vet e integração contra `headscale/headscale:0.29.3` com prazo de doze minutos |
+| `spike-headscale.yml` | PR no túnel e manual | Executa o spike de política e expiração com Headscale 0.29.3 no Linux |
+| `nightly-e2e.yml` | Planejado para execução diária | Ainda ausente; deve executar o self test no Linux e no Windows e anexar evidências |
+| `mobile-artifacts.yml` | Planejado para tag e manual | Ainda ausente; deve publicar `Tunnelcore.xcframework.zip`, `tunnelcore.aar` e hashes para a release |
 
-Segredos do GitHub, nomes: `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`, `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_CERT_PROFILE`, `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Builds de PR nunca recebem segredos.
+O workflow atual referencia somente `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Os nomes planejados para Developer ID, notarização e Azure Trusted Signing ainda precisam ser ligados ao workflow sem expor valores. Builds de PR nunca devem receber secrets.
 
 ## Codemagic
 
@@ -22,9 +41,9 @@ Três workflows em `codemagic.yaml`, no padrão de `$CONTROL/codemagic.yaml` e `
 
 | Workflow | Passos | Publicação |
 | --- | --- | --- |
-| `ios-testflight` | Validar `APP_STORE_APP_ID` e `CERTIFICATE_PRIVATE_KEY`; baixar o xcframework da release pelo SHA-256 ou compilar com Go e `gomobile` no próprio runner; `npm ci`, `typecheck`, `lint`, `jest --runInBand`, `swift tools/release/check-app-icon.swift apps/mobile/assets/icon.png`, `bash tools/release/cm-build-number.test.sh`, `bash tools/release/cm-download.test.sh`, `node --test tools/release/cm-config.test.cjs`; `npx expo prebuild --platform ios --no-install` e `pod install`; número de build por `cm-next-build-number.sh` com `agvtool`; assinatura por `keychain initialize`, chave RSA decodificada de `CERTIFICATE_PRIVATE_KEY` em arquivo temporário, `app-store-connect fetch-signing-files br.com.ordinum.cialai --type IOS_APP_STORE --certificate-key=@file:… --create`, `keychain add-certificates`, `xcode-project use-profiles`; `xcode-project build-ipa --workspace apps/mobile/ios/Cialai.xcworkspace --scheme Cialai` | `app_store_connect` com `auth: integration`, `submit_to_testflight: false`, `submit_to_app_store: false`; o grupo interno recebe todo build sem Beta App Review |
+| `ios-testflight` | Valida ambiente, instala Go, compila e confere o XCFramework, executa os testes móveis, gera o projeto, busca perfis, numera e compila o IPA | `app_store_connect` usa a integração, mas `submit_to_testflight` e `submit_to_app_store` estão falsos. O IPA permanece artefato até o usuário mudar e executar a política de publicação |
 | `ios-archive` | Igual, com `PROJECT_BUILD_NUMBER` | Nenhuma; só o IPA como artefato |
-| `android-play` | Mesma instância; AAR da release ou compilado no runner com Go, `gomobile` e NDK; `npm ci` e testes; `npx expo prebuild --platform android --no-install`; keystore decodificado de `CM_KEYSTORE_BASE64` para `secrets/upload-keystore.jks` do build e `android/key.properties` gravado com `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS`; `./gradlew bundleRelease` | Bloco `google_play` com `credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` e `track: internal`, ou `tools/release/play_api.py upload <aab> internal --commit` |
+| `android-play` | Valida ambiente, instala Go, compila e confere o AAR, executa os testes móveis, gera o projeto, grava credenciais temporárias e compila o AAB | O bloco `google_play` aponta para a faixa interna. A execução publicaria externamente e depende de autorização e credenciais do usuário |
 
 Integração no Codemagic: chave do App Store Connect registrada em Settings, Integrations, Developer Portal com o nome exato `Cialai ASC API Key`, referenciado em `integrations.app_store_connect`. Grupos de variáveis: `appstore_credentials` com `CERTIFICATE_PRIVATE_KEY` em base64 marcada como secreta; `android_credentials` com `CM_KEYSTORE_BASE64`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` injetadas pela API; `google_play` com `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`. Variáveis simples: `APP_STORE_APP_ID`, `BUNDLE_ID`, `APP_ENV`. Contas pessoais não podem usar variáveis globais, então tudo fica por app.
 
@@ -41,8 +60,8 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Esquema de URL | `cialai`, reservado para deep links futuros |
 | App no App Store Connect | A criar com o bundle acima; o número resultante vira `APP_STORE_APP_ID` |
 | App no Codemagic | A criar apontando para `OrdinumTeam/cialai-platform`; o id vai em `CODEMAGIC_APP_ID` |
-| App no Google Play | A criar na conta Ordinum, id `7730543760992383205`, com verificação de desenvolvedor já feita |
-| Projeto no Google Cloud para a conta de serviço do Play | `cialai-platform`, conta `cialai-play-publisher@cialai-platform.iam.gserviceaccount.com`, com `androidpublisher.googleapis.com` ligado e só os papéis de ver informações, publicar em produção e em faixas de teste |
+| App no Google Play | A criar na conta Ordinum; a referência `7730543760992383205` precisa ser confirmada pelo usuário antes de qualquer publicação |
+| Projeto no Google Cloud para a conta de serviço do Play | Planejado como `cialai-platform`, com conta `cialai-play-publisher@cialai-platform.iam.gserviceaccount.com`; criação, API e papéis não foram verificados nesta linha |
 | Nome de exibição | Cialai |
 | Referências existentes | Control: app `6809897505` e Codemagic `6aa03dae642175d18c41fe72`; Advoris: app `6783436909`, Codemagic `6a3acb9e11b238d7837dbe12`, Play `4971975462970394779` |
 
@@ -66,12 +85,12 @@ O repositório privado `ordinum-credentials` guarda referências, donos e proced
 
 | Etapa | Regras |
 | --- | --- |
-| TestFlight interno | Grupo Ordinum Team recebe todo build sem revisão; builds expiram em 90 dias; até 100 testadores; Apple processa em 5 a 15 minutos |
-| TestFlight externo | Exige informações de teste e conta de demonstração; Beta App Review de cerca de um dia; usado como ensaio do App Review antes da submissão, spike 6 |
-| App Store | Submissão manual pela primeira vez; notas de revisão com um desktop de demonstração acessível e um vídeo do pareamento; nunca a palavra VPN; conformidade de exportação com algoritmos padrão e isenção de mercado de massa; questionário de privacidade sem coleta; política de privacidade publicada |
-| Play interno | Faixa `internal` por `play_api.py upload` ou pelo bloco `google_play`; relatório de pré-lançamento conferido pelo aviso de texto claro |
-| Play produção | Data safety sem coleta; `targetSdk` 36; ícone adaptativo; capturas por tamanho |
-| Textos | Bloco curto em português para os 500 caracteres do Play e versão longa para a App Store, em inglês e português, no padrão dos `release-notes-*.md` do Advoris |
+| TestFlight interno | Pendente. Exige app, integração, assinatura, build e grupo confirmados pelo usuário |
+| TestFlight externo | Pendente. Exige informações de teste, conta de demonstração e Beta App Review; será o ensaio antes da submissão |
+| App Store | Materiais preparados. Submissão, política publicada, auditoria do archive e respostas finais continuam pendentes |
+| Play interno | Pendente. Workflow aponta para `internal`, e o script de API ensaia sem `--commit`; relatório de pré lançamento depende do AAB enviado |
+| Play produção | Materiais preparados. Data safety proposta, alvo 36, ícone e capturas precisam ser conferidos contra o AAB final |
+| Textos | Versões curta e longa em português e inglês estão em `docs/stores`; campos marcados dependem de confirmação do usuário |
 | Versões | Desktop pela tag `v<semver>`; celular com versão de marketing `X.Y.Z` e número de build monotônico do `cm-next-build-number.sh` no iOS e do `versionCode` no Android |
 
 ## Lista de verificação de release

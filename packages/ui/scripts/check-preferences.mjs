@@ -10,7 +10,8 @@ import {
 } from '../src/desktop/preferences-model.js';
 
 const source = readFileSync(fileURLToPath(new URL('../src/desktop/Preferences.jsx', import.meta.url)), 'utf8');
-for (const section of ['Aparência', 'Terminal', 'Projetos', 'Rede', 'Dev Browser']) {
+const updater = readFileSync(fileURLToPath(new URL('../src/desktop/Updater.jsx', import.meta.url)), 'utf8');
+for (const section of ['Aparência', 'Terminal', 'Projetos', 'Rede', 'Dev Browser', 'Atualizações']) {
   assert.match(source, new RegExp(`>${section}<`), `Missing preferences section: ${section}`);
 }
 for (const field of ['args', 'lang', 'pathPrefix', 'projectRoots', 'chromiumPath']) {
@@ -18,6 +19,10 @@ for (const field of ['args', 'lang', 'pathPrefix', 'projectRoots', 'chromiumPath
 }
 assert.match(source, /chooseDirectory/);
 assert.match(source, /chooseFile/);
+assert.match(source, /<Updater \/>/);
+assert.match(updater, /@tauri-apps\/plugin-updater/);
+assert.match(updater, /downloadAndInstall/);
+assert.match(updater, /@tauri-apps\/plugin-process/);
 
 const original = {
   appearance: 'neon',
@@ -57,4 +62,4 @@ assert.deepEqual(addUniquePath(['/a'], '/a'), ['/a']);
 assert.deepEqual(addUniquePath(['/a'], ' /b '), ['/a', '/b']);
 assert.deepEqual(removePath(['/a', '/b'], '/a'), ['/b']);
 
-console.log('PASS preferences: five sections, network assistant, native pickers and normalized snapshots');
+console.log('PASS preferences: six sections, signed updater, network assistant, native pickers and normalized snapshots');

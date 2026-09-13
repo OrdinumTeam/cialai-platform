@@ -1,5 +1,15 @@
 # Release móvel
 
+## Chave do atualizador do desktop
+
+Esta etapa depende do usuário porque a chave privada nunca entra no repositório. Gere o par fora da árvore do projeto:
+
+```sh
+npm exec --workspace @cialai/desktop -- tauri signer generate -- -w "$HOME/.tauri/cialai-updater.key"
+```
+
+Copie o conteúdo da chave pública gerada para `plugins.updater.pubkey` em `apps/desktop/src-tauri/tauri.conf.json`. Guarde a chave privada completa no secret `TAURI_SIGNING_PRIVATE_KEY` e a senha no secret `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` do GitHub. O check de release falha enquanto a chave pública estiver com o marcador.
+
 Os workflows em `codemagic.yaml` não têm disparo automático. Os atalhos desta pasta usam a API do Codemagic somente quando as variáveis locais são fornecidas de forma explícita.
 
 ## Configuração local

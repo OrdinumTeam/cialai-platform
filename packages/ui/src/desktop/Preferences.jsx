@@ -13,6 +13,7 @@ import {
   sanitizePreferences,
 } from './preferences-model.js';
 import NetworkSetup from './NetworkSetup.jsx';
+import Updater from './Updater.jsx';
 
 const APPEARANCE_OPTIONS = [
   { value: 'system', label: 'Sistema' },
@@ -141,9 +142,13 @@ export default function Preferences({ open, onClose, appearance }) {
         <NetworkSetup value={draft.network} onChange={(network) => setDraft((current) => ({ ...current, network }))} />
       </section>
 
-      <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">Dev Browser</h3>
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>
         <Row title="Executável do Chromium" description="Vazio procura uma instalação compatível automaticamente." wide><input className="field__control mac-prefs__browser-path" value={draft.devBrowser.chromiumPath || ''} placeholder="Detectar automaticamente" spellCheck="false" onChange={(event) => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: event.target.value || null } }))} aria-label="Executável do Chromium" /></Row>
         <div className="mac-prefs__actions">{draft.devBrowser.chromiumPath ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: null } }))}><RotateCcw aria-hidden="true" />Detectar automaticamente</button> : null}<button type="button" className="btn btn-secondary btn-sm" onClick={pickChromium}>Escolher executável</button></div>
+      </section>
+
+      <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">Atualizações</h3>
+        <Updater />
       </section>
 
       {error ? <p className="mac-prefs__error" role="alert">{error}</p> : null}

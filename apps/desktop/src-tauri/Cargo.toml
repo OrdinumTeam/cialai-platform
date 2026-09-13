@@ -37,6 +37,8 @@ futures-util = { version = "0.3", features = ["sink"] }
 sys-locale = "0.3"
 which = "7"
 dunce = "1"
+tauri-plugin-updater = "2.11.0"
+tauri-plugin-process = "2.3.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }

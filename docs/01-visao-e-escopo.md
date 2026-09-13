@@ -1,5 +1,27 @@
 # Visão e escopo
 
+## Estado em 13/09/2026
+
+`Implementado` significa código ou documento presente com verificação local registrada. `Preparado` significa que a estrutura existe, mas ainda depende de outra plataforma, serviço, assinatura ou execução manual. `Pendente` significa que a implementação ou a evidência exigida ainda não existe.
+
+| Item | Estado | Evidência e limite |
+| --- | --- | --- |
+| Produto desktop e estúdio no macOS | Implementado | Extração, marca, onboarding, testes e capturas locais estão registrados no documento 13 |
+| Túnel, pareamento e Headscale | Implementado | Núcleo Go, sidecar, ponte, receita e integração local existem; servidor de produção e celular real continuam fora deste aceite |
+| Casca iOS e Android | Preparado | Interface, módulos nativos e workflows existem, mas não houve build assinado nem execução em aparelho |
+| Código e documentação públicos | Implementado | Licença, README, contribuição, segurança, modelos e documentação estão versionados |
+| Distribuição e lojas | Preparado | Atualizador, materiais, notas de revisão e procedimento da versão 1 existem; publicação e submissão não ocorreram |
+
+Estado dos critérios de sucesso:
+
+| Critério | Estado | Evidência necessária para concluir |
+| --- | --- | --- |
+| 1. Primeira instalação e terminal em menos de 3 minutos | Pendente | Instalação limpa cronometrada em macOS, Linux e Windows por pessoa sem contexto prévio |
+| 2. Pareamento real em menos de 1 minuto | Pendente | Headscale externo, desktop empacotado e celular físico com histórico visível |
+| 3. Suítes elegíveis sem falhas | Implementado | As suítes locais do macOS estão registradas no documento 13; a matriz remota continua separada nos critérios 4 e no roadmap |
+| 4. Roteiros de rede nas cinco plataformas | Preparado | Folhas iOS e Android existem sem resultados; Linux e Windows ainda dependem da Fase 5 integrada |
+| 5. Cinco estados visuais iguais ao Control | Preparado | Comparação macOS com dados fictícios existe em `docs/evidence/task-1.11`; Linux e Windows não foram conferidos |
+
 ## O produto
 
 Cialai é um estúdio de terminais para quem trabalha com vários projetos e vários agentes de código ao mesmo tempo. No computador, cada sessão é um shell numa pasta, com um card que mostra o que está rodando, se precisa de atenção e quanto consome de CPU e memória. Trocar de card troca só o que está sendo exibido: processo, histórico, rolagem e arquivos abertos continuam onde estavam. Ao lado do terminal ficam o editor e a árvore do projeto. Fechar o app não apaga o que aconteceu: o histórico volta e as conversas de Claude Code e Codex são retomadas.

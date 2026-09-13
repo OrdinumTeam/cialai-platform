@@ -55,14 +55,16 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
 | 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
-| 3.7 Testes Jest | Concluída localmente | Os 65 casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação e transições somam 99 casos em 14 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
+| 3.7 Testes Jest | Concluída localmente | Os casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação, assinatura e transições somam 101 casos em 15 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
 | 3.8 Distribuição iOS | Preparada localmente, serviços externos pendentes | `ios-testflight` e `ios-archive` compilam o XCFramework com Go 1.26.5 e `gomobile` no runner, validam a casca e preparam assinatura e IPA. Contrato YAML e scripts passaram localmente; app, integração, credenciais, assinatura, archive e upload não foram criados nem executados |
+| 3.9 Roteiros em iPhone | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06, limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 | 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
 | 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
+| 4.7 Roteiros em Android | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06 e quatro verificações específicas do Android, com limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
 | 5.1 Fonte de processos | Verificada no macOS e Linux; Windows compilado | `procs/` separa contrato portável, backends nativos e `ProcSource`; `FakeProcs` prova as métricas sem consultar processos reais. `TestChild` passou no macOS e no Ubuntu, enquanto o braço Windows passou no cross check sem execução nativa |
 | 5.2 Processos Linux | Concluída e verificada no Ubuntu 22.04 arm64 | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`. Os três testes próprios do backend e o `TestChild` nativo passaram no contêiner da tarefa 5.15 |
 | 5.3 Processos Windows | Compilada, execução Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin check --all-targets` passou para `x86_64-pc-windows-msvc`; nenhum executável Windows ou recurso `.rc` foi executado ou compilado neste host |
@@ -81,7 +83,13 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 6.2 Prévias Office | Validada no macOS; Linux e Windows pendentes | O LibreOffice real converteu a fixture RTF em PDF válido de 17.799 bytes no macOS. O runner Ubuntu 22.04 está preparado com contêiner efêmero e limite de 6 GiB, mas parou no preflight de disco antes de executar |
 | 6.4 `mobile_files` no Windows | Implementada; compilação e execução Windows pendentes | Usa `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT`, recusa reparse points e hard links e confere o caminho final de cada handle dentro da raiz. O check estrutural passou; `cargo-xwin` não está instalado e o disco está abaixo do piso para instalar ou compilar |
 | 6.6 Preparação de tradução | Página web do celular migrada; app nativo pendente | `@cialai/i18n` fornece os dicionários em português e inglês com troca observável e fallback. Na integração, o cabeçalho atual da página do celular passou a usar as chaves de conexão e o nome reserva do computador, preservando os textos em português; o seletor de idioma do cabeçalho antigo não foi portado e o idioma segue o navegador ou o valor salvo. O gate cobre `packages/ui/src/mobile`; as telas React Native de `apps/mobile` ainda têm textos literais e ficam fora do gate até a migração |
-| 3.9, 3.10, 4.7, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.1 a 7.6 | Não iniciadas ou pendentes na main | Janela, CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos e lançamento continuam pendentes; a integração da frente C atualiza a Fase 7 |
+| 6.8 Documentação viva | Implementada na frente C | Documentos 01 a 12 têm estado datado por item, o roadmap classifica 86 tarefas e o registro cobre as 31 decisões. O índice e as descrições de CI e ferramentas foram atualizados para o que existe nesta linha |
+| 7.1 Atualizador | Preparado na frente C, assinatura pendente | Plugins Rust e JavaScript, interface em Preferências, artefatos do updater e endpoint `latest.json` configurados. O workflow exige os dois secrets e falha enquanto a chave pública mantiver o marcador. Nenhum artefato foi assinado ou publicado |
+| 7.2 Documentação pública | Implementada na frente C | README em inglês usa três capturas reais com dados fictícios; guias de contribuição e segurança, código de conduta e modelos de issue e PR foram revisados. O contato e o prazo de segurança permanecem marcados para confirmação |
+| 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
+| 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
+| 7.5 Release da versão 1 | Procedimento preparado na frente C, release pendente | Changelog público, roteiro da candidata e guarda local cobrem os seis gates do documento 10. A guarda final falha com todos os gates pendentes e nenhuma tag, assinatura, publicação ou instalação foi feita |
+| 3.10, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.6 | Não iniciadas ou pendentes na main | Janela, CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos do desktop e publicação da versão 1 continuam pendentes. A autorização para avançar não aprova testes físicos, remotos, de assinatura ou de loja |
 
 ## Ambiente observado
 
@@ -528,9 +536,35 @@ Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testa
 | 3 iOS | Código de 3.1 a 3.8 pronto; builds nativos, roteiros em iPhone e revisão pendentes | 70% |
 | 4 Android | Código de 4.1 a 4.6 pronto; build, roteiros em aparelho e relatório do Play pendentes | 57% |
 | 5 Linux e Windows | Em andamento fora da main | 0% na main |
-| 6 Todas as plataformas | Não iniciada | 0% |
-| 7 Lançamento | Não iniciada | 0% |
+| 6 Todas as plataformas | 6.8 concluída na frente C fora da main; validações das outras plataformas pendentes | 0% na main |
+| 7 Lançamento | 7.1 a 7.5 implementadas ou preparadas na frente C fora da main; gates externos pendentes | 0% na main |
 | Total | Soma ponderada | cerca de 48%, ou 57% quando a frente da Fase 5 entrar com o que já tem |
+
+### 13/09/2026, integração das Fases 5, 6 e 7 na main
+
+A main passou a conter todas as branches locais. `fase-5/rust-multiplataforma` entrou no commit `1d60cdf`, `fase-6/portabilidade` no `6a1e879` e `fase-7/lancamento` no merge seguinte. Não houve push, tag, release nem build remoto.
+
+Na Fase 6, `MobileHeader.jsx` e `MobileApp.jsx` adotaram as chaves de conexão e o nome reserva do computador sobre o cabeçalho atual da página do celular. `check-mobile-i18n.mjs` cobre somente `packages/ui/src/mobile`, porque as telas React Native ainda têm textos literais. Sem `document`, o locale inicial é português, o que torna `check-mobile-shell.mjs` independente do idioma do sistema.
+
+Na Fase 7, `package.json` uniu os checks das duas linhas numa só cadeia de `npm test`. `Cargo.toml` manteve `dunce` junto dos plugins `updater` e `process`, e `Cargo.lock` partiu da main e recebeu somente os crates novos resolvidos pelo Cargo. O README em inglês ganhou a seção Platform setup com macOS, Linux e Windows. `platform-docs.mjs` passou a exigir a frase em inglês sobre a verificação Windows. Documento 10 e roadmap receberam os estados reais das tarefas 5.1 a 6.6, e o índice deixou de dizer que a Fase 5 não estava integrada.
+
+A primeira execução completa revelou `workspace::procs::macos::tests::lists_children_and_descendants` falhando só na suíte paralela: o teste escolhia o primeiro `sleep` da árvore do processo de testes e podia pegar o de outro teste. Isolado, passou cinco vezes. Ele passou a procurar o `sleep` entre os filhos do próprio `sh` e continua exigindo que esse pid esteja entre os descendentes.
+
+Validação na main integrada, com Node 22.23.2, npm 10.9.8, `CARGO_TARGET_DIR=~/.cache/cialai-target` e Cargo com dois jobs: `npm install` adicionou os dois pacotes JavaScript do updater; `npm test` da raiz terminou com código 0, com todos os checks de fundação, CI, plataforma, documentação pública, lojas, revisão, roteiros, release e documentação viva, 3 casos de i18n, 17 de sincronização, 56 da interface, 9 do protocolo, 155 testes Rust aprovados com 2 ignorados, todos os pacotes Go e 101 casos Jest em 15 suítes. `go test -race -mod=readonly ./...` passou nos 13 pacotes do `tunnel-core`; typecheck e lint de `apps/mobile` e `cargo fmt --check` terminaram com código 0. Nada disso representa execução remota, Linux visível, Windows nativo, aparelho ou assinatura.
+
+Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testados em aparelho só no Codemagic:
+
+| Fase | Situação na main | Percentual |
+| --- | --- | --- |
+| 0 Fundação e spikes | Base, CI local e spike 3; demais spikes absorvidos pelas Fases 3 e 4 ou pendentes de assinatura e soak | 47% |
+| 1 Desktop macOS | Implementação e evidência local completas; aceite humano pendente | 97% |
+| 2 Túnel e pareamento | Implementação e evidência local completas, validade da chave incluída; CI remota e Headscale real pendentes | 96% |
+| 3 iOS | Código de 3.1 a 3.8 e roteiro 3.9 prontos; builds nativos, execução em iPhone e revisão pendentes | 73% |
+| 4 Android | Código de 4.1 a 4.6 e roteiro 4.7 prontos; build, execução em aparelho e relatório do Play pendentes | 62% |
+| 5 Linux e Windows | 3 tarefas implementadas e 11 preparadas; 5.11, 5.13, 5.14, 5.17 e 5.18 pendentes, Windows sem execução nativa | 60% |
+| 6 Todas as plataformas | 6.8 implementada; 6.1, 6.2, 6.4 e 6.6 preparadas; 6.3, 6.5 e 6.7 pendentes | 45% |
+| 7 Lançamento | 7.2 implementada; 7.1, 7.3, 7.4 e 7.5 preparadas; chave, contas, lojas e 7.6 pendentes | 50% |
+| Total | Soma ponderada | cerca de 67% |
 
 ### 13/09/2026, prefixo e validade da chave da API corrigidos
 
@@ -740,6 +774,97 @@ Esta raia não alterou `main`, não fez push e não editou outros worktrees. A i
 
 Parte B pronta para merge
 
+### 13/09/2026, atualizador da tarefa 7.1 preparado na frente C
+
+Adicionados `tauri-plugin-updater` 2.11.0 e `tauri-plugin-process` 2.3.1 ao desktop e os pacotes JavaScript correspondentes à interface. Preferências mostra a versão atual, busca sob demanda, disponibilidade, progresso da transferência, instalação assinada e reinício. `tauri.conf.json` cria os artefatos do updater e aponta para `latest.json` na release mais recente do GitHub. O workflow recebe `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` somente pelos secrets.
+
+A chave pública continua com o marcador `REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY`. `tools/release/check-updater.mjs` aprovou o contrato local e, com `--release`, falhou de propósito nesse marcador antes de qualquer build. O comando para gerar o par fora do repositório e a configuração dos secrets estão em `tools/release/README.md`.
+
+Comandos concluídos com código 0:
+
+```sh
+node tools/release/check-updater.mjs
+npm run test:ui
+npm run sidecar --workspace @cialai/desktop
+npm run build:mobile-resource --workspace @cialai/desktop
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2
+git diff --check
+```
+
+Resultados: 17 casos de sincronização e 46 checks de UI passaram; o recurso móvel teve 130 assets validados; o sidecar local foi recompilado; o crate com os plugins novos compilou. A release do GitHub, a assinatura, o download de `latest.json` e a instalação de uma atualização não foram executados e continuam dependentes do usuário e da infraestrutura externa.
+
+### 13/09/2026, documentação pública da tarefa 7.2 concluída na frente C
+
+O README público foi reescrito em inglês com descrição, recursos, estado honesto por plataforma, execução a partir do código, Headscale próprio, mapa do repositório, privacidade, segurança e licença. Foram inspecionadas as capturas reais e fictícias da tarefa 1.11. O README usa desktop escuro, lista móvel e arquivos móveis, que continuam atuais para o estúdio mostrado. A nova interface do updater fica em Preferências e não altera esses três estados.
+
+`CONTRIBUTING.md` agora descreve toolchains, desenvolvimento, testes, Cargo com sidecar, commits, PRs, segurança e a distinção entre código preparado e evidência externa. `SECURITY.md` mantém contato, prazo de confirmação e versões suportadas marcados como `TO BE CONFIRMED BEFORE PUBLICATION`. `CODE_OF_CONDUCT.md` foi alinhado ao Contributor Covenant 2.1 com o contato também pendente. Os três modelos de issue e o modelo de PR passaram a pedir ambiente, evidência sanitizada e classificação dos testes.
+
+A skill `dev-browser-panel` orientou a tentativa de captura. Não havia porta local desta lane, e a porta global pertencia a outro workspace; nenhum navegador alheio foi controlado. Como o conteúdo principal não mudou desde a evidência versionada, as imagens existentes foram inspecionadas diretamente e reutilizadas. `npm run check:public-docs` terminou com código 0 e confirmou idioma, links, imagens com conteúdo real, marcadores de contato e modelos. `git diff --check` também passou. Nenhum dado privado foi aberto ou copiado.
+
+### 13/09/2026, materiais das lojas da tarefa 7.3 preparados na frente C
+
+Criadas políticas de privacidade em português e inglês em `docs/legal`. Elas descrevem processamento local, conexão entre aparelhos, responsabilidade da operação do Headscale, atualização manual pelo GitHub Releases, armazenamento, exclusão, permissões e contato ainda a confirmar. Os documentos distinguem dados que transitam a pedido da pessoa de coleta pela Ordinum.
+
+`docs/stores/app-store-privacy.md` propõe a resposta sem coleta do questionário da Apple. `docs/stores/google-play-data-safety.md` propõe ausência de coleta e compartilhamento para o AAB atual. As duas propostas exigem nova auditoria dos SDKs e do binário enviado. As orientações oficiais da Apple e do Google foram consultadas e ligadas nos documentos. Nenhuma resposta foi publicada.
+
+Os textos de loja seguem a separação do Advoris entre versão curta e longa. Há conteúdo em `pt-BR` e inglês para nome, subtítulo, promoção, descrição, novidades e campos dependentes do usuário. O check mediu 67 e 63 caracteres nas descrições breves, 1373 e 1282 nas descrições longas e 363 e 350 nas notas curtas. Todos ficam dentro dos limites registrados. O plano de capturas lista seis telas prioritárias e matrizes para iPhone, telefone Android, tablets e arte gráfica, todas pendentes do build nativo real e da interface em inglês.
+
+Comandos concluídos com código 0:
+
+```sh
+npm run check:store-metadata
+git diff --check
+```
+
+O check confirmou políticas bilíngues, marcadores de contato, respostas propostas, ausência do termo de risco nos textos de loja, limites de caracteres e tamanhos de captura. Nenhuma loja, conta, formulário, captura nativa ou política pública foi alterada.
+
+### 13/09/2026, pacote de revisão da tarefa 7.4 preparado na frente C
+
+`docs/review/app-review-notes-en.md` contém texto copiável em inglês com propósito, ausência de conta, conexão cifrada, passos de acesso, permissões, declaração de criptografia e campos que o usuário precisa preencher apenas no App Store Connect. O arquivo não contém o termo que o documento 10 proíbe nas notas de revisão.
+
+`desktop-demo-runbook.md` define computador e usuário do sistema dedicados, projeto inteiramente fictício, candidato assinado, Headscale exclusivo, ensaio externo, disponibilidade diária e limpeza. Nenhuma credencial ou endereço de acesso entrou no repositório. `pairing-video-script.md` organiza em até 90 segundos o vínculo, a confirmação, o histórico, um comando, um arquivo e a revogação, com conferência quadro a quadro e registro da evidência.
+
+Comandos concluídos com código 0:
+
+```sh
+npm run check:review-pack
+rg -ni '\bvpn\b' docs/review
+git diff --check
+```
+
+O primeiro comando aprovou os três documentos e seus campos obrigatórios. A busca não encontrou ocorrências e terminou sem saída, como esperado. A máquina de demonstração, o acesso remoto, a gravação, o TestFlight externo, o App Review e a produção do Play continuam pendentes do usuário. Nada foi publicado ou enviado.
+
+### 13/09/2026, roteiro imprimível da tarefa 3.9 preparado na frente C
+
+Criado `docs/testes/roteiro-3.9-ios.md` para uma execução por combinação de iPhone, iOS, build móvel, desktop e Headscale. A folha mantém em branco identificação, tempos, resultado, evidência, defeitos e assinaturas. Os treze cenários do documento 06 aparecem com os limites originais: modo avião, atraso, revogação, reinícios, troca de rede, segundo plano, relé, Headscale fora do ar, desvio do relógio, multiplicidade, foto do QR e permissões.
+
+`npm run check:manual-mobile` terminou com código 0 e confirmou os treze blocos, nove limites numéricos, treze campos de resultado e o estado pendente. `git diff --check` passou. Nenhum iPhone, build interno, rede móvel, relé ou servidor externo foi usado; a tarefa 3.9 continua sem aceite físico.
+
+### 13/09/2026, roteiro imprimível da tarefa 4.7 preparado na frente C
+
+Criado `docs/testes/roteiro-4.7-android.md` para uma execução por combinação de aparelho Android, versão do sistema, build móvel, desktop e Headscale. A folha reproduz os treze cenários do documento 06 e acrescenta navegação pelo botão Voltar, retorno após mais de 120 segundos em segundo plano, biometria e armazenamento protegido.
+
+`npm run check:manual-mobile` terminou com código 0 e confirmou trinta blocos pendentes nos dois roteiros, sendo dezessete do Android, seus limites numéricos e campos de resultado. `git diff --check` passou. Nenhum aparelho, AAB, rede móvel, suspensão, biometria ou servidor externo foi usado; a tarefa 4.7 continua sem aceite físico.
+
+### 13/09/2026, procedimento da tarefa 7.5 preparado na frente C
+
+Criado `CHANGELOG.md` em inglês com o estado não publicado da primeira versão. `docs/release-v1.md` transforma os seis itens do documento 10 em etapas de congelamento, testes, assinatura, tag, conferência de artefatos, instalação limpa, distribuição interna, submissão e recuo. As responsabilidades por chaves, contas, aparelhos, contato, capturas e aprovação estão marcadas como dependências do usuário.
+
+`tools/release/check-release.mjs` valida a presença dos seis gates, dos seis formatos desktop, dos cinco sidecars, do atualizador e dos dois artefatos móveis. `npm run check:release` terminou com código 0 e informou seis gates documentados e seis pendentes. A execução com `--release` falhou como esperado antes de consultar versões e tag, porque nenhum gate tem evidência verificada. `git diff --check` passou. Nenhuma versão foi alterada, tag criada, chave gerada, ação remota disparada, release publicada, instalação feita ou loja acessada; a tarefa 7.5 permanece preparada, sem aceite de lançamento.
+
+### 13/09/2026, documentação viva da tarefa 6.8 implementada na frente C
+
+Os documentos 01 a 12 agora começam com um quadro `Estado em 13/09/2026`. Cada componente, critério, workflow, tarefa e decisão foi classificado como `Implementado`, `Preparado` ou `Pendente`, sempre pelo conteúdo desta linha. O roadmap contém estado individual para 86 tarefas e o registro contém estado individual para as 31 decisões. `docs/README.md`, a árvore real, os scripts existentes e a descrição dos workflows foram atualizados; planos ausentes como `nightly-e2e.yml`, `mobile-artifacts.yml` e as ferramentas de navegador permanecem identificados como pendentes.
+
+`npm run check:living-docs` terminou com código 0 e confirmou os doze quadros datados, os cinco critérios de sucesso, as 86 tarefas e as 31 decisões. `git diff --check` passou. A revisão documental não aprova CI remota, Linux, Windows, builds nativos, aparelhos, assinatura, lojas ou soak.
+
+A validação final usou Node 22.23.2 e npm 10.9.8. `npm test` da raiz terminou com código 0: todos os checks de fundação e lançamento passaram; `check-terminal-sync.mjs` aprovou 17 casos; a suíte restante da interface aprovou 46; o protocolo aprovou 9; os dois builds Vite concluíram e o recurso móvel validou 130 assets; Rust aprovou 143 testes, com 2 ensaios externos ignorados; todos os pacotes Go terminaram verdes; Jest aprovou 101 testes em 15 suítes. A guarda comum da release informou seis gates documentados e seis pendentes. Nenhum teste remoto, físico, de assinatura, publicação, loja ou soak foi executado.
+
+A frente partiu de `ba1b828`. Durante a execução, a main avançou para `842491a` com uma correção do túnel e recebeu alterações não commitadas da frente de integração. `git merge-tree` não encontrou conflito entre as árvores commitadas de `main` e `fase-7/lancamento`; mudanças ainda não commitadas não entram nessa prova e precisam ser preservadas pela integração final.
+
+Parte C pronta para merge
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -815,4 +940,4 @@ npm run check:source
 4. Disponibilizar Xcode completo, SDK e NDK Android e aparelhos reais. Compilar os bindings experimentais e criar os hosts nativos de teste do spike 1, ainda inexistentes.
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
 6. Conferir o ícone aprovado no Dock, na barra de tarefas e nos lançadores quando os builds de cada plataforma forem executados.
-7. Fase 2 com implementação e evidência local completas. Pendências reais: executar `headscale-integration.yml` e `release.yml` no GitHub, cumprir o aceite manual no macOS com um Headscale real e fazer o sidecar informar `apiKey.expiresAt` em `control.configure` para a tela Dispositivos mostrar a validade da chave.
+7. Fase 2 com implementação e evidência local completas. Pendências reais: executar `headscale-integration.yml` e `release.yml` no GitHub, cumprir o aceite manual no macOS com um Headscale real. A validade da chave já é devolvida por `control.configure` desde o commit `842491a`.

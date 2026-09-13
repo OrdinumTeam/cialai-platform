@@ -483,11 +483,14 @@ mod tests {
         assert!(direct.contains(&child.id()), "filho direto: {direct:?}");
         let tree = descendants(me);
         assert!(tree.len() >= 2, "sh e sleep na arvore: {tree:?}");
-        let sleep_pid = tree
-            .iter()
-            .copied()
+        // Outros testes do mesmo processo também criam sleep; procura o do próprio sh.
+        let sleep_pid = children(child.id())
+            .into_iter()
             .find(|pid| name(*pid).as_deref() == Some("sleep"));
-        assert!(sleep_pid.is_some(), "sleep na arvore: {tree:?}");
+        assert!(
+            sleep_pid.is_some_and(|pid| tree.contains(&pid)),
+            "sleep na arvore: {tree:?}"
+        );
         assert_eq!(info(sleep_pid.unwrap()).unwrap().ppid, child.id());
         let _ = child.kill();
         let _ = child.wait();

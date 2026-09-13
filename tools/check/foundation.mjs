@@ -32,4 +32,4 @@ for (const path of protectedPaths) {
 const example = spawnSync('git', ['check-ignore', '--no-index', '-q', '.env.example'], { cwd: root });
 assert.equal(example.status, 1, '.env.example must remain trackable');
 console.log(`PASS foundation: ${packages.length} workspaces, lockfile, Node 22, ${protectedPaths.length} protected paths`);
-console.log('Phase 0: UI, protocol and mobile product tests are not implemented yet.');
+console.log('External CI, native device, signing, store and soak evidence remains pending.');

@@ -2,6 +2,21 @@
 
 Inventário técnico do estúdio de terminais do Ordinum Control, em `$CONTROL`, conferido em 12/09/2026. É o contrato do que o Cialai preserva. Cada peça cita o arquivo de origem para a execução abrir o lugar certo.
 
+## Estado em 13/09/2026
+
+| Item do inventário | Estado | Situação atual |
+| --- | --- | --- |
+| Proveniência do Control | Implementado | Commit base e hashes dos oito arquivos modificados estão em `docs/evidence/control-source.json`; o Control permaneceu somente leitura |
+| Extração do Rust elegível | Implementado | Código de terminal, arquivos, Git, prévias, Dev Browser, ponte e ciclo de vida está no crate Cialai e passa localmente no macOS |
+| Extração da interface | Implementado | Estúdio, cascas desktop e celular e componentes compartilhados estão em `packages/ui` com checks locais |
+| Remoção das áreas de negócio | Implementado | Stack, reuniões, VPN, backend Node, Python e views de negócio não fazem parte do produto |
+| Adaptações de identidade e dados | Implementado | Identificadores, chaves locais, marca, preferências e diretórios Cialai substituem os do Control |
+| Adaptações nativas móveis | Preparado | Swift, Kotlin e ligação gomobile estão versionados; compilação e execução nativas não foram comprovadas |
+| Adaptações Linux e Windows | Pendente | O contrato permanece neste documento, mas a frente correspondente ainda não está integrada nesta linha |
+| Aceite humano de paridade | Pendente | Capturas macOS existem; abertura por usuário do Control e validação nas outras plataformas não foram registradas |
+
+As tabelas abaixo continuam sendo o contrato técnico de origem. Verbos como preservar, adaptar e construir descrevem a decisão de extração; a tabela acima registra o que de fato foi integrado nesta linha.
+
 ## Estado do repositório de origem
 
 | Item | Valor |

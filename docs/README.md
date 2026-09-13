@@ -1,6 +1,6 @@
-# Documentação de planejamento do Cialai
+# Documentação do Cialai
 
-Estado em 12/09/2026: Fase 0 aberta e Fase 1 em execução por autorização do usuário. Scaffold, núcleo Rust, interface de Terminais, camada multiplataforma e recurso web do celular compilam e passam localmente no macOS; a próxima tarefa é integrar `projectRoots` e o onboarding em 1.6. Para continuar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md). Os demais documentos preservam o planejamento e recebem correções verificadas durante a execução.
+Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
 
 Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão segura por Headscale.
 
@@ -22,6 +22,8 @@ Cialai é o estúdio de terminais do Ordinum Control transformado em produto ope
 | 12 | [12-decisoes.md](./12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
 | Continuidade | [13-progresso-e-handoff.md](./13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
 | Referência | [14-diferencas-por-plataforma.md](./14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
+
+Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `Implementado`, `Preparado` e `Pendente`. O roteiro não considera workflow escrito como workflow executado, binding gerado como aplicativo nativo compilado, nem material de loja como submissão.
 
 ## Convenções destes documentos
 

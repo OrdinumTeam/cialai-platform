@@ -2,6 +2,24 @@
 
 Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CONTROL/ios/app`, com quatro acréscimos: o alvo Android, o leitor de QR, os perfis de Headscale e um módulo nativo que embute o núcleo Go do túnel e expõe o proxy em loopback que o WebView usa. A interface continua sendo a página que o computador serve. Nada é reimplementado em React Native além das telas de casca.
 
+## Estado em 13/09/2026
+
+| Item | Estado | Situação atual |
+| --- | --- | --- |
+| Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente |
+| Página do celular | Implementado | Composição somente com Terminais e cabeçalho compacto passou nos checks compartilhados |
+| Módulo Swift e XCFramework | Preparado | Wrapper e contrato existem; build Swift, link e execução em iPhone estão pendentes |
+| Configuração iOS | Preparado | Bundle, permissões, criptografia e proteção estão declarados; archive assinado não foi auditado |
+| Distribuição iOS | Preparado | Workflows e scripts existem; app, credenciais, TestFlight e App Review estão pendentes |
+| Roteiro iOS 3.9 | Preparado | Treze cenários imprimíveis estão sem resultado de aparelho |
+| Módulo Kotlin e AAR | Preparado | Wrapper e contrato existem; build Kotlin, link e execução em Android estão pendentes |
+| Configuração Android e botão Voltar | Implementado | Prebuild de inspeção e checks Node confirmaram configuração e navegação; aparelho real está fora deste aceite |
+| Ciclo de vida, biometria e armazenamento Android | Preparado | Código e checks estáticos existem; suspensão, prompt e Keystore reais não foram exercitados |
+| Distribuição Android | Preparado | Workflow e assinatura por variáveis existem; AAB e faixa interna não foram criados |
+| Roteiro Android 4.7 | Preparado | Treze cenários de rede e quatro verificações Android estão sem resultado de aparelho |
+| Relatório de pré lançamento | Pendente | Depende de AAB assinado na conta do Play |
+| Materiais das lojas | Preparado | Políticas, respostas, textos e plano de capturas existem; auditoria dos binários, URLs e submissões estão pendentes |
+
 ## Ponto de partida
 
 | Parte do Control | Comportamento | No Cialai |

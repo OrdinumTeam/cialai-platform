@@ -1,27 +1,66 @@
 # Cialai
 
-Cialai é um estúdio de terminais open source, mantido pela Ordinum. Cada sessão
-é um shell numa pasta, com contexto de arquivos, prévias e Dev Browser. Um
-celular pareado acompanha e controla essas sessões por um túnel cifrado ponta a
-ponta, coordenado por um Headscale que a própria pessoa hospeda.
+Cialai is an open source terminal studio for desktop and mobile. It keeps shells, files, Git context, previews and coding agent sessions together, then lets you reach the same terminal history from a paired phone through infrastructure you control.
 
-## Estado
+> Cialai is preparing its first public release. Source code and local automated checks are available today. Signed installers, native mobile builds and store listings have not been published yet.
 
-A portabilidade desktop da Fase 5 está em execução. O núcleo Rust foi executado
-nativamente no macOS e no Ubuntu 22.04. O alvo Windows passou no `cargo-xwin`,
-sem execução nativa. Isso não equivale a aplicativo final, instalador aprovado
-ou matriz remota concluída.
+## A terminal workspace that travels with you
 
-O [roadmap](./docs/11-roadmap-de-execucao.md) define o aceite e o
-[progresso e handoff](./docs/13-progresso-e-handoff.md) registra os comandos e
-resultados observados. O
-[guia de diferenças por plataforma](./docs/14-diferencas-por-plataforma.md)
-explica os comportamentos de macOS, Linux e Windows.
+![Cialai desktop in dark mode](./docs/evidence/task-1.11/cialai-desktop-dark.png)
 
-## Preparação comum
+The desktop studio runs the real shell inside your project folder. Session cards show activity, resource use and agent state. The workspace combines the terminal with project files, previews and a controlled Chromium browser.
 
-Use Git, Node 22, npm 10, Rust 1.98.1 e Go 1.26.5. O Go pode baixar a versão
-declarada no módulo quando `GOTOOLCHAIN=auto` estiver ativo.
+| Phone sessions | Phone files |
+| --- | --- |
+| ![Cialai phone session list](./docs/evidence/task-1.11/cialai-mobile-list.png) | ![Cialai phone file browser](./docs/evidence/task-1.11/cialai-mobile-files.png) |
+
+These captures use fictional projects and the reproducible demo mode. The complete visual evidence set is in [docs/evidence/task-1.11](./docs/evidence/task-1.11/README.md).
+
+## Highlights
+
+- Run and organize terminal sessions from macOS, Linux and Windows.
+- Keep terminal history available after the desktop app closes.
+- Resume supported Claude Code and Codex sessions in the same project folder.
+- Browse and edit project files, inspect Git changes and open local previews.
+- Use the built in Dev Browser for web development workflows.
+- Pair iOS and Android devices with a short lived QR code.
+- Coordinate private device connectivity with your own Headscale server.
+- Keep project contents and credentials out of Cialai hosted services because there are none.
+
+## Project status
+
+| Area | Status |
+| --- | --- |
+| Desktop studio | Implemented and verified locally on macOS |
+| Headscale integration | Implemented with local Docker integration coverage |
+| iOS and Android | Source prepared and JavaScript tests passing, native builds and real device checks pending |
+| Linux and Windows | Rust suite verified on Ubuntu 22.04, Windows cross checked only, native CI evidence pending |
+| Signed releases and stores | Pending certificates, accounts, external review and publication |
+
+Prepared code is not the same as verified distribution. See the [execution handoff](./docs/13-progresso-e-handoff.md) for exact evidence and remaining external work.
+
+## Run the desktop app from source
+
+You need Node 22, npm 10, Go 1.26.5, the Rust toolchain declared by the repository and the native prerequisites for Tauri 2 on your system.
+
+```sh
+npm ci
+npm run dev:desktop
+```
+
+The development command builds the local `cialai-tunnel` sidecar before starting Tauri. No private Headscale instance or project data is bundled with the repository.
+
+Run the automated suites with:
+
+```sh
+npm test
+```
+
+Detailed setup, test and contribution guidance is in [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## Platform setup
+
+All platforms use Git, Node 22, npm 10, Rust 1.98.1 and Go 1.26.5. Build the local `cialai-tunnel` sidecar before calling Cargo directly; `npm run dev:desktop` already does it. Rust builds in this repository are limited to two jobs.
 
 ```sh
 npm ci
@@ -29,77 +68,62 @@ npm run sidecar --workspace @cialai/desktop
 npm test
 ```
 
-Compile o sidecar novamente antes de chamar Cargo diretamente ou iniciar o app.
-Neste repositório, compilações Rust usam no máximo dois jobs.
-
-```sh
-npm run sidecar --workspace @cialai/desktop
-CARGO_BUILD_JOBS=2 npm run dev:desktop
-```
-
 ### macOS
 
-Requer macOS 13 ou mais novo e as ferramentas de linha de comando do Xcode. O
-shell detectado recebe argumentos de login. O pacote local usa `app` e `dmg`.
+Requires macOS 13 or newer and the Xcode command line tools. Local bundles use `app` and `dmg`. Developer ID signing and notarization are not part of the local flow.
 
 ```sh
 xcode-select --install
-npm run sidecar --workspace @cialai/desktop
 CARGO_BUILD_JOBS=2 npm run dev:desktop
 ```
 
-Assinatura Developer ID e notarização não fazem parte do fluxo local.
-
 ### Linux
 
-A referência de build é Ubuntu 22.04 com WebKitGTK 4.1. Instale as dependências
-do Tauri antes da preparação comum.
+The reference build is Ubuntu 22.04 with WebKitGTK 4.1. Install the Tauri dependencies first. Planned packages are `deb`, `rpm` and `AppImage`.
 
 ```sh
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev zsh
-npm run sidecar --workspace @cialai/desktop
 CARGO_BUILD_JOBS=2 npm run dev:desktop
 ```
 
-Os pacotes previstos são `deb`, `rpm` e `AppImage`. Em problemas de composição
-do WebKitGTK, consulte o guia por plataforma antes de alterar o ambiente.
-
 ### Windows
 
-Requer Windows 10 21H2 ou mais novo, WebView2 Runtime e Visual Studio Build Tools
-com Desktop development with C++. PowerShell 7 é preferido; Windows PowerShell
-e `cmd.exe` permanecem reservas suportadas.
+Requires Windows 10 21H2 or newer, the WebView2 Runtime and Visual Studio Build Tools with Desktop development with C++. PowerShell 7 is preferred; Windows PowerShell and `cmd.exe` remain supported fallbacks. Planned packages are `nsis` and `msi`.
 
 ```powershell
 npm ci
-npm run sidecar --workspace @cialai/desktop
 $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Os pacotes previstos são `nsis` e `msi`. Execução nativa no Windows segue
-pendente; o resultado disponível é um cross check do código Rust, sem validar
-WebView2, ConPTY, recursos do instalador ou assinatura.
+Windows has only a Rust cross check so far. WebView2, ConPTY, installer resources and signing have not been exercised natively. Behavior differences between systems are documented in [docs/14-diferencas-por-plataforma.md](./docs/14-diferencas-por-plataforma.md).
 
-## Documentação
+## Connect your own Headscale server
 
-Índice e ordem de leitura em [docs/README.md](./docs/README.md). Instruções para
-contribuir em [CONTRIBUTING.md](./CONTRIBUTING.md).
+The desktop setup assistant accepts a Headscale server you operate. A reproducible deployment recipe, security defaults and diagnostics live in [infra/headscale](./infra/headscale/README.md).
 
-## Estrutura
+After the desktop joins your network, choose **Link phone**, scan the short lived QR code in the mobile app and confirm the pairing code when approval is enabled. Real device validation remains required before the first mobile release.
+
+## Repository map
 
 ```text
-apps/desktop          Tauri 2 e Rust
-apps/mobile           Expo, iOS e Android, módulo nativo do túnel
-packages/ui           React, estúdio e cascas desktop e celular
-packages/protocol     Contrato da ponte e do pareamento
-packages/tunnel-core  Go, tsnet, borda, proxy, pareamento e Headscale
-infra/headscale       Docker Compose, configuração e política
-tools                 Verificações, capturas, autoteste e release
-docs                  Planejamento e documentação viva
+apps/desktop          Tauri desktop application
+apps/mobile           Expo application and native tunnel modules
+packages/ui           Shared React terminal studio
+packages/protocol     Desktop and phone bridge protocol
+packages/tunnel-core  Go networking core and desktop sidecar
+infra/headscale       Self hosted coordination recipe
+tools                 Checks, builds, browser tests and release helpers
+docs                  Architecture, decisions, evidence and handoff
 ```
 
-## Licença
+Start with the [documentation index](./docs/README.md) for the architecture and decisions.
 
-Apache 2.0.
+## Privacy and security
+
+Cialai does not provide an account, analytics service or hosted relay. Project contents stay on devices you control and terminal traffic uses end to end encrypted links between paired devices. Operating a Headscale server still carries administrative responsibility. Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability. Legal documents for the first release live in `docs/legal`.
+
+## License
+
+Licensed under Apache License 2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
