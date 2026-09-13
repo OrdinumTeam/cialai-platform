@@ -1,6 +1,6 @@
 # Progresso e passagem de contexto
 
-Atualizado em 12/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
+Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
 
 ## Regras de continuidade
 
@@ -21,7 +21,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 0.3 CI mínima | Implementada, execução remota pendente | `.github/workflows/ci.yml` para macOS, Linux e Windows. `npm test` passou localmente em macOS arm64. Sem remoto configurado ou push. A consulta GitHub não conseguiu resolver `OrdinumTeam/cialai-platform`, por inexistência ou falta de acesso |
 | 0.4 Spike 1 | Preparação parcial | API Go experimental, interfaces Java e Objective-C geradas e script de build. Sem XCFramework, AAR ou execução em aparelhos |
 | 0.6 Spike 3 | Aprovado localmente | Headscale 0.29.3 e tsnet 1.102.0; oito verificações finais passaram em 35,830 s, incluindo persistência do módulo móvel no desktop. Workflow remoto preparado |
-| 0.5, 0.7 a 0.11 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja, assinatura e soak não executados |
+| 0.5, 0.7 a 0.10 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja e assinatura não executados |
+| 0.11 Robustez do proxy | Ensaio local de 30 minutos aprovado; aceite de 24 horas pendente | Oito sockets enviaram 180 rajadas de 50 MiB em quadros de 1 MiB: 9.000 quadros, 9.437.184.000 bytes ecoados e zero desconexões do proxy. RSS foi de 49.299.456 para 62.767.104 bytes, pico de 63.569.920; heap foi de 2.459.656 para 1.673.648 bytes, pico de 2.720.568. Executar as 24 horas antes do aceite do spike |
 | 0.12 Decisões dos spikes | Atualizado parcialmente | Decisões 022 a 026 registram correções, aceite local do spike 3 e estado dos demais |
 | 1.1 Scaffold desktop | Concluído localmente | Tauri real, configurações macOS, Windows e Linux, capabilities, duas entradas Vite e ícones provisórios. Build macOS sem bundle aprovado. Configurações Windows e Linux aguardam a matriz remota |
 | 1.2 Extração Rust | Concluída localmente | Núcleo macOS extraído sem stack, reuniões e VPN. Clippy sem avisos, 118 testes ativos passaram, dois ensaios externos permaneceram ignorados e o binário Tauri compilou e iniciou |
@@ -360,6 +361,20 @@ Com 9,9 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --ma
 O LibreOffice agora é descoberto em Homebrew e aplicativos no macOS, PATH, `/usr`, `/opt` e Snap no Linux, e Program Files ou PATH no Windows. A URL do perfil emite `file:///C:/...` corretamente, o PATH usa o separador nativo, `HOME` só é definido no Unix e o processo recebe `CREATE_NO_WINDOW` no Windows. As mensagens de instalação não recomendam Homebrew fora do macOS.
 
 Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::browser` passou 13 casos e manteve apenas o download real ignorado. O filtro `workspace::office` passou 5 casos e manteve só a conversão real ignorada. Os testes incluem layouts artificiais Linux e Windows, URLs do Windows, instalação simulada, prazo e origens. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis erros conhecidos de `bridge/`, sem aviso novo. Browser, instalador e LibreOffice ainda não foram executados no Linux ou Windows.
+
+### 13/09/2026, soak local do proxy da tarefa 0.11
+
+Criada em `packages/tunnel-core/soak` uma suíte Go opt-in com duração e intervalo configuráveis. Ela sobe o proxy real sobre loopback, mantém oito WebSockets, usa quadros binários de 1 MiB em rajadas agregadas de 50 MiB, confere o eco byte a byte e registra RSS, heap, goroutines, conexões da borda e desconexões observadas pelo cliente do proxy. `go test -mod=readonly ./soak` e `go vet -tags=soak ./soak` passaram. Um smoke posterior de 2 segundos também passou com a versão final da contagem por socket.
+
+Execução real concluída com código 0:
+
+```sh
+CIALAI_SOAK_DURATION=30m CIALAI_SOAK_BURST_INTERVAL=10s \
+CIALAI_SOAK_REPORT="$PWD/build/soak/proxy-soak-30m.json" \
+go test -tags=soak -count=1 -run '^TestProxySoak$' -timeout=35m -v ./soak
+```
+
+O teste durou 1.800,064 segundos. Depois de uma rajada de aquecimento, foram 180 rajadas medidas, 9.000 quadros e 9.437.184.000 bytes enviados e ecoados. Houve oito conexões aceitas, zero desconexões atribuídas ao proxy e zero erros inesperados no backend. O RSS começou em 49.299.456 bytes, terminou em 62.767.104, atingiu 63.569.920 e cresceu 13.467.648. O heap começou em 2.459.656 bytes, terminou em 1.673.648, atingiu 2.720.568 e não apresentou crescimento final. O relatório completo local está no caminho ignorado `packages/tunnel-core/build/soak/proxy-soak-30m.json`. O soak de 24 horas não foi executado e continua obrigatório para aceitar o spike 8.
 
 ## Arquivos para retomar
 
