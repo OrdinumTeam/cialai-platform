@@ -58,7 +58,9 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 6.2 Prévias Office | Validada no macOS; Linux e Windows pendentes | O LibreOffice real converteu a fixture RTF em PDF válido de 17.799 bytes no macOS. O runner Ubuntu 22.04 está preparado com contêiner efêmero e limite de 6 GiB, mas parou no preflight de disco antes de executar |
 | 6.3 Uso do plano | Não iniciada nesta raia | Depende da integração dos backends da Fase 5 |
 | 6.4 `mobile_files` no Windows | Implementada; compilação e execução Windows pendentes | Usa `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT`, recusa reparse points e hard links e confere o caminho final de cada handle dentro da raiz. O check estrutural passou; `cargo-xwin` não está instalado e o disco está abaixo do piso para instalar ou compilar |
-| 6.5 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
+| 6.5 Arraste para fora | Não iniciada nesta raia | Tarefa opcional e fora do escopo desta entrega |
+| 6.6 Preparação de tradução | Web móvel implementada; app nativo preparado para integração | `@cialai/i18n` fornece 20 chaves equivalentes em português e inglês, troca observável e fallback. A UI em `packages/ui/src/mobile` ganhou troca persistida de idioma e não conserva texto visível literal. `apps/mobile` recebeu o adaptador; as telas React Native não existem na base Rust e devem ser migradas quando a frente A as integrar. O gate rejeita novos textos literais nos dois diretórios |
+| 6.7 a 7.6 | Não iniciadas nesta base | Renomeação opcional de tokens, documentação viva, lançamento e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -400,6 +402,14 @@ No Linux, o mesmo script prepara um contêiner efêmero Ubuntu 22.04, instala `l
 O código comum de `workspace/mobile_files.rs` ficou restrito a Unix e o novo backend `workspace/mobile_files/windows.rs` implementa as mesmas operações de lista e leitura. Cada raiz, cwd e alvo é aberto por `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT` e `FILE_FLAG_BACKUP_SEMANTICS`; atributos vindos do handle recusam reparse points, `GetFinalPathNameByHandleW` prova a contenção depois da resolução e `GetFileInformationByHandle` recusa arquivos com mais de um hard link. Permanecem os limites de 200 entradas, 128 KiB, texto válido e nomes ou conteúdos sensíveis.
 
 `node tools/check/mobile-files-windows.mjs` passou e confirmou o feature do `windows-sys`, as APIs, flags, contenção final, proteção de hard links e ausência do stub indisponível. `cargo fmt` e `git diff --check` passaram. `cargo-xwin` não foi encontrado no PATH; como o host tinha somente 4,2 GiB livres, sua instalação e a compilação Windows não foram iniciadas. O backend está implementado, mas não foi compilado nem executado no Windows.
+
+### 13/09/2026, preparação de tradução da tarefa 6.6
+
+Criado o workspace puro `@cialai/i18n`, com normalização de locale, português do Brasil como fallback seguro, inglês como segundo idioma, interpolação fechada quando falta chave ou valor e assinatura observável para React. Os dois dicionários têm as mesmas 20 chaves. `packages/ui/src/mobile` passou a resolver por chave todos os textos visíveis de cabeçalho, conexão, aparência, navegação, estado somente leitura e abertura externa. O botão de idioma no cabeçalho alterna entre português e inglês, persiste em `localStorage` e atualiza o atributo `lang` do documento.
+
+`apps/mobile/src/i18n.ts` expõe a mesma instância, locale detectado, troca, assinatura e tradução ao aplicativo nativo. Esta branch nasceu de `fase-5/rust-multiplataforma`, onde `apps/mobile` continha somente o manifesto; as telas React Native mantidas pela frente A não estão disponíveis para edição sem trazer trabalho de outra raia. Por isso o adaptador está pronto, mas a substituição dos textos dessas telas deve acontecer na integração da frente A. A migração do desktop continua explicitamente para depois dessa integração.
+
+`packages/ui/scripts/check-mobile-i18n.mjs` percorre somente `packages/ui/src/mobile` e `apps/mobile`, exige paridade dos dicionários, valida chaves literais e rejeita texto JSX, propriedades acessíveis e mensagens nativas literais. Assim, as telas React Native ainda ausentes falharão no gate quando entrarem até adotarem as chaves. `npm run test:i18n` passou 3 casos, o gate passou com 20 chaves em dois idiomas e `npm run test:ui` passou os 39 casos, os 17 casos de sincronização e os checks estáticos existentes. `npm audit` informou zero vulnerabilidades.
 
 ## Arquivos para retomar
 
