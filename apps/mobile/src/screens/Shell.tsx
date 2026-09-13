@@ -108,8 +108,8 @@ export function Shell({
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
-      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId
-    })}; true;`, [desktopId, version]);
+      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName
+    })}; true;`, [desktopId, desktopName, version]);
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>

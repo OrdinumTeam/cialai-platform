@@ -4,7 +4,14 @@
 [data-form-factor="phone"] .ios-shell { display: flex; flex-direction: column; height: 100dvh; background: var(--mac-bg); color: var(--mac-label); }
 [data-form-factor="phone"] .ios-header { flex: none; padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: var(--mac-toolbar-bg); border-bottom: 1px solid var(--mac-separator); }
 [data-form-factor="phone"] .ios-header__heading { display: flex; align-items: center; gap: 4px; }
-[data-form-factor="phone"] .ios-header--compact { padding: 4px 12px; }
+[data-form-factor="phone"] .ios-header--terminal { min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(env(safe-area-inset-top) + 8px) max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left)); }
+[data-form-factor="phone"] .ios-header--terminal h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; }
+[data-form-factor="phone"] .ios-header--terminal .ios-connection { flex: none; display: flex; align-items: center; gap: 6px; margin: 0; font-size: .75rem; }
+[data-form-factor="phone"] .ios-header--terminal .ios-connection span { width: 7px; height: 7px; border-radius: 50%; background: var(--mac-label-3); }
+[data-form-factor="phone"] .ios-header--terminal .ios-connection--connected span { background: #30d158; }
+[data-form-factor="phone"] .ios-header--terminal .ios-connection--connecting span { background: #ff9f0a; }
+[data-form-factor="phone"] .ios-header--terminal .ios-connection--removed span,
+[data-form-factor="phone"] .ios-header--terminal .ios-connection--incompatible span { background: #ff453a; }
 [data-form-factor="phone"] .ios-shell--terminal .ios-content { overflow: hidden; padding: 0; }
 [data-form-factor="phone"] .ios-shell--terminal .ios-tabbar { position: static; flex: none; }
 /* Teclado aberto: o WebKit nao encolhe a pagina, so o visualViewport. A casca

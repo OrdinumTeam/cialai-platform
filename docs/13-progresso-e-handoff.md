@@ -48,6 +48,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.3 Aplicativo Expo | Scaffold implementado e validado estaticamente | Expo 57 e React Native 0.86.3 com estados de pareamento, computadores, shell, offline e ajustes; perfis sem segredos e tokens no Secure Store. `typecheck` e lint passaram; Jest fica para 3.7 e execução nativa permanece pendente |
 | 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
+| 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 
 ## Ambiente observado
@@ -360,6 +361,12 @@ O observador global de `AppState` chama `NotifyForeground`, preserva o bloqueio 
 `app.config.ts` define Cialai, esquema `cialai`, bundle `br.com.ordinum.cialai`, iOS 16.4 herdado do podspec, câmera, rede local e Face ID. `usesNonExemptEncryption` está verdadeiro e o entitlement de proteção padrão usa `NSFileProtectionCompleteUntilFirstUserAuthentication`; o módulo Swift também exclui seu estado do backup em runtime. O ícone aponta para o PNG opaco de 1024 pixels já aprovado e versionado em `apps/desktop/design`, sem duplicar o binário.
 
 `npm run typecheck --workspace @cialai/mobile`, `npm run lint --workspace @cialai/mobile` e `npm exec --workspace @cialai/mobile -- expo config --type public --json` terminaram com código 0. A variante `--type prebuild` confirmou bundle, criptografia não isenta e proteção de dados. Nenhum projeto Xcode, assinatura, archive ou aparelho foi usado.
+
+### 12/09/2026, página do celular da tarefa 3.6 concluída localmente
+
+`MobileApp` monta somente `VIEW_COMPONENTS.terminais`; `TabBar` e `MoreSheet` foram removidos. O cabeçalho compacto permanece visível com o nome recebido no `welcome` ou pela casca nativa e traduz conectado, conectando, removido, incompatível e desconectado. O bootstrap da WebView agora inclui `desktopName` em `__CIALAI_SHELL__`.
+
+Adicionado `check-mobile-shell.mjs` para renderizar o cabeçalho e impedir a volta das abas. `npm run test:ui` terminou com código 0: sincronização 17 de 17 e demais checks Node 40 de 40. `npm run typecheck --workspace @cialai/mobile` e lint também passaram antes da entrega. Isso prova composição e contratos locais, não carregamento em WKWebView ou WebView Android.
 
 ## Arquivos para retomar
 
