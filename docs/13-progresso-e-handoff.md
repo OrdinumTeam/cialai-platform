@@ -52,7 +52,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
 | 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
-| 3.7 Testes Jest | Concluída localmente | Os 65 casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação e transições somam 99 casos em 14 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
+| 3.7 Testes Jest | Concluída localmente | Os casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação, assinatura e transições somam 101 casos em 15 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
 | 3.8 Distribuição iOS | Preparada localmente, serviços externos pendentes | `ios-testflight` e `ios-archive` compilam o XCFramework com Go 1.26.5 e `gomobile` no runner, validam a casca e preparam assinatura e IPA. Contrato YAML e scripts passaram localmente; app, integração, credenciais, assinatura, archive e upload não foram criados nem executados |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 | 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
@@ -65,9 +65,10 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
 | 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
 | 7.5 Release da versão 1 | Procedimento preparado na frente C, release pendente | Changelog público, roteiro da candidata e guarda local cobrem os seis gates do documento 10. A guarda final falha com todos os gates pendentes e nenhuma tag, assinatura, publicação ou instalação foi feita |
+| 6.8 Documentação viva | Implementada na frente C | Documentos 01 a 12 têm estado datado por item, o roadmap classifica 86 tarefas e o registro cobre as 31 decisões. O índice e as descrições de CI e ferramentas foram atualizados para o que existe nesta linha |
 | 3.9 Roteiros em iPhone | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06, limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
 | 4.7 Roteiros em Android | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06 e quatro verificações específicas do Android, com limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
-| 3.10, 4.8, 5.1 a 6.8 e 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 3.10, 4.8, 5.1 a 6.7 e 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -514,8 +515,8 @@ Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testa
 | 3 iOS | Código de 3.1 a 3.8 pronto; builds nativos, roteiros em iPhone e revisão pendentes | 70% |
 | 4 Android | Código de 4.1 a 4.6 pronto; build, roteiros em aparelho e relatório do Play pendentes | 57% |
 | 5 Linux e Windows | Em andamento fora da main | 0% na main |
-| 6 Todas as plataformas | Não iniciada | 0% |
-| 7 Lançamento | Não iniciada | 0% |
+| 6 Todas as plataformas | 6.8 concluída na frente C fora da main; validações das outras plataformas pendentes | 0% na main |
+| 7 Lançamento | 7.1 a 7.5 implementadas ou preparadas na frente C fora da main; gates externos pendentes | 0% na main |
 | Total | Soma ponderada | cerca de 48%, ou 57% quando a frente da Fase 5 entrar com o que já tem |
 
 ### 13/09/2026, atualizador da tarefa 7.1 preparado na frente C
@@ -596,6 +597,18 @@ Criado `docs/testes/roteiro-4.7-android.md` para uma execução por combinação
 Criado `CHANGELOG.md` em inglês com o estado não publicado da primeira versão. `docs/release-v1.md` transforma os seis itens do documento 10 em etapas de congelamento, testes, assinatura, tag, conferência de artefatos, instalação limpa, distribuição interna, submissão e recuo. As responsabilidades por chaves, contas, aparelhos, contato, capturas e aprovação estão marcadas como dependências do usuário.
 
 `tools/release/check-release.mjs` valida a presença dos seis gates, dos seis formatos desktop, dos cinco sidecars, do atualizador e dos dois artefatos móveis. `npm run check:release` terminou com código 0 e informou seis gates documentados e seis pendentes. A execução com `--release` falhou como esperado antes de consultar versões e tag, porque nenhum gate tem evidência verificada. `git diff --check` passou. Nenhuma versão foi alterada, tag criada, chave gerada, ação remota disparada, release publicada, instalação feita ou loja acessada; a tarefa 7.5 permanece preparada, sem aceite de lançamento.
+
+### 13/09/2026, documentação viva da tarefa 6.8 implementada na frente C
+
+Os documentos 01 a 12 agora começam com um quadro `Estado em 13/09/2026`. Cada componente, critério, workflow, tarefa e decisão foi classificado como `Implementado`, `Preparado` ou `Pendente`, sempre pelo conteúdo desta linha. O roadmap contém estado individual para 86 tarefas e o registro contém estado individual para as 31 decisões. `docs/README.md`, a árvore real, os scripts existentes e a descrição dos workflows foram atualizados; planos ausentes como `nightly-e2e.yml`, `mobile-artifacts.yml` e as ferramentas de navegador permanecem identificados como pendentes.
+
+`npm run check:living-docs` terminou com código 0 e confirmou os doze quadros datados, os cinco critérios de sucesso, as 86 tarefas e as 31 decisões. `git diff --check` passou. A revisão documental não aprova CI remota, Linux, Windows, builds nativos, aparelhos, assinatura, lojas ou soak.
+
+A validação final usou Node 22.23.2 e npm 10.9.8. `npm test` da raiz terminou com código 0: todos os checks de fundação e lançamento passaram; `check-terminal-sync.mjs` aprovou 17 casos; a suíte restante da interface aprovou 46; o protocolo aprovou 9; os dois builds Vite concluíram e o recurso móvel validou 130 assets; Rust aprovou 143 testes, com 2 ensaios externos ignorados; todos os pacotes Go terminaram verdes; Jest aprovou 101 testes em 15 suítes. A guarda comum da release informou seis gates documentados e seis pendentes. Nenhum teste remoto, físico, de assinatura, publicação, loja ou soak foi executado.
+
+A frente partiu de `ba1b828`. Durante a execução, a main avançou para `842491a` com uma correção do túnel e recebeu alterações não commitadas da frente de integração. `git merge-tree` não encontrou conflito entre as árvores commitadas de `main` e `fase-7/lancamento`; mudanças ainda não commitadas não entram nessa prova e precisam ser preservadas pela integração final.
+
+Parte C pronta para merge
 
 ## Arquivos para retomar
 

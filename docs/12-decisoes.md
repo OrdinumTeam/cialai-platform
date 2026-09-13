@@ -2,6 +2,44 @@
 
 Uma entrada por decisão, com contexto, decisão, alternativas e consequências. Entradas novas entram no fim com número sequencial e data. As quatro primeiras foram confirmadas pelo usuário em 12/09/2026; as demais vieram da análise técnica e das duas revisões de arquitetura do mesmo dia.
 
+## Estado em 13/09/2026
+
+O estado abaixo se refere à aplicação da decisão nesta linha, não à conclusão de todas as fases que dependem dela.
+
+| Decisão | Estado | Limite atual |
+| --- | --- | --- |
+| 001 | Implementado | Nome, bundle e esquema adotados |
+| 002 | Implementado | Headscale auto hospedado e `ControlAdmin` adotados |
+| 003 | Preparado | Escopo de paridade adotado; primeira versão pública segue pendente |
+| 004 | Implementado | Apache 2.0, `LICENSE` e `NOTICE` presentes |
+| 005 | Implementado | Tauri e extração Rust adotados no macOS |
+| 006 | Preparado | Expo e WebView adotados; builds nativos permanecem pendentes |
+| 007 | Implementado | Borda Go serve o recurso móvel |
+| 008 | Preparado | Sidecar implementado e bindings gerados; aparelhos permanecem pendentes |
+| 009 | Implementado | Proxy fixo, nonce e cookie integrados |
+| 010 | Implementado | Token fica fora da página e segredo protege a ponte |
+| 011 | Implementado | Política foi exercitada localmente com dois usuários |
+| 012 | Implementado | Payload textual e leitor QR adotados |
+| 013 | Preparado | Subprotocolo existe; plano B não foi ativado |
+| 014 | Preparado | Configuração verdadeira aplicada; confirmação jurídica e loja pendentes |
+| 015 | Implementado | Marca, acento, sessões e ANSI aplicados |
+| 016 | Preparado | Workflows existem; execução remota e publicação permanecem pendentes |
+| 017 | Preparado | Entrada pública em inglês existe; tradução da interface permanece pendente |
+| 018 | Implementado | Tokens `--mac-*` foram mantidos |
+| 019 | Pendente | Atalhos Linux e Windows dependem da integração da Fase 5 |
+| 020 | Implementado | Leitura móvel Unix e arraste macOS refletem o recorte decidido |
+| 021 | Implementado | Extração usou o working tree inventariado; commit no Control segue como dependência do usuário |
+| 022 | Implementado | Go 1.26.5 está fixado no módulo e nos workflows |
+| 023 | Implementado | Fundação e aceite externo permanecem separados nos registros |
+| 024 | Implementado | Inventário e check da origem estão versionados |
+| 025 | Implementado | Resultado local do spike 3 está registrado com limites |
+| 026 | Implementado | Pendências dos demais spikes estão registradas sem aceite indevido |
+| 027 | Implementado | Fases locais avançaram com pendências preservadas |
+| 028 | Implementado | Vite 7.3.6 e plugin React 5.2.0 estão fixados |
+| 029 | Implementado | Ícone provisório foi aplicado e depois conferido na tarefa 1.7 |
+| 030 | Implementado | Suíte Rust usa casos elegíveis e contagem real no handoff |
+| 031 | Implementado | SheetJS oficial e esbuild corrigido estão no lockfile |
+
 ## 001 Nome Cialai
 
 Contexto: o pedido soletrou C-I-A-L-I-A, mas a pasta é `cialai-platform` e a marca em `ordinum-marketing` é `CIALAI`. Decisão: `Cialai`, bundle `br.com.ordinum.cialai`, esquema `cialai`. Alternativa: renomear pasta e marca para `Cialia`. Consequência: todos os identificadores, chaves e textos usam `cialai`.

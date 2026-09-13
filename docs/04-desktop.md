@@ -4,6 +4,20 @@ O app desktop do Cialai é o app macOS do Control extraído para `apps/desktop`,
 
 Versões conferidas no `Cargo.lock` do Control: tauri 2.11.5, wry 0.55.1, tao 0.35.3, portable-pty 0.9.0, window-vibrancy 0.8.0. Fatos que decidem o desenho: no Unix o `portable-pty` mata só o shell com SIGHUP e expõe `tcgetpgrp` pelo master; no Windows ele chama `TerminateProcess` no shell, não tem líder de grupo nem descritor e fechar o master fecha o ConPTY. O plugin `opener` já revela arquivos no Finder, no Explorer e nos gerenciadores Linux. O Tauri 2.11 já tem `work_area`, `set_effects` e as chaves `backgroundColor`, `decorations`, `shadow` e `transparent` por sistema.
 
+## Estado em 13/09/2026
+
+| Área | Estado | Situação atual |
+| --- | --- | --- |
+| Estrutura Tauri e crate macOS | Implementado | Crate extraído, sidecar integrado e compilação local aprovados |
+| Estúdio e casca desktop | Implementado | Interface, onboarding, preferências, marca e página móvel passam nos checks locais |
+| Terminal, arquivos, Git, prévias e Dev Browser | Implementado | Suíte Rust elegível e self test local aprovados no macOS |
+| Ponte, supervisor e telas de rede | Implementado | Contratos e simulações locais aprovados; pareamento com celular físico segue pendente |
+| Backend Linux | Pendente | Matriz e riscos estão especificados, sem integração nesta linha |
+| Backend Windows | Pendente | ConPTY, Job Objects, janela, atalhos e arquivos permanecem especificados, sem integração nesta linha |
+| Empacotamento desktop | Preparado | Sidecars e configuração Tauri existem; instaladores assinados e instalação limpa não foram produzidos |
+| Atualizador | Preparado | Plugin, interface, endpoint e guarda existem; chave pública, assinatura e atualização real estão pendentes |
+| Testes multiplataforma | Pendente | Os testes locais macOS não substituem CI remota, IME, Wayland, WebView2 nem instalação nos outros sistemas |
+
 ## Estrutura do crate
 
 ```

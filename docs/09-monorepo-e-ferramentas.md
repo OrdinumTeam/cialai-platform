@@ -1,5 +1,18 @@
 # Monorepo e ferramentas
 
+## Estado em 13/09/2026
+
+| Item | Estado | Situação atual |
+| --- | --- | --- |
+| Workspaces e toolchains | Implementado | npm, Node, Rust, Go, Expo e versões centrais estão fixados no repositório |
+| Desktop, interface, protocolo e túnel | Implementado | Os quatro pacotes existem e passam na suíte local do macOS |
+| Aplicativo móvel | Preparado | TypeScript e checks passam; projetos nativos gerados, builds e aparelhos continuam externos |
+| Infraestrutura Headscale | Implementado | Receita e integração Docker local existem; implantação pública não ocorreu |
+| Ferramentas de check e self test | Implementado | Checks estruturais, suíte da interface e self test local estão versionados |
+| Ferramentas de release e lojas | Preparado | Scripts e guardas existem; credenciais, assinatura e chamadas de publicação não foram executadas |
+| Navegador automatizado multiplataforma | Pendente | Não há diretório `tools/browser` nem workflow nightly nesta linha |
+| Documentação viva | Implementado | Documentos 01 a 12 têm estado datado e o documento 13 mantém a evidência de execução |
+
 ## Estrutura
 
 ```
@@ -10,9 +23,9 @@ cialai-platform/
   CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
   package.json                       workspaces npm e scripts da raiz
   .gitignore
-  .github/workflows/                 ci.yml, release.yml, headscale-integration.yml, nightly-e2e.yml
+  .github/workflows/                 ci.yml, release.yml, headscale-integration.yml, spike-headscale.yml
   codemagic.yaml                     ios-testflight, ios-archive, android-play
-  docs/                              estes documentos, depois documentação viva
+  docs/                              documentação viva, evidências, lojas, revisão e roteiros
   apps/
     desktop/                         Tauri 2, ver 04-desktop.md
     mobile/                          Expo, ver 05-mobile.md
@@ -24,13 +37,16 @@ cialai-platform/
   infra/
     headscale/                       docker-compose.yml, config/, bootstrap.sh, README.md
   tools/
-    check/                           check-*.mjs herdados de $CONTROL/frontend/scripts
-    browser/                         run-browser-checks.mjs com Playwright e os check-*-browser.js
+    check/                           checks estruturais e guardas da documentação
     selftest/                        selftest-app.js e fixtures
-    mac/                             wksnap, winid, winbounds, drive, em Swift
-    release/                         cm-*.sh, _stores.py, asc_api.py, play_api.py, check-app-icon.swift
+    spikes/                          preparação e execução local dos experimentos
+    release/                         updater, checklist, cm-*.sh, APIs das lojas e check do ícone
     build-tunnel-mobile.sh           gera o xcframework e o aar
+    build-tunnel.mjs                 gera e verifica os sidecars
+    run.mjs                          orquestra checks desktop, túnel e integrações
 ```
+
+O diretório `tools/browser` e `nightly-e2e.yml` continuam planejados para as tarefas 5.15 e 5.18. Diretórios gerados como `dist`, `target`, `node_modules`, binários e recursos móveis podem existir no ambiente local e permanecem ignorados pelo Git.
 
 ## Pacotes
 
@@ -68,19 +84,25 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | --- | --- |
 | `npm run dev:desktop` | `tauri dev` em `apps/desktop`, com o Vite servindo `packages/ui` |
 | `npm run build:desktop` | `tauri build` no sistema atual, precedido do build do sidecar para o triplo local |
-| `npm run build:tunnel` | Compila o sidecar para todos os triplos em `apps/desktop/src-tauri/binaries` |
-| `npm run build:tunnel:mobile` | `tools/build-tunnel-mobile.sh` |
-| `npm run dev:mobile` | `expo start --dev-client` em `apps/mobile` |
-| `npm run prebuild:mobile` | `expo prebuild` das duas plataformas, nunca versionado |
-| `npm run test` | `test:ui`, `test:protocol`, `test:desktop`, `test:tunnel`, `test:mobile` |
-| `npm run test:ui` | `node --test packages/ui/tests` mais `tools/check/*.mjs` |
-| `npm run test:browser` | `tools/browser/run-browser-checks.mjs` |
-| `npm run test:desktop` | `cargo fmt --check`, `cargo clippy --all-targets -D warnings`, `cargo test` em `apps/desktop/src-tauri` |
-| `npm run test:tunnel` | `go test ./...` em `packages/tunnel-core` |
-| `npm run test:tunnel:integration` | `go test -tags integration ./integration` com Docker |
-| `npm run test:mobile` | `jest --runInBand`, `tsc --noEmit`, `eslint . --max-warnings 0` em `apps/mobile` |
-| `npm run check:text` | Varre `docs`, `packages/ui/src` e `apps/mobile/src` por parênteses e travessões em texto visível |
-| `npm run icons` | Gera os ícones das três plataformas e roda `check-app-icon.swift` |
+| `npm run build:tunnel` | Compila os cinco alvos de release por `tools/build-tunnel.mjs`; `--local` é usado pelo workspace desktop para gerar só o alvo atual |
+| `npm run test` | Executa guardas de fundação e lançamento, depois interface, protocolo, desktop, túnel e celular |
+| `npm run test:ui` | Executa os checks de extração, sincronização, rede, marca, arquivos, casca, plataforma e preferências |
+| `npm run test:protocol` | Valida o esquema, as fixtures e o cliente remoto de `packages/protocol` |
+| `npm run test:desktop` | Confere estrutura, ícone, extração, onboarding, self test, sidecar e updater; gera sidecar e recurso móvel; executa build Vite, formatação, clippy e testes Rust |
+| `npm run test:tunnel` | Confere a receita Headscale, executa `go vet` e `go test -mod=readonly ./...` |
+| `npm run test:mobile` | Executa Jest no aplicativo Expo; typecheck e lint têm scripts próprios no workspace e também estão no Codemagic |
+| `npm run test:selftest` | Executa o self test local com dados fictícios e saída em diretório temporário |
+| `npm run test:integration:headscale` | Executa a integração Docker com Headscale quando o ambiente estiver disponível |
+| `npm run test:spike:headscale` | Executa o spike local de política e expiração |
+| `npm run check:source` | Confere commit e hashes da origem somente leitura no Control |
+| `npm run check:public-docs` | Confere README, contribuição, segurança, conduta e modelos públicos |
+| `npm run check:store-metadata` | Confere políticas, respostas, limites e plano de capturas das lojas |
+| `npm run check:review-pack` | Confere notas de revisão e roteiros de demonstração e vídeo |
+| `npm run check:manual-mobile` | Confere as folhas imprimíveis iOS e Android sem aprovar seus resultados |
+| `npm run check:release` | Confere a preparação da versão 1; `--release` exige os seis gates verificados |
+| `npm run check:living-docs` | Confere estado datado nos documentos 01 a 12 e cobertura das tarefas e decisões |
+
+O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`, sem atalho na raiz. Desenvolvimento Expo e prebuild são executados no workspace `@cialai/mobile`. Os scripts `test:browser`, `check:text` e `icons` descritos no planejamento original ainda não existem na raiz.
 
 ## Como rodar
 
@@ -88,7 +110,7 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | --- | --- |
 | Desktop em desenvolvimento | `npm ci`, `npm run build:tunnel` para o triplo local, `npm run dev:desktop`; o app abre com `?cialai_selftest=1` quando `devUrl` aponta para isso |
 | Headscale local | `cd infra/headscale && docker compose up`, com `server_url` em `http://127.0.0.1:8080` só em desenvolvimento; `bootstrap.sh --dev` gera a chave da API |
-| Celular em desenvolvimento | `npm run build:tunnel:mobile`, `npm run prebuild:mobile`, `npx expo run:ios --device` ou `npx expo run:android --device`; simuladores não têm UDP confiável para o WireGuard, então rede só em aparelho real |
+| Celular em desenvolvimento | `bash tools/build-tunnel-mobile.sh`, depois `npm exec --workspace @cialai/mobile -- expo prebuild` e `npm exec --workspace @cialai/mobile -- expo run:ios --device` ou `expo run:android --device`; simuladores não têm UDP confiável para o WireGuard, então rede só em aparelho real |
 | Página do celular no desktop | `http://127.0.0.1:1420/mobile.html?bridge=ws://127.0.0.1:3720/pty` com `--dev-open-bridge`, como o protótipo fazia com `?bridge=` em loopback |
 | Demo do estúdio | `http://127.0.0.1:1420/?terminais=demo&motion=0#terminais` |
 

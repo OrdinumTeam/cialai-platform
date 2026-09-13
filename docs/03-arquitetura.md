@@ -1,5 +1,20 @@
 # Arquitetura
 
+## Estado em 13/09/2026
+
+| Componente ou fluxo | Estado | Evidência e limite |
+| --- | --- | --- |
+| `apps/desktop` no macOS | Implementado | Tauri, estúdio, ponte e supervisor compilam e passam nas suítes locais |
+| `packages/ui` | Implementado | Entradas desktop e celular, marca e checks de sincronização estão integrados |
+| `packages/protocol` | Implementado | Esquema, fixtures e transporte remoto passam nos testes Node |
+| `packages/tunnel-core` | Implementado | Sidecar, borda, proxy, pareamento e cliente Headscale passam em Go e na integração Docker local |
+| `apps/mobile` | Preparado | Casca Expo e wrappers Swift e Kotlin existem; nenhum aparelho ou archive assinado foi executado |
+| `infra/headscale` | Implementado | Receita e política existem e a política foi exercitada localmente; implantação pública continua pendente |
+| Linux e Windows desktop | Pendente | O desenho está especificado, mas a implementação da frente paralela não está integrada nesta linha |
+| Distribuição | Preparado | Workflows e updater existem; assinatura, artefatos publicados, instalações e lojas continuam pendentes |
+
+O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda não executados, o estado válido é o da tabela acima e do documento 13.
+
 ## Desenho alvo
 
 ```

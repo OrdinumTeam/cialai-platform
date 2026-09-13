@@ -2,6 +2,19 @@
 
 O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primitivas, movimento e dimensões, e troca a marca Ordinum pela identidade Cialai da louva-a-deus orquídea. A paleta das sessões e o tema ANSI do terminal não mudam.
 
+## Estado em 13/09/2026
+
+| Item | Estado | Situação atual |
+| --- | --- | --- |
+| Marca, acento e gradiente | Implementado | `brand.css`, splash e superfícies Cialai passam no check de marca |
+| Tema ANSI e paleta das sessões | Implementado | Azul semântico e dezoito ids foram preservados e testados |
+| Ícones desktop e móvel | Implementado | Fontes opacas e formatos do Tauri foram gerados e o ícone móvel passou no check de assets; lançadores externos não foram conferidos |
+| Tipografia, movimento e dimensões | Implementado | Valores foram preservados na interface compartilhada e nas capturas macOS |
+| Regras de texto em português | Implementado | Checks de interface e revisão dos materiais cobrem os textos atuais |
+| Tradução da interface para inglês | Pendente | A tarefa 6.6 ainda não está integrada nesta linha |
+| Capturas de paridade no macOS | Implementado | Comparações claro, escuro, Dev Browser e quatro estados móveis estão em `docs/evidence/task-1.11` |
+| Capturas Linux, Windows e lojas | Pendente | Dependem das implementações integradas, builds nativos e tamanhos exigidos pelas lojas |
+
 ## Fontes da marca
 
 | Item | Valor |
@@ -130,3 +143,5 @@ Sem parênteses para informação secundária; sem hífen isolado, meia-risca ou
 ## Capturas de referência
 
 Gerar com a demo `?terminais=demo&motion=0#terminais` em 1380 por 880, claro e escuro, no Control e no Cialai, e comparar lado a lado: lista com cinco sessões cobrindo os estados, área de trabalho com editor e terminal, explorador com marcadores Git, Dev Browser, celular em 393 por 852 nas quatro telas. No Control a captura usa `macos/tools/wksnap`; no Cialai a mesma ferramenta no macOS e Playwright nos outros sistemas. Fora do Tauri o xterm não desenha na captura, então o terminal é conferido dentro do app.
+
+As capturas do macOS e da página móvel foram produzidas com dados fictícios em `docs/evidence/task-1.11` e são usadas no README público. A geração por Playwright nos outros sistemas e as capturas nativas das lojas continuam pendentes.

@@ -2,6 +2,138 @@
 
 Oito fases, cada uma com tarefas numeradas, tamanho relativo, raia de paralelismo, dependências e critérios de aceite. Tamanhos: P até meio dia, M de um a dois dias, G de três a cinco dias. Raias A, B e C podem andar em paralelo dentro da fase depois de cumpridas as dependências. Cada tarefa cita o documento que a detalha.
 
+## Estado em 13/09/2026
+
+Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige entrega local e verificação proporcional ao que está disponível. `Preparado` indica código, roteiro ou workflow presente com aceite externo, remoto ou físico ainda pendente. `Pendente` indica trabalho ausente nesta linha ou execução ainda não iniciada. O documento 13 contém a evidência detalhada.
+
+### Fase 0
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 0.1 | Implementado | Fundação e arquivos públicos existem |
+| 0.2 | Pendente | O commit solicitado no Control depende do usuário |
+| 0.3 | Preparado | CI existe sem execução remota observada |
+| 0.4 | Preparado | Bindings e script existem sem aparelhos e medições |
+| 0.5 | Pendente | Transições físicas não foram repetidas nos aparelhos |
+| 0.6 | Implementado | Política e expiração passaram em Docker local |
+| 0.7 | Pendente | WKWebView nativo não foi exercitado |
+| 0.8 | Pendente | WebView Android com AAR não foi exercitado |
+| 0.9 | Pendente | TestFlight externo não foi submetido |
+| 0.10 | Pendente | Conjunto assinado dos três desktops não foi produzido |
+| 0.11 | Pendente | Soak de 24 horas não foi executado |
+| 0.12 | Preparado | Resultados existentes estão no documento 12; spikes restantes aguardam evidência |
+
+### Fase 1
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 1.1 | Implementado | Scaffold Tauri e duas entradas Vite aprovados |
+| 1.2 | Implementado | Rust elegível extraído e testado no macOS |
+| 1.3 | Implementado | Interface extraída e checks locais aprovados |
+| 1.4 | Implementado | Plataforma, shell e caminhos portáveis integrados |
+| 1.5 | Implementado | Página móvel empacotada como recurso |
+| 1.6 | Implementado | Raízes e onboarding integrados |
+| 1.7 | Implementado | Marca, ícones e regra ANSI integrados |
+| 1.8 | Implementado | Preferências do produto integradas |
+| 1.9 | Implementado | Pacote de protocolo, esquema e fixtures integrados |
+| 1.10 | Implementado | Self test local aprovado no macOS |
+| 1.11 | Implementado | Capturas macOS e móveis comparadas com dados fictícios |
+
+### Fase 2
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 2.1 | Implementado | Base Go, nó, estado, logs e RPC testados |
+| 2.2 | Implementado | Cliente Headscale e interface administrativa testados |
+| 2.3 | Implementado | QR, sessões, dispositivos e tokens testados |
+| 2.4 | Implementado | Borda, estáticos, pareamento e autenticação testados |
+| 2.5 | Implementado | Proxy em loopback e proteções testados |
+| 2.6 | Implementado | Sidecar, doctor, versão, pai e trava testados |
+| 2.7 | Implementado | Supervisor Rust e eventos testados localmente |
+| 2.8 | Implementado | Ponte com segredo, dispositivo e revogação testada |
+| 2.9 | Implementado | Assistente, QR, dispositivos e estados integrados na interface |
+| 2.10 | Implementado | Receita Headscale e check local aprovados |
+| 2.11 | Preparado | Integração Docker passou localmente; workflow remoto está pendente |
+| 2.12 | Preparado | Cinco sidecars compilam localmente; release remota está pendente |
+
+### Fase 3
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 3.1 | Preparado | Script e binding iOS existem; workflow dedicado e XCFramework de release estão pendentes |
+| 3.2 | Preparado | Wrapper Swift existe sem build nativo |
+| 3.3 | Implementado | Casca Expo e estados passam em Node |
+| 3.4 | Implementado | URL, saúde, shell e ganchos passam nos checks locais |
+| 3.5 | Preparado | Configuração estática validada sem archive assinado |
+| 3.6 | Implementado | Página móvel reduzida e checks aprovados |
+| 3.7 | Implementado | Cento e um casos em quinze suítes aprovados na validação final desta frente |
+| 3.8 | Preparado | Codemagic e scripts existem sem contas, credenciais ou build remoto |
+| 3.9 | Preparado | Roteiro imprimível existe sem execução em iPhone |
+| 3.10 | Pendente | Ensaio externo do App Review não ocorreu |
+
+### Fase 4
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 4.1 | Preparado | Wrapper Kotlin e AAR de desenvolvimento existem sem build nativo final |
+| 4.2 | Implementado | Configuração foi validada por prebuild e introspecção |
+| 4.3 | Implementado | Voltar foi validado pelos checks Node |
+| 4.4 | Preparado | Ciclo de vida existe sem suspensão em aparelho |
+| 4.5 | Preparado | Política e Secure Store existem sem biometria e Keystore reais |
+| 4.6 | Preparado | Workflow existe sem app, credenciais, AAB ou faixa interna |
+| 4.7 | Preparado | Roteiro imprimível existe sem execução em Android |
+| 4.8 | Pendente | Relatório do Play depende do AAB enviado |
+
+### Fase 5
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 5.1 | Pendente | Base de processos multiplataforma não integrada nesta linha |
+| 5.2 | Pendente | Backend Linux não integrado nesta linha |
+| 5.3 | Pendente | Backend Windows não integrado nesta linha |
+| 5.4 | Pendente | PTY por sistema não integrado nesta linha |
+| 5.5 | Pendente | Retomada e citação por shell não integradas nesta linha |
+| 5.6 | Pendente | Backend notify não integrado nesta linha |
+| 5.7 | Pendente | Arquivos por sistema não integrados nesta linha |
+| 5.8 | Pendente | Preview Windows não integrado nesta linha |
+| 5.9 | Pendente | Browser e Office por sistema não integrados nesta linha |
+| 5.10 | Pendente | Diagnóstico e hook por sistema não integrados nesta linha |
+| 5.11 | Pendente | Janela Linux e Windows não integrada nesta linha |
+| 5.12 | Pendente | Atalhos multiplataforma não integrados nesta linha |
+| 5.13 | Pendente | CSS e fontes por sistema não integrados nesta linha |
+| 5.14 | Pendente | Preferências por sistema não integradas nesta linha |
+| 5.15 | Pendente | Matriz de testes Linux e Windows não integrada nesta linha |
+| 5.16 | Pendente | CI completa depende da integração da fase |
+| 5.17 | Pendente | Assinaturas e instaladores não foram executados |
+| 5.18 | Pendente | Nightly e self test remoto não existem nesta linha |
+| 5.19 | Pendente | Diferenças verificadas por plataforma ainda não foram registradas |
+
+### Fase 6
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 6.1 | Pendente | Dev Browser não foi validado em Linux e Windows |
+| 6.2 | Pendente | LibreOffice não foi validado nos três sistemas |
+| 6.3 | Pendente | Uso de plano não foi validado nos três sistemas |
+| 6.4 | Pendente | Leitura móvel no Windows não foi implementada nesta linha |
+| 6.5 | Pendente | Arraste externo continua opcional e sem Linux ou Windows |
+| 6.6 | Pendente | Tradução da interface não foi integrada |
+| 6.7 | Pendente | Tokens `--mac-*` permanecem por decisão |
+| 6.8 | Implementado | Documentos 01 a 12 foram revistos com estado datado e check automático |
+
+### Fase 7
+
+| Tarefa | Estado | Limite atual |
+| --- | --- | --- |
+| 7.1 | Preparado | Updater existe; chave, assinatura e instalação estão pendentes |
+| 7.2 | Implementado | Documentação pública e modelos foram revistos |
+| 7.3 | Preparado | Políticas, formulários propostos, textos e capturas planejadas existem sem publicação |
+| 7.4 | Preparado | Notas e roteiros existem sem submissão às lojas |
+| 7.5 | Preparado | Changelog, procedimento e guarda existem com seis gates pendentes |
+| 7.6 | Pendente | Anúncio e página do projeto não foram produzidos |
+
+As frentes paralelas alteram a ordem de autoria, mas não dispensam dependências de aceite. Em particular, a documentação e os materiais da Fase 7 podem estar preparados enquanto as Fases 5 e 6 e os testes externos continuam pendentes.
+
 ## Fase 0: fundação e spikes
 
 Objetivo: monorepo pronto, toolchains fixadas, CI mínima nos três sistemas e as oito incertezas de rede resolvidas com critérios numéricos antes de qualquer código de produto.

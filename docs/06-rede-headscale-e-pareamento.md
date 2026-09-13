@@ -2,6 +2,32 @@
 
 Este documento especifica a camada que liga o celular ao computador: o Headscale auto hospedado, o núcleo Go do túnel, a borda no desktop, o proxy no celular, o pareamento por QR, o registro de dispositivos, o modelo de ameaças, os testes e os spikes que precisam passar antes de qualquer outra fase.
 
+## Estado em 13/09/2026
+
+| Item | Estado | Situação atual |
+| --- | --- | --- |
+| Receita e política Headscale | Implementado | Compose, modelos, bootstrap e check existem; política e expiração passaram em Docker local |
+| Núcleo Go e sidecar | Implementado | Nó, cliente REST, stdio, armazenamento e logs passam nas suítes locais |
+| Borda, proxy e pareamento | Implementado | Contratos, segurança, limites e integração Docker passam sem aparelho físico |
+| Supervisor e ponte desktop | Implementado | Processo real falso, timeouts, reinício, eventos e segredo da borda foram testados localmente |
+| Ligações gomobile | Preparado | API, script e bindings gerados existem; execução nativa em iOS e Android está pendente |
+| Modelo de ameaças | Implementado | Controles estão refletidos no código e nos testes locais; auditoria externa e prova em aparelhos não ocorreram |
+| Roteiros manuais | Preparado | Folhas iOS e Android cobrem trinta cenários no total; todos permanecem sem resultado |
+| Plano B com app Tailscale | Pendente | Não foi ativado nem executado, pois o caminho principal ainda não falhou em aparelho |
+
+Estado dos spikes:
+
+| Spike | Estado | Evidência e limite |
+| --- | --- | --- |
+| 1. gomobile e tsnet em aparelhos | Preparado | API e bindings foram gerados; iPhone, Android, LTE, tamanho e memória não foram medidos |
+| 2. Rede e suspensão | Pendente | Ganchos existem, mas as dez execuções por caso em cada aparelho não ocorreram |
+| 3. Política e expiração | Implementado | Mesmo usuário, isolamento, porta e expiração foram verificados localmente com Headscale 0.29.3 |
+| 4. WKWebView e proxy | Pendente | Checks simulados não substituem WKWebView nativo |
+| 5. Android WebView e AAR | Pendente | Prebuild estático não substitui Android 12, Android 14 e relatório do Play |
+| 6. TestFlight externo | Pendente | Nenhum build foi submetido a Beta App Review |
+| 7. Empacotamento e assinatura | Pendente | Nenhum conjunto assinado dos três sistemas foi instalado |
+| 8. Robustez por 24 horas | Pendente | Testes unitários de carga existem, mas o soak não foi executado |
+
 ## Princípios
 
 1. Um só núcleo de rede em Go, sobre `tailscale.com/tsnet` 1.102, compilado como sidecar no desktop e como biblioteca `gomobile` nos celulares. Nada de cliente Tailscale do sistema, nada de `tailscale serve`, nada de certificado na borda.
