@@ -40,7 +40,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     android: {
       package: 'br.com.ordinum.cialai',
-      versionCode: 1
+      versionCode: 1,
+      allowBackup: false,
+      softwareKeyboardLayoutMode: 'resize',
+      permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC'],
+      blockedPermissions: [
+        'android.permission.READ_EXTERNAL_STORAGE',
+        'android.permission.USE_FINGERPRINT',
+        'android.permission.WRITE_EXTERNAL_STORAGE'
+      ]
     },
     plugins: [
       'expo-dev-client',
@@ -50,7 +58,18 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         barcodeScannerEnabled: true
       }],
       'expo-secure-store',
-      ['expo-local-authentication', { faceIDPermission }]
+      ['expo-local-authentication', { faceIDPermission }],
+      ['./plugins/with-loopback-network-security.cjs'],
+      ['expo-build-properties', {
+        android: {
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          minSdkVersion: 26
+        },
+        ios: {
+          deploymentTarget: '16.4'
+        }
+      }]
     ],
     extra: { appEnv }
   };

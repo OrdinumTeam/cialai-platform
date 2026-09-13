@@ -50,6 +50,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
 | 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
+| 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
 | 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
 
 ## Ambiente observado
@@ -374,6 +375,12 @@ Adicionado `check-mobile-shell.mjs` para renderizar o cabeçalho e impedir a vol
 No Android, o `BackHandler` da casca injeta `{type: navigate-back}` na página. `PhoneWorkbench` usa a mesma transição do botão visível para voltar de prévia a arquivos, de arquivos a terminal e de terminal à lista. Quando já está na lista, a página devolve a mensagem à casca e o app abre Computadores. Mensagens com campos extras são recusadas.
 
 O novo caso bidirecional de `check-mobile-shell.mjs` passou. A suíte UI terminou com 17 casos de sincronização e 41 demais casos; typecheck e lint do app também passaram. O botão físico e o histórico real da WebView não foram executados em Android.
+
+### 12/09/2026, segurança Android da tarefa 4.2 preparada
+
+O plugin `with-loopback-network-security.cjs` escreve uma política com texto claro negado na base e uma única exceção sem subdomínios para `127.0.0.1`. Ele liga o arquivo no manifesto, mantém `usesCleartextTraffic` falso e desliga backup. O config usa teclado `resize`, `compileSdkVersion` e `targetSdkVersion` 36 e mínimo 26. Permissões herdadas de armazenamento e impressão digital legada foram bloqueadas, restando câmera, internet e biometria.
+
+Typecheck e lint passaram. `expo config --type prebuild` confirmou as três permissões finais e `expo config --type introspect` confirmou os três atributos do manifesto e SDKs 36, 36 e 26. O XML exportado pelo plugin foi conferido pela execução Node. Nenhum projeto Gradle, WebView real ou relatório de pré lançamento foi executado.
 
 ## Arquivos para retomar
 
