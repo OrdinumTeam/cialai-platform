@@ -1,4 +1,4 @@
-import { EventEmitter, requireNativeModule, type EventSubscription } from 'expo-modules-core';
+import { requireNativeModule, type EventSubscription } from 'expo-modules-core';
 
 export type TunnelEventKind = 'state' | 'peer' | 'proxy' | 'pair' | 'log';
 export type TunnelEvent = { kind: TunnelEventKind; payload: unknown };
@@ -31,17 +31,18 @@ export type TunnelStatus = {
   nodeKey?: string;
   keyExpiry?: string;
   health?: string[];
-  peers: Array<{
+  peers: {
     nodeKey: string;
     name: string;
     online: boolean;
     ip4?: string;
     ip6?: string;
     lastSeen?: string;
-  }>;
+  }[];
 };
 
 type NativeCialaiTunnel = {
+  addListener(eventName: 'onTunnelEvent', handler: (event: TunnelEvent) => void): EventSubscription;
   version(): string;
   inspectPairPayload(payload: string): Promise<PairInspection>;
   pair(
@@ -64,7 +65,6 @@ type NativeCialaiTunnel = {
 };
 
 const nativeModule = requireNativeModule<NativeCialaiTunnel>('CialaiTunnel');
-const emitter = new EventEmitter(nativeModule);
 
 export const version = (): string => nativeModule.version();
 export const inspectPairPayload = (payload: string): Promise<PairInspection> =>
@@ -89,4 +89,4 @@ export const notifyForeground = (active: boolean): void => nativeModule.notifyFo
 export const forgetProfile = (profileId: string): Promise<void> => nativeModule.forgetProfile(profileId);
 export const setLogLevel = (level: 'error' | 'info' | 'debug'): void => nativeModule.setLogLevel(level);
 export const addListener = (handler: (event: TunnelEvent) => void): EventSubscription =>
-  emitter.addListener<TunnelEvent>('onTunnelEvent', handler);
+  nativeModule.addListener('onTunnelEvent', handler);

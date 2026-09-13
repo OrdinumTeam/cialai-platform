@@ -2,6 +2,50 @@
   "name": "@cialai/mobile",
   "version": "0.1.0",
   "private": true,
-  "type": "module",
-  "license": "Apache-2.0"
+  "main": "index.ts",
+  "license": "Apache-2.0",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "ios": "expo start --ios --dev-client",
+    "android": "expo start --android --dev-client",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "@react-native-community/netinfo": "12.0.1",
+    "cialai-tunnel": "file:modules/cialai-tunnel",
+    "expo": "~57.0.7",
+    "expo-build-properties": "~57.0.17",
+    "expo-camera": "~57.0.4",
+    "expo-clipboard": "~57.0.1",
+    "expo-constants": "~57.0.6",
+    "expo-dev-client": "~57.0.18",
+    "expo-file-system": "~57.0.1",
+    "expo-local-authentication": "~57.0.2",
+    "expo-secure-store": "~57.0.1",
+    "expo-sharing": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-webview": "13.16.1"
+  },
+  "devDependencies": {
+    "@types/jest": "~29.5.14",
+    "@types/react": "~19.2.2",
+    "eslint": "^9.39.5",
+    "eslint-config-expo": "^57.0.0",
+    "globals": "^16.4.0",
+    "jest": "~29.7.0",
+    "jest-expo": "~57.0.5",
+    "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=22 <25"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": ["/node_modules/"]
+  }
 }

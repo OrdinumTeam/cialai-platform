@@ -45,6 +45,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.9 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 | 3.1 API e build gomobile | Código preparado e superfície validada localmente | `packages/tunnel-core/mobile` compõe nó, inspeção e pareamento, perfis, proxy e ciclo de vida sem persistir tokens. `tools/build-tunnel-mobile.sh` tem preflight de Go, Xcode, SDK e NDK e gera hashes SHA 256. Bindings Java e Objective C gerados; XCFramework, AAR e aparelhos continuam pendentes do Codemagic |
 | 3.2 Módulo Expo em Swift | Código preparado, build nativo pendente | Módulo local `cialai-tunnel` expõe a API TypeScript, embrulha `Tunnelcore.xcframework` numa fila serial, encaminha eventos e protege o diretório fora do backup. Podspec e manifesto foram validados estruturalmente; compilação Swift aguarda o Codemagic |
+| 3.3 Aplicativo Expo | Scaffold implementado e validado estaticamente | Expo 57 e React Native 0.86.3 com estados de pareamento, computadores, shell, offline e ajustes; perfis sem segredos e tokens no Secure Store. `typecheck` e lint passaram; Jest fica para 3.7 e execução nativa permanece pendente |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 
 ## Ambiente observado
@@ -328,6 +329,23 @@ O podspec declara iOS 16.4 e `Tunnelcore.xcframework` como `vendored_frameworks`
 Adicionada a implementação Android do módulo `cialai-tunnel`. Ela usa `noBackupFilesDir`, uma fila serial para todas as chamadas bloqueantes, converte JSON do Go para valores Expo e preserva os códigos estáveis ao rejeitar Promises. O Gradle fixa `minSdkVersion 26`, declara o AAR local e reutiliza as versões padrão do Expo Modules Core. O AAR e o XCFramework foram acrescentados ao ignore explícito.
 
 `xmllint --noout` no manifesto, conferência dos métodos contra as classes Java geradas por `gobind`, leitura do Gradle e `git diff --check` terminaram com código 0. Não houve `expo prebuild`, compilação Kotlin, AAR real nem execução Android local; essas provas pertencem ao runner do Codemagic e aos roteiros em aparelho.
+
+### 12/09/2026, scaffold Expo da tarefa 3.3 implementado
+
+`apps/mobile` agora usa Expo 57, React Native 0.86.3 e dev client. A máquina de estados cobre carregamento, pareamento, computadores, shell, offline e ajustes. `Pair` desliga a leitura depois do primeiro QR, permite colar o texto, inspeciona antes de confirmar e mostra progresso. A lista troca perfis, abre computadores e oferece renomear ou esquecer. O shell preserva WebView, biometria, downloads, abertura externa e guarda de origem do Control, com `__CIALAI_SHELL__`, nome do computador e estado do túnel.
+
+`profiles.json` guarda somente perfis e metadados. Cada token usa `expo-secure-store` sob `cialai.device.<desktopId>` com `WHEN_UNLOCKED_THIS_DEVICE_ONLY`; a rotação recebida pelo evento nativo substitui o valor seguro. Esquecer um perfil apaga seus tokens e solicita a remoção do estado Go. Textos visíveis novos não usam parênteses nem traços como separadores.
+
+Comandos concluídos com código 0:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm install
+npm run lint --workspace @cialai/mobile
+npm run typecheck --workspace @cialai/mobile
+git diff --check
+```
+
+O primeiro `npm install` recusou a versão inexistente `expo-camera ~57.0.7`; o mapa `bundledNativeModules.json` do Expo 57 corrigiu câmera para 57.0.4, NetInfo para 12.0.1, build properties para 57.0.17 e dev client para 57.0.18. A instalação final terminou com código 0. `npm audit --omit=dev --audit-level=moderate` encontrou onze ocorrências transitivas do aviso de `uuid` abaixo de 11.1.1 pela ferramenta `xcode` dos config plugins do Expo. O único reparo sugerido força downgrade incompatível de `expo-sharing`; ele não foi aplicado. Jest ainda não foi criado nem executado nesta tarefa.
 
 ## Arquivos para retomar
 
