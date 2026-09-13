@@ -53,7 +53,9 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.7 Arquivos portáveis | Concluída localmente no macOS; lixeira Linux e Windows pendente | Caminhos devolvidos usam barras normais, entradas preservam as duas formas aceitas no Windows, a sujeira é filtrada por sistema, links são recriados somente no Unix e `trash` 5 cobre Linux e Windows sem apagar quando a lixeira recusa |
 | 5.8 Prévia portável | Concluída localmente no macOS; WebView2 pendente | O handler aceita `preview://` e `http://preview.localhost`, `native.js` escolhe a forma do Windows e `dunce::canonicalize` protege raiz e alvo. As duas rotas passaram em teste Rust; a forma Windows ainda não foi aberta no WebView2 |
 | 5.9 Browser e Office | Concluída localmente no macOS; execução Linux e Windows pendente | Chromium e LibreOffice têm descoberta por sistema, Playwright usa cache e shell nativos, processos auxiliares não abrem janela no Windows e o browser usa Job Object. A origem `http://tauri.localhost` e URLs `file:///C:/` estão cobertas |
-| 5.10 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.10 a 5.19 | Não iniciadas nesta base | Demais backends e matriz remota continuam dependentes da integração das outras raias |
+| 6.1 Dev Browser no Linux | Preparado; imagem Ubuntu validada; testes Linux e Windows pendentes | A imagem Ubuntu 22.04 com Rust 1.98.1, Node 22.23.2 e dependências Tauri foi construída. O runner limita Docker a 6 GiB, usa Cargo com dois jobs, testa descoberta e baixa o Chromium real pelo Playwright. A compilação no contêiner não começou porque o disco caiu abaixo de 5 GiB; Windows permanece pendente |
+| 6.2 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -375,6 +377,14 @@ go test -tags=soak -count=1 -run '^TestProxySoak$' -timeout=35m -v ./soak
 ```
 
 O teste durou 1.800,064 segundos. Depois de uma rajada de aquecimento, foram 180 rajadas medidas, 9.000 quadros e 9.437.184.000 bytes enviados e ecoados. Houve oito conexões aceitas, zero desconexões atribuídas ao proxy e zero erros inesperados no backend. O RSS começou em 49.299.456 bytes, terminou em 62.767.104, atingiu 63.569.920 e cresceu 13.467.648. O heap começou em 2.459.656 bytes, terminou em 1.673.648, atingiu 2.720.568 e não apresentou crescimento final. O relatório completo local está no caminho ignorado `packages/tunnel-core/build/soak/proxy-soak-30m.json`. O soak de 24 horas não foi executado e continua obrigatório para aceitar o spike 8.
+
+### 13/09/2026, runner Linux do Dev Browser da tarefa 6.1
+
+Adicionados `tools/docker/linux-desktop.Dockerfile` e `tools/test-linux-browser.sh`. A imagem fixa Ubuntu 22.04, Rust 1.98.1 e Node 22.23.2, instala as bibliotecas de compilação do Tauri e aceita `amd64` e `arm64`. O runner usa `docker build --memory 6g`, `docker run --rm --memory 6g`, `CARGO_TARGET_DIR=/root/.cache/cialai-target-d` e Cargo com `-j 2`. Ele executa os testes de `workspace::browser`, incluindo a descoberta Linux simulada, e depois o teste ignorado que baixa e descobre um Chromium real pelo Playwright. O teste simulado do instalador também passou a criar o layout correto no Linux.
+
+A imagem foi construída de verdade em Docker Desktop arm64. A construção reduziu o espaço livre do host de 8,6 GiB para 1,4 GiB; antes de iniciar Cargo, a imagem e o cache criados nesta raia foram removidos e o reclaim do Docker elevou o espaço para 5,2 GiB. O espaço voltou a 4,2 GiB por atividade externa. O preflight incorporado ao runner então terminou com código 2 e `Espaço livre abaixo de 5 GiB`, sem iniciar uma compilação grande. Assim, nenhum teste Rust ou download real do Playwright rodou no Linux e nada foi validado no Windows.
+
+Antes de qualquer comando Cargo desta raia, `npm run sidecar --workspace @cialai/desktop` foi executado com Node 22.23.2 e npm 10.9.8. O sidecar arm64 do macOS foi criado com 19,9 MiB e SHA-256 `3ed3418600f789d9749c567d840dc21f5aa66d3de50f5c393e1b57206714c3f1`. `cargo fmt`, sem compilação, e `git diff --check` passaram. O código está preparado; o comportamento Linux e Windows não está verificado.
 
 ## Arquivos para retomar
 

@@ -8,6 +8,7 @@
     "dev": "tauri dev",
     "vite": "vite",
     "build": "tauri build",
+    "sidecar": "node ../../tools/build-tunnel.mjs --local",
     "build:ui": "vite build && npm run build:mobile-resource",
     "build:mobile-resource": "vite build --mode mobile-resource && node ../../tools/check/mobile-resource.mjs",
     "check": "cargo check --manifest-path src-tauri/Cargo.toml --locked",

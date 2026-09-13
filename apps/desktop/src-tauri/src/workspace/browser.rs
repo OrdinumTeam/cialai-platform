@@ -1365,14 +1365,21 @@ mod tests {
         let cache = platform::playwright_cache(&home);
         // Instalador de mentira: fala como o Playwright e deixa o headless
         // shell onde `find_binary` procura.
-        let script = "exec 2>&1; \
+        let layout = if cfg!(target_os = "macos") {
+            "chrome-headless-shell-mac-arm64"
+        } else {
+            "chrome-headless-shell-linux-test"
+        };
+        let script = format!(
+            "exec 2>&1; \
             echo 'Downloading Chrome Headless Shell 153.0.8010.12 (playwright chromium-headless-shell v1243) from https://cdn.playwright.dev/x.zip'; \
             echo '|■■■■                        |  50% of 90.1 MiB'; \
-            mkdir -p \"$1/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64\"; \
-            touch \"$1/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell\"";
+            mkdir -p \"$1/chromium_headless_shell-1243/{layout}\"; \
+            touch \"$1/chromium_headless_shell-1243/{layout}/chrome-headless-shell\""
+        );
         let mut seen: Vec<String> = Vec::new();
         run_install(
-            script,
+            &script,
             &home,
             &cache,
             &home,
