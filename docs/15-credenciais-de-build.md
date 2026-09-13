@@ -42,7 +42,7 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | App `br.com.ordinum.cialai` no App Store Connect | Criado em 13/09/2026 |
 | App `br.com.ordinum.cialai` no Google Play | Criado em 13/09/2026 |
 | App do Cialai no Codemagic com as integrações e grupos acima | Pendente |
-| Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Pendente |
+| Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
 | Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
 | Chave do updater e certificados de assinatura do desktop | Pendente, fora desta pasta |
 
