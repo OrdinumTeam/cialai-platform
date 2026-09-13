@@ -69,3 +69,38 @@ def token_apple() -> str:
     first, second = decode_dss_signature(key.sign(header + b"." + payload, ec.ECDSA(hashes.SHA256())))
     signature = _b64(first.to_bytes(32, "big") + second.to_bytes(32, "big"))
     return (header + b"." + payload + b"." + signature).decode()
+
+
+def token_play() -> str:
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+
+    path = env("GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH")
+    if not os.path.isabs(path):
+        path = os.path.join(REPO_ROOT, path)
+    if not os.path.exists(path):
+        sys.exit("conta de serviço do Google Play não encontrada em " + path)
+    with open(path, encoding="utf-8") as source:
+        service_account = json.load(source)
+
+    now = int(time.time())
+    header = _b64(json.dumps({"alg": "RS256", "typ": "JWT"}, separators=(",", ":")).encode())
+    payload = _b64(json.dumps({
+        "iss": service_account["client_email"],
+        "scope": "https://www.googleapis.com/auth/androidpublisher",
+        "aud": "https://oauth2.googleapis.com/token",
+        "iat": now,
+        "exp": now + 3600,
+    }, separators=(",", ":")).encode())
+    key = serialization.load_pem_private_key(service_account["private_key"].encode(), password=None)
+    signature = _b64(key.sign(header + b"." + payload, padding.PKCS1v15(), hashes.SHA256()))
+
+    code, body = curl([
+        "-X", "POST", "https://oauth2.googleapis.com/token",
+        "-d", "grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer",
+        "--data-urlencode", "assertion=" + (header + b"." + payload + b"." + signature).decode(),
+    ])
+    response = json.loads(body) if code == "200" else {}
+    if "access_token" not in response:
+        sys.exit("falha ao obter token do Google: HTTP %s %s" % (code, body[:300]))
+    return response["access_token"]

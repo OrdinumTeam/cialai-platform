@@ -17,6 +17,8 @@ Nunca versione tokens, chaves da App Store, chaves de assinatura ou credenciais 
 | `cm-log.sh BUILD_ID --download` | Mostra o resumo e baixa logs sem expor URLs assinadas |
 | `cm-publish.sh ios-testflight main` | Dispara, acompanha e resume |
 | `asc_api.py builds` | Consulta a App Store Connect |
+| `play_api.py status` | Consulta as faixas no Google Play |
+| `play_api.py upload APP.aab internal` | Valida um AAB e descarta o ensaio sem publicar |
 | `ios-gen-signing-key.sh` | Gera localmente a chave RSA em `secrets` |
 
 Criar o app, configurar integrações e iniciar builds continuam sendo ações manuais do usuário.

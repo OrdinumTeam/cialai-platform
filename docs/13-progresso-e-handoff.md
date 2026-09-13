@@ -56,6 +56,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
+| 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
 
 ## Ambiente observado
 
@@ -409,6 +410,22 @@ Com Node 22.23.2 e npm 10.9.8, `npm run typecheck`, `npm run lint` e `npm test` 
 Criados `ios-testflight` e `ios-archive` sem disparo automático. Ambos usam `mac_mini_m2`, Node 22.23.2, npm 10.9.8, Xcode atual e CocoaPods padrão. O runner instala Go 1.26.5 com o checksum do índice oficial, executa `tools/build-tunnel-mobile.sh ios`, valida o SHA 256, coloca o XCFramework no módulo Expo, roda as validações da casca, faz o prebuild e prepara assinatura e IPA. O primeiro workflow publica somente pela integração `Cialai ASC API Key`, sem solicitar TestFlight externo ou revisão da loja; o segundo conserva o IPA como artefato.
 
 Os atalhos locais de Codemagic e App Store foram espelhados dos modelos somente leitura, com a proteção nova que não envia o token da API a storage externo depois de redirecionamento. `bash -n`, análise sintática dos dois arquivos Python, três testes Node do YAML, quatro casos do próximo número de build, quatro casos de download e o verificador Swift do ícone terminaram com código 0. Nenhum build Codemagic, assinatura, archive, upload ou alteração no App Store Connect foi executado.
+
+### 12/09/2026, distribuição Android da tarefa 4.6 preparada
+
+Adicionado `android-play` no mesmo runner macOS, com NDK 28.2, Java 17 e Go 1.26.5. O workflow compila o AAR com `gomobile`, confere seu SHA 256, executa as validações móveis, gera o projeto Android e grava keystore e `key.properties` somente no runner com umask privado. Um plugin idempotente liga esse arquivo à assinatura release do Gradle, e `PROJECT_BUILD_NUMBER` governa o `versionCode`. A publicação está configurada para a faixa interna com o grupo `google_play`.
+
+O prebuild Android local terminou com código 0 e confirmou o bloco de assinatura, sem criar `key.properties`. Typecheck e lint passaram; Jest aprovou 101 casos em 15 suítes. Os quatro testes Node do YAML, os testes de número e download, `bash -n`, a análise sintática dos três arquivos Python e `git diff --check` também passaram. Nenhum segredo de projeto de referência foi aberto ou copiado. Nenhum build no Codemagic, AAB assinado, upload ou alteração no Google Play foi executado.
+
+Parte celular pronta para merge.
+
+Próximas ações do usuário:
+
+1. Criar o repositório `OrdinumTeam/cialai-platform` no GitHub e fazer o push depois de integrar os commits locais.
+2. Criar o app no Codemagic apontando para esse repositório e reconhecer o `codemagic.yaml` da raiz.
+3. Criar os apps com o identificador `br.com.ordinum.cialai` no App Store Connect e no Google Play.
+4. Configurar a integração `Cialai ASC API Key`, os grupos `appstore_credentials`, `android_credentials` e `google_play` e as variáveis simples documentadas.
+5. Só então disparar `ios-archive`, `ios-testflight` e `android-play`, conferir os artefatos e avançar para os roteiros em aparelhos e lojas.
 
 ## Arquivos para retomar
 

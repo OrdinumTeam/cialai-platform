@@ -20,7 +20,7 @@ install_dir="$tool_root/go"
 
 if [[ -x "$install_dir/bin/go" && "$($install_dir/bin/go env GOVERSION)" == "go$go_version" ]]; then
   export PATH="$install_dir/bin:$PATH"
-  [[ -z "${CM_ENV:-}" ]] || printf 'PATH=%s/bin:$PATH\n' "$install_dir" >> "$CM_ENV"
+  [[ -z "${CM_ENV:-}" ]] || printf 'PATH=%s\n' "$PATH" >> "$CM_ENV"
   return 0 2>/dev/null || exit 0
 fi
 [[ ! -e "$install_dir" ]] || {
@@ -52,4 +52,4 @@ printf '%s  %s\n' "$checksum" "$download_dir/$archive" | shasum -a 256 -c -
 tar -C "$tool_root" -xzf "$download_dir/$archive"
 test "$($install_dir/bin/go env GOVERSION)" = "go$go_version"
 export PATH="$install_dir/bin:$PATH"
-[[ -z "${CM_ENV:-}" ]] || printf 'PATH=%s/bin:$PATH\n' "$install_dir" >> "$CM_ENV"
+[[ -z "${CM_ENV:-}" ]] || printf 'PATH=%s\n' "$PATH" >> "$CM_ENV"

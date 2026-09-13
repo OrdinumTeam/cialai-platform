@@ -4,7 +4,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/_lib.sh"
 workflow="${1:-$CODEMAGIC_WORKFLOW_ID}"
 branch="${2:-$CODEMAGIC_BRANCH}"
 case "$workflow" in
-  ios-testflight|ios-archive) ;;
+  ios-testflight|ios-archive|android-play) ;;
   *) echo "Workflow inválido: $workflow" >&2; exit 1 ;;
 esac
 [[ -n "$branch" ]] || { echo "A branch é obrigatória" >&2; exit 1; }

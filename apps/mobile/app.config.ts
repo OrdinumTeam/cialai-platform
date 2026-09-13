@@ -8,6 +8,17 @@ function resolveAppEnvironment(): AppEnvironment {
   throw new Error(`APP_ENV inválido: ${value}`);
 }
 
+function resolveAndroidVersionCode(): number {
+  const value = process.env.PROJECT_BUILD_NUMBER?.trim();
+  if (!value) return 1;
+  if (!/^[1-9][0-9]*$/.test(value)) throw new Error('PROJECT_BUILD_NUMBER inválido para o Android.');
+  const versionCode = Number(value);
+  if (!Number.isSafeInteger(versionCode) || versionCode > 2_100_000_000) {
+    throw new Error('PROJECT_BUILD_NUMBER inválido para o Android.');
+  }
+  return versionCode;
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appEnv = resolveAppEnvironment();
   const faceIDPermission = 'O Cialai usa o Face ID para autorizar ações sensíveis no computador.';
@@ -40,7 +51,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     },
     android: {
       package: 'br.com.ordinum.cialai',
-      versionCode: 1,
+      versionCode: resolveAndroidVersionCode(),
       allowBackup: false,
       softwareKeyboardLayoutMode: 'resize',
       permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC'],
@@ -62,6 +73,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ['expo-secure-store', { configureAndroidBackup: false }],
       ['expo-local-authentication', { faceIDPermission }],
       ['./plugins/with-loopback-network-security.cjs'],
+      ['./plugins/with-android-release-signing.cjs'],
       ['expo-build-properties', {
         android: {
           compileSdkVersion: 36,

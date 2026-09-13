@@ -14,8 +14,9 @@ function config() {
 
 test('defines isolated iOS workflows with the documented toolchain', () => {
   const workflows = config().workflows;
-  assert.deepEqual(Object.keys(workflows).sort(), ['ios-archive', 'ios-testflight']);
-  for (const workflow of Object.values(workflows)) {
+  assert.deepEqual(Object.keys(workflows).sort(), ['android-play', 'ios-archive', 'ios-testflight']);
+  for (const name of ['ios-archive', 'ios-testflight']) {
+    const workflow = workflows[name];
     assert.equal(workflow.instance_type, 'mac_mini_m2');
     assert.equal(workflow.max_build_duration, 60);
     assert.equal(workflow.integrations.app_store_connect, 'Cialai ASC API Key');
@@ -31,7 +32,8 @@ test('defines isolated iOS workflows with the documented toolchain', () => {
 
 test('builds the iOS binding on the runner before Expo prebuild', () => {
   const workflows = config().workflows;
-  for (const workflow of Object.values(workflows)) {
+  for (const name of ['ios-archive', 'ios-testflight']) {
+    const workflow = workflows[name];
     const scripts = workflow.scripts.map(step => step.script).join('\n');
     assert.match(scripts, /install-go\.sh 1\.26\.5/);
     assert.match(scripts, /build-tunnel-mobile\.sh ios/);
@@ -54,4 +56,27 @@ test('uploads internally without requesting review and keeps archive local', () 
   assert.notEqual(publisher.submit_to_app_store, true);
   assert.equal(publisher.beta_groups, undefined);
   assert.equal(workflows['ios-archive'].publishing, undefined);
+});
+
+test('builds and signs the Android binding before publishing to the internal track', () => {
+  const workflow = config().workflows['android-play'];
+  assert.equal(workflow.instance_type, 'mac_mini_m2');
+  assert.equal(workflow.max_build_duration, 60);
+  assert.deepEqual(workflow.environment.groups, ['android_credentials', 'google_play']);
+  assert.equal(workflow.environment.node, '22.23.2');
+  assert.equal(workflow.environment.npm, '10.9.8');
+  assert.equal(workflow.environment.ndk, '28.2.13676358');
+  assert.equal(workflow.environment.java, 17);
+  assert.equal(workflow.environment.vars.ANDROID_PACKAGE, 'br.com.ordinum.cialai');
+  assert.equal(workflow.triggering, undefined);
+  const scripts = workflow.scripts.map(step => step.script).join('\n');
+  assert.match(scripts, /install-go\.sh 1\.26\.5/);
+  assert.match(scripts, /build-tunnel-mobile\.sh android/);
+  assert.match(scripts, /modules\/cialai-tunnel\/android\/libs\/tunnelcore\.aar/);
+  assert.ok(scripts.indexOf('build-tunnel-mobile.sh android') < scripts.indexOf('expo prebuild --platform android'));
+  assert.match(scripts, /CM_KEYSTORE_BASE64/);
+  assert.match(scripts, /android\/key\.properties/);
+  assert.match(scripts, /gradlew bundleRelease/);
+  assert.equal(workflow.publishing.google_play.credentials, '$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS');
+  assert.equal(workflow.publishing.google_play.track, 'internal');
 });

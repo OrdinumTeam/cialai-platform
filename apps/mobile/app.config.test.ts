@@ -6,9 +6,12 @@ const context = { config: {} } as ConfigContext;
 
 describe('Expo app config', () => {
   const originalAppEnv = process.env.APP_ENV;
+  const originalBuildNumber = process.env.PROJECT_BUILD_NUMBER;
   afterEach(() => {
     if (originalAppEnv === undefined) delete process.env.APP_ENV;
     else process.env.APP_ENV = originalAppEnv;
+    if (originalBuildNumber === undefined) delete process.env.PROJECT_BUILD_NUMBER;
+    else process.env.PROJECT_BUILD_NUMBER = originalBuildNumber;
   });
 
   test('defines both identities without a global cleartext bypass', () => {
@@ -34,5 +37,12 @@ describe('Expo app config', () => {
   test('fails clearly for an invalid application environment', () => {
     process.env.APP_ENV = 'invalid';
     expect(() => buildConfig(context)).toThrow('APP_ENV');
+  });
+
+  test('uses the monotonic Codemagic build number as Android version code', () => {
+    process.env.PROJECT_BUILD_NUMBER = '42';
+    expect(buildConfig(context).android?.versionCode).toBe(42);
+    process.env.PROJECT_BUILD_NUMBER = 'invalid';
+    expect(() => buildConfig(context)).toThrow('PROJECT_BUILD_NUMBER');
   });
 });

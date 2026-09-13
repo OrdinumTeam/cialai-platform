@@ -185,3 +185,93 @@ workflows:
       - build/mobile/ios/Tunnelcore.xcframework.zip.sha256
       - build_ipa.log
       - /tmp/xcodebuild_logs/*.log
+
+  android-play:
+    name: Android Play interno
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    environment:
+      groups:
+        - android_credentials
+        - google_play
+      node: 22.23.2
+      npm: 10.9.8
+      xcode: latest
+      ndk: 28.2.13676358
+      java: 17
+      vars:
+        ANDROID_PACKAGE: "br.com.ordinum.cialai"
+        APP_ENV: "production"
+    scripts:
+      - name: Validar ambiente do Play
+        script: |
+          set -euo pipefail
+          : "${CM_KEYSTORE_BASE64:?Configure CM_KEYSTORE_BASE64 no grupo android_credentials}"
+          : "${CM_KEYSTORE_PASSWORD:?Configure CM_KEYSTORE_PASSWORD no grupo android_credentials}"
+          : "${CM_KEY_PASSWORD:?Configure CM_KEY_PASSWORD no grupo android_credentials}"
+          : "${CM_KEY_ALIAS:?Configure CM_KEY_ALIAS no grupo android_credentials}"
+          : "${GCLOUD_SERVICE_ACCOUNT_CREDENTIALS:?Configure a conta de serviço no grupo google_play}"
+          : "${PROJECT_BUILD_NUMBER:?PROJECT_BUILD_NUMBER não foi injetado pelo Codemagic}"
+          case "$PROJECT_BUILD_NUMBER" in
+            *[!0-9]*|'') echo "PROJECT_BUILD_NUMBER deve conter somente dígitos" >&2; exit 1 ;;
+          esac
+      - name: Instalar Go
+        script: |
+          set -euo pipefail
+          source tools/release/install-go.sh 1.26.5
+          test "$(go env GOVERSION)" = "go1.26.5"
+      - name: Compilar núcleo Android
+        script: |
+          set -euo pipefail
+          artifact_dir="$CM_BUILD_DIR/build/mobile/android"
+          bash tools/build-tunnel-mobile.sh android "$artifact_dir"
+          cd "$artifact_dir"
+          shasum -a 256 -c tunnelcore.aar.sha256
+          cd "$CM_BUILD_DIR"
+          cp "$artifact_dir/tunnelcore.aar" \
+            apps/mobile/modules/cialai-tunnel/android/libs/tunnelcore.aar
+      - name: Instalar e validar dependências
+        script: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck --workspace @cialai/mobile
+          npm run lint --workspace @cialai/mobile
+          npm run test --workspace @cialai/mobile
+          bash tools/release/cm-build-number.test.sh
+          bash tools/release/cm-download.test.sh
+          node --test tools/release/cm-config.test.cjs
+      - name: Gerar projeto Android
+        script: |
+          set -euo pipefail
+          cd apps/mobile
+          npx expo prebuild --platform android --no-install
+      - name: Configurar assinatura Android
+        script: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$CM_BUILD_DIR/secrets"
+          keystore_path="$CM_BUILD_DIR/secrets/upload-keystore.jks"
+          printf '%s' "$CM_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          key_properties="$CM_BUILD_DIR/apps/mobile/android/key.properties"
+          {
+            printf 'storePassword=%s\n' "$CM_KEYSTORE_PASSWORD"
+            printf 'keyPassword=%s\n' "$CM_KEY_PASSWORD"
+            printf 'keyAlias=%s\n' "$CM_KEY_ALIAS"
+            printf 'storeFile=%s\n' "$keystore_path"
+          } > "$key_properties"
+      - name: Compilar AAB
+        script: |
+          set -euo pipefail
+          set -o pipefail
+          cd apps/mobile/android
+          ./gradlew bundleRelease 2>&1 | tee "$CM_BUILD_DIR/build_aab.log"
+    artifacts:
+      - apps/mobile/android/app/build/outputs/bundle/**/*.aab
+      - apps/mobile/android/app/build/outputs/**/mapping.txt
+      - build/mobile/android/tunnelcore.aar
+      - build/mobile/android/tunnelcore.aar.sha256
+      - build_aab.log
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
