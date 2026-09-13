@@ -45,7 +45,7 @@ export function isSameControlOrigin(controlUrl: string, candidate: string): bool
 export function controlOriginWhitelist(controlUrl: string): string[] {
   const url = new URL(controlUrl);
   if (url.protocol !== 'http:' || url.hostname !== LOOPBACK_HOST || !url.port) return [];
-  return [`http://${LOOPBACK_HOST}:${url.port}`];
+  return ['*'];
 }
 
 export function isSafeExternalUrl(value: string): boolean {

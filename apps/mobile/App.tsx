@@ -46,6 +46,7 @@ import { Pair } from './src/screens/Pair';
 import { Settings } from './src/screens/Settings';
 import { Shell } from './src/screens/Shell';
 import { transition, type AppScreen, type OfflineReason } from './src/state/machine';
+import { handleAppStateTransition, notifyNetworkTransition } from './src/state/lifecycle';
 import { usePalette } from './src/theme';
 
 type LogLevel = 'error' | 'info' | 'debug';
@@ -166,26 +167,23 @@ function AppContent() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (biometricSession.handleAppState(nextState)) setLockSignal(value => value + 1);
-      if (nextState !== 'active') backgroundedAt.current ??= Date.now();
-      const backgroundDuration = backgroundedAt.current === null ? 0 : Date.now() - backgroundedAt.current;
-      if (nextState === 'active') backgroundedAt.current = null;
-      notifyForeground(nextState === 'active');
-      if (nextState === 'active' && Platform.OS === 'android' && backgroundDuration >= 120_000 && screen.kind === 'shell') {
-        dispatch({ type: 'desktop-offline', desktopId: screen.desktopId, reason: 'reconnecting' });
-        return;
-      }
-      if (nextState === 'active' && screen.kind === 'shell') {
-        void checkControlHealth(screen.url).then(healthy => {
-          if (!healthy) dispatch({ type: 'desktop-offline', desktopId: screen.desktopId, reason: 'desktop' });
-        });
-      }
+      backgroundedAt.current = handleAppStateTransition({
+        nextState,
+        backgroundedAt: backgroundedAt.current,
+        now: Date.now(),
+        platform: Platform.OS === 'android' ? 'android' : 'ios',
+        screen,
+        notifyForeground,
+        checkHealth: checkControlHealth,
+        markOffline: (desktopId, reason) => dispatch({ type: 'desktop-offline', desktopId, reason }),
+        reconnect: desktopId => dispatch({ type: 'desktop-offline', desktopId, reason: 'reconnecting' })
+      });
     });
     return () => subscription.remove();
   }, [biometricSession, screen]);
 
   useEffect(() => NetInfo.addEventListener(network => {
-    const reachable = network.isConnected === true && network.isInternetReachable !== false;
-    notifyNetworkChange(reachable);
+    notifyNetworkTransition(network, notifyNetworkChange);
   }), []);
 
   useEffect(() => {

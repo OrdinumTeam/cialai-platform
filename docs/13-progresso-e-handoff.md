@@ -49,6 +49,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.4 URL, saúde e rede | Implementado e validado estaticamente | Produção aceita somente `http://127.0.0.1:<porta>/?k=<nonce>`, saúde exige serviço `cialai`, AppState atualiza o foreground e sonda imediatamente, NetInfo notifica mudança de rede. Testes unitários específicos ficam em 3.7 |
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
 | 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
+| 3.7 Testes Jest | Concluída localmente | Os 65 casos herdados e as coberturas novas de QR, perfis, URL, saúde, navegação e transições somam 99 casos em 14 suítes verdes. Typecheck e lint passaram; aparelhos reais continuam pendentes das tarefas 3.9 e 4.7 |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
 | 4.2 Configuração Android | Implementada e introspectada pelo Expo | SDK alvo e compilação 36, mínimo 26, teclado resize, backup desligado e texto claro negado salvo `127.0.0.1`. Permissões finais limitadas a câmera, internet e biometria; prebuild e relatório Play pendentes |
 | 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
@@ -395,6 +396,12 @@ A casca mede o tempo fora, mostra a tela Reconectando depois do limite e só ret
 O mesmo `BiometricSession` do Control governa iOS e Android por `expo-local-authentication`: sessão após abertura ou cinco minutos fora e autorização por ação sempre nova. Tokens continuam separados por desktop em `expo-secure-store`; o plugin agora recebe `configureAndroidBackup: false`, além de `allowBackup` falso no manifesto e estado Go em `noBackupFilesDir`.
 
 Typecheck, lint e `expo config --type introspect` terminaram com código 0 e mantiveram biometria permitida, backup falso e armazenamento externo bloqueado. Os testes unitários herdados serão executados em 3.7. Nenhuma impressão digital, reconhecimento facial, fallback por código ou inspeção do Android Keystore ocorreu neste Mac, portanto 4.5 permanece preparada e não verificada em aparelho.
+
+### 12/09/2026, Jest da tarefa 3.7 concluído localmente
+
+Os 65 casos da casca do Control foram preservados e ampliados para QR, armazenamento de perfis sem tokens, URL de loopback, saúde `cialai`, telas, máquina de estados, primeiro e segundo plano e alcance de rede. A lista ampla do WebView agora deixa toda navegação chegar à guarda da aplicação, que continua aceitando somente a origem local exata ou links HTTPS seguros. Erros desconhecidos do QR não devolvem a mensagem nativa e não podem expor o payload.
+
+Com Node 22.23.2 e npm 10.9.8, `npm run typecheck`, `npm run lint` e `npm test` em `apps/mobile` terminaram com código 0. Jest aprovou 99 casos em 14 suítes, sem snapshots. `git diff --check` também passou. Nenhum módulo nativo foi compilado e nenhum aparelho foi usado nesta tarefa.
 
 ## Arquivos para retomar
 

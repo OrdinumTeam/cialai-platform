@@ -2,6 +2,7 @@ import { buildHealthUrl } from '../config/url';
 
 export const HEALTH_TIMEOUT_MS = 5_000;
 export const HEALTH_POLL_INTERVAL_MS = 10_000;
+export const HEALTH_DETECTION_BUDGET_MS = HEALTH_TIMEOUT_MS + HEALTH_POLL_INTERVAL_MS;
 
 export async function checkControlHealth(
   controlUrl: string,

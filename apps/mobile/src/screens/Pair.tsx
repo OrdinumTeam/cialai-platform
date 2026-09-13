@@ -7,21 +7,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { inspectPairPayload, pair, type PairInspection, type PairResult } from 'cialai-tunnel';
 
 import { usePalette } from '../theme';
+import { pairErrorMessage } from './pair-errors';
 
 type Props = {
   initialError?: string;
   device: { name: string; model: string; platform: 'ios' | 'android'; app: string };
   onPaired: (inspection: PairInspection, result: PairResult) => Promise<void>;
 };
-
-function friendlyError(caught: unknown): string {
-  const message = caught instanceof Error ? caught.message : '';
-  if (message.includes('payload_version')) return 'Atualize o Cialai neste celular para usar este código.';
-  if (message.includes('payload_expired')) return 'Este código expirou. Gere um novo no computador.';
-  if (message.includes('auth_key_rejected')) return 'Este código já foi usado ou expirou. Gere um novo.';
-  if (message.includes('peer_not_found')) return 'O computador ainda não está acessível. Deixe o Cialai aberto nele.';
-  return message.replace(/^[a-z_]+:\s*/, '') || 'Não foi possível ler este código.';
-}
 
 export function Pair({ initialError, device, onPaired }: Props) {
   const palette = usePalette();
@@ -41,7 +33,7 @@ export function Pair({ initialError, device, onPaired }: Props) {
       setRawPayload(payload.trim());
       setInspection(value);
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(pairErrorMessage(caught));
       setScanned(false);
     }
   }, []);
@@ -58,7 +50,7 @@ export function Pair({ initialError, device, onPaired }: Props) {
       const result = await pair(rawPayload, device);
       await onPaired(inspection, result);
     } catch (caught) {
-      setError(friendlyError(caught));
+      setError(pairErrorMessage(caught));
       setBusy(false);
     }
   }
