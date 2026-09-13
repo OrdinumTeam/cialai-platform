@@ -105,7 +105,36 @@ func (runtime *runtimeState) controlConfigure(ctx context.Context, raw json.RawM
 	runtime.admin = admin
 	runtime.controlURL = strings.TrimRight(args.URL, "/")
 	runtime.caFile = args.CAFile
-	return map[string]any{"health": health, "apiKey": map[string]any{"prefix": safeAPIKeyPrefix(args.APIKey)}}, nil
+	prefix := safeAPIKeyPrefix(args.APIKey)
+	apiKey := map[string]any{"prefix": prefix}
+	if expiresAt, ok := runtime.apiKeyExpiry(ctx, admin, prefix); ok {
+		apiKey["expiresAt"] = expiresAt.UTC().Format(time.RFC3339)
+	}
+	return map[string]any{"health": health, "apiKey": apiKey}, nil
+}
+
+type apiKeyLister interface {
+	ListAPIKeys(context.Context) ([]control.APIKey, error)
+}
+
+// apiKeyExpiry is best effort: a server or broker that cannot list keys still
+// configures, and the desktop falls back to showing the prefix.
+func (runtime *runtimeState) apiKeyExpiry(ctx context.Context, admin control.ControlAdmin, prefix string) (time.Time, bool) {
+	lister, ok := admin.(apiKeyLister)
+	if !ok {
+		return time.Time{}, false
+	}
+	keys, err := lister.ListAPIKeys(ctx)
+	if err != nil {
+		runtime.logger.Warn("could not read the API key expiration", map[string]any{"code": control.Code(err)})
+		return time.Time{}, false
+	}
+	for _, key := range keys {
+		if control.SameAPIKeyPrefix(key.Prefix, prefix) && !key.Expiration.IsZero() {
+			return key.Expiration, true
+		}
+	}
+	return time.Time{}, false
 }
 
 func (runtime *runtimeState) requireAdmin() (control.ControlAdmin, error) {
@@ -182,15 +211,7 @@ func (runtime *runtimeState) controlAPIKeyExpire(ctx context.Context, raw json.R
 }
 
 func safeAPIKeyPrefix(apiKey string) string {
-	const marker = "hskey-api-"
-	remainder := strings.TrimPrefix(apiKey, marker)
-	if separator := strings.IndexByte(remainder, '-'); separator > 0 {
-		return marker + remainder[:separator]
-	}
-	if len(remainder) > 12 {
-		remainder = remainder[:12]
-	}
-	return marker + remainder
+	return control.APIKeyPrefix(apiKey)
 }
 
 func (runtime *runtimeState) serverNow() time.Time {

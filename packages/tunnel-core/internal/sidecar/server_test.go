@@ -192,6 +192,49 @@ func TestServeControlConfigureDoesNotEchoAPIKey(t *testing.T) {
 	}
 }
 
+type listingControlAdmin struct {
+	fakeControlAdmin
+	keys []control.APIKey
+}
+
+func (admin *listingControlAdmin) ListAPIKeys(context.Context) ([]control.APIKey, error) {
+	return admin.keys, nil
+}
+
+func TestServeControlConfigureReportsExpiryForADashedPrefix(t *testing.T) {
+	const secret = "hskey-api-FYQT-7gktHAV-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123"
+	expires := time.Date(2027, 9, 12, 12, 0, 0, 0, time.UTC)
+	input := strings.Join([]string{
+		`{"id":1,"cmd":"hello","args":{"protocol":1}}`,
+		`{"id":2,"cmd":"control.configure","args":{"url":"https://hs.example.com","apiKey":"` + secret + `"}}`,
+	}, "\n") + "\n"
+	options, output := testOptions(t, input)
+	options.AdminFactory = func(string, string, string) (control.ControlAdmin, error) {
+		return &listingControlAdmin{keys: []control.APIKey{
+			{ID: 1, Prefix: "hskey-api-FYQT-7gktHAX-***", Expiration: expires.Add(-time.Hour)},
+			{ID: 2, Prefix: "hskey-api-FYQT-7gktHAV-***", Expiration: expires},
+		}}, nil
+	}
+	if code := Serve(context.Background(), options); code != 0 {
+		t.Fatalf("serve returned %d", code)
+	}
+	if strings.Contains(output.String(), secret) {
+		t.Fatal("control.configure echoed the full API key")
+	}
+	for _, frame := range decodeFrames(t, output) {
+		if frame["id"] != float64(2) {
+			continue
+		}
+		result, _ := frame["result"].(map[string]any)
+		apiKey, _ := result["apiKey"].(map[string]any)
+		if apiKey["prefix"] != "hskey-api-FYQT-7gktHAV" || apiKey["expiresAt"] != expires.Format(time.RFC3339) {
+			t.Fatalf("configure did not report the matching key: %#v", apiKey)
+		}
+		return
+	}
+	t.Fatal("configure response missing")
+}
+
 func TestShutdownCancelsCommandsInFlight(t *testing.T) {
 	input := strings.Join([]string{
 		`{"id":1,"cmd":"hello","args":{"protocol":1}}`,

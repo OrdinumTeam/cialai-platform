@@ -128,15 +128,25 @@ impl ApiKeyStore {
     }
 }
 
+/// Public prefix of a Headscale 0.29 key shaped
+/// `hskey-api-{12 character prefix}-{secret}`. The base64url prefix may itself
+/// contain `-`, so the fixed length wins over the first separator.
 pub fn api_key_prefix(secret: &str) -> String {
-    let marker = "hskey-api-";
-    let remainder = secret.strip_prefix(marker).unwrap_or(secret);
-    let prefix = remainder
-        .split_once('-')
-        .map(|(prefix, _)| prefix)
-        .map(str::to_owned)
-        .unwrap_or_else(|| remainder.chars().take(12).collect());
-    format!("{marker}{prefix}")
+    const MARKER: &str = "hskey-api-";
+    const PREFIX_LENGTH: usize = 12;
+    let remainder = secret.strip_prefix(MARKER).unwrap_or(secret);
+    let fixed = remainder.is_char_boundary(PREFIX_LENGTH)
+        && remainder.len() > PREFIX_LENGTH
+        && remainder.as_bytes()[PREFIX_LENGTH] == b'-';
+    let prefix = if fixed {
+        remainder[..PREFIX_LENGTH].to_owned()
+    } else {
+        remainder
+            .split_once('-')
+            .map(|(prefix, _)| prefix.to_owned())
+            .unwrap_or_else(|| remainder.chars().take(PREFIX_LENGTH).collect())
+    };
+    format!("{MARKER}{prefix}")
 }
 
 fn inspect_regular(path: &Path) -> Result<Option<std::fs::Metadata>, String> {
@@ -226,6 +236,24 @@ mod tests {
     use std::fs;
 
     use super::*;
+
+    #[test]
+    fn api_key_prefix_keeps_dashes_inside_the_fixed_length_prefix() {
+        let secret = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123";
+        assert_eq!(
+            api_key_prefix(&format!("hskey-api-FYQT-7gktHAV-{secret}")),
+            "hskey-api-FYQT-7gktHAV"
+        );
+        assert_eq!(
+            api_key_prefix(&format!("hskey-api-7Y-BtzrE7y8c-{secret}")),
+            "hskey-api-7Y-BtzrE7y8c"
+        );
+        assert_eq!(
+            api_key_prefix(&format!("hskey-api-_KcCpQuLBJCa-{secret}")),
+            "hskey-api-_KcCpQuLBJCa"
+        );
+        assert_eq!(api_key_prefix("hskey-api-test-secret"), "hskey-api-test");
+    }
 
     #[test]
     fn private_fallback_round_trip_never_exposes_the_secret_in_metadata() {

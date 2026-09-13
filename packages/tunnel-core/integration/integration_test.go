@@ -13,7 +13,6 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -27,6 +26,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/control"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/logx"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
@@ -58,10 +58,20 @@ func TestDesktopPairsPhoneThroughHeadscale(t *testing.T) {
 		Health struct {
 			OK bool `json:"ok"`
 		} `json:"health"`
+		APIKey struct {
+			Prefix    string `json:"prefix"`
+			ExpiresAt string `json:"expiresAt"`
+		} `json:"apiKey"`
 	}
 	side.call("control.configure", map[string]any{"url": hs.URL, "apiKey": hs.APIKey()}, &configured)
 	if !configured.Health.OK {
 		t.Fatal("control.configure did not report a healthy server")
+	}
+	if configured.APIKey.Prefix != control.APIKeyPrefix(hs.APIKey()) {
+		t.Fatal("control.configure reported a prefix that does not match the key")
+	}
+	if expiry, err := time.Parse(time.RFC3339, configured.APIKey.ExpiresAt); err != nil || !expiry.After(time.Now()) {
+		t.Fatal("control.configure did not report the API key expiration")
 	}
 	var desktop node.Status
 	side.call("node.up", map[string]any{"controlUrl": hs.URL, "userId": aliceID, "userName": "alice", "hostname": "alice-desktop"}, &desktop)
@@ -268,7 +278,7 @@ func TestDesktopPairsPhoneThroughHeadscale(t *testing.T) {
 	if !strings.HasPrefix(rotated.APIKey, "hskey-api-") || rotated.APIKey == previous {
 		t.Fatal("rotation did not return a new API key")
 	}
-	side.call("control.apikey.expireOld", map[string]any{"prefix": apiKeyPrefix(previous)}, nil)
+	side.call("control.apikey.expireOld", map[string]any{"prefix": control.APIKeyPrefix(previous)}, nil)
 	if status := hs.Status(previous, http.MethodGet, "/api/v1/user"); status != http.StatusUnauthorized && status != http.StatusForbidden {
 		t.Fatalf("expired API key still works: HTTP %d", status)
 	}
@@ -554,13 +564,4 @@ func nodePresent(nodes []testutil.Node, nodeKey string) bool {
 		}
 	}
 	return false
-}
-
-func apiKeyPrefix(apiKey string) string {
-	const marker = "hskey-api-"
-	remainder := strings.TrimPrefix(apiKey, marker)
-	if separator := strings.IndexByte(remainder, '-'); separator > 0 {
-		return marker + remainder[:separator]
-	}
-	return fmt.Sprintf("%s%.12s", marker, remainder)
 }

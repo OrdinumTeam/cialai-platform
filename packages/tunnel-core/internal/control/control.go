@@ -6,6 +6,7 @@ package control
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -67,6 +68,47 @@ type Node struct {
 	Expiry         *time.Time `json:"expiry,omitempty"`
 	UserID         uint64     `json:"userId"`
 	RegisterMethod string     `json:"registerMethod,omitempty"`
+}
+
+// APIKey is the public view Headscale lists for an API key. Prefix keeps the
+// server spelling, which ends in -***.
+type APIKey struct {
+	ID         uint64    `json:"id"`
+	Prefix     string    `json:"prefix"`
+	Expiration time.Time `json:"expiration"`
+	CreatedAt  time.Time `json:"createdAt,omitempty"`
+}
+
+const (
+	apiKeyMarker       = "hskey-api-"
+	apiKeyPrefixLength = 12
+)
+
+// APIKeyPrefix returns the public prefix of a Headscale 0.29 key shaped
+// hskey-api-{12 character prefix}-{secret}. The base64url prefix may itself
+// contain '-', so the fixed length wins over the first separator.
+func APIKeyPrefix(apiKey string) string {
+	remainder := strings.TrimPrefix(apiKey, apiKeyMarker)
+	if len(remainder) > apiKeyPrefixLength && remainder[apiKeyPrefixLength] == '-' {
+		return apiKeyMarker + remainder[:apiKeyPrefixLength]
+	}
+	if separator := strings.IndexByte(remainder, '-'); separator > 0 {
+		return apiKeyMarker + remainder[:separator]
+	}
+	if len(remainder) > apiKeyPrefixLength {
+		remainder = remainder[:apiKeyPrefixLength]
+	}
+	return apiKeyMarker + remainder
+}
+
+// SameAPIKeyPrefix compares a prefix listed by Headscale with one computed by
+// APIKeyPrefix.
+func SameAPIKeyPrefix(listed, prefix string) bool {
+	normalize := func(value string) string {
+		return strings.TrimPrefix(strings.TrimSuffix(value, "-***"), apiKeyMarker)
+	}
+	left := normalize(listed)
+	return left != "" && left == normalize(prefix)
 }
 
 type ControlAdmin interface {

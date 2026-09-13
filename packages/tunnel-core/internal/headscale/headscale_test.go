@@ -64,6 +64,8 @@ func TestHeadscaleDirectImplementsEveryAdministrativeEndpoint(t *testing.T) {
 			_, _ = response.Write([]byte(`{"apiKey":"hskey-api-new-secret"}`))
 		case "POST /api/v1/apikey/expire":
 			_, _ = response.Write([]byte(`{}`))
+		case "GET /api/v1/apikey":
+			_, _ = response.Write([]byte(`{"apiKeys":[{"id":"3","prefix":"hskey-api-FYQT-7gktHAV-***","expiration":"2026-09-13T20:00:00Z","createdAt":"2026-09-12T20:00:00Z","lastSeen":null}]}`))
 		default:
 			http.Error(response, "unexpected endpoint", http.StatusNotFound)
 		}
@@ -119,6 +121,11 @@ func TestHeadscaleDirectImplementsEveryAdministrativeEndpoint(t *testing.T) {
 	if err := client.ExpireAPIKey(ctx, "test-prefix"); err != nil {
 		t.Fatal(err)
 	}
+	keys, err := client.ListAPIKeys(ctx)
+	if err != nil || len(keys) != 1 || keys[0].ID != 3 || keys[0].Prefix != "hskey-api-FYQT-7gktHAV-***" || !keys[0].Expiration.Equal(expires) {
+		t.Fatalf("bad API key list: %#v %v", keys, err)
+	}
+	assertRequest(t, requests, "GET", "/api/v1/apikey", nil, nil)
 
 	assertRequest(t, requests, "POST", "/api/v1/user", nil, map[string]any{"name": "bob", "displayName": "Bob"})
 	assertRequest(t, requests, "POST", "/api/v1/preauthkey", nil, map[string]any{"user": "42", "reusable": false, "ephemeral": false, "expiration": expires.Format(time.RFC3339), "aclTags": []any{}})

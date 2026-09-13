@@ -399,6 +399,29 @@ func (client *Direct) ExpireAPIKey(ctx context.Context, prefix string) error {
 	return client.do(ctx, http.MethodPost, "/api/v1/apikey/expire", nil, map[string]any{"prefix": prefix}, nil)
 }
 
+// ListAPIKeys returns public metadata only; Headscale never lists secrets.
+func (client *Direct) ListAPIKeys(ctx context.Context) ([]control.APIKey, error) {
+	var response struct {
+		APIKeys []wireAPIKey `json:"apiKeys"`
+	}
+	if err := client.do(ctx, http.MethodGet, "/api/v1/apikey", nil, nil, &response); err != nil {
+		return nil, err
+	}
+	keys := make([]control.APIKey, 0, len(response.APIKeys))
+	for _, key := range response.APIKeys {
+		keys = append(keys, control.APIKey{ID: uint64(key.ID), Prefix: key.Prefix, Expiration: time.Time(key.Expiration), CreatedAt: time.Time(key.CreatedAt)})
+	}
+	return keys, nil
+}
+
+type wireAPIKey struct {
+	ID         wireID   `json:"id"`
+	Prefix     string   `json:"prefix"`
+	Expiration wireTime `json:"expiration"`
+	CreatedAt  wireTime `json:"createdAt"`
+	LastSeen   wireTime `json:"lastSeen"`
+}
+
 type wireID uint64
 
 func (id *wireID) UnmarshalJSON(data []byte) error {
