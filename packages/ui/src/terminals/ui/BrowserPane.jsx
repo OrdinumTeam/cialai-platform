@@ -13,6 +13,7 @@ import { useRuntimeEvents } from '../hooks.js';
 import {
   attachCanvas, copyPort, detachCanvas, goBack, goForward, navigate, recoverTab, reload, startBrowser, stopBrowser, stopLoading,
 } from '../browser/runtime.js';
+import { shortcutLabel } from '../../lib/keys.js';
 
 function Overlay({ browser, sessionId }) {
   if (browser.status === 'ready' && !browser.error) return null;
@@ -93,15 +94,15 @@ function BrowserPane({ session }) {
   return (
     <div className="terminais-browser">
       <div className="terminais-browser__bar">
-        <button type="button" className="terminais-pane__tool" onClick={() => goBack(session.id)} disabled={!ready || !browser.canGoBack} aria-label="Voltar" title="Voltar, ⌘["><ArrowLeft size={14} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={() => goForward(session.id)} disabled={!ready || !browser.canGoForward} aria-label="Avançar" title="Avançar, ⌘]"><ArrowRight size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => goBack(session.id)} disabled={!ready || !browser.canGoBack} aria-label="Voltar" title={`Voltar, ${shortcutLabel('Mod+BracketLeft')}`}><ArrowLeft size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => goForward(session.id)} disabled={!ready || !browser.canGoForward} aria-label="Avançar" title={`Avançar, ${shortcutLabel('Mod+BracketRight')}`}><ArrowRight size={14} strokeWidth={1.75} /></button>
         <button
           type="button"
           className="terminais-pane__tool"
           onClick={() => (browser.loading ? stopLoading(session.id) : reload(session.id))}
           disabled={!ready}
           aria-label={browser.loading ? 'Parar' : 'Recarregar'}
-          title={browser.loading ? 'Parar, Esc' : 'Recarregar, ⌘R'}
+          title={browser.loading ? `Parar, ${shortcutLabel('Escape')}` : `Recarregar, ${shortcutLabel('Mod+R')}`}
         >
           {browser.loading ? <X size={14} strokeWidth={1.75} /> : <RotateCcw size={14} strokeWidth={1.75} />}
         </button>

@@ -19,7 +19,7 @@ import { registerPaletteProvider } from '../../desktop/palette-registry.js';
 import { shell } from '../../desktop/shell-bridge.js';
 import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
-  getState, hydrate, insertPaths, insertText, isDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pickAndOpen,
+  getState, hydrate, insertPaths, insertText, isDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pasteText, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
   setSessionColor, setSessionSubtitle, subscribe, togglePinned, viewMounted,
 } from '../runtime.js';
@@ -36,16 +36,13 @@ import Menu from './Menu.jsx';
 import NewSessionPopover from './NewSessionPopover.jsx';
 import QuickOpen from './QuickOpen.jsx';
 import { CloseSessionDialog, ConflictDialog, DeleteDialog, NameDialog, UnsavedDialog } from './dialogs.jsx';
+import { isTerminalFocused, shortcutLabel } from '../../lib/keys.js';
+import { isTerminalAppShortcut, terminalEditAction, workbenchShortcutAction } from '../shortcut-actions.js';
 
 // Abaixo destas larguras os paineis laterais recolhem sozinhos, sem mexer
 // na preferencia do usuario, e voltam quando a janela cresce.
 const AUTO_COLLAPSE_EXPLORER = 980;
 const AUTO_COLLAPSE_SESSIONS = 720;
-
-function isTerminalFocused() {
-  const active = document.activeElement;
-  return Boolean(active && active.closest && active.closest('.terminais-terminal'));
-}
 
 function isDark() {
   return document.documentElement.getAttribute('data-theme') === 'dark';
@@ -226,10 +223,10 @@ export default function Workbench() {
       { id: 'subtitle', label: session.subtitle ? 'Editar subtítulo…' : 'Definir subtítulo…', icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: 'Subtítulo da sessão', description: 'Para que serve esta sessão. Aparece sob o nome e entra na busca.', initial: session.subtitle, placeholder: 'Servidor de desenvolvimento', confirmLabel: 'Salvar' }) },
       { id: 'color', label: 'Cor da sessão…', icon: Palette, run: () => setTimeout(() => colorMenu(session, anchor), 0) },
       { id: 'pin', label: session.pinned ? 'Desafixar do topo' : 'Fixar no topo', icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
-      { id: 'up', label: 'Mover para cima', icon: ArrowUp, hint: '⌥↑', disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
-      { id: 'down', label: 'Mover para baixo', icon: ArrowDown, hint: '⌥↓', disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
+      { id: 'up', label: 'Mover para cima', icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
+      { id: 'down', label: 'Mover para baixo', icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
       { separator: true },
-      { id: 'browser', label: 'Abrir Dev Browser', icon: Globe, hint: '⇧⌘B', run: () => openBrowserTab(session.id) },
+      { id: 'browser', label: 'Abrir Dev Browser', icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
       session.browser?.status === 'ready' || session.browser?.status === 'starting'
         ? { id: 'browser-stop', label: 'Encerrar Dev Browser', icon: Globe, run: () => stopBrowser(session.id).catch(() => {}) }
         : null,
@@ -334,53 +331,57 @@ export default function Workbench() {
     // keypress mandaria um CR por conta propria: os tres ficam com ele
     // bloqueados.
     const isShiftEnter = (event) => event.key === 'Enter' && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
-    const handled = (event) => {
-      if (!event.metaKey || event.ctrlKey || event.altKey) return false;
-      const key = event.key.toLowerCase();
-      if (key === 'f' && !event.shiftKey) return true;
-      if (key === 'p' && !event.shiftKey) return true;
-      if (key === 'n' && !event.shiftKey) return true;
-      if ((key === '=' || key === '+' || key === '-' || key === '0') && !event.shiftKey) return true;
-      if (event.shiftKey && (key === 'e' || key === 'j' || key === 'b' || key === '[' || key === ']')) return true;
-      return false;
+    const copyTerminalSelection = () => {
+      const text = selected.term.getSelection();
+      if (!text) { notify('Nada selecionado no terminal', 'info'); return; }
+      copyToClipboard(text).then((ok) => notify(ok ? 'Seleção copiada' : 'Não foi possível copiar', ok ? 'success' : 'warning'));
     };
-    // ⌘⌫ apaga a linha inteira, o mesmo que o editor faz: no shell isso e o
-    // kill-whole-line do zsh, em Ctrl+U.
-    const isDeleteLine = (event) => event.key === 'Backspace' && event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+    const pasteTerminalClipboard = () => {
+      if (!navigator.clipboard?.readText) { notify('Não foi possível colar', 'warning'); return; }
+      navigator.clipboard.readText()
+        .then((text) => { if (text) pasteText(selected.id, text); })
+        .catch(() => notify('Não foi possível colar', 'warning'));
+    };
     selected.term.attachCustomKeyEventHandler((event) => {
       if (isShiftEnter(event)) {
         if (!selected.activity?.foreground) return true;
         if (event.type === 'keydown') insertText(selected.id, '\n');
         return false;
       }
-      if (isDeleteLine(event)) {
-        if (event.type === 'keydown') insertText(selected.id, '\x15');
+      const editAction = terminalEditAction(event);
+      if (editAction) {
+        if (event.type === 'keydown') {
+          event.preventDefault?.();
+          if (editAction === 'copy') copyTerminalSelection();
+          else if (editAction === 'paste') pasteTerminalClipboard();
+          else insertText(selected.id, '\x15');
+        }
         return false;
       }
-      return !(event.type === 'keydown' && handled(event));
+      return !(event.type === 'keydown' && isTerminalAppShortcut(event));
     });
     return () => { try { selected.term.attachCustomKeyEventHandler(() => true); } catch (_error) { /* descartado */ } };
-  }, [selected]);
+  }, [selected, notify]);
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if (!event.metaKey || event.ctrlKey || event.altKey) return;
-      const key = event.key.toLowerCase();
       const inTerminal = isTerminalFocused();
-      if (event.shiftKey) {
-        if (key === 'e') { event.preventDefault(); setLayout({ explorerCollapsed: !layout.explorerCollapsed }); return; }
-        if (key === 'j') { event.preventDefault(); setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }); return; }
-        if (key === 'b') { event.preventDefault(); if (selected) openBrowserTab(selected.id); return; }
-        if (key === ']') { event.preventDefault(); selectNext(1); return; }
-        if (key === '[') { event.preventDefault(); selectNext(-1); return; }
-        return;
-      }
-      if (key === 'p' && selected && selected.status !== 'disconnected') { event.preventDefault(); setQuickOpen(true); return; }
-      if (!inTerminal) return;
-      if (key === 'f') { event.preventDefault(); setFindOpen(true); return; }
-      if (key === '=' || key === '+') { event.preventDefault(); setLayout({ fontSize: Math.min(LAYOUT_LIMITS.fontSize.max, layout.fontSize + 1) }); return; }
-      if (key === '-') { event.preventDefault(); setLayout({ fontSize: Math.max(LAYOUT_LIMITS.fontSize.min, layout.fontSize - 1) }); return; }
-      if (key === '0') { event.preventDefault(); setLayout({ fontSize: LAYOUT_LIMITS.fontSize.default }); }
+      const action = workbenchShortcutAction(event, { inTerminal });
+      if (!action) return;
+      if (action === 'quick-open' && (!selected || selected.status === 'disconnected')) return;
+      if (!inTerminal && ['find', 'font-increase', 'font-decrease', 'font-reset'].includes(action)) return;
+      if (action === 'open-browser' && !selected) return;
+      event.preventDefault();
+      if (action === 'toggle-explorer') setLayout({ explorerCollapsed: !layout.explorerCollapsed });
+      else if (action === 'toggle-sessions') setLayout({ sessionsCollapsed: !layout.sessionsCollapsed });
+      else if (action === 'open-browser') openBrowserTab(selected.id);
+      else if (action === 'next-session') selectNext(1);
+      else if (action === 'previous-session') selectNext(-1);
+      else if (action === 'quick-open') setQuickOpen(true);
+      else if (action === 'find') setFindOpen(true);
+      else if (action === 'font-increase') setLayout({ fontSize: Math.min(LAYOUT_LIMITS.fontSize.max, layout.fontSize + 1) });
+      else if (action === 'font-decrease') setLayout({ fontSize: Math.max(LAYOUT_LIMITS.fontSize.min, layout.fontSize - 1) });
+      else if (action === 'font-reset') setLayout({ fontSize: LAYOUT_LIMITS.fontSize.default });
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -390,8 +391,8 @@ export default function Workbench() {
 
   useEffect(() => registerPaletteProvider(() => {
     const items = [
-      { id: 'terminais:new', kind: 'Sessões', label: 'Nova sessão', shortcut: '⌘T', icon: Plus, run: () => openPickerRef.current?.() },
-      { id: 'terminais:new-file', kind: 'Estúdio', label: 'Novo arquivo temporário', shortcut: '⌘N', icon: FilePlus2, run: () => newFileRef.current?.() },
+      { id: 'terminais:new', kind: 'Sessões', label: 'Nova sessão', shortcut: shortcutLabel('Mod+T'), icon: Plus, run: () => openPickerRef.current?.() },
+      { id: 'terminais:new-file', kind: 'Estúdio', label: 'Novo arquivo temporário', shortcut: shortcutLabel('Mod+N'), icon: FilePlus2, run: () => newFileRef.current?.() },
     ];
     orderedSessions().forEach((session) => {
       const state = describe(session);
@@ -405,14 +406,14 @@ export default function Workbench() {
     });
     const current = getState().selected;
     if (current && current.status !== 'disconnected') {
-      items.push({ id: 'terminais:file', kind: 'Estúdio', label: 'Buscar arquivo no projeto', shortcut: '⌘P', icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
+      items.push({ id: 'terminais:file', kind: 'Estúdio', label: 'Buscar arquivo no projeto', shortcut: shortcutLabel('Mod+P'), icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
     }
-    items.push({ id: 'terminais:explorer', kind: 'Estúdio', label: layout.explorerCollapsed ? 'Mostrar explorador de arquivos' : 'Ocultar explorador de arquivos', shortcut: '⇧⌘E', icon: Files, run: () => setLayout({ explorerCollapsed: !layout.explorerCollapsed }) });
-    items.push({ id: 'terminais:sessions', kind: 'Estúdio', label: layout.sessionsCollapsed ? 'Mostrar coluna de sessões' : 'Ocultar coluna de sessões', shortcut: '⇧⌘J', icon: PanelLeft, run: () => setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }) });
+    items.push({ id: 'terminais:explorer', kind: 'Estúdio', label: layout.explorerCollapsed ? 'Mostrar explorador de arquivos' : 'Ocultar explorador de arquivos', shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => setLayout({ explorerCollapsed: !layout.explorerCollapsed }) });
+    items.push({ id: 'terminais:sessions', kind: 'Estúdio', label: layout.sessionsCollapsed ? 'Mostrar coluna de sessões' : 'Ocultar coluna de sessões', shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }) });
     items.push({ id: 'terminais:focus', kind: 'Estúdio', label: layout.focus ? 'Sair do modo foco' : 'Modo foco', icon: Maximize2, run: toggleFocus });
     if (current) items.push({ id: 'terminais:restart', kind: 'Estúdio', label: `Reiniciar terminal de ${current.name}`, icon: RotateCcw, run: () => restart(current.id) });
     if (current && current.status !== 'disconnected') {
-      items.push({ id: 'terminais:browser', kind: 'Estúdio', label: `Abrir o Dev Browser de ${current.name}`, shortcut: '⇧⌘B', icon: Globe, run: () => { shell.navigate('terminais'); openBrowserTab(current.id); } });
+      items.push({ id: 'terminais:browser', kind: 'Estúdio', label: `Abrir o Dev Browser de ${current.name}`, shortcut: shortcutLabel('Mod+Shift+B'), icon: Globe, run: () => { shell.navigate('terminais'); openBrowserTab(current.id); } });
       if (current.browser?.status === 'ready') {
         items.push({ id: 'terminais:browser-port', kind: 'Estúdio', label: `Copiar a porta do Dev Browser, ${current.browser.info?.port || ''}`, icon: Copy, run: () => copyPort(current.id) });
         items.push({ id: 'terminais:browser-stop', kind: 'Estúdio', label: `Encerrar o Dev Browser de ${current.name}`, icon: Power, run: () => stopBrowser(current.id).catch(() => {}) });
@@ -478,7 +479,7 @@ export default function Workbench() {
 
   const toolbar = (
     <ToolbarSlot>
-      <button ref={newButtonRef} type="button" className="mac-tool" onClick={openPicker} disabled={!native} title="Abrir uma sessão numa pasta, ⌘T">
+      <button ref={newButtonRef} type="button" className="mac-tool" onClick={openPicker} disabled={!native} title={`Abrir uma sessão numa pasta, ${shortcutLabel('Mod+T')}`}>
         <Plus size={15} strokeWidth={1.75} />
         <span>Nova sessão</span>
       </button>
@@ -561,7 +562,7 @@ export default function Workbench() {
         </>
       ) : (
         <div className="terminais-edge terminais-edge--left">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ sessionsCollapsed: false, focus: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar sessões" title="Mostrar sessões, ⇧⌘J"><ChevronRight size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ sessionsCollapsed: false, focus: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar sessões" title={`Mostrar sessões, ${shortcutLabel('Mod+Shift+J')}`}><ChevronRight size={12} strokeWidth={2} /></button>
         </div>
       )}
       {selected ? (
@@ -600,7 +601,7 @@ export default function Workbench() {
         </>
       ) : (
         <div className="terminais-edge terminais-edge--right">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ explorerCollapsed: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar arquivos" title="Mostrar arquivos, ⇧⌘E"><ChevronLeft size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ explorerCollapsed: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar arquivos" title={`Mostrar arquivos, ${shortcutLabel('Mod+Shift+E')}`}><ChevronLeft size={12} strokeWidth={2} /></button>
         </div>
       )}
       {pickerNode}

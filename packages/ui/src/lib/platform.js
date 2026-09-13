@@ -12,8 +12,18 @@ function browserOs(agent = typeof navigator !== 'undefined' ? navigator.userAgen
   return 'unknown';
 }
 
+// Só no navegador de desenvolvimento: ?platform=windows ou linux simula o
+// sistema para conferir atalhos e casca. O Tauri sempre substitui o valor.
+function developmentOverride() {
+  if (typeof window === 'undefined' || isTauri()) return '';
+  try {
+    const value = new URLSearchParams(window.location.search).get('platform');
+    return ['macos', 'windows', 'linux'].includes(value) ? value : '';
+  } catch (_error) { return ''; }
+}
+
 function fallback() {
-  const os = browserOs();
+  const os = developmentOverride() || browserOs();
   const homes = { macos: '/Users/exemplo', linux: '/home/exemplo', windows: 'C:/Users/exemplo' };
   const managers = { macos: 'Finder', linux: 'Arquivos', windows: 'Explorer' };
   return {

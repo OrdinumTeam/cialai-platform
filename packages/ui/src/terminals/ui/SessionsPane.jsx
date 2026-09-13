@@ -17,6 +17,7 @@ import { deliverPaths, moveSession, moveSessionBy } from '../runtime.js';
 import { beginDrag, inside, onDrag } from '../drag.js';
 import { shortPath } from '../files.js';
 import { onNativeDragDrop } from '../../lib/native.js';
+import { shortcutLabel } from '../../lib/keys.js';
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -167,10 +168,10 @@ export default function SessionsPane({
           </button>
         ) : null}
         <span className="terminais-pane__spacer" />
-        <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label="Nova sessão" title="Nova sessão, ⌘T">
+        <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label="Nova sessão" title={`Nova sessão, ${shortcutLabel('Mod+T')}`}>
           <Plus size={15} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher sessões" title="Recolher sessões, ⇧⌘J">
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher sessões" title={`Recolher sessões, ${shortcutLabel('Mod+Shift+J')}`}>
           <PanelLeftClose size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>

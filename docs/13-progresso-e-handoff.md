@@ -1,6 +1,6 @@
 # Progresso e passagem de contexto
 
-Atualizado em 12/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
+Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
 
 ## Regras de continuidade
 
@@ -42,7 +42,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.6 Sidecar executável | Concluída localmente | `serve-stdio`, `doctor` e `version` estão compilados; handshake, comandos, eventos, encerramento pelo pai, trava, log rotativo e ausência de segredos na linha de comando passaram com race detector |
 | 2.7 Supervisor Rust | Concluída localmente | Processo filho, protocolo limitado, eventos Tauri, reinício, encerramento, keyring por sistema e segredo efêmero da ponte passaram em 140 testes Rust ativos e no fake sidecar real |
 | 2.8 Ponte com identidade | Concluída localmente | O supervisor sincroniza a identidade do computador, a lista e os eventos dos dispositivos com `BridgeControl`; o handshake exige id e chave do nó, o `welcome` traz os nomes conhecidos e a revogação fecha com 4401 em menos de 1 s. Clippy sem avisos, 142 testes Rust ativos e `go test -race` passaram |
-| 2.9 Interface de rede | Concluída localmente | Assistente do Headscale no onboarding e em Preferências, diálogo Vincular celular com QR de 280 px girando a cada 90 s e aprovação por código, tela Dispositivos com renomear, revogar e diagnóstico, ponto de estado na sidebar e na toolbar. Checks Node, Rust com `tunnel_doctor` e check visível nos temas claro e escuro passaram; validade da chave da API depende de o sidecar informar `expiresAt` |
+| 2.9 Interface de rede | Concluída localmente | Assistente do Headscale no onboarding e em Preferências, diálogo Vincular celular com QR de 280 px girando a cada 90 s e aprovação por código, tela Dispositivos com renomear, revogar e diagnóstico, ponto de estado na sidebar e na toolbar. Checks Node, Rust com `tunnel_doctor` e check visível nos temas claro e escuro passaram; o sidecar agora informa `expiresAt` ao encontrar a chave pelo prefixo público do Headscale |
 | 2.10 Receita Headscale | Concluída localmente | `infra/headscale` com Compose fixado por digest, modelo do `config.yaml` do documento 06, `policy.json` com `autogroup:self`, `bootstrap.sh` validado e README com guia, diagnóstico e atualização com backup. Check estrutural, `shellcheck`, `configtest` e smoke em contêiner descartável passaram; certificado Let's Encrypt real não foi emitido |
 | 2.11 Integração Docker | Concluída localmente | `packages/tunnel-core/integration` dirige o sidecar real pelo protocolo stdio, um celular tsnet com o proxy e o Headscale 0.29.3 em Docker: pareamento, replay recusado na borda e no Headscale, sessão expirada, eco WebSocket de texto, binário e 1 MiB, isolamento entre usuários, revogação em menos de 2 s com remoção do nó e rotação da chave da API. Verde em 26,7 s no macOS; `headscale-integration.yml` sem execução remota |
 | 2.12 Sidecars de release | Concluída localmente | `tools/build-tunnel.mjs` compila os cinco triplos com `CGO_ENABLED=0`, grava e confere `SHA256SUMS`; `release.yml` compila, publica como artefato, verifica por alvo e gera rascunho sem assinatura com `tauri-action`; `externalBin` aponta para `binaries/cialai-tunnel`. Cinco binários compilados localmente, suíte raiz verde e build Tauri copiando o sidecar; execução remota do workflow pendente |
@@ -60,7 +60,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.4 Ciclo de segundo plano | Código preparado e validado estaticamente | Kotlin agenda `Stop` após 120 s, conserva abertura só em memória e executa `StartProfile` e `OpenDesktop` no retorno; React Native mostra Reconectando até saúde verde. Suspensão real pendente |
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
-| 3.9, 3.10, 4.7, 4.8 e 5.1 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 5.12 Atalhos por sistema | Concluída localmente na main | Rótulos e handlers usam um contrato único no desktop, no Workbench, nos painéis, na paleta, no editor e no xterm. O Dev Browser da porta 64552 confirmou Windows, Linux e macOS detectado sem o parâmetro; não houve execução nativa em Windows ou Linux |
+| 3.9, 3.10, 4.7, 4.8, 5.1 a 5.11 e 5.13 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -511,6 +512,24 @@ Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testa
 | 7 Lançamento | Não iniciada | 0% |
 | Total | Soma ponderada | cerca de 48%, ou 57% quando a frente da Fase 5 entrar com o que já tem |
 
+### 13/09/2026, prefixo e validade da chave da API corrigidos
+
+O prefixo público de uma chave Headscale 0.29 agora respeita os doze caracteres fixos mesmo quando o trecho base64url contém hífen. O cliente administrativo lista os metadados públicos das chaves e `control.configure` devolve `expiresAt` quando encontra o prefixo correspondente, sem expor o segredo. O Rust usa a mesma regra de prefixo ao guardar credenciais.
+
+`go vet ./internal/control ./internal/headscale ./internal/sidecar`, `go test -race -mod=readonly ./internal/control ./internal/headscale ./internal/sidecar`, `go vet -tags=integration ./integration` e `go test -race -tags=integration -count=1 ./integration` terminaram com código 0. A integração Headscale passou em 46,824 s. Antes do Rust foi executado `npm run sidecar --workspace @cialai/desktop`; depois, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2 tunnel::credentials` aprovou três testes, sem falhas. A correção está no commit `842491a` e não representa execução remota de CI.
+
+### 13/09/2026, atalhos por sistema da tarefa 5.12 concluídos localmente
+
+`lib/keys.js` passou a concentrar a leitura, o rótulo e a correspondência exata dos atalhos. CommandPalette, Workbench, SessionsPane, ExplorerPane, WorkArea, BrowserPane, Toolbar e o menu usam esse contrato. Fora do macOS, os atalhos do aplicativo ganham Shift dentro do terminal; copiar e colar aceitam Ctrl Shift C, Ctrl Shift V, Ctrl Insert e Shift Insert; Ctrl Shift Backspace apaga a linha; o explorador aceita Delete e Ctrl Shift Backspace. O editor aceita Mod Shift Backspace. No macOS, os mesmos comandos e glifos anteriores foram preservados.
+
+Os testes começaram falhando pela ausência do módulo puro de ações do terminal e depois aprovaram oito casos em `keys.test.cjs`. O preview do navegador também revelou `networkIsConfigured` recebendo `null`; o caso regressivo em `tunnel-model.test.cjs` falhou com `TypeError` antes da correção e passou depois que o normalizador aceitou ausência de configuração.
+
+O cache do Playwright estava vazio e a preferência do VS Code apontava para a revisão removida 1228. Como o disco tinha 4,2 GiB livres, abaixo do piso operacional, `npm run sidecar --workspace @cialai/desktop` foi executado e `CARGO_BUILD_JOBS=2 cargo clean --manifest-path apps/desktop/src-tauri/Cargo.toml` removeu somente artefatos gerados do `target` da main. Com 8,2 GiB livres, `PLAYWRIGHT_BROWSERS_PATH="$HOME/Library/Caches/ms-playwright" npx --yes playwright install chromium` instalou Chrome for Testing e Chrome Headless Shell 153.0.8010.12, revisão 1243. A preferência `devBrowserPanel.chromiumPath` foi atualizada para esse executável e os dois binários responderam à consulta de versão.
+
+No Dev Browser Panel indicado pelo usuário, porta 64552, a URL exata `?platform=windows` renderizou com `data-platform="windows"` e sem exceções. As demos Windows e Linux exibiram rótulos Ctrl Shift. No terminal Windows, Ctrl F não abriu a busca do aplicativo e Ctrl Shift F abriu. A demo sem `platform` detectou macOS e mostrou ⌘, ⇧, ⌃ e ⌥, inclusive na paleta aberta por ⌘K. As capturas temporárias ficaram em `~/.dev-browser/tmp/cialai-5-12-windows-palette.png`, `cialai-5-12-linux-demo.png`, `cialai-5-12-macos-demo.png` e `cialai-5-12-macos-palette.png`.
+
+`npm run test:ui` terminou com código 0, com 17 casos de sincronização e 54 testes Node. `npm run build:ui --workspace @cialai/desktop` terminou com código 0, gerou as duas entradas e validou o recurso móvel com 130 assets. `git diff --check` também passou. O override de plataforma só é aceito fora do Tauri. Essa evidência não representa compilação ou execução nativa em Windows ou Linux.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -526,6 +545,7 @@ Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testa
 | `apps/desktop/src-tauri/resources/README.md` | Origem e regra do bundle móvel gerado e não versionado |
 | `apps/desktop/src-tauri/src/workspace/`, `bridge/` | Estúdio nativo e transporte remoto reduzido |
 | `packages/ui/src/lib/platform.js`, `terminals/files.js` | Snapshot da plataforma e caminhos/cotação de shell no frontend |
+| `packages/ui/src/lib/keys.js`, `terminals/shortcut-actions.js` | Rótulos, combinações por sistema e ações puras dos atalhos da tarefa 5.12 |
 | `packages/ui/src/terminals/`, `views/Terminais.jsx` | Runtime e interface extraídos do estúdio |
 | `packages/ui/src/desktop/`, `mobile/` | Composições Cialai para as duas entradas Vite |
 | `packages/ui/src/desktop/brand.css`, `brand/` | Paleta aplicada e fonte canônica dos símbolos da marca Cialai |

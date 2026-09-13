@@ -23,6 +23,8 @@ import { swapIn } from '../motion.js';
 import { useRuntimeEvents, useRuntimeValue } from '../hooks.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { onNativeDragDrop } from '../../lib/native.js';
+import { shortcutLabel } from '../../lib/keys.js';
+import { isExplorerDeleteShortcut } from '../shortcut-actions.js';
 
 // Linhas novas que entram escalonadas na arvore; acima disso nenhuma anima.
 const FRESH_ROWS_LIMIT = 60;
@@ -539,7 +541,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       if (current.dir && current.expanded) toggleDir(current.path);
       else { const parent = entries.find((row) => row.path === dirName(current.path)); if (parent) focusRow(parent); }
     } else if (event.key === 'Enter' && current) { event.preventDefault(); openEntry(current.entry); }
-    else if (event.key === 'Backspace' && event.metaKey && current) {
+    else if (isExplorerDeleteShortcut(event) && current) {
       event.preventDefault();
       onDeleteRequest({ path: current.path, name: current.entry.name, kind: current.dir ? 'dir' : 'file', parent: dirName(current.path) });
     }
@@ -559,7 +561,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label="Atualizar" title="Atualizar. A árvore também se atualiza sozinha"><RefreshCw size={13} strokeWidth={1.75} /></button>
         <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label="Recolher todas as pastas" title="Recolher todas as pastas"><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
         <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label="Buscar arquivo por nome" aria-pressed={searching} title="Buscar por nome"><Search size={13} strokeWidth={2} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher arquivos" title="Recolher arquivos, ⇧⌘E"><PanelRightClose size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher arquivos" title={`Recolher arquivos, ${shortcutLabel('Mod+Shift+E')}`}><PanelRightClose size={14} strokeWidth={1.75} /></button>
       </div>
       {gitStatus?.isRepo ? (
         <div className="terminais-explorer__git" title={gitStatus.upstream ? `Acompanha ${gitStatus.upstream}` : 'Sem remoto acompanhado'}>

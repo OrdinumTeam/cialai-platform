@@ -8,13 +8,14 @@ export const EDGE_PORT = 4740;
 const text = (value) => String(value ?? '').trim();
 
 export function normalizeNetworkConfig(value = {}) {
+  const config = value && typeof value === 'object' ? value : {};
   return {
-    controlUrl: text(value.controlUrl).replace(/\/+$/, '') || null,
-    userId: text(value.userId) || null,
-    userName: text(value.userName) || null,
-    desktopName: text(value.desktopName) || null,
-    requireApproval: Boolean(value.requireApproval),
-    keepAwakeWhilePaired: Boolean(value.keepAwakeWhilePaired),
+    controlUrl: text(config.controlUrl).replace(/\/+$/, '') || null,
+    userId: text(config.userId) || null,
+    userName: text(config.userName) || null,
+    desktopName: text(config.desktopName) || null,
+    requireApproval: Boolean(config.requireApproval),
+    keepAwakeWhilePaired: Boolean(config.keepAwakeWhilePaired),
   };
 }
 

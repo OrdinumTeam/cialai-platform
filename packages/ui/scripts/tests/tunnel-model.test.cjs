@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const load = () => import('../../src/desktop/tunnel-model.js');
 
 test('a configuracao de rede e normalizada sem guardar a chave da API', async () => {
-  const { normalizeNetworkConfig, validateControlInput } = await load();
+  const { networkIsConfigured, normalizeNetworkConfig, validateControlInput } = await load();
   const normalized = normalizeNetworkConfig({
     controlUrl: '  https://headscale.exemplo.com/  ',
     userId: 42,
@@ -28,6 +28,15 @@ test('a configuracao de rede e normalizada sem guardar a chave da API', async ()
   assert.match(validateControlInput('http://headscale.exemplo.com', 'hskey-api-segredo'), /HTTPS/);
   assert.equal(validateControlInput('http://127.0.0.1:8080', 'hskey-api-segredo'), '');
   assert.match(validateControlInput('https://headscale.exemplo.com', ''), /chave da API/);
+  assert.equal(networkIsConfigured(null), false);
+  assert.deepEqual(normalizeNetworkConfig(null), {
+    controlUrl: null,
+    userId: null,
+    userName: null,
+    desktopName: null,
+    requireApproval: false,
+    keepAwakeWhilePaired: false,
+  });
 });
 
 test('a identidade do computador tem o formato exigido pelo codec', async () => {

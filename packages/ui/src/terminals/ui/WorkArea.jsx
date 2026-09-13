@@ -25,6 +25,7 @@ import { onNativeDragDrop } from '../../lib/native.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { openBrowserTab } from '../browser/runtime.js';
+import { shortcutLabel } from '../../lib/keys.js';
 
 function exitLabel(session) {
   const base = session.signal
@@ -301,7 +302,7 @@ export default function WorkArea({
         {running ? <span className={`terminais-work__running${running.agent ? ' is-agent' : ''}`}>{running.text}</span> : null}
         <span className="terminais-pane__spacer" />
         <div className="terminais-work__actions">
-          <button type="button" className={`terminais-pane__tool${browserOn || browserActive ? ' is-on' : ''}`} onClick={() => openBrowserTab(session.id)} aria-pressed={browserActive} title={browserOn ? 'Dev Browser desta sessão, aberto. ⇧⌘B' : 'Abrir o Dev Browser desta sessão, ⇧⌘B'} aria-label="Dev Browser"><Globe size={14} strokeWidth={1.75} /></button>
+          <button type="button" className={`terminais-pane__tool${browserOn || browserActive ? ' is-on' : ''}`} onClick={() => openBrowserTab(session.id)} aria-pressed={browserActive} title={browserOn ? `Dev Browser desta sessão, aberto. ${shortcutLabel('Mod+Shift+B')}` : `Abrir o Dev Browser desta sessão, ${shortcutLabel('Mod+Shift+B')}`} aria-label="Dev Browser"><Globe size={14} strokeWidth={1.75} /></button>
           {previewable ? (
             <button type="button" className={`terminais-pane__tool${previewing ? ' is-on' : ''}`} onClick={() => editorActions.togglePreview(activeTab)} aria-pressed={previewing} title={previewing ? 'Voltar ao código' : (activeTab.kind === 'html' ? 'Visualizar o HTML' : activeTab.kind === 'csv' ? 'Visualizar como tabela' : 'Visualizar o Markdown')} aria-label="Visualizar">{previewing ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}</button>
           ) : null}
@@ -312,11 +313,11 @@ export default function WorkArea({
               <span className="terminais-work__sep" aria-hidden="true" />
             </>
           ) : null}
-          <button type="button" className={`terminais-pane__tool${findOpen ? ' is-on' : ''}`} onClick={findOpen ? onFindClose : onFindOpen} aria-pressed={findOpen} title="Buscar na saída, ⌘F" aria-label="Buscar na saída"><Search size={14} strokeWidth={1.75} /></button>
+          <button type="button" className={`terminais-pane__tool${findOpen ? ' is-on' : ''}`} onClick={findOpen ? onFindClose : onFindOpen} aria-pressed={findOpen} title={`Buscar na saída, ${shortcutLabel('Mod+F')}`} aria-label="Buscar na saída"><Search size={14} strokeWidth={1.75} /></button>
           <button type="button" className="terminais-pane__tool" onClick={copySelection} title="Copiar seleção do terminal" aria-label="Copiar seleção"><Copy size={14} strokeWidth={1.75} /></button>
-          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(-1)} title="Diminuir fonte, ⌘−" aria-label="Diminuir fonte"><Minus size={14} strokeWidth={1.75} /></button>
+          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(-1)} title={`Diminuir fonte, ${shortcutLabel('Mod+Minus')}`} aria-label="Diminuir fonte"><Minus size={14} strokeWidth={1.75} /></button>
           <span className="terminais-work__font" aria-live="polite">{layout.fontSize}</span>
-          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title="Aumentar fonte, ⌘+" aria-label="Aumentar fonte"><Plus size={14} strokeWidth={1.75} /></button>
+          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title={`Aumentar fonte, ${shortcutLabel('Mod+Equal')}`} aria-label="Aumentar fonte"><Plus size={14} strokeWidth={1.75} /></button>
           <span className="terminais-work__sep" aria-hidden="true" />
           <button type="button" className={`terminais-pane__tool${layout.focus ? ' is-on' : ''}`} onClick={onToggleFocus} aria-pressed={layout.focus} title={layout.focus ? 'Sair do modo foco' : 'Modo foco'} aria-label="Modo foco">{layout.focus ? <Minimize2 size={14} strokeWidth={1.75} /> : <Maximize2 size={14} strokeWidth={1.75} />}</button>
         </div>

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isTauri } from '../lib/native.js';
+import { currentOs, isAppShortcut, isShortcut, isTerminalFocused } from '../lib/keys.js';
 
 let installed = false;
 export async function installNativeMenu(actionsRef, views = []) {
@@ -24,17 +25,30 @@ export async function installNativeMenu(actionsRef, views = []) {
   await (await Menu.new({ items: [appMenu, fileMenu, editMenu, viewMenu, windowMenu] })).setAsAppMenu();
 }
 
+// Fora do macOS nativo não há menubar: os atalhos do app vivem no DOM. Dentro
+// do terminal só a variante com Shift é do app, para Ctrl chegar ao shell.
 export function installDomShortcuts(actionsRef, views = []) {
   if (isTauri() && document.documentElement.dataset.platform === 'macos') return () => {};
   const onKeyDown = (event) => {
-    const meta = event.metaKey || event.ctrlKey; if (!meta) return;
-    const actions = actionsRef.current || {}; const key = event.key.toLowerCase();
-    if (key === 'k') { event.preventDefault(); actions.openPalette?.(); }
-    else if (key === 't') { event.preventDefault(); actions.newTerminal?.(); }
-    else if (key === 'n' && !event.shiftKey) { event.preventDefault(); actions.newFile?.(); }
-    else if (key === ',') { event.preventDefault(); actions.openPreferences?.(); }
-    else if (key === 's' && event.ctrlKey && event.metaKey) { event.preventDefault(); actions.toggleSidebar?.(); }
-    else if (/^[1-9]$/.test(key) && !event.shiftKey && !event.altKey) { const view = views[Number(key) - 1]; if (view) { event.preventDefault(); actions.navigate?.(view.id); } }
+    const actions = actionsRef.current || {};
+    const inTerminal = isTerminalFocused();
+    const app = (combo) => isAppShortcut(event, combo, { inTerminal });
+    let run = null;
+    if (app('Mod+K')) run = actions.openPalette;
+    else if (app('Mod+T')) run = actions.newTerminal;
+    else if (app('Mod+N')) run = actions.newFile;
+    else if (app('Mod+W')) run = actions.closeActiveTerminalOrWindow;
+    else if (isTauri() && app('Mod+R')) run = actions.reloadData;
+    else if (app('Mod+Comma')) run = actions.openPreferences;
+    else if (currentOs() === 'macos' && isShortcut(event, 'Ctrl+Mod+S')) run = actions.toggleSidebar;
+    else {
+      const digit = /^Digit([1-9])$/.exec(event.code || '')?.[1] || (/^[1-9]$/.test(event.key) ? event.key : '');
+      const view = digit ? views[Number(digit) - 1] : null;
+      if (view && app(`Mod+${digit}`)) run = () => actions.navigate?.(view.id);
+    }
+    if (!run) return;
+    event.preventDefault();
+    run();
   };
   window.addEventListener('keydown', onKeyDown); return () => window.removeEventListener('keydown', onKeyDown);
 }

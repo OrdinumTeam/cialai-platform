@@ -175,6 +175,7 @@ function buildView(tab, content, language) {
     // ⌘⌫ e ⌘⌦ apagam a linha inteira. Vem antes do keymap padrao, onde ⌘⌫
     // apagaria so do cursor ate o comeco da linha.
     { key: 'Mod-Backspace', run: deleteLine },
+    { key: 'Mod-Shift-Backspace', run: deleteLine },
     { key: 'Mod-Delete', run: deleteLine },
     ...defaultKeymap,
     ...historyKeymap,
