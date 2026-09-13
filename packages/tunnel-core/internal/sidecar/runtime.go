@@ -51,7 +51,7 @@ func newRuntime(options Options, writer *rpc.Writer) *runtimeState {
 	runtime := &runtimeState{
 		logger: options.Logger, writer: writer, paths: options.Paths, adminFactory: factory,
 		node:     node.NewTSNetManager(options.Logger.Logf("info"), options.Logger.Logf("debug")),
-		sessions: pairing.NewSessions(nil, nil, false),
+		sessions: pairing.NewSessions(nil, nil, options.AllowLoopbackHTTP),
 	}
 	runtime.approvals = newApprovalQueue(runtime.emit)
 	return runtime

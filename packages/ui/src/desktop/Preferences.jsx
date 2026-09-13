@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-// Four focused preference areas backed by the complete Rust snapshot.
+// Focused preference areas backed by the complete Rust snapshot.
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { FolderPlus, RotateCcw, Trash2 } from 'lucide-react';
@@ -12,6 +12,7 @@ import {
   removePath,
   sanitizePreferences,
 } from './preferences-model.js';
+import NetworkSetup from './NetworkSetup.jsx';
 
 const APPEARANCE_OPTIONS = [
   { value: 'system', label: 'Sistema' },
@@ -133,6 +134,11 @@ export default function Preferences({ open, onClose, appearance }) {
         <p className="mac-prefs__note">Estas pastas alimentam o seletor de sessões e delimitam os arquivos disponíveis no celular.</p>
         <div className="mac-prefs__roots" aria-label="Pastas de projetos">{draft.projectRoots.map((path) => <div className="mac-prefs__root" key={path}><code>{path}</code><button type="button" className="btn btn-quiet btn-sm" disabled={draft.projectRoots.length === 1} onClick={() => setDraft((current) => ({ ...current, projectRoots: removePath(current.projectRoots, path) }))} aria-label={`Remover ${path}`}><Trash2 aria-hidden="true" />Remover</button></div>)}</div>
         <button type="button" className="btn btn-secondary btn-sm" onClick={addProjectRoot}><FolderPlus aria-hidden="true" />Adicionar pasta</button>
+      </section>
+
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Rede</h3>
+        <p className="mac-prefs__note">Conecte este computador ao seu Headscale para abrir o estúdio pelo celular.</p>
+        <NetworkSetup value={draft.network} onChange={(network) => setDraft((current) => ({ ...current, network }))} />
       </section>
 
       <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">Dev Browser</h3>

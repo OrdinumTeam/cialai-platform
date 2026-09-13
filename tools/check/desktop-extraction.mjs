@@ -46,7 +46,10 @@ for (const prefix of ['stack_', 'vpn_', 'meetings_']) {
 
 assert.match(lib, /MobileSite::resolve\(app\.handle\(\)\)/);
 assert.match(lib, /app\.manage\(mobile_site(\.clone\(\))?\)/);
-assert.match(lib, /Supervisor::for_app\(app\.handle\(\), &mobile_site,/);
+assert.match(
+  lib,
+  /Supervisor::for_app\(\s*app\.handle\(\),\s*&mobile_site,\s*bridge_session,\s*bridge_control,/,
+);
 assert.match(read('tunnel/mod.rs'), /pub fn mobile_static_dir/);
 
 const prefs = read('prefs.rs').split('#[cfg(test)]')[0];

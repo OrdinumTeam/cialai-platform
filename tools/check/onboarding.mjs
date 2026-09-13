@@ -11,7 +11,7 @@ const commands = read('apps/desktop/src-tauri/src/commands.rs');
 const repos = read('apps/desktop/src-tauri/src/workspace/repos.rs');
 const mobileFiles = read('apps/desktop/src-tauri/src/workspace/mobile_files.rs');
 
-for (const label of ['Boas-vindas', 'Pastas', 'Shell', 'Pronto']) {
+for (const label of ['Boas-vindas', 'Pastas', 'Shell', 'Rede', 'Pronto']) {
   assert.match(onboarding, new RegExp(`['"]${label}['"]`), `Etapa ausente: ${label}`);
 }
 for (const command of ['get_preferences', 'set_preferences', 'detect_project_roots', 'list_repo_dirs', 'app_shell', 'shell_probe']) {

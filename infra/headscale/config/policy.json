@@ -1,0 +1,11 @@
+{
+  // Every Cialai node belongs to one user and has no tag. A person's phones
+  // reach that person's desktops on the Cialai port and nothing else.
+  // Different people stay isolated. No tagOwners on purpose: tagged nodes
+  // leave autogroup:self.
+  "grants": [
+    { "src": ["autogroup:member"], "dst": ["autogroup:self"], "ip": ["tcp:4740"] }
+  ],
+  "tagOwners": {},
+  "ssh": []
+}

@@ -41,8 +41,12 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.5 Proxy móvel | Concluída localmente | Proxy preso a `127.0.0.1`, cookie de nonce, `Origin`, Bearer interno, peer resolvido por discagem, prazo renovável e rotação de token passaram em testes com race detector |
 | 2.6 Sidecar executável | Concluída localmente | `serve-stdio`, `doctor` e `version` estão compilados; handshake, comandos, eventos, encerramento pelo pai, trava, log rotativo e ausência de segredos na linha de comando passaram com race detector |
 | 2.7 Supervisor Rust | Concluída localmente | Processo filho, protocolo limitado, eventos Tauri, reinício, encerramento, keyring por sistema e segredo efêmero da ponte passaram em 140 testes Rust ativos e no fake sidecar real |
-| 2.8 Ponte com identidade | Em andamento, parcial | `bridge/mod.rs` e `bridge/protocol.rs` já têm `BridgeControl`, identidade do dispositivo e do computador no `welcome`, exigência de `x-cialai-node-key` e fechamento por revogação com 4401. O supervisor ainda não chama essa API: Clippy com `-D warnings` falha por código não usado e por `serve` com oito argumentos, e o teste `bridge::tests::proxy_secret_marks_the_connection_as_a_device` falha porque não envia a chave do nó |
-| 2.9 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 2.8 Ponte com identidade | Concluída localmente | O supervisor sincroniza a identidade do computador, a lista e os eventos dos dispositivos com `BridgeControl`; o handshake exige id e chave do nó, o `welcome` traz os nomes conhecidos e a revogação fecha com 4401 em menos de 1 s. Clippy sem avisos, 142 testes Rust ativos e `go test -race` passaram |
+| 2.9 Interface de rede | Concluída localmente | Assistente do Headscale no onboarding e em Preferências, diálogo Vincular celular com QR de 280 px girando a cada 90 s e aprovação por código, tela Dispositivos com renomear, revogar e diagnóstico, ponto de estado na sidebar e na toolbar. Checks Node, Rust com `tunnel_doctor` e check visível nos temas claro e escuro passaram; validade da chave da API depende de o sidecar informar `expiresAt` |
+| 2.10 Receita Headscale | Concluída localmente | `infra/headscale` com Compose fixado por digest, modelo do `config.yaml` do documento 06, `policy.json` com `autogroup:self`, `bootstrap.sh` validado e README com guia, diagnóstico e atualização com backup. Check estrutural, `shellcheck`, `configtest` e smoke em contêiner descartável passaram; certificado Let's Encrypt real não foi emitido |
+| 2.11 Integração Docker | Concluída localmente | `packages/tunnel-core/integration` dirige o sidecar real pelo protocolo stdio, um celular tsnet com o proxy e o Headscale 0.29.3 em Docker: pareamento, replay recusado na borda e no Headscale, sessão expirada, eco WebSocket de texto, binário e 1 MiB, isolamento entre usuários, revogação em menos de 2 s com remoção do nó e rotação da chave da API. Verde em 26,7 s no macOS; `headscale-integration.yml` sem execução remota |
+| 2.12 Sidecars de release | Concluída localmente | `tools/build-tunnel.mjs` compila os cinco triplos com `CGO_ENABLED=0`, grava e confere `SHA256SUMS`; `release.yml` compila, publica como artefato, verifica por alvo e gera rascunho sem assinatura com `tauri-action`; `externalBin` aponta para `binaries/cialai-tunnel`. Cinco binários compilados localmente, suíte raiz verde e build Tauri copiando o sidecar; execução remota do workflow pendente |
+| 3.1 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -295,6 +299,64 @@ O binário `packages/tunnel-core/cialai-tunnel`, de 30 MiB, gerado por `go build
 
 Resultado real depois da correção, com Node 22.23.2 e npm 10.9.8: fundação, UI 17 e 38, protocolo 9, scaffold, ícone, extração, onboarding, autoteste estrutural, build Vite e recurso móvel passaram. `cargo clippy -D warnings` falhou pelos avisos da 2.8 parcial. `cargo test --locked` terminou com 140 aprovados, 1 falha e 2 ignorados. `go vet ./...` e `go test -race -mod=readonly ./...` passaram nos dez pacotes com testes. Não houve push.
 
+### 12/09/2026, ponte com identidade da tarefa 2.8 concluída localmente
+
+`BridgeControl` passou a ser entregue ao supervisor e recebe a identidade do computador ao abrir a borda, a lista completa de `devices.list`, o dispositivo de `pair.completed` e as mudanças de nome ou revogação de `devices.changed`. A revogação local agora é publicada antes das chamadas administrativas opcionais ao Headscale, para não depender da latência de rede. A conexão mantém somente `device_id`; a chave do nó é consumida no handshake para resolver a identidade mostrada no `welcome`. As dependências de `serve` foram agrupadas em `ServeContext`.
+
+O teste `bridge::tests::proxy_secret_marks_the_connection_as_a_device` envia os três cabeçalhos confiáveis, confere as identidades do dispositivo e do computador e exige fechamento WebSocket 4401 em menos de um segundo. Um teste do supervisor cobre a sincronização dos cinco caminhos de identidade e um teste Go cobre o conteúdo dos eventos de renomeação e revogação. Os ciclos vermelhos reproduziram o 403 do cabeçalho ausente, a ausência da interface de sincronização e o evento `devices.changed` sem dados suficientes.
+
+Comandos concluídos com código 0, usando `CARGO_TARGET_DIR="$HOME/.cache/cialai-target"` nos comandos Rust:
+
+```sh
+cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --all-targets -- -D warnings
+cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked
+go vet ./...
+go test -race -mod=readonly ./...
+go mod tidy -diff
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
+git diff --check
+```
+
+Resultados: Clippy sem avisos; 142 testes Rust aprovados, zero falhas e os dois ensaios externos já justificados ignorados; race detector verde em todos os pacotes Go com testes; as 17 sincronizações, 38 testes UI, 9 testes de protocolo, checks estruturais, builds Vite e a suíte raiz passaram. Nenhum servidor real foi usado.
+
+### 12/09/2026, interface de rede da tarefa 2.9 concluída localmente
+
+`TunnelContext.jsx` concentra comandos `tunnel_*`, eventos `tunnel://state`, `tunnel://pair` e `tunnel://devices`, restauração da rede salva e um modo de demonstração acionado por `?tunnel=demo`. `tunnel-model.js` guarda as regras puras: normalização da preferência `network` sem chave da API, validação de HTTPS fora do loopback, identidade `d_` compatível com o codec, nome do nó, relógio de 90 s dentro do TTL de 600 s e o estado único mostrado na sidebar e na toolbar.
+
+`NetworkSetup.jsx` percorre Servidor, Usuário, Computador e Concluído, aparece como etapa Rede do onboarding e como seção Rede das Preferências. `PairingDialog.jsx` gera o QR com `qrcode` 1.5.4 em 280 px, cancela a sessão anterior a cada rotação e ao fechar, mostra os dois contadores e o código de quatro dígitos quando a aprovação está ligada. `Devices.jsx` é a segunda rota do desktop, com IP, nome no Headscale, DERP, chave, diagnóstico por `cialai-tunnel doctor` e ações de renomear e revogar, inclusive na rede. O estado vazio de Terminais também oferece Vincular celular. O comando Tauri `tunnel_doctor` executa a CLI do sidecar sem abrir outro nó.
+
+Limite conhecido: `control.configure` do sidecar devolve somente o prefixo da chave da API. A interface mostra a validade quando `apiKey.expiresAt` existir e, até lá, mostra o prefixo protegido.
+
+Validação: `npm run test:ui` com 17 sincronizações e 43 testes Node, incluindo o novo `tunnel-model.test.cjs` e `check-network.mjs`; `cargo fmt --check`, Clippy com `-D warnings` e `cargo test` com 143 aprovados, zero falhas e dois ignorados; checks de onboarding, extração e `git diff --check`. No Dev Browser Panel da sessão atual, `scripts/check-network-browser.js` terminou em `PASS: Cialai network screens and rotating QR in light theme` e `in dark theme`, com rota Dispositivos, QR de 280 px, contador em 1:30, aprovação 4827 e nenhum separador proibido no texto visível. Capturas em `~/.dev-browser/tmp/cialai-2-9-pair-light.png` e `cialai-2-9-pair-dark.png`. Nenhum Headscale real ou celular foi usado.
+
+### 12/09/2026, receita Headscale da tarefa 2.10 concluída localmente
+
+`infra/headscale/docker-compose.yml` sobe `headscale/headscale:0.29.3` fixado pelo digest `sha256:0e7f1c6e4ce6c2a2a001103ecd3fa645a045adf30ac8a5234fe037b43000cd72`, publica 443, 80 e 3478 UDP, monta `config` somente leitura, guarda dados no volume `headscale-data` e mantém o socket em `tmpfs`. A imagem não tem shell nem `curl`, então a verificação de saúde usa `/ko-app/headscale health`, desvio consciente do `/health` citado no documento 06. `config/config.yaml.template` reproduz o modelo do documento com marcadores de domínio e IPv4; `config/policy.json` mantém os comentários, aceitos pelo Headscale.
+
+`bootstrap.sh` normaliza e valida domínio e IPv4, recusa domínios dentro de `cialai.internal`, não sobrescreve `config/config.yaml` sem `--force`, roda `configtest` antes de subir, espera `https://<domínio>/health` por até 300 s e só imprime o comando `apikeys create --expiration 365d`, sem criar chave. O README traz o guia de 10 minutos, a tabela de diagnóstico de DNS, 443, certificado, versão, saúde e STUN, a atualização com backup do volume e as notas de segurança. `tools/check/headscale-infra.mjs` entrou no job `tunnel-check` e protege imagem, portas, modelo, política, bootstrap e texto do README.
+
+Validação: check estrutural e `shellcheck` verdes; `bash -n`; numa cópia temporária, entradas inválidas terminaram com código 1, a geração funcionou, `docker compose config` e `docker compose run headscale configtest` passaram. Um smoke com a mesma configuração, trocando apenas TLS por HTTP local, ficou `running`, respondeu `/health`, `headscale health` pelo socket em `/var/run/headscale` e `headscale version` pelo PATH, carregou a política e iniciou o relé DERP e o STUN. Contêiner, rede, volume e cópia temporária foram removidos. A emissão real do certificado, DNS e portas públicas dependem de um servidor com domínio e não foram exercitadas.
+
+### 12/09/2026, sidecars de release da tarefa 2.12 concluídos localmente
+
+`tools/build-tunnel.mjs` é a fonte única dos cinco triplos: `aarch64-apple-darwin`, `x86_64-apple-darwin`, `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` e `x86_64-pc-windows-msvc`. Compila `./cmd/cialai-tunnel` com `CGO_ENABLED=0`, `-trimpath` e `-ldflags=-s -w` em `apps/desktop/src-tauri/binaries`, já ignorado pelo Git, grava `SHA256SUMS` e verifica um alvo com `--verify`. `--local` usa o host do `rustc`. `npm run build:tunnel` compila todos; `npm run sidecar` do desktop compila só o local e agora precede `tauri dev` e `tauri build`.
+
+`tauri.conf.json` ganhou `externalBin: ["binaries/cialai-tunnel"]`. Um ensaio controlado provou a consequência: sem o binário do host, `cargo check` falha com ``resource path `binaries/cialai-tunnel-aarch64-apple-darwin` doesn't exist``; com o binário, passa. Por isso o job `desktop-check` compila o sidecar local antes do Cargo. Quem rodar Cargo diretamente, inclusive a frente da Fase 5 depois do merge, precisa executar `npm run sidecar --workspace @cialai/desktop` antes.
+
+`.github/workflows/release.yml` roda em tags `v*` e manualmente. O job `sidecars` testa o núcleo, compila os cinco alvos e publica o artefato; o job `desktop` baixa, verifica o SHA-256 do alvo e roda `tauri-action` em macOS 14, macOS 13, Ubuntu 22.04 e Windows 2022, gerando release em rascunho. Assinatura, notarização e updater ficaram fora de propósito, para as tarefas 5.17 e 7.1. `tools/check/release-sidecar.mjs` amarra triplos, workflow, `externalBin`, nome procurado pelo supervisor e scripts do desktop.
+
+Validação: os cinco binários foram compilados em 2 min e o `file` confirmou Mach-O arm64 e x86_64, ELF estático x86-64 e aarch64 e PE32+; os cinco checksums conferiram e um hash adulterado terminou em `Checksum mismatch` com código 1; o YAML foi lido por Ruby com os jobs `sidecars` e `desktop`. `npm test` completo terminou com código 0, incluindo 143 testes Rust aprovados, zero falhas e dois ignorados, Go, UI, protocolo e a receita Headscale. `tauri build --debug --no-bundle --ci` terminou com código 0 e copiou `target/debug/cialai-tunnel` idêntico ao binário do triplo; `cialai-tunnel version` respondeu. O workflow não foi executado no GitHub.
+
+### 12/09/2026, integração Docker da tarefa 2.11 concluída localmente
+
+`packages/tunnel-core/testutil` ganhou, sob a tag `integration`, o Headscale 0.29.3 descartável no loopback com relé DERP local de certificado fixado, como no spike 3, e uma ponte WebSocket falsa que registra os cabeçalhos recebidos. `packages/tunnel-core/integration/integration_test.go` executa `sidecar.Serve` em processo pelo mesmo protocolo stdio do supervisor: `control.configure`, `node.up`, `edge.serve` e `pair.begin`. O celular é um `node.Manager` tsnet real que lê o payload, entra na rede com a chave do QR, espera o computador nos peers e chama `/api/health` e `/pair` pelo túnel.
+
+O teste prova que o mesmo QR recebe `pair_consumed` na borda e que a chave de entrada consumida não coloca outro nó na rede; que uma sessão de 1 s recebe `pair_expired`; que o proxy local recusa quem não tem o cookie, troca o nonce por cookie `HttpOnly` e leva quadros de texto, binários e de 1 MiB até a ponte e de volta; que a ponte recebe segredo, id do dispositivo e chave do nó, sem `Authorization` nem cookie; que Bob não vê nem alcança o computador de Alice; que `devices.revoke` com `network` fecha o socket em menos de 2 s, emite `devices.changed` e apaga o nó no Headscale; e que `control.apikey.rotate` com `expireOld` invalida a chave anterior e o sidecar segue operando com a nova.
+
+Para o QR aceitar o controle HTTP do loopback, `sidecar.Options` ganhou `AllowLoopbackHTTP`, repassado a `pairing.NewSessions`. O padrão continua falso e a CLI não expõe a opção; só desenvolvimento e esta suíte a usam, conforme o documento 06. O caminho TLS com `caFile` permanece coberto pelos testes unitários do cliente Headscale, não por esta integração. Headscale parado por 60 s, aprovação por código e rotação de token de 30 dias também ficaram fora do cenário de ponta a ponta.
+
+Validação: `go mod tidy` tornou `github.com/coder/websocket` dependência direta e `go mod tidy -diff` ficou limpo; `gofmt`, `go vet ./...`, `go vet -tags=integration ./integration ./testutil`, `go test -race` do sidecar e `go test ./...` passaram. `go test -tags=integration -count=1 ./integration` terminou com `--- PASS: TestDesktopPairsPhoneThroughHeadscale (26.72s)` e nenhum contêiner com o rótulo da suíte permaneceu. `npm run test:integration:headscale` e `.github/workflows/headscale-integration.yml` repetem os mesmos comandos; o workflow não foi executado no GitHub.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -337,6 +399,12 @@ Resultado real depois da correção, com Node 22.23.2 e npm 10.9.8: fundação, 
 | `packages/tunnel-core/internal/proxy/` | Proxy local do WebView e transporte pelo nó da tarefa 2.5 |
 | `packages/tunnel-core/cmd/cialai-tunnel/`, `internal/sidecar/` | CLI, protocolo stdio e composição dos serviços da tarefa 2.6 |
 | `apps/desktop/src-tauri/src/tunnel/{protocol,credentials,supervisor}.rs` | Supervisor, keyring, framing e eventos Tauri da tarefa 2.7 |
+| `packages/ui/src/desktop/TunnelContext.jsx`, `tunnel-model.js`, `views.js` | Estado da rede, comandos e eventos do túnel e rotas do desktop da tarefa 2.9 |
+| `packages/ui/src/desktop/NetworkSetup.jsx`, `PairingDialog.jsx`, `Devices.jsx` | Assistente do Headscale, QR rotativo e gestão de dispositivos |
+| `packages/ui/scripts/check-network.mjs`, `check-network-browser.js`, `tests/tunnel-model.test.cjs` | Contratos Node e check visível das telas de rede, com `?tunnel=demo&network-check=1` |
+| `infra/headscale/`, `tools/check/headscale-infra.mjs` | Receita auto hospedada da tarefa 2.10 e guarda estrutural |
+| `tools/build-tunnel.mjs`, `.github/workflows/release.yml`, `tools/check/release-sidecar.mjs` | Sidecar por triplo, checksums, release em rascunho e guarda da tarefa 2.12 |
+| `packages/tunnel-core/integration/`, `testutil/`, `.github/workflows/headscale-integration.yml` | Fluxo de ponta a ponta com Headscale em Docker da tarefa 2.11 |
 | `tools/spikes/build-mobile.mjs` | Preflight e build experimental iOS ou Android |
 | `tools/spikes/README.md` | Escopo, comandos e medições pendentes dos spikes |
 | `docs/evidence/control-source.json` | Commit base e hashes da origem |
@@ -349,10 +417,11 @@ Na raiz, com as versões globais atuais, use o cache do npm exec:
 npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm ci
 npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
 npm run test:spike:headscale
+npm run test:integration:headscale
 npm run check:source
 ```
 
-`npm run dev:desktop` e `npm run build:desktop` agora também geram e validam o recurso móvel da tarefa 1.5. `npm run test:selftest` executa os oito cenários no binário macOS. A página `mobile.html` existe como artefato web, mas o aplicativo móvel nativo ainda não existe. Os demais scripts futuros do documento 09 continuam sendo planejamento.
+`npm run dev:desktop` e `npm run build:desktop` agora também compilam o sidecar do host e geram e validam o recurso móvel da tarefa 1.5. Antes de rodar `cargo` diretamente, execute `npm run sidecar --workspace @cialai/desktop`; `npm run build:tunnel` compila os cinco alvos de release. `npm run test:selftest` executa os oito cenários no binário macOS. A página `mobile.html` existe como artefato web, mas o aplicativo móvel nativo ainda não existe. Os demais scripts futuros do documento 09 continuam sendo planejamento.
 
 ## Próxima ação
 
@@ -362,4 +431,4 @@ npm run check:source
 4. Disponibilizar Xcode completo, SDK e NDK Android e aparelhos reais. Compilar os bindings experimentais e criar os hosts nativos de teste do spike 1, ainda inexistentes.
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
 6. Conferir o ícone aprovado no Dock, na barra de tarefas e nos lançadores quando os builds de cada plataforma forem executados.
-7. Concluir 2.8: ligar os eventos `tunnel://devices` e o estado do nó do supervisor a `BridgeControl`, usar ou remover `node_key` da conexão, agrupar os argumentos de `serve`, atualizar o teste da borda para enviar `x-cialai-node-key` e provar o fechamento por revogação com 4401 em menos de um segundo. Clippy e `cargo test` precisam voltar a passar.
+7. Fase 2 com implementação e evidência local completas. Pendências reais: executar `headscale-integration.yml` e `release.yml` no GitHub, cumprir o aceite manual no macOS com um Headscale real e fazer o sidecar informar `apiKey.expiresAt` em `control.configure` para a tela Dispositivos mostrar a validade da chave.

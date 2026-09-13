@@ -509,7 +509,7 @@ export default function Workbench() {
               ? 'Abra uma sessão numa pasta de projeto. Cada sessão tem o próprio terminal, os arquivos do projeto e um card para acompanhar o que está rodando.'
               : NATIVE_ONLY_MESSAGE}
           </p>
-          {native ? <button type="button" className="btn btn-primary" onClick={openPicker}><Plus size={14} strokeWidth={2} />Nova sessão</button> : null}
+          {native ? <div className="terminais-empty__actions"><button type="button" className="btn btn-primary" onClick={openPicker}><Plus size={14} strokeWidth={2} />Nova sessão</button><button type="button" className="btn btn-secondary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}>Vincular celular</button></div> : null}
           {native && recent.length ? (
             <div className="terminais-empty__recent">
               {recent.map((path) => (

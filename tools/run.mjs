@@ -12,6 +12,8 @@ const jobs = {
       ['node', 'tools/check/desktop-extraction.mjs'],
       ['node', 'tools/check/onboarding.mjs'],
       ['node', 'tools/check/selftest.mjs'],
+      ['node', 'tools/check/release-sidecar.mjs'],
+      ['node', 'tools/build-tunnel.mjs', '--local'],
       ['npm', 'run', 'build:ui', '--workspace', '@cialai/desktop'],
       ['cargo', 'fmt', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--check'],
       ['cargo', 'clippy', '--manifest-path', 'apps/desktop/src-tauri/Cargo.toml', '--locked', '--all-targets', '--', '-D', 'warnings'],
@@ -20,7 +22,14 @@ const jobs = {
   },
   'tunnel-check': {
     cwd: 'packages/tunnel-core',
-    commands: [['go', 'vet', './...'], ['go', 'test', '-mod=readonly', './...']],
+    commands: [['node', '../../tools/check/headscale-infra.mjs'], ['go', 'vet', './...'], ['go', 'test', '-mod=readonly', './...']],
+  },
+  'integration-headscale': {
+    cwd: 'packages/tunnel-core',
+    commands: [
+      ['go', 'vet', '-tags=integration', './integration', './testutil'],
+      ['go', 'test', '-mod=readonly', '-tags=integration', '-count=1', '-timeout=12m', '-v', './integration'],
+    ],
   },
   'spike-headscale': {
     cwd: 'packages/tunnel-core',

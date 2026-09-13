@@ -8,18 +8,19 @@ import { ThemeProvider } from '@mui/material/styles';
 import { ToastProvider } from '../components/ui.jsx';
 import ContentArea from '../components/ContentArea.jsx';
 import { closeCurrentWindow, invoke, watchFullscreen } from '../lib/native.js';
-import { useViewRoute } from '../lib/useViewRoute.js';
-import { VIEWS, VIEW_COMPONENTS, getView } from '../views/registry.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
 import Preferences from './Preferences.jsx';
 import Onboarding, { shouldShowOnboarding } from './Onboarding.jsx';
+import PairingDialog from './PairingDialog.jsx';
 import Sidebar from './Sidebar.jsx';
 import { installShellBridge } from './shell-bridge.js';
 import Splash from './Splash.jsx';
 import { buildMacTheme } from './theme.macos.js';
 import Toolbar from './Toolbar.jsx';
+import { TunnelProvider, useTunnel } from './TunnelContext.jsx';
+import { DESKTOP_VIEWS, DESKTOP_VIEW_COMPONENTS, getDesktopView, useDesktopViewRoute } from './views.js';
 
 const BOOT_RUNTIME_LIMIT_MS = 1500;
 const BOOT_GROW_TIMEOUT_MS = 1600;
@@ -82,15 +83,17 @@ function useBoot() {
   return { boot, runtimeStatus, splashMounted };
 }
 
-export default function DesktopApp() {
+function DesktopShell() {
   const appearance = useAppearance();
+  const tunnel = useTunnel();
   const theme = useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
-  const { view, navigate } = useViewRoute();
+  const { view, navigate } = useDesktopViewRoute();
   const viewRef = useRef(view);
   viewRef.current = view;
   const [sidebarHidden, setSidebarHidden] = useState(() => readStored(SIDEBAR_KEY) === 'true');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [pairOpen, setPairOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();
@@ -108,6 +111,7 @@ export default function DesktopApp() {
   }, []);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
   const openPreferences = useCallback(() => setPrefsOpen(true), []);
+  const openPair = useCallback(() => setPairOpen(true), []);
   const newTerminal = useCallback(() => {
     navigate('terminais');
     import('../terminals/runtime.js').then((runtime) => runtime.requestNewTerminal()).catch(() => {});
@@ -124,23 +128,24 @@ export default function DesktopApp() {
       .then((runtime) => { if (!runtime.closeActive()) closeWindow(); })
       .catch(closeWindow);
   }, [closeWindow]);
-  const completeOnboarding = useCallback((root) => {
+  const completeOnboarding = useCallback((root, options = {}) => {
     setOnboardingOpen(false);
     navigate('terminais');
     import('../terminals/runtime.js').then((runtime) => runtime.openSession(root)).catch(() => {});
+    if (options.openPair) setPairOpen(true);
   }, [navigate]);
 
   const actions = useMemo(() => ({
-    navigate, toggleSidebar, reloadData, openPalette, openPreferences,
+    navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair,
     setAppearance: appearance.setMode, newTerminal, newFile,
     closeActiveTerminalOrWindow, closeWindow, quitApp,
-  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp]);
+  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp]);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
   useEffect(() => {
-    installNativeMenu(actionsRef).catch((error) => console.error('[menu]', error));
-    return installDomShortcuts(actionsRef);
+    installNativeMenu(actionsRef, DESKTOP_VIEWS).catch((error) => console.error('[menu]', error));
+    return installDomShortcuts(actionsRef, DESKTOP_VIEWS);
   }, []);
   useEffect(() => {
     installShellBridge({ setSidebarHidden: setSidebarHiddenTransient, openPalette, navigate }, { sidebarHidden });
@@ -154,21 +159,30 @@ export default function DesktopApp() {
     return () => { disposed = true; off?.(); };
   }, []);
 
-  const active = getView(view);
-  const ViewComponent = VIEW_COMPONENTS[active.id];
+  useEffect(() => {
+    const pair = () => setPairOpen(true);
+    const network = () => setPrefsOpen(true);
+    window.addEventListener('cialai:pair-device', pair);
+    window.addEventListener('cialai:network-preferences', network);
+    return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-preferences', network); };
+  }, []);
+
+  const active = getDesktopView(view);
+  const ViewComponent = DESKTOP_VIEW_COMPONENTS[active.id];
   return (
     <AppearanceContext.Provider value={appearance}>
       <ThemeProvider theme={theme}>
         <CssBaseline enableColorScheme />
         <ToastProvider>
           <div className={`mac-window${sidebarHidden ? ' mac-window--sidebar-hidden' : ''}${boot === 'ready' ? ' is-booted' : ''}${boot === 'splash' ? ' is-booting' : ''}`}>
-            <Sidebar views={VIEWS} active={active.id} onNavigate={navigate} hidden={sidebarHidden} />
+            <Sidebar views={DESKTOP_VIEWS} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
-              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} />
+              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} />
               <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
             </div>
-            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={VIEWS} actions={actions} appearance={appearance} />
+            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={DESKTOP_VIEWS} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} onClose={() => setPrefsOpen(false)} appearance={appearance} />
+            <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} onConfigure={openPreferences} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}
           </div>
@@ -176,4 +190,8 @@ export default function DesktopApp() {
       </ThemeProvider>
     </AppearanceContext.Provider>
   );
+}
+
+export default function DesktopApp() {
+  return <TunnelProvider><DesktopShell /></TunnelProvider>;
 }

@@ -14,6 +14,8 @@ use base64::Engine;
 use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::bridge::{BridgeControl, IdentityControl};
+
 use super::MobileSite;
 use super::credentials::{ApiKeyStore, SecretStatus, api_key_prefix};
 use super::protocol::{
@@ -91,6 +93,7 @@ struct ProcessHandle {
 struct Inner {
     launch: LaunchConfig,
     events: EventSink,
+    bridge: Arc<dyn IdentityControl>,
     secrets: ApiKeyStore,
     next_id: AtomicU64,
     next_generation: AtomicU64,
@@ -111,6 +114,7 @@ impl Supervisor {
         app: &AppHandle,
         mobile_site: &MobileSite,
         bridge: BridgeSession,
+        bridge_control: BridgeControl,
     ) -> Result<Self, String> {
         let binary = resolve_binary(app)?;
         let state_dir = app
@@ -130,15 +134,22 @@ impl Supervisor {
             Arc::new(move |channel, payload| {
                 let _ = sink_app.emit(channel, payload);
             }),
+            Arc::new(bridge_control),
             ApiKeyStore::new(state_dir.join("headscale-api-key")),
         ))
     }
 
-    fn new(launch: LaunchConfig, events: EventSink, secrets: ApiKeyStore) -> Self {
+    fn new(
+        launch: LaunchConfig,
+        events: EventSink,
+        bridge: Arc<dyn IdentityControl>,
+        secrets: ApiKeyStore,
+    ) -> Self {
         Self {
             inner: Arc::new(Inner {
                 launch,
                 events,
+                bridge,
                 secrets,
                 next_id: AtomicU64::new(1),
                 next_generation: AtomicU64::new(1),
@@ -169,7 +180,11 @@ impl Supervisor {
         let args = self.inner.prepare_args(command, args)?;
         self.inner.ensure_started()?;
         let process = self.inner.ready_process()?;
-        self.inner.send_on(&process, command, args, CALL_TIMEOUT)
+        let result = self
+            .inner
+            .send_on(&process, command, args.clone(), CALL_TIMEOUT)?;
+        self.inner.sync_bridge_call(command, &args, &result);
+        Ok(result)
     }
 
     pub fn configure_control(
@@ -288,12 +303,76 @@ impl Supervisor {
             .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))
     }
 
+    pub fn doctor(&self, control_url: Option<String>) -> PendingResult {
+        let mut command = Command::new(&self.inner.launch.binary);
+        command
+            .arg("doctor")
+            .arg("--state-dir")
+            .arg(&self.inner.launch.state_dir)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(url) = control_url.filter(|value| !value.trim().is_empty()) {
+            command.arg("--control-url").arg(url);
+        }
+        let output = command.output().map_err(|error| {
+            RpcProblem::local(
+                "doctor_unavailable",
+                format!("Não foi possível abrir o diagnóstico do túnel: {error}"),
+                true,
+            )
+        })?;
+        let result: Value = serde_json::from_slice(&output.stdout).map_err(|_| {
+            RpcProblem::local(
+                "doctor_invalid",
+                "O diagnóstico do túnel devolveu uma resposta inválida.",
+                false,
+            )
+        })?;
+        if !result.is_object() {
+            return Err(RpcProblem::local(
+                "doctor_invalid",
+                "O diagnóstico do túnel devolveu uma resposta inválida.",
+                false,
+            ));
+        }
+        Ok(result)
+    }
+
     pub fn shutdown_blocking(&self) {
         self.inner.shutdown();
     }
 }
 
 impl Inner {
+    fn sync_bridge_call(&self, command: &str, args: &Value, result: &Value) {
+        match command {
+            "edge.serve" => self.bridge.set_desktop(&args["desktop"]),
+            "devices.list" => self.bridge.sync_devices(result),
+            _ => {}
+        }
+    }
+
+    fn sync_bridge_event(&self, event: &EventFrame) {
+        match event.name.as_str() {
+            "pair.completed" => {
+                if let Some(device) = event.data.get("device") {
+                    self.bridge.upsert_device(device);
+                }
+            }
+            "devices.changed" => {
+                let Some(device_id) = event.data.get("deviceId").and_then(Value::as_str) else {
+                    return;
+                };
+                if event.data.get("revoked").and_then(Value::as_bool) == Some(true) {
+                    self.bridge.revoke_device(device_id);
+                } else if let Some(name) = event.data.get("name").and_then(Value::as_str) {
+                    self.bridge.rename_device(device_id, name);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn prepare_args(&self, command: &str, mut args: Value) -> Result<Value, RpcProblem> {
         if !args.is_object() {
             return Err(RpcProblem::local(
@@ -650,6 +729,7 @@ fn read_output(
             }
             Inbound::Event(event) => {
                 let channel = event_channel(&event.name);
+                owner.sync_bridge_event(&event);
                 if let Ok(payload) = serde_json::to_value(event) {
                     (owner.events)(channel, payload);
                 }
@@ -735,6 +815,34 @@ mod tests {
 
     use super::*;
 
+    #[derive(Clone, Default)]
+    struct RecordingBridge {
+        updates: Arc<Mutex<Vec<Value>>>,
+    }
+
+    impl IdentityControl for RecordingBridge {
+        fn set_desktop(&self, value: &Value) {
+            lock(&self.updates).push(json!({"kind":"desktop", "value":value}));
+        }
+
+        fn upsert_device(&self, value: &Value) {
+            lock(&self.updates).push(json!({"kind":"upsert", "value":value}));
+        }
+
+        fn sync_devices(&self, value: &Value) {
+            lock(&self.updates).push(json!({"kind":"sync", "value":value}));
+        }
+
+        fn rename_device(&self, device_id: &str, name: &str) {
+            lock(&self.updates).push(json!({"kind":"rename", "deviceId":device_id, "name":name}));
+        }
+
+        fn revoke_device(&self, device_id: &str) -> usize {
+            lock(&self.updates).push(json!({"kind":"revoke", "deviceId":device_id}));
+            1
+        }
+    }
+
     fn fixture(root: &Path, binary: PathBuf, bridge: BridgeSession) -> LaunchConfig {
         LaunchConfig {
             binary,
@@ -763,6 +871,7 @@ mod tests {
         let supervisor = Supervisor::new(
             fixture(&root, root.join("sidecar"), bridge),
             Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("unused-key")),
         );
         let args = supervisor
@@ -795,10 +904,107 @@ mod tests {
     }
 
     #[test]
+    fn successful_tunnel_updates_keep_bridge_identities_current() {
+        let root = std::env::temp_dir();
+        let bridge = RecordingBridge::default();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                root.join("sidecar"),
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(bridge.clone()),
+            ApiKeyStore::new(root.join("unused-key")),
+        );
+
+        supervisor.inner.sync_bridge_call(
+            "edge.serve",
+            &json!({"desktop":{"id":"desktop_fixture", "name":"MacBook"}}),
+            &json!({"port":4740}),
+        );
+        supervisor.inner.sync_bridge_call(
+            "devices.list",
+            &json!({}),
+            &json!({"devices":[{"id":"dev_fixture", "name":"iPhone", "nodeKey":"nodekey:fixture"}]}),
+        );
+        supervisor.inner.sync_bridge_event(&EventFrame {
+            name: "devices.changed".into(),
+            data: json!({"deviceId":"dev_fixture", "name":"iPhone novo"}),
+            ts: "2026-09-12T20:00:00Z".into(),
+        });
+        supervisor.inner.sync_bridge_event(&EventFrame {
+            name: "devices.changed".into(),
+            data: json!({"deviceId":"dev_fixture", "revoked":true}),
+            ts: "2026-09-12T20:00:01Z".into(),
+        });
+        supervisor.inner.sync_bridge_event(&EventFrame {
+            name: "pair.completed".into(),
+            data: json!({"pairId":"pair_fixture", "device":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
+            ts: "2026-09-12T20:00:00Z".into(),
+        });
+
+        assert_eq!(
+            *lock(&bridge.updates),
+            vec![
+                json!({"kind":"desktop", "value":{"id":"desktop_fixture", "name":"MacBook"}}),
+                json!({"kind":"sync", "value":{"devices":[{"id":"dev_fixture", "name":"iPhone", "nodeKey":"nodekey:fixture"}]}}),
+                json!({"kind":"rename", "deviceId":"dev_fixture", "name":"iPhone novo"}),
+                json!({"kind":"revoke", "deviceId":"dev_fixture"}),
+                json!({"kind":"upsert", "value":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
+            ]
+        );
+    }
+
+    #[test]
     fn sidecar_binary_must_be_an_absolute_regular_file() {
         assert!(validate_binary(Path::new("relative-sidecar")).is_err());
         let directory = std::env::temp_dir();
         assert!(validate_binary(&directory).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn doctor_uses_the_sidecar_cli_without_starting_another_node() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("cialai-doctor-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("mobile")).unwrap();
+        let script = root.join("fake-doctor.sh");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+[ "$1" = doctor ] || exit 8
+[ "$2" = --state-dir ] || exit 9
+[ "$4" = --control-url ] || exit 10
+[ "$5" = https://headscale.example ] || exit 11
+printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                script,
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("key")),
+        );
+        let result = supervisor
+            .doctor(Some("https://headscale.example".into()))
+            .unwrap();
+        assert_eq!(result["checks"]["control"]["ok"], true);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]
@@ -842,6 +1048,7 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
             Arc::new(move |channel, value| {
                 lock(&captured).push((channel.to_owned(), value));
             }),
+            Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("key")),
         );
         let result = supervisor.call("logs.tail", json!({"lines":10})).unwrap();

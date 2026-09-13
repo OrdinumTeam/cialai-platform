@@ -1,0 +1,57 @@
+# SPDX-License-Identifier: Apache-2.0
+# Rendered by bootstrap.sh into config.yaml. Keep in sync with
+# docs/06-rede-headscale-e-pareamento.md.
+server_url: https://__HEADSCALE_DOMAIN__
+listen_addr: 0.0.0.0:443
+metrics_listen_addr: 127.0.0.1:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: cialai
+    region_name: "Cialai relay"
+    verify_clients: true
+    stun_listen_addr: 0.0.0.0:3478
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+    ipv4: __PUBLIC_IPV4__
+  urls: []
+  paths: []
+  auto_update_enabled: false
+disable_check_updates: true
+node:
+  ephemeral:
+    inactivity_timeout: 30m
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+tls_letsencrypt_hostname: __HEADSCALE_DOMAIN__
+tls_letsencrypt_cache_dir: /var/lib/headscale/cache
+tls_letsencrypt_challenge_type: HTTP-01
+tls_letsencrypt_listen: ":http"
+log:
+  level: info
+  format: text
+policy:
+  mode: file
+  path: /etc/headscale/policy.json
+dns:
+  magic_dns: true
+  base_domain: cialai.internal
+  override_local_dns: false
+  nameservers:
+    global: []
+  search_domains: []
+unix_socket: /var/run/headscale/headscale.sock
+unix_socket_permission: "0770"
+logtail:
+  enabled: false

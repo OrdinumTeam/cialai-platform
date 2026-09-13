@@ -4,14 +4,18 @@ package sidecar
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/control"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/logx"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
+	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/rpc"
 	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
 )
@@ -90,5 +94,57 @@ func TestNodeUpKeepsAnExplicitEnrollmentKeyWithoutControlAdmin(t *testing.T) {
 	_, err := runtime.nodeUp(context.Background(), []byte(`{"controlUrl":"https://hs.example.com","userId":"42","userName":"alice","hostname":"desktop","authKey":"tskey-auth-explicit","forceLogin":true}`))
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeviceEventsDescribeBridgeIdentityChanges(t *testing.T) {
+	paths, err := statedir.Prepare(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	desktopID := "d_" + base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{1}, 16))
+	registry, err := pairing.OpenRegistry(paths, pairing.DesktopIdentity{
+		ID: desktopID, Name: "MacBook", CreatedAt: time.Now().UTC(),
+	}, nil, bytes.NewReader(bytes.Repeat([]byte{2}, 1024)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	device, _, err := registry.Pair(pairing.DeviceInput{
+		Name: "iPhone", Model: "iPhone16,1", Platform: "ios", App: "1.0.0",
+		NodeKey: "nodekey:" + strings.Repeat("a", 64), NodeID: "17", UserID: "42",
+		IP4: "100.64.0.9", RemoteAddr: "100.64.0.9:51234",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var output bytes.Buffer
+	runtime := &runtimeState{
+		logger: logx.New(&bytes.Buffer{}, 20), writer: rpc.NewWriter(&output), paths: paths,
+		node:    node.NewManager(func(node.Config) (node.Engine, error) { return nil, errors.New("not used") }),
+		devices: registry,
+	}
+
+	if _, err := runtime.deviceRename(json.RawMessage(`{"deviceId":"` + device.ID + `","name":"iPhone novo"}`)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runtime.deviceRevoke(context.Background(), json.RawMessage(`{"deviceId":"`+device.ID+`","network":false}`)); err != nil {
+		t.Fatal(err)
+	}
+
+	decoder := json.NewDecoder(&output)
+	var renamed, revoked rpc.Event
+	if err := decoder.Decode(&renamed); err != nil {
+		t.Fatal(err)
+	}
+	if err := decoder.Decode(&revoked); err != nil {
+		t.Fatal(err)
+	}
+	renameData := renamed.Data.(map[string]any)
+	revokeData := revoked.Data.(map[string]any)
+	if renamed.Name != "devices.changed" || renameData["deviceId"] != device.ID || renameData["name"] != "iPhone novo" {
+		t.Fatalf("rename event cannot update bridge identity: %#v", renamed)
+	}
+	if revoked.Name != "devices.changed" || revokeData["deviceId"] != device.ID || revokeData["revoked"] != true {
+		t.Fatalf("revoke event cannot close bridge connection: %#v", revoked)
 	}
 }

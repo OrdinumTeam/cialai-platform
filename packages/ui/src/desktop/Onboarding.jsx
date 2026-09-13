@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
-// Primeiro uso do desktop: escolhe somente os contratos locais necessários
-// para entrar no estúdio. Rede e pareamento pertencem à fase 2.
+// Primeiro uso do desktop: prepara o estúdio local e oferece a rede privada.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronLeft, FolderOpen, FolderPlus, Terminal } from 'lucide-react';
+import { Check, ChevronLeft, FolderOpen, FolderPlus, Network, Terminal } from 'lucide-react';
 import { chooseDirectory, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
+import NetworkSetup from './NetworkSetup.jsx';
+import { networkIsConfigured } from './tunnel-model.js';
 
 export const ONBOARDING_KEY = 'cialai_onboarding_complete';
 const ROOT_NAMES = ['Projects', 'Developer', 'src', 'dev', 'code', 'Github Projects'];
-const STEPS = ['Boas-vindas', 'Pastas', 'Shell', 'Pronto'];
+const STEPS = ['Boas-vindas', 'Pastas', 'Shell', 'Rede', 'Pronto'];
 
 const DEFAULT_PREFS = {
   appearance: 'system',
@@ -127,7 +128,18 @@ function ShellStep({ shell, setShell, probe, test }) {
   </div>;
 }
 
-function Ready({ selected, shell, saving, error }) {
+function NetworkStep({ network, onChange, expanded, onExpand }) {
+  if (expanded) return <div className="mac-onboarding__screen mac-onboarding__network"><NetworkSetup value={network} onChange={onChange} startExpanded /></div>;
+  return <div className="mac-onboarding__screen">
+    <div className="mac-onboarding__icon" aria-hidden="true"><Network /></div>
+    <p className="mac-onboarding__eyebrow">Rede privada</p>
+    <h1 id="onboarding-title">Quer acessar pelo celular?</h1>
+    <p className="mac-onboarding__lead">Conecte o Cialai ao seu Headscale para abrir terminais e arquivos com segurança fora deste computador. Você também pode fazer isso depois.</p>
+    <button type="button" className="btn btn-primary" onClick={onExpand}>Configurar agora</button>
+  </div>;
+}
+
+function Ready({ selected, shell, network, saving, error }) {
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__ready-mark" aria-hidden="true"><Check /></div>
     <p className="mac-onboarding__eyebrow">Tudo certo</p>
@@ -137,6 +149,7 @@ function Ready({ selected, shell, saving, error }) {
       <div><dt>Pasta inicial</dt><dd>{selected[0]}</dd></div>
       <div><dt>Shell</dt><dd>{shell}</dd></div>
       <div><dt>Arquivos móveis</dt><dd>{selected.length} {selected.length === 1 ? 'raiz permitida' : 'raízes permitidas'}</dd></div>
+      <div><dt>Rede</dt><dd>{networkIsConfigured(network) ? `${network.desktopName} acessível` : 'Configurar depois'}</dd></div>
     </dl>
     {error ? <p className="mac-onboarding__error" role="alert">{error}</p> : null}
     {saving ? <p className="mac-onboarding__saving" role="status">Salvando preferências…</p> : null}
@@ -155,6 +168,7 @@ export default function Onboarding({ onComplete }) {
   const [selected, setSelected] = useState([]);
   const [shell, setShellValue] = useState('');
   const [probe, setProbe] = useState({ status: 'idle', shell: '', output: '' });
+  const [networkSetupOpen, setNetworkSetupOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -232,7 +246,7 @@ export default function Onboarding({ onComplete }) {
       setProbe({ status: 'error', shell: value, output: cleanPrompt(message) });
     }
   };
-  const finish = async () => {
+  const finish = async (openPair = false) => {
     setSaving(true);
     setError('');
     try {
@@ -243,7 +257,7 @@ export default function Onboarding({ onComplete }) {
       };
       if (native) await invoke('set_preferences', { next });
       try { localStorage.setItem(ONBOARDING_KEY, '1'); } catch (_error) { /* storage unavailable */ }
-      onComplete(selected[0]);
+      onComplete(selected[0], { openPair });
     } catch (saveError) {
       setError(`Não foi possível salvar: ${saveError?.message || saveError}`);
       setSaving(false);
@@ -258,11 +272,12 @@ export default function Onboarding({ onComplete }) {
         {!loading && step === 0 ? <Welcome next={() => setStep(1)} /> : null}
         {!loading && step === 1 ? <Folders roots={roots} selected={selected} toggle={toggle} add={add} busy={busy} error={error} /> : null}
         {!loading && step === 2 ? <ShellStep shell={shell} setShell={setShell} probe={probe} test={testShell} /> : null}
-        {!loading && step === 3 ? <Ready selected={selected} shell={shell} saving={saving} error={error} /> : null}
+        {!loading && step === 3 ? <NetworkStep network={prefs.network} expanded={networkSetupOpen} onExpand={() => setNetworkSetupOpen(true)} onChange={(network) => setPrefs((current) => ({ ...current, network }))} /> : null}
+        {!loading && step === 4 ? <Ready selected={selected} shell={shell} network={prefs.network} saving={saving} error={error} /> : null}
       </div>
       {!loading && step > 0 ? <footer className="mac-onboarding__footer">
         <button type="button" className="btn btn-quiet" disabled={saving} onClick={() => { setError(''); setStep((current) => current - 1); }}><ChevronLeft size={15} />Voltar</button>
-        {step < 3 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>Continuar</button> : <button type="button" className="btn btn-primary" disabled={saving} onClick={finish}>{saving ? 'Abrindo…' : 'Abrir primeira sessão'}</button>}
+        {step < 4 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>{step === 3 && !networkIsConfigured(prefs.network) ? 'Depois' : 'Continuar'}</button> : <div className="mac-onboarding__final-actions"><button type="button" className="btn btn-secondary" disabled={saving} onClick={() => { if (networkIsConfigured(prefs.network)) finish(true); else { setNetworkSetupOpen(true); setStep(3); } }}>Vincular celular</button><button type="button" className="btn btn-primary" disabled={saving} onClick={() => finish(false)}>{saving ? 'Abrindo…' : 'Abrir primeira sessão'}</button></div>}
       </footer> : null}
     </section>
   </div>;

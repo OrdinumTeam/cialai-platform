@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Link2, Settings } from 'lucide-react';
 import { groupViews } from '../views/registry.js';
 import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
 
@@ -13,7 +13,7 @@ function readClosedGroups() {
   } catch (_error) { return new Set(); }
 }
 
-export default function Sidebar({ views, active, onNavigate, hidden }) {
+export default function Sidebar({ views, active, onNavigate, hidden, tunnelStatus, onOpenPair, onOpenPreferences }) {
   const groups = useMemo(() => groupViews(views), [views]);
   const [closed, setClosed] = useState(readClosedGroups);
   const navRef = useRef(null);
@@ -56,5 +56,5 @@ export default function Sidebar({ views, active, onNavigate, hidden }) {
     if (!entry.group) return entry.views.map(renderItem);
     const collapsed = closed.has(entry.group) && !entry.views.some((view) => view.id === active); const index = order++;
     return <section key={entry.key} className={`mac-nav-group${collapsed ? ' is-collapsed' : ''}`}><button type="button" className="mac-nav-group__header" style={{ '--i': index }} onClick={() => toggleGroup(entry.group)} aria-expanded={!collapsed}><span>{entry.group}</span><ChevronRight size={12} strokeWidth={2} className="mac-nav-group__chevron" aria-hidden="true" /></button><div className="mac-nav-group__items"><div>{entry.views.map(renderItem)}</div></div></section>;
-  })}</nav></aside>;
+  })}</nav><div className="mac-sidebar__footer"><button type="button" className="mac-sidebar__pair" onClick={onOpenPair}><Link2 aria-hidden="true" /><span><strong>Vincular celular</strong><small><i className={`mac-dot is-${tunnelStatus?.tone || 'idle'}`} aria-hidden="true" />{tunnelStatus?.label || 'Rede não configurada'}</small></span></button><button type="button" className="mac-sidebar__settings" onClick={onOpenPreferences} title="Preferências" aria-label="Preferências"><Settings aria-hidden="true" /></button></div></aside>;
 }

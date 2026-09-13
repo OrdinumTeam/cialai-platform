@@ -348,6 +348,16 @@
 .mac-sidebar .mac-dot.is-ok{background:#5cd68f}
 .mac-sidebar .mac-dot.is-bad{background:#ff8080}
 .mac-sidebar .mac-dot.is-busy{background:#ffcf6b}
+.mac-sidebar__footer{display:flex;align-items:center;gap:4px;margin:0 10px 12px;padding-top:10px;border-top:1px solid var(--mac-sidebar-line)}
+.mac-sidebar__pair{display:flex;align-items:center;gap:9px;min-width:0;flex:1;padding:7px 9px;border:0;border-radius:8px;background:transparent;color:var(--mac-sidebar-text);font:inherit;text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.mac-sidebar__pair:hover,.mac-sidebar__settings:hover{background:var(--mac-sidebar-hover)}
+.mac-sidebar__pair>svg{width:16px;height:16px;flex:0 0 auto;color:var(--mac-sidebar-icon)}
+.mac-sidebar__pair>span{display:flex;min-width:0;flex-direction:column;gap:3px}
+.mac-sidebar__pair strong{overflow:hidden;font-size:12.5px;font-weight:500;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+.mac-sidebar__pair small{display:flex;align-items:center;gap:6px;overflow:hidden;color:var(--mac-sidebar-text-2);font-size:10.5px;line-height:1.1;text-overflow:ellipsis;white-space:nowrap}
+.mac-sidebar__pair small i{flex:0 0 auto}
+.mac-sidebar__settings{display:grid;place-items:center;width:30px;height:30px;flex:0 0 auto;padding:0;border:0;border-radius:7px;background:transparent;color:var(--mac-sidebar-icon);cursor:default}
+.mac-sidebar__settings svg{width:15px;height:15px}
 .mac-sidebar ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.24);background-clip:padding-box;border:3px solid transparent}
 .mac-sidebar ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.38);background-clip:padding-box;border:3px solid transparent}
 
@@ -395,6 +405,15 @@
 .mac-toolbar__trailing{display:flex;align-items:center;gap:2px}
 .mac-toolbar__slot{display:flex;align-items:center;gap:4px}
 .mac-toolbar__slot:empty{display:none}
+.mac-tunnel-status{display:flex;align-items:center;gap:6px;height:26px;margin-right:4px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:11px;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.mac-tunnel-status:hover{background:var(--mac-hover);color:var(--mac-label)}
+.mac-tunnel-status>svg{width:13px;height:13px;color:var(--mac-label-3)}
+.mac-tunnel-status.is-ok>svg{color:var(--mac-ok)}
+.mac-tunnel-status.is-bad>svg{color:var(--mac-bad)}
+.mac-tunnel-status.is-busy>svg{color:var(--mac-warn)}
+.mac-tool--label{width:auto;padding:0 9px;gap:6px}
+.mac-tool--label span{font-size:11.5px}
+.mac-tool.is-danger{color:var(--mac-bad)}
 
 .mac-tool{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:28px;min-width:28px;padding:0 6px;border:0;border-radius:7px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:12px;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease),transform var(--mac-fast) var(--mac-ease)}
 .mac-tool:hover{background:var(--mac-hover);color:var(--mac-label)}
@@ -538,10 +557,152 @@
 .mac-prefs__root code{min-width:0;flex:1;overflow:hidden;color:var(--mac-label);font:11px/1.45 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
 .mac-prefs__error{margin:12px 0 0;color:var(--mac-bad);font-size:12px}
 
+/* assistente de rede */
+.mac-network-setup{margin-top:12px;border-radius:var(--mac-radius-card);background:var(--mac-surface-2);overflow:hidden}
+.mac-network-setup__progress{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin:0;padding:11px 14px;list-style:none;border-bottom:1px solid var(--mac-separator);background:color-mix(in srgb,var(--mac-surface-2) 72%,var(--mac-surface))}
+.mac-network-setup__progress li{position:relative;display:flex;align-items:center;justify-content:center;gap:6px;color:var(--mac-label-3);font-size:10.5px}
+.mac-network-setup__progress li:not(:last-child)::after{content:"";position:absolute;left:calc(50% + 38px);right:calc(-50% + 38px);height:1px;background:var(--mac-separator-strong)}
+.mac-network-setup__progress li>span{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;background:var(--mac-surface-3);font-size:9px;font-weight:600;z-index:1}
+.mac-network-setup__progress li>span svg{width:10px;height:10px}
+.mac-network-setup__progress li.is-current{color:var(--mac-accent-text);font-weight:600}
+.mac-network-setup__progress li.is-current>span{background:var(--mac-accent);color:#fff}
+.mac-network-setup__progress li.is-done{color:var(--mac-label-2)}
+.mac-network-setup__progress li.is-done>span{background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-network-setup__body{padding:16px 18px 18px}
+.mac-network-setup__intro{display:flex;align-items:flex-start;gap:11px;margin-bottom:15px}
+.mac-network-setup__icon{display:grid;place-items:center;width:32px;height:32px;flex:0 0 auto;border-radius:9px;background:var(--mac-accent-soft);color:var(--mac-accent)}
+.mac-network-setup__icon svg{width:16px;height:16px}
+.mac-network-setup h4{margin:0;color:var(--mac-label);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mac-network-setup p{margin:3px 0 0;color:var(--mac-label-2);font-size:11.5px;line-height:1.45}
+.mac-network-setup__field{display:flex;flex-direction:column;gap:5px;margin:10px 0;color:var(--mac-label-2);font-size:11.5px;font-weight:500}
+.mac-network-setup__field .field__control{width:100%}
+.mac-network-setup__fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mac-network-setup__toggle{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-top:1px solid var(--mac-separator);color:var(--mac-label);font-size:12px;cursor:default}
+.mac-network-setup__toggle input{margin-top:2px}
+.mac-network-setup__toggle span{display:flex;flex-direction:column;gap:2px}
+.mac-network-setup__toggle strong{font-weight:500}
+.mac-network-setup__toggle small{color:var(--mac-label-2);font-size:10.5px;line-height:1.4}
+.mac-network-setup__actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;margin-top:14px}
+.mac-network-setup__actions .btn-quiet:first-child{margin-right:auto}
+.mac-network-setup__error{color:var(--mac-bad)!important}
+.mac-network-checks{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.mac-network-checks span{display:flex;align-items:center;gap:4px;padding:4px 7px;border-radius:999px;background:var(--mac-ok-bg);color:var(--mac-ok);font-size:10.5px}
+.mac-network-checks svg{width:11px;height:11px}
+.mac-network-setup__done{display:grid;grid-template-columns:42px minmax(0,1fr);gap:0 13px}
+.mac-network-setup__done-mark{display:grid;place-items:center;width:42px;height:42px;grid-row:1 / span 2;border-radius:50%;background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-network-setup__done-mark svg{width:20px;height:20px}
+.mac-network-setup__eyebrow{margin:0 0 2px!important;color:var(--mac-ok)!important;font-size:10.5px!important;font-weight:600}
+.mac-network-setup__summary{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin:16px 0 0;border-radius:9px;overflow:hidden;background:var(--mac-separator)}
+.mac-network-setup__summary>div{min-width:0;padding:9px 10px;background:var(--mac-surface)}
+.mac-network-setup__summary dt{color:var(--mac-label-3);font-size:9.5px}
+.mac-network-setup__summary dd{margin:3px 0 0;overflow:hidden;color:var(--mac-label);font:10.5px/1.4 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
+.mac-network-setup__done .mac-network-setup__actions{grid-column:1 / -1}
+.mac-onboarding__network{width:min(100%,680px)}
+.mac-onboarding__network .mac-network-setup{margin-top:0}
+.mac-onboarding__final-actions{display:flex;align-items:center;gap:8px}
+
+/* pareamento */
+.mac-pair{display:grid;grid-template-columns:minmax(190px,1fr) 320px;gap:30px;align-items:center;padding:4px 2px 8px}
+.mac-pair__copy{align-self:start;padding:28px 0 0 8px}
+.mac-pair__device{display:grid;place-items:center;width:40px;height:40px;margin-bottom:16px;border-radius:12px;background:var(--mac-accent-soft);color:var(--mac-accent)}
+.mac-pair__device svg{width:20px;height:20px}
+.mac-pair__eyebrow{margin:0 0 4px;color:var(--mac-accent-text);font-size:11px;font-weight:600}
+.mac-pair h3,.mac-pair__empty h3,.mac-pair__success h3{margin:0;color:var(--mac-label);font-size:21px;line-height:1.2;font-weight:650;letter-spacing:-.02em}
+.mac-pair__copy>p:not(.mac-pair__eyebrow),.mac-pair__empty p,.mac-pair__success>p:not(.mac-pair__eyebrow){margin:9px 0 0;color:var(--mac-label-2);font-size:13px;line-height:1.5}
+.mac-pair__state{display:flex;align-items:center;gap:7px;margin-top:18px;color:var(--mac-label-2);font-size:11.5px}
+.mac-pair__visual{display:flex;flex-direction:column;align-items:center}
+.mac-pair__qr{position:relative;display:grid;place-items:center;width:292px;height:292px;padding:6px;border-radius:18px;background:conic-gradient(var(--mac-accent) var(--pair-progress,360deg),var(--mac-surface-3) 0);transition:background var(--mac-normal) linear}
+.mac-pair__qr::after{content:"";position:absolute;inset:4px;border-radius:15px;background:#fff;z-index:0}
+.mac-pair__qr canvas,.mac-pair__qr-placeholder{position:relative;z-index:1;width:280px;height:280px;border-radius:12px;background:#fff}
+.mac-pair__qr-placeholder{display:grid;place-items:center;color:#786d76;font-size:12px}
+.mac-pair__qr.is-loading{opacity:.72}
+.mac-pair__timers{display:grid;grid-template-columns:1fr 1fr;width:292px;margin-top:10px}
+.mac-pair__timers>div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.mac-pair__timers>div+div{border-left:1px solid var(--mac-separator)}
+.mac-pair__timers span{color:var(--mac-label-3);font-size:9.5px}
+.mac-pair__timers strong{color:var(--mac-label);font:12px/1.3 var(--mac-font-mono)}
+.mac-pair__approval{width:292px;margin-top:13px;padding:12px;border-radius:11px;background:var(--mac-accent-soft)}
+.mac-pair__approval>div:first-child{display:flex;align-items:center;gap:8px;color:var(--mac-accent-text)}
+.mac-pair__approval svg{width:17px;height:17px;flex:0 0 auto}
+.mac-pair__approval span{display:flex;flex-direction:column;gap:1px}
+.mac-pair__approval strong{font-size:11.5px;font-weight:600}
+.mac-pair__approval small{font-size:9.5px}
+.mac-pair__approval output{display:block;margin:10px 0;text-align:center;color:var(--mac-label);font:700 28px/1.1 var(--mac-font-mono);letter-spacing:.2em}
+.mac-pair__approval-actions{display:flex!important;justify-content:flex-end;gap:6px!important}
+.mac-pair__error{width:292px;margin:10px 0 0;color:var(--mac-bad);font-size:11px;line-height:1.4;text-align:center}
+.mac-pair__empty,.mac-pair__success{display:flex;min-height:360px;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.mac-pair__empty>span,.mac-pair__success>span{display:grid;place-items:center;width:48px;height:48px;margin-bottom:16px;border-radius:50%;background:var(--mac-accent-soft);color:var(--mac-accent)}
+.mac-pair__success>span{background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-pair__empty>span svg,.mac-pair__success>span svg{width:22px;height:22px}
+.mac-pair__empty .btn,.mac-pair__success .btn{margin-top:18px}
+
+/* dispositivos */
+.mac-devices{max-width:1080px!important;animation:macFade var(--mac-normal) var(--mac-ease)}
+.mac-devices__head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;margin:8px 0 28px}
+.mac-devices__eyebrow{margin:0 0 4px;color:var(--mac-accent-text);font-size:11px;font-weight:600}
+.mac-devices__head h2{margin:0;color:var(--mac-label);font-size:24px;line-height:1.2;font-weight:650;letter-spacing:-.025em}
+.mac-devices__head p:not(.mac-devices__eyebrow){margin:7px 0 0;color:var(--mac-label-2);font-size:13px}
+.mac-network-badge{display:flex;align-items:center;gap:7px;margin-top:4px;padding:6px 9px;border-radius:999px;background:var(--mac-neutral-bg);color:var(--mac-label-2);font-size:11px}
+.mac-network-badge.is-ok{background:var(--mac-ok-bg);color:var(--mac-ok)}
+.mac-network-badge.is-bad{background:var(--mac-bad-bg);color:var(--mac-bad)}
+.mac-network-badge.is-busy{background:var(--mac-warn-bg);color:var(--mac-warn)}
+.mac-machine{padding:18px 20px;border-radius:var(--mac-radius-panel);background:var(--mac-surface-2)}
+.mac-machine__title{display:flex;align-items:center;gap:11px}
+.mac-machine__title>span{display:grid;place-items:center;width:34px;height:34px;border-radius:10px;background:var(--mac-accent-soft);color:var(--mac-accent)}
+.mac-machine__title svg{width:17px;height:17px}
+.mac-machine__title h3,.mac-devices__section-head h3{margin:0;color:var(--mac-label);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.mac-machine__title p,.mac-devices__section-head p{margin:2px 0 0;color:var(--mac-label-2);font-size:10.5px}
+.mac-machine__details{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;margin:16px 0 14px;border-radius:9px;overflow:hidden;background:var(--mac-separator)}
+.mac-device-detail{min-width:0;padding:10px 11px;background:var(--mac-surface)}
+.mac-device-detail dt{color:var(--mac-label-3);font-size:9.5px}
+.mac-device-detail dd{margin:4px 0 0;overflow:hidden;color:var(--mac-label);font-size:11.5px;text-overflow:ellipsis;white-space:nowrap}
+.mac-device-detail dd.is-mono{font-family:var(--mac-font-mono);font-size:10.5px}
+.mac-machine__actions{display:flex;align-items:center;gap:6px}
+.mac-machine__diagnostic{display:flex;align-items:center;gap:6px;margin:12px 0 0;padding-top:11px;border-top:1px solid var(--mac-separator);color:var(--mac-warn);font-size:10.5px}
+.mac-machine__diagnostic.is-ok{color:var(--mac-ok)}
+.mac-machine__diagnostic svg{width:13px;height:13px}
+.mac-machine__diagnostic span{margin-left:auto;color:var(--mac-label-3)}
+.mac-devices__list-section{margin-top:30px}
+.mac-devices__section-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:8px}
+.mac-device-list{margin:0;padding:0;list-style:none;border-top:1px solid var(--mac-separator)}
+.mac-device-row{display:grid;grid-template-columns:34px minmax(180px,1fr) minmax(100px,.5fr) minmax(110px,.5fr) 64px;gap:10px;align-items:center;min-height:62px;padding:7px 4px;border-bottom:1px solid var(--mac-separator);transition:background var(--mac-fast) var(--mac-ease)}
+.mac-device-row:hover{background:var(--mac-hover)}
+.mac-device-row__icon{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:var(--mac-surface-2);color:var(--mac-label-2)}
+.mac-device-row__icon svg{width:15px;height:15px}
+.mac-device-row__identity,.mac-device-row__platform,.mac-device-row__seen{display:flex;min-width:0;flex-direction:column;gap:3px}
+.mac-device-row__identity strong{overflow:hidden;color:var(--mac-label);font-size:12.5px;font-weight:500;text-overflow:ellipsis;white-space:nowrap}
+.mac-device-row__identity>span,.mac-device-row__platform small,.mac-device-row__seen small{overflow:hidden;color:var(--mac-label-3);font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.mac-device-row__platform>span{color:var(--mac-label-2);font-size:9.5px;font-weight:600;letter-spacing:.03em}
+.mac-device-row__seen>span{display:flex;align-items:center;gap:6px;color:var(--mac-label-2);font-size:10.5px}
+.mac-device-row__actions{display:flex;justify-content:flex-end;gap:2px}
+.mac-device-row__actions .mac-tool{width:28px;height:28px}
+.mac-device-row__actions svg{width:13px;height:13px}
+.mac-device-row__rename{display:flex;align-items:center;gap:5px;grid-column:span 3}
+.mac-device-row__rename .field__control{min-width:110px;flex:1}
+.mac-devices__error{margin:14px 0 0;color:var(--mac-bad);font-size:12px}
+.mac-revoke>p{margin:0 0 14px;color:var(--mac-label-2);font-size:13px;line-height:1.5}
+.mac-revoke>p strong{color:var(--mac-label)}
+.mac-revoke label{display:flex;align-items:flex-start;gap:9px;padding:11px;border-radius:9px;background:var(--mac-surface-2);cursor:default}
+.mac-revoke label input{margin-top:2px}
+.mac-revoke label span{display:flex;flex-direction:column;gap:3px}
+.mac-revoke label strong{color:var(--mac-label);font-size:12px;font-weight:500}
+.mac-revoke label small{color:var(--mac-label-2);font-size:10.5px;line-height:1.4}
+
 @media (max-width:720px){
   .mac-prefs__row{align-items:flex-start;flex-direction:column;gap:7px}
   .mac-prefs__row-control,.mac-prefs__input,.mac-prefs__textarea,.mac-prefs__browser-path{width:100%}
   .mac-prefs__row--wide .mac-prefs__row-text{padding-top:0}
+}
+
+@media (max-width:900px){
+  .mac-tunnel-status>span:last-child{display:none}
+  .mac-pair{grid-template-columns:1fr}
+  .mac-pair__copy{padding:0;text-align:center}
+  .mac-pair__device{margin-left:auto;margin-right:auto}
+  .mac-pair__state{justify-content:center}
+  .mac-machine__details{grid-template-columns:1fr 1fr}
+  .mac-device-row{grid-template-columns:34px minmax(160px,1fr) minmax(100px,.5fr) 64px}
+  .mac-device-row__platform{display:none}
 }
 
 .mac-segmented{display:inline-flex;gap:2px;padding:2px;border-radius:8px;background:var(--mac-neutral-bg)}
