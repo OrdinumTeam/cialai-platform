@@ -1,10 +1,18 @@
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import type { Locale } from '@cialai/i18n';
 
+import { useI18n } from '../i18n';
 import type { ProfileStore } from '../profiles/store';
 import { usePalette } from '../theme';
 
 type LogLevel = 'error' | 'info' | 'debug';
+
+const LANGUAGE_OPTIONS: readonly { value: Locale; key: string }[] = [
+  { value: 'pt-BR', key: 'language.portuguese' },
+  { value: 'en', key: 'language.english' },
+  { value: 'es', key: 'language.spanish' },
+];
 
 type Props = {
   store: ProfileStore;
@@ -18,41 +26,55 @@ type Props = {
 
 export function Settings({ store, appVersion, coreVersion, logLevel, onBack, onForgetProfile, onLogLevel }: Props) {
   const palette = usePalette();
+  const { locale, setLocale, t } = useI18n();
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={styles.header}>
         <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}>
-          <Text style={[styles.backText, { color: palette.accent }]}>Computadores</Text>
+          <Text style={[styles.backText, { color: palette.accent }]}>{t('mobile.desktops.title')}</Text>
         </Pressable>
-        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>Ajustes</Text>
+        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.settings.title')}</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>Perfis</Text>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.profiles')}</Text>
         {store.profiles.map(profile => (
           <View key={profile.id} style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
             <Text style={[styles.cardTitle, { color: palette.label }]}>{profile.userName}</Text>
             <Text selectable style={[styles.cardDetail, { color: palette.secondaryLabel }]}>{profile.controlUrl}</Text>
             <Pressable accessibilityRole="button" onPress={() => onForgetProfile(profile.id)} style={styles.rowButton}>
-              <Text style={[styles.rowButtonText, { color: palette.danger }]}>Esquecer perfil</Text>
+              <Text style={[styles.rowButtonText, { color: palette.danger }]}>{t('mobile.settings.forgetProfile')}</Text>
             </Pressable>
           </View>
         ))}
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>Nível de log</Text>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('language.label')}</Text>
+        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
+          {LANGUAGE_OPTIONS.map(option => (
+            <Pressable accessibilityLabel={t(option.key)} accessibilityRole="button"
+              accessibilityState={{ selected: option.value === locale }} key={option.value}
+              onPress={() => setLocale(option.value)}
+              style={[styles.segmentItem, option.value === locale && { backgroundColor: palette.accent }]}>
+              <Text style={{ color: option.value === locale ? palette.accentText : palette.label, fontWeight: '600' }}>
+                {t(option.key)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.logLevel')}</Text>
         <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
           {(['error', 'info', 'debug'] as const).map(level => (
             <Pressable accessibilityRole="button" key={level} onPress={() => onLogLevel(level)}
               style={[styles.segmentItem, level === logLevel && { backgroundColor: palette.accent }]}>
               <Text style={{ color: level === logLevel ? palette.accentText : palette.label, fontWeight: '600' }}>
-                {level === 'error' ? 'Erros' : level === 'info' ? 'Informações' : 'Diagnóstico'}
+                {t(`mobile.settings.log.${level}`)}
               </Text>
             </Pressable>
           ))}
         </View>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>Sobre</Text>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.about')}</Text>
         <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          <Text style={[styles.cardDetail, { color: palette.label }]}>Aplicativo {appVersion}</Text>
-          <Text style={[styles.cardDetail, { color: palette.label }]}>Núcleo {coreVersion}</Text>
-          <Text style={[styles.cardDetail, { color: palette.secondaryLabel }]}>Licenças de código aberto disponíveis no repositório do Cialai</Text>
+          <Text style={[styles.cardDetail, { color: palette.label }]}>{t('mobile.settings.appVersion', { version: appVersion })}</Text>
+          <Text style={[styles.cardDetail, { color: palette.label }]}>{t('mobile.settings.coreVersion', { version: coreVersion })}</Text>
+          <Text style={[styles.cardDetail, { color: palette.secondaryLabel }]}>{t('mobile.settings.licenses')}</Text>
         </View>
       </ScrollView>
     </SafeAreaView>

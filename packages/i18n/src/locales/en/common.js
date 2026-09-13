@@ -12,5 +12,9 @@ export default Object.freeze({
   'connection.incompatible': 'Update required',
   'connection.removed': 'Phone removed',
   'language.current': 'English',
+  'language.english': 'English',
+  'language.label': 'Language',
+  'language.portuguese': 'Português',
+  'language.spanish': 'Español',
   'language.switch': 'Mudar para português',
 });

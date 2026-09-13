@@ -8,6 +8,7 @@ import type { BiometricSession } from '../auth/biometrics';
 import { pageMessageScript, parsePageMessage, shellMessageScript, type ShellMessage } from '../bridge/messages';
 import { shareDownload } from '../bridge/share-download';
 import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '../config/url';
+import { useI18n } from '../i18n';
 import { checkControlHealth, HEALTH_POLL_INTERVAL_MS } from '../network/health';
 import { usePalette } from '../theme';
 
@@ -27,6 +28,7 @@ export function Shell({
   url, desktopId, desktopName, version, biometricSession, lockSignal, tunnelOnline, onOffline, onDesktops
 }: Props) {
   const palette = usePalette();
+  const { t } = useI18n();
   const webView = useRef<WebView>(null);
   const loaded = useRef(false);
   const downloadBusy = useRef(false);
@@ -80,9 +82,9 @@ export function Shell({
     try {
       await Linking.openURL(externalUrl);
     } catch {
-      Alert.alert('Não foi possível abrir o link', 'Confira o endereço e tente novamente.');
+      Alert.alert(t('mobile.alert.openLink.title'), t('mobile.alert.openLink.detail'));
     }
-  }, []);
+  }, [t]);
 
   const allowNavigation = useCallback((request: WebViewNavigation) => {
     if (isSameControlOrigin(url, request.url)) return true;
@@ -106,18 +108,18 @@ export function Shell({
       return;
     }
     if (downloadBusy.current) {
-      Alert.alert('Download em andamento', 'Conclua o compartilhamento atual antes de iniciar outro.');
+      Alert.alert(t('mobile.alert.downloadBusy.title'), t('mobile.alert.downloadBusy.detail'));
       return;
     }
     downloadBusy.current = true;
     try {
       await shareDownload(message, __DEV__);
     } catch (caught) {
-      Alert.alert('Download não concluído', caught instanceof Error ? caught.message : 'Não foi possível preparar o arquivo.');
+      Alert.alert(t('mobile.alert.downloadFailed.title'), caught instanceof Error ? caught.message : t('mobile.alert.downloadFailed.detail'));
     } finally {
       downloadBusy.current = false;
     }
-  }, [biometricSession, emitShellState, inject, onDesktops, openExternal, url]);
+  }, [biometricSession, emitShellState, inject, onDesktops, openExternal, t, url]);
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
@@ -132,9 +134,9 @@ export function Shell({
             <View style={[styles.connectedDot, { backgroundColor: tunnelOnline ? palette.success : palette.danger }]} />
             <Text numberOfLines={1} style={[styles.toolbarTitle, { color: palette.label }]}>{desktopName}</Text>
           </View>
-          <Pressable accessibilityLabel="Mostrar computadores" accessibilityRole="button" onPress={onDesktops}
+          <Pressable accessibilityLabel={t('mobile.shell.showDesktops')} accessibilityRole="button" onPress={onDesktops}
             style={({ pressed }) => [styles.desktopsButton, pressed && styles.pressed]}>
-            <Text style={[styles.desktopsText, { color: palette.accent }]}>Computadores</Text>
+            <Text style={[styles.desktopsText, { color: palette.accent }]}>{t('mobile.shell.desktops')}</Text>
           </Pressable>
         </View>
       </SafeAreaView>

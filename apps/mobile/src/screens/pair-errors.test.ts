@@ -1,6 +1,11 @@
 import { pairErrorMessage } from './pair-errors';
+import { setLocale } from '../i18n';
 
 describe('pairing QR errors', () => {
+  beforeEach(async () => {
+    await setLocale('pt-BR');
+  });
+
   test.each([
     ['payload_invalid', 'não é um código de pareamento'],
     ['payload_version', 'Atualize o Cialai'],

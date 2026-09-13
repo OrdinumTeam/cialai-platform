@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -23,6 +23,7 @@ import {
 import { authenticateWithDevice, BiometricSession } from './src/auth/biometrics';
 import { getAppVersion } from './src/config/env';
 import { validateControlUrl } from './src/config/url';
+import { hydrateLocale, useI18n } from './src/i18n';
 import { checkControlHealth } from './src/network/health';
 import {
   deleteDeviceToken,
@@ -50,6 +51,7 @@ import { handleAppStateTransition, notifyNetworkTransition } from './src/state/l
 import { usePalette } from './src/theme';
 
 type LogLevel = 'error' | 'info' | 'debug';
+type Translator = (key: string, values?: Record<string, string | number>) => string;
 
 function findDesktop(store: ProfileStore, desktopId: string) {
   for (const profile of store.profiles) {
@@ -59,11 +61,11 @@ function findDesktop(store: ProfileStore, desktopId: string) {
   return null;
 }
 
-function deviceIdentity(version: string) {
+function deviceIdentity(version: string, translate: Translator) {
   const constants = Platform.constants as Record<string, unknown>;
   const model = String(constants.Model ?? constants.model ?? constants.Brand ?? Platform.OS);
   return {
-    name: Platform.OS === 'ios' ? 'iPhone com Cialai' : 'Android com Cialai',
+    name: translate(Platform.OS === 'ios' ? 'mobile.device.iosName' : 'mobile.device.androidName'),
     model,
     platform: Platform.OS === 'android' ? 'android' as const : 'ios' as const,
     app: version
@@ -72,6 +74,7 @@ function deviceIdentity(version: string) {
 
 function AppContent() {
   const palette = usePalette();
+  const { t } = useI18n();
   const [screen, dispatch] = useReducer(transition, { kind: 'loading' } as AppScreen);
   const [profiles, setProfiles] = useState<ProfileStore>(emptyProfileStore);
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | null>(null);
@@ -80,7 +83,7 @@ function AppContent() {
   const backgroundedAt = useRef<number | null>(null);
   const [biometricSession] = useState(() => new BiometricSession(authenticateWithDevice));
   const appVersion = getAppVersion();
-  const device = useMemo(() => deviceIdentity(appVersion), [appVersion]);
+  const device = deviceIdentity(appVersion, t);
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -124,6 +127,7 @@ function AppContent() {
     let cancelled = false;
     const bootstrap = async () => {
       try {
+        await hydrateLocale();
         const stored = await loadProfileStore();
         if (cancelled) return;
         setProfiles(stored);
@@ -153,16 +157,16 @@ function AppContent() {
             ? { type: 'desktop-opened', desktopId: desktop.id, url: localUrl }
             : { type: 'desktop-offline', desktopId: desktop.id, reason: 'desktop' });
         }
-      } catch (caught) {
+      } catch {
         if (!cancelled) dispatch({
           type: 'needs-pairing',
-          error: caught instanceof Error ? caught.message : 'Não foi possível abrir os perfis guardados.'
+          error: t('mobile.error.profileLoad')
         });
       }
     };
     void bootstrap();
     return () => { cancelled = true; };
-  }, [refreshStatus]);
+  }, [refreshStatus, t]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
@@ -242,22 +246,22 @@ function AppContent() {
   }, [openDesktop, profiles, screen]);
 
   const forgetDesktop = useCallback((profile: HeadscaleProfile, desktop: DesktopProfile) => {
-    Alert.alert('Esquecer computador', `Remover ${desktop.name} deste celular?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Esquecer', style: 'destructive', onPress: () => void (async () => {
+    Alert.alert(t('mobile.alert.forgetDesktop.title'), t('mobile.alert.forgetDesktop.detail', { name: desktop.name }), [
+      { text: t('mobile.common.cancel'), style: 'cancel' },
+      { text: t('mobile.common.forget'), style: 'destructive', onPress: () => void (async () => {
         await closeDesktop(desktop.id).catch(() => undefined);
         await deleteDeviceToken(desktop.id);
         await persist(removeDesktop(profiles, profile.id, desktop.id));
       })() }
     ]);
-  }, [persist, profiles]);
+  }, [persist, profiles, t]);
 
   const forgetStoredProfile = useCallback((profileId: string) => {
     const profile = profiles.profiles.find(candidate => candidate.id === profileId);
     if (!profile) return;
-    Alert.alert('Esquecer perfil', `Remover o perfil de ${profile.userName} e seus computadores?`, [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Esquecer', style: 'destructive', onPress: () => void (async () => {
+    Alert.alert(t('mobile.alert.forgetProfile.title'), t('mobile.alert.forgetProfile.detail', { name: profile.userName }), [
+      { text: t('mobile.common.cancel'), style: 'cancel' },
+      { text: t('mobile.common.forget'), style: 'destructive', onPress: () => void (async () => {
         for (const desktop of profile.desktops) await deleteDeviceToken(desktop.id);
         await forgetProfile(profile.id);
         const next = removeProfile(profiles, profile.id);
@@ -265,7 +269,7 @@ function AppContent() {
         dispatch(next.profiles.length ? { type: 'show-desktops' } : { type: 'needs-pairing' });
       })() }
     ]);
-  }, [persist, profiles]);
+  }, [persist, profiles, t]);
 
   const selected = screen.kind === 'shell' || screen.kind === 'offline'
     ? findDesktop(profiles, screen.desktopId) : null;

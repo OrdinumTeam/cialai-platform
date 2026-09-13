@@ -3,17 +3,18 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { OfflineReason } from '../state/machine';
+import { useI18n } from '../i18n';
 import { RequestGate } from '../network/request-gate';
 import { usePalette } from '../theme';
 
 const RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000] as const;
 
-const reasonText: Record<OfflineReason, { title: string; detail: string }> = {
-  tunnel: { title: 'A rede segura está indisponível', detail: 'Confira sua conexão e tente novamente.' },
-  desktop: { title: 'O computador está fora de alcance', detail: 'Deixe o Cialai aberto no computador.' },
-  server: { title: 'O servidor está indisponível', detail: 'Conexões existentes podem continuar. Novas conexões precisam do servidor.' },
-  reconnecting: { title: 'Reconectando', detail: 'Restaurando a conexão segura com o computador.' },
-  removed: { title: 'Este celular foi removido', detail: 'Vincule novamente para acessar este computador.' }
+const reasonKeys: Record<OfflineReason, { title: string; detail: string }> = {
+  tunnel: { title: 'mobile.offline.tunnel.title', detail: 'mobile.offline.tunnel.detail' },
+  desktop: { title: 'mobile.offline.desktop.title', detail: 'mobile.offline.desktop.detail' },
+  server: { title: 'mobile.offline.server.title', detail: 'mobile.offline.server.detail' },
+  reconnecting: { title: 'mobile.offline.reconnecting.title', detail: 'mobile.offline.reconnecting.detail' },
+  removed: { title: 'mobile.offline.removed.title', detail: 'mobile.offline.removed.detail' }
 };
 
 type Props = {
@@ -24,6 +25,7 @@ type Props = {
 
 export function Offline({ reason, onRetry, onDesktops }: Props) {
   const palette = usePalette();
+  const { t } = useI18n();
   const [checking, setChecking] = useState(false);
   const [gate] = useState(() => new RequestGate());
   const attempt = useRef(0);
@@ -56,28 +58,28 @@ export function Offline({ reason, onRetry, onDesktops }: Props) {
   }, [onRetry]);
 
   useEffect(() => () => gate.invalidate(), [gate]);
-  const copy = reasonText[reason];
+  const copy = reasonKeys[reason];
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={[styles.status, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
           <View style={[styles.statusDot, { backgroundColor: palette.danger }]} />
-          <Text style={[styles.statusText, { color: palette.secondaryLabel }]}>Sem conexão</Text>
+          <Text style={[styles.statusText, { color: palette.secondaryLabel }]}>{t('mobile.offline.status')}</Text>
         </View>
-        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{copy.title}</Text>
-        <Text style={[styles.body, { color: palette.secondaryLabel }]}>{copy.detail}</Text>
+        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t(copy.title)}</Text>
+        <Text style={[styles.body, { color: palette.secondaryLabel }]}>{t(copy.detail)}</Text>
         <Pressable accessibilityRole="button" disabled={checking} onPress={() => void retry()}
           style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, checking && styles.disabled]}>
           {checking ? <ActivityIndicator color={palette.accentText} />
-            : <Text style={[styles.primaryText, { color: palette.accentText }]}>Tentar agora</Text>}
+            : <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.offline.retry')}</Text>}
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => {
           leaving.current = true;
           gate.invalidate();
           onDesktops();
         }} style={styles.secondary}>
-          <Text style={[styles.secondaryText, { color: palette.accent }]}>Trocar de computador</Text>
+          <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.offline.switchDesktop')}</Text>
         </Pressable>
       </ScrollView>
     </SafeAreaView>

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import type { TunnelStatus } from 'cialai-tunnel';
 
+import { useI18n } from '../i18n';
 import type { DesktopProfile, HeadscaleProfile, ProfileStore } from '../profiles/store';
 import { usePalette } from '../theme';
 
@@ -18,16 +19,17 @@ type Props = {
   onForgetDesktop: (profile: HeadscaleProfile, desktop: DesktopProfile) => void;
 };
 
-function formatLastSeen(value: string): string {
+function formatLastSeen(value: string, locale: string, never: string): string {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return 'Nunca acessado';
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(date);
+  if (Number.isNaN(date.getTime())) return never;
+  return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date);
 }
 
 export function Desktops({
   store, tunnelStatus, onOpen, onPair, onSettings, onSwitchProfile, onRename, onForgetDesktop
 }: Props) {
   const palette = usePalette();
+  const { locale, t } = useI18n();
   const activeProfile = store.profiles.find(profile => profile.id === store.lastProfileId) ?? store.profiles[0];
   const [selected, setSelected] = useState<{ profile: HeadscaleProfile; desktop: DesktopProfile } | null>(null);
   const [name, setName] = useState('');
@@ -37,11 +39,11 @@ export function Desktops({
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={styles.header}>
         <View>
-          <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>Computadores</Text>
-          <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>Escolha onde deseja continuar</Text>
+          <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.desktops.title')}</Text>
+          <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>{t('mobile.desktops.subtitle')}</Text>
         </View>
-        <Pressable accessibilityLabel="Abrir ajustes" accessibilityRole="button" onPress={onSettings} style={styles.headerButton}>
-          <Text style={[styles.headerButtonText, { color: palette.accent }]}>Ajustes</Text>
+        <Pressable accessibilityLabel={t('mobile.desktops.openSettings')} accessibilityRole="button" onPress={onSettings} style={styles.headerButton}>
+          <Text style={[styles.headerButtonText, { color: palette.accent }]}>{t('mobile.desktops.settings')}</Text>
         </Pressable>
       </View>
 
@@ -70,47 +72,49 @@ export function Desktops({
                 <View style={styles.cardText}>
                   <Text style={[styles.cardTitle, { color: palette.label }]}>{desktop.name}</Text>
                   <Text style={[styles.cardMeta, { color: palette.secondaryLabel }]}>
-                    {online ? 'Disponível' : 'Fora de alcance'}
+                    {online ? t('mobile.desktops.status.available') : t('mobile.desktops.status.unreachable')}
                   </Text>
-                  <Text style={[styles.cardMeta, { color: palette.tertiaryLabel }]}>Último acesso {formatLastSeen(desktop.lastSeenAt)}</Text>
+                  <Text style={[styles.cardMeta, { color: palette.tertiaryLabel }]}>{t('mobile.desktops.lastSeen', {
+                    date: formatLastSeen(desktop.lastSeenAt, locale, t('mobile.desktops.never'))
+                  })}</Text>
                 </View>
               </Pressable>
-              <Pressable accessibilityLabel={`Opções de ${desktop.name}`} accessibilityRole="button"
+              <Pressable accessibilityLabel={t('mobile.desktops.optionsFor', { name: desktop.name })} accessibilityRole="button"
                 onPress={() => { setSelected({ profile: activeProfile, desktop }); setName(desktop.name); }} style={styles.options}>
-                <Text style={[styles.optionsText, { color: palette.accent }]}>Opções</Text>
+                <Text style={[styles.optionsText, { color: palette.accent }]}>{t('mobile.desktops.options')}</Text>
               </Pressable>
             </View>
           );
         })}
         {!activeProfile?.desktops.length ? (
-          <Text style={[styles.empty, { color: palette.secondaryLabel }]}>Nenhum computador neste perfil</Text>
+          <Text style={[styles.empty, { color: palette.secondaryLabel }]}>{t('mobile.desktops.empty')}</Text>
         ) : null}
         <Pressable accessibilityRole="button" onPress={onPair}
           style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
-          <Text style={[styles.primaryText, { color: palette.accentText }]}>Vincular outro</Text>
+          <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.desktops.pairAnother')}</Text>
         </Pressable>
       </ScrollView>
 
       <Modal animationType="fade" transparent visible={selected !== null} onRequestClose={() => setSelected(null)}>
         <View style={styles.modalBackdrop}>
           <View style={[styles.modal, { backgroundColor: palette.surface }]}>
-            <Text style={[styles.modalTitle, { color: palette.label }]}>Opções do computador</Text>
-            <TextInput accessibilityLabel="Nome do computador" maxLength={48} onChangeText={setName} value={name}
+            <Text style={[styles.modalTitle, { color: palette.label }]}>{t('mobile.desktops.optionsTitle')}</Text>
+            <TextInput accessibilityLabel={t('mobile.desktops.nameLabel')} maxLength={48} onChangeText={setName} value={name}
               style={[styles.input, { backgroundColor: palette.background, color: palette.label, borderColor: palette.separator }]} />
             <Pressable accessibilityRole="button" onPress={() => {
               if (selected) onRename(selected.desktop.id, name);
               setSelected(null);
             }} style={styles.modalButton}>
-              <Text style={[styles.modalButtonText, { color: palette.accent }]}>Renomear</Text>
+              <Text style={[styles.modalButtonText, { color: palette.accent }]}>{t('mobile.desktops.rename')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => {
               if (selected) onForgetDesktop(selected.profile, selected.desktop);
               setSelected(null);
             }} style={styles.modalButton}>
-              <Text style={[styles.modalButtonText, { color: palette.danger }]}>Esquecer</Text>
+              <Text style={[styles.modalButtonText, { color: palette.danger }]}>{t('mobile.common.forget')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => setSelected(null)} style={styles.modalButton}>
-              <Text style={[styles.modalButtonText, { color: palette.secondaryLabel }]}>Cancelar</Text>
+              <Text style={[styles.modalButtonText, { color: palette.secondaryLabel }]}>{t('mobile.common.cancel')}</Text>
             </Pressable>
           </View>
         </View>

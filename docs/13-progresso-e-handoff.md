@@ -756,6 +756,12 @@ A imagem Docker `cialai-linux-desktop:agente-a`, os volumes `cialai-a-linux-targ
 
 Dependem de execução externa: a primeira rodada remota de `nightly-e2e.yml` e de `ci.yml`; Windows nativo com controles próprios, `SetWindowPos`, Mica ao abrir e ao salvar, WebView2, Edge WebDriver, ConPTY e o roteiro com PowerShell; Linux em desktop real com Wayland, WebKitGTK visível e IME; e a disponibilidade real das fontes de cada sistema.
 
+### 13/09/2026, telas React Native em três idiomas na tarefa 6.6
+
+As telas de pareamento, computadores, estado sem conexão, shell e ajustes passaram a resolver pela instância compartilhada todos os títulos, ações, estados, alertas, mensagens de QR, rótulos acessíveis e textos de biometria. Ajustes oferece Português, English e Español com nomes próprios dos idiomas. A seleção é normalizada e persistida pelo `expo-secure-store`, já presente no aplicativo. Na primeira abertura, `Intl.DateTimeFormat` fornece o idioma do aparelho porque não existe uma dependência própria para locale.
+
+Os testes começaram falhando pela ausência de hidratação, persistência, espanhol e seletor. A suíte final do workspace móvel aprovou 104 testes em 16 suítes. `typecheck`, lint sem advertências, `npm run test:i18n` e `git diff --check` também passaram com Node 22.23.2 e npm 10.9.8. Nenhum build nativo ou teste em aparelho foi executado.
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.

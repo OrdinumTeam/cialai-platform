@@ -1,6 +1,8 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import type { AppStateStatus } from 'react-native';
 
+import { t } from '../i18n';
+
 export type AuthLevel = 'session' | 'action';
 export type Authenticate = (reason: string) => Promise<boolean>;
 
@@ -10,8 +12,8 @@ export async function authenticateWithDevice(reason: string): Promise<boolean> {
   try {
     const result = await LocalAuthentication.authenticateAsync({
       promptMessage: reason,
-      cancelLabel: 'Cancelar',
-      fallbackLabel: 'Usar código',
+      cancelLabel: t('mobile.biometric.cancel'),
+      fallbackLabel: t('mobile.biometric.fallback'),
       disableDeviceFallback: false
     });
     return result.success;

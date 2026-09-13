@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { inspectPairPayload, pair, type PairInspection, type PairResult } from 'cialai-tunnel';
 
+import { useI18n } from '../i18n';
 import { usePalette } from '../theme';
 import { pairErrorMessage } from './pair-errors';
 
@@ -17,6 +18,7 @@ type Props = {
 
 export function Pair({ initialError, device, onPaired }: Props) {
   const palette = usePalette();
+  const { t } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const [inspection, setInspection] = useState<PairInspection | null>(null);
   const [rawPayload, setRawPayload] = useState('');
@@ -60,25 +62,25 @@ export function Pair({ initialError, device, onPaired }: Props) {
       <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
         <ScrollView contentContainerStyle={styles.confirmContent}>
           <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>
-            Vincular a {inspection.desktop.name}?
+            {t('mobile.pair.confirmTitle', { name: inspection.desktop.name })}
           </Text>
           <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-            <Text style={[styles.label, { color: palette.secondaryLabel }]}>Servidor</Text>
+            <Text style={[styles.label, { color: palette.secondaryLabel }]}>{t('mobile.pair.server')}</Text>
             <Text selectable style={[styles.value, { color: palette.label }]}>{inspection.control}</Text>
-            <Text style={[styles.label, { color: palette.secondaryLabel }]}>Usuário</Text>
+            <Text style={[styles.label, { color: palette.secondaryLabel }]}>{t('mobile.pair.user')}</Text>
             <Text style={[styles.value, { color: palette.label }]}>{inspection.userName}</Text>
           </View>
           {busy ? (
             <View style={styles.progress}>
               <ActivityIndicator color={palette.accent} />
               <Text style={[styles.progressText, { color: palette.secondaryLabel }]}>
-                Entrando na rede e procurando o computador
+                {t('mobile.pair.progress')}
               </Text>
             </View>
           ) : (
             <Pressable accessibilityRole="button" onPress={() => void confirm()}
               style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
-              <Text style={[styles.primaryText, { color: palette.accentText }]}>Vincular</Text>
+              <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.confirm')}</Text>
             </Pressable>
           )}
           <Pressable accessibilityRole="button" disabled={busy} onPress={() => {
@@ -86,7 +88,7 @@ export function Pair({ initialError, device, onPaired }: Props) {
             setRawPayload('');
             setScanned(false);
           }} style={styles.secondary}>
-            <Text style={[styles.secondaryText, { color: palette.accent }]}>Ler outro código</Text>
+            <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.anotherCode')}</Text>
           </Pressable>
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
         </ScrollView>
@@ -105,19 +107,19 @@ export function Pair({ initialError, device, onPaired }: Props) {
       ) : null}
       <SafeAreaView style={styles.cameraOverlay}>
         <View style={[styles.instructions, { backgroundColor: palette.overlay }]}>
-          <Text accessibilityRole="header" style={[styles.cameraTitle, { color: palette.label }]}>Vincular celular</Text>
-          <Text style={[styles.body, { color: palette.secondaryLabel }]}>Abra Vincular celular no computador</Text>
+          <Text accessibilityRole="header" style={[styles.cameraTitle, { color: palette.label }]}>{t('mobile.pair.title')}</Text>
+          <Text style={[styles.body, { color: palette.secondaryLabel }]}>{t('mobile.pair.instruction')}</Text>
           {!permission?.granted ? (
             <>
-              <Text style={[styles.permissionText, { color: palette.secondaryLabel }]}>A câmera é usada somente para ler o código do Cialai.</Text>
+              <Text style={[styles.permissionText, { color: palette.secondaryLabel }]}>{t('mobile.pair.cameraUse')}</Text>
               <Pressable accessibilityRole="button" onPress={() => void requestPermission()}
                 style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
-                <Text style={[styles.primaryText, { color: palette.accentText }]}>Permitir câmera</Text>
+                <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.allowCamera')}</Text>
               </Pressable>
             </>
           ) : null}
           <Pressable accessibilityRole="button" onPress={() => void pasteCode()} style={styles.secondary}>
-            <Text style={[styles.secondaryText, { color: palette.accent }]}>Colar código</Text>
+            <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.pasteCode')}</Text>
           </Pressable>
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
         </View>
