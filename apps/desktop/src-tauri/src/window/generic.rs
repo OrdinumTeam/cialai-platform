@@ -25,6 +25,9 @@ pub fn positions_window() -> bool {
 /// Linux nao tem material de fundo nativo; a janela e opaca.
 pub fn decorate(_window: &WebviewWindow, _backdrop: &str) {}
 
+/// Sem material de fundo, a preferencia nao muda nada no Linux.
+pub fn apply_backdrop(_window: &WebviewWindow, _backdrop: &str) {}
+
 fn scale(window: &WebviewWindow) -> f64 {
     window.scale_factor().unwrap_or(1.0)
 }

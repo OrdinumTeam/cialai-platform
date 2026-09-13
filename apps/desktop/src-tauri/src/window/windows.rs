@@ -9,7 +9,7 @@
 use tauri::WebviewWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos};
 
-use super::{Origin, Rect, logical_rect, mica_supported, physical_rect};
+use super::{Origin, Rect, logical_rect, mica_supported, physical_rect, wants_mica};
 
 pub const ORIGIN: Origin = Origin::TopLeft;
 
@@ -19,16 +19,27 @@ pub fn positions_window() -> bool {
 }
 
 pub fn decorate(window: &WebviewWindow, backdrop: &str) {
-    if backdrop != "auto" {
-        return;
-    }
+    apply_backdrop(window, backdrop);
+}
+
+/// Mica com o fundo automatico; o fundo solido remove o material quando o
+/// sistema o suporta. Falhas ficam apenas registradas.
+pub fn apply_backdrop(window: &WebviewWindow, backdrop: &str) {
     let build = os_build();
-    if !mica_supported(build) {
-        eprintln!("[window] Mica exige o build 22621; este Windows e o build {build}");
+    if wants_mica(backdrop, build) {
+        if let Err(error) = window_vibrancy::apply_mica(window, None) {
+            eprintln!("[window] Mica indisponivel: {error}");
+        }
         return;
     }
-    if let Err(error) = window_vibrancy::apply_mica(window, None) {
-        eprintln!("[window] Mica indisponivel: {error}");
+    if !mica_supported(build) {
+        if backdrop == crate::prefs::BACKDROP_AUTO {
+            eprintln!("[window] Mica exige o build 22621; este Windows e o build {build}");
+        }
+        return;
+    }
+    if let Err(error) = window_vibrancy::clear_mica(window) {
+        eprintln!("[window] nao foi possivel remover o Mica: {error}");
     }
 }
 

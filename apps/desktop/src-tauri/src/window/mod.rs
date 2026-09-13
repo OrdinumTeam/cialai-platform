@@ -88,6 +88,12 @@ pub fn decorate(window: &WebviewWindow, backdrop: &str) {
     });
 }
 
+/// Troca o material de fundo com a janela aberta, quando a preferencia muda.
+/// So o Windows tem escolha; nos outros sistemas nada acontece.
+pub fn apply_backdrop(window: &WebviewWindow, backdrop: &str) {
+    backend::apply_backdrop(window, backdrop);
+}
+
 /// Mostra a janela de abertura. Chamado quando a tela de abertura ja esta
 /// montada, para nao piscar uma janela vazia. Bloqueia; nunca na thread
 /// principal.
@@ -474,6 +480,13 @@ fn mica_supported(build: u32) -> bool {
     build >= MICA_MIN_BUILD
 }
 
+/// Mica com o fundo automatico num Windows que o suporta; o fundo solido e
+/// valores desconhecidos nunca aplicam o material.
+#[cfg(any(test, target_os = "windows"))]
+fn wants_mica(backdrop: &str, build: u32) -> bool {
+    backdrop == crate::prefs::BACKDROP_AUTO && mica_supported(build)
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::OsStr;
@@ -645,6 +658,14 @@ mod tests {
         ));
         assert!(!is_wayland_session(None, None));
         assert!(!is_wayland_session(Some(OsStr::new("")), None));
+    }
+
+    #[test]
+    fn mica_follows_the_backdrop_preference() {
+        assert!(wants_mica("auto", MICA_MIN_BUILD));
+        assert!(!wants_mica("solid", MICA_MIN_BUILD));
+        assert!(!wants_mica("auto", 19045));
+        assert!(!wants_mica("acrylic", 26100));
     }
 
     #[test]

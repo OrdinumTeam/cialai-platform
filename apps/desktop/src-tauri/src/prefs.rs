@@ -47,6 +47,11 @@ pub struct DevBrowserPreferences {
     pub chromium_path: Option<String>,
 }
 
+/// Fundo automatico: Mica quando o Windows permite.
+pub const BACKDROP_AUTO: &str = "auto";
+/// Fundo solido pintado pela pagina, sem material do sistema.
+pub const BACKDROP_SOLID: &str = "solid";
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct WindowPreferences {
@@ -56,7 +61,18 @@ pub struct WindowPreferences {
 impl Default for WindowPreferences {
     fn default() -> Self {
         Self {
-            backdrop: "auto".into(),
+            backdrop: BACKDROP_AUTO.into(),
+        }
+    }
+}
+
+impl WindowPreferences {
+    /// Fundo valido da janela; valores desconhecidos voltam ao automatico.
+    pub fn backdrop(&self) -> &str {
+        if self.backdrop == BACKDROP_SOLID {
+            BACKDROP_SOLID
+        } else {
+            BACKDROP_AUTO
         }
     }
 }
@@ -159,6 +175,16 @@ mod tests {
         assert_eq!(prefs.terminal.shell.as_deref(), Some("/bin/fish"));
         assert!(prefs.terminal.args.is_empty());
         assert_eq!(prefs.project_roots, ["~/Projects"]);
+    }
+
+    #[test]
+    fn window_backdrop_accepts_only_auto_and_solid() {
+        let mut window = WindowPreferences::default();
+        assert_eq!(window.backdrop(), BACKDROP_AUTO);
+        window.backdrop = BACKDROP_SOLID.into();
+        assert_eq!(window.backdrop(), BACKDROP_SOLID);
+        window.backdrop = "acrylic".into();
+        assert_eq!(window.backdrop(), BACKDROP_AUTO);
     }
 
     #[test]

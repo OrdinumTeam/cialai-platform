@@ -559,6 +559,7 @@
 .mac-prefs__roots{margin:10px 0 12px;border-top:1px solid var(--mac-separator)}
 .mac-prefs__root{display:flex;align-items:center;gap:12px;min-height:38px;border-bottom:1px solid var(--mac-separator)}
 .mac-prefs__root code{min-width:0;flex:1;overflow:hidden;color:var(--mac-label);font:11px/1.45 var(--mac-font-mono);text-overflow:ellipsis;white-space:nowrap}
+.mac-prefs__root-label{flex:0 0 118px;font-size:12px;color:var(--mac-label-2)}
 .mac-prefs__error{margin:12px 0 0;color:var(--mac-bad);font-size:12px}
 
 /* assistente de rede */

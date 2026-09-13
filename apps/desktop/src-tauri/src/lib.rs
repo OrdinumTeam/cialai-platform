@@ -55,6 +55,7 @@ pub fn run() {
             commands::tunnel_delete_api_key,
             commands::tunnel_doctor,
             commands::app_platform,
+            commands::app_paths,
             commands::app_shell,
             commands::shell_probe,
             commands::splash_ready,
@@ -113,7 +114,7 @@ pub fn run() {
             app.manage(mobile_site.clone());
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
-            let backdrop = preferences.window.backdrop.clone();
+            let backdrop = preferences.window.backdrop().to_string();
             let prefs = prefs::PrefsState::new(preferences);
             app.manage(prefs.clone());
             app.manage(workspace::terminal::TerminalManager::new(

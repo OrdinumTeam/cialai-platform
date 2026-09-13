@@ -51,12 +51,47 @@ pub fn set_preferences(
     prefs: State<'_, PrefsState>,
     next: Preferences,
 ) -> Result<Preferences, String> {
+    let previous_backdrop = prefs.get().window.backdrop().to_string();
     next.save(&app)?;
     if let Some(browsers) = app.try_state::<BrowserManager>() {
         browsers.set_chromium_path(next.dev_browser.chromium_path.clone());
     }
+    if next.window.backdrop() != previous_backdrop
+        && let Some(window) = app.get_webview_window("main")
+    {
+        crate::window::apply_backdrop(&window, next.window.backdrop());
+    }
     prefs.set(next.clone());
     Ok(next)
+}
+
+/// Arquivos do aplicativo em barras portáveis, para Preferências mostrar os
+/// caminhos reais de cada sistema.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppPaths {
+    preferences: String,
+    data: String,
+    logs: String,
+}
+
+impl AppPaths {
+    fn new(config: &Path, data: &Path, logs: &Path) -> Self {
+        Self {
+            preferences: platform::to_portable(config.join("preferences.json")),
+            data: platform::to_portable(data),
+            logs: platform::to_portable(logs),
+        }
+    }
+}
+
+#[tauri::command]
+pub fn app_paths(app: AppHandle) -> Result<AppPaths, String> {
+    let paths = app.path();
+    let config = paths.app_config_dir().map_err(|error| error.to_string())?;
+    let data = paths.app_data_dir().map_err(|error| error.to_string())?;
+    let logs = paths.app_log_dir().map_err(|error| error.to_string())?;
+    Ok(AppPaths::new(&config, &data, &logs))
 }
 
 fn tunnel_join_error(error: impl std::fmt::Display) -> RpcProblem {
@@ -407,6 +442,45 @@ mod selftest_path_tests {
         assert!(cache.join("selftest/run-fixture").is_dir());
         assert!(logs.is_dir());
         std::fs::remove_dir_all(base).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod app_path_tests {
+    use std::path::Path;
+
+    use super::AppPaths;
+
+    #[test]
+    fn app_paths_are_portable_and_name_the_preferences_file() {
+        let windows = AppPaths::new(
+            Path::new(r"C:\Users\ana\AppData\Roaming\br.com.ordinum.cialai"),
+            Path::new(r"C:\Users\ana\AppData\Roaming\br.com.ordinum.cialai"),
+            Path::new(r"C:\Users\ana\AppData\Local\br.com.ordinum.cialai\logs"),
+        );
+        assert_eq!(
+            windows.preferences,
+            "C:/Users/ana/AppData/Roaming/br.com.ordinum.cialai/preferences.json"
+        );
+        assert_eq!(
+            windows.data,
+            "C:/Users/ana/AppData/Roaming/br.com.ordinum.cialai"
+        );
+        assert_eq!(
+            windows.logs,
+            "C:/Users/ana/AppData/Local/br.com.ordinum.cialai/logs"
+        );
+
+        let linux = AppPaths::new(
+            Path::new("/home/ana/.config/br.com.ordinum.cialai"),
+            Path::new("/home/ana/.local/share/br.com.ordinum.cialai"),
+            Path::new("/home/ana/.local/share/br.com.ordinum.cialai/logs"),
+        );
+        assert_eq!(
+            linux.preferences,
+            "/home/ana/.config/br.com.ordinum.cialai/preferences.json"
+        );
+        assert_eq!(linux.data, "/home/ana/.local/share/br.com.ordinum.cialai");
     }
 }
 

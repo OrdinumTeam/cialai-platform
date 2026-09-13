@@ -2,13 +2,16 @@
 // Focused preference areas backed by the complete Rust snapshot.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FolderPlus, RotateCcw, Trash2 } from 'lucide-react';
+import { FolderOpen, FolderPlus, RotateCcw, Trash2 } from 'lucide-react';
 import { AppModal, useToast } from '../components/ui.jsx';
 import { chooseDirectory, chooseFile, invoke, isTauri } from '../lib/native.js';
+import { platform } from '../lib/platform.js';
+import { shortPath } from '../terminals/files.js';
 import {
   addUniquePath,
   DEFAULT_PREFERENCES,
   normalizePreferenceDraft,
+  platformPreferenceHints,
   removePath,
   sanitizePreferences,
 } from './preferences-model.js';
@@ -42,7 +45,8 @@ export default function Preferences({ open, onClose, appearance }) {
   const native = isTauri();
   const [draft, setDraft] = useState(null);
   const [savedKey, setSavedKey] = useState('');
-  const [effectiveShell, setEffectiveShell] = useState('');
+  const [effectiveShell, setEffectiveShell] = useState(null);
+  const [appPaths, setAppPaths] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -53,19 +57,25 @@ export default function Preferences({ open, onClose, appearance }) {
     setLoading(true);
     setError('');
     const load = native
-      ? Promise.all([invoke('get_preferences'), invoke('app_shell')])
-      : Promise.resolve([DEFAULT_PREFERENCES, null]);
-    load.then(([value, shell]) => {
+      ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null)])
+      : Promise.resolve([DEFAULT_PREFERENCES, null, null]);
+    load.then(([value, shell, paths]) => {
       if (cancelled) return;
       const next = normalizePreferenceDraft({ ...(value || {}), appearance: appearance.mode });
       setDraft(next);
       setSavedKey(snapshotKey(next));
-      setEffectiveShell(shell?.path || '');
+      setEffectiveShell(shell?.path ? shell : null);
+      setAppPaths(paths);
     }).catch((loadError) => {
       if (!cancelled) setError(`Não foi possível carregar as preferências: ${loadError?.message || loadError}`);
     }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [open, native]);
+
+  const hints = platformPreferenceHints(platform().os, effectiveShell?.flavor || platform().defaultShellFlavor);
+  const shownPaths = appPaths
+    ? [['Preferências', appPaths.preferences], ['Dados e jornais', appPaths.data], ['Registros', appPaths.logs]].map(([label, path]) => [label, path, shortPath(path)])
+    : [['Preferências', hints.paths.preferences], ['Dados e jornais', hints.paths.data], ['Registros', hints.paths.logs]].map(([label, path]) => [label, null, path]);
 
   const currentKey = useMemo(() => draft ? snapshotKey(draft) : '', [draft]);
   const dirty = Boolean(draft && currentKey !== savedKey);
@@ -90,8 +100,16 @@ export default function Preferences({ open, onClose, appearance }) {
   };
 
   const pickChromium = async () => {
-    const picked = await chooseFile({ title: 'Escolher o executável do Chromium', defaultPath: draft?.devBrowser?.chromiumPath || undefined });
+    const picked = await chooseFile({ title: 'Escolher o executável do Chromium', defaultPath: draft?.devBrowser?.chromiumPath || undefined, filters: hints.chromiumFilters });
     if (picked) setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: picked } }));
+  };
+
+  const reveal = async (path) => {
+    try {
+      await invoke('fs_reveal', { path });
+    } catch (revealError) {
+      notify(`Não foi possível abrir: ${revealError?.message || revealError}`, 'warning');
+    }
   };
 
   const save = async () => {
@@ -125,10 +143,10 @@ export default function Preferences({ open, onClose, appearance }) {
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Terminal</h3>
-        <Row title="Shell" description={effectiveShell ? `Detectado: ${effectiveShell}` : 'Vazio usa o shell detectado pelo sistema.'}><input className="field__control mac-prefs__input" value={draft.terminal.shell || ''} placeholder={effectiveShell || '/bin/zsh'} spellCheck="false" onChange={(event) => updateTerminal({ shell: event.target.value || null })} aria-label="Caminho do shell" /></Row>
-        <Row title="Argumentos" description="Um argumento em cada linha." wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label="Argumentos do shell" /></Row>
-        <Row title="Idioma" description="Vazio usa o idioma do sistema."><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder="pt_BR.UTF-8" spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label="Idioma do terminal" /></Row>
-        <Row title="Prefixos do PATH" description="Um diretório em cada linha." wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label="Prefixos do PATH" /></Row>
+        <Row title="Shell" description={effectiveShell ? `Detectado: ${effectiveShell.path}` : hints.shellDescription}><input className="field__control mac-prefs__input" value={draft.terminal.shell || ''} placeholder={effectiveShell?.path || hints.shellPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ shell: event.target.value || null })} aria-label="Caminho do shell" /></Row>
+        <Row title="Argumentos" description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label="Argumentos do shell" /></Row>
+        {hints.showLang ? <Row title="Idioma" description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label="Idioma do terminal" /></Row> : null}
+        <Row title="Prefixos do PATH" description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label="Prefixos do PATH" /></Row>
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Projetos</h3>
@@ -143,8 +161,17 @@ export default function Preferences({ open, onClose, appearance }) {
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>
-        <Row title="Executável do Chromium" description="Vazio procura uma instalação compatível automaticamente." wide><input className="field__control mac-prefs__browser-path" value={draft.devBrowser.chromiumPath || ''} placeholder="Detectar automaticamente" spellCheck="false" onChange={(event) => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: event.target.value || null } }))} aria-label="Executável do Chromium" /></Row>
+        <Row title="Executável do Chromium" description="Vazio procura uma instalação compatível automaticamente." wide><input className="field__control mac-prefs__browser-path" value={draft.devBrowser.chromiumPath || ''} placeholder={hints.chromiumPlaceholder} spellCheck="false" onChange={(event) => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: event.target.value || null } }))} aria-label="Executável do Chromium" /></Row>
         <div className="mac-prefs__actions">{draft.devBrowser.chromiumPath ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => setDraft((current) => ({ ...current, devBrowser: { ...current.devBrowser, chromiumPath: null } }))}><RotateCcw aria-hidden="true" />Detectar automaticamente</button> : null}<button type="button" className="btn btn-secondary btn-sm" onClick={pickChromium}>Escolher executável</button></div>
+      </section>
+
+      {hints.windowSection ? <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Janela</h3>
+        <Row title="Material Mica" description="Aplica o Mica do Windows 11 atrás da janela quando o sistema permite. Desligado, a janela usa fundo sólido."><input type="checkbox" className="mac-switch" checked={draft.window.backdrop === 'auto'} onChange={(event) => setDraft((current) => ({ ...current, window: { ...current.window, backdrop: event.target.checked ? 'auto' : 'solid' } }))} aria-label="Material Mica" /></Row>
+      </section> : null}
+
+      <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Arquivos do aplicativo</h3>
+        <p className="mac-prefs__note">{native ? 'Onde o Cialai guarda seus arquivos neste computador.' : 'Locais usados pelo aplicativo desktop neste sistema.'}</p>
+        <div className="mac-prefs__roots" aria-label="Arquivos do aplicativo">{shownPaths.map(([label, path, shown]) => <div className="mac-prefs__root" key={label}><span className="mac-prefs__root-label">{label}</span><code title={shown}>{shown}</code>{path ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => reveal(path)} aria-label={`${hints.revealLabel}: ${label}`}><FolderOpen aria-hidden="true" />{hints.revealLabel}</button> : null}</div>)}</div>
       </section>
 
       <section className="mac-prefs__section mac-prefs__section--last"><h3 className="mac-prefs__heading">Atualizações</h3>

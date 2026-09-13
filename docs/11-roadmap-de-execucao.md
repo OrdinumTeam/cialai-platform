@@ -101,7 +101,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.11 | Preparado | Backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; janela nativa Linux e Windows não exercitada |
 | 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; sem execução nativa Linux ou Windows |
 | 5.13 | Implementado | Casca, fontes, `.mac-switch` e JetBrains Mono conferidos no Dev Browser nos três sistemas; WebKitGTK e WebView2 reais não exercitados |
-| 5.14 | Pendente | Preferências por sistema não implementadas |
+| 5.14 | Implementado | Terminal, Dev Browser, Janela e caminhos por sistema conferidos no Dev Browser e em testes Rust nos três alvos; troca do Mica ao salvar sem execução Windows |
 | 5.15 | Preparado | Suíte Rust passou no macOS e Linux; Windows apenas compilado |
 | 5.16 | Preparado | Matriz do `ci.yml` versionada sem execução remota; release, Playwright e check de texto pendentes |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |

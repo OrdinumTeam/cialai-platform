@@ -16,6 +16,9 @@ pub fn positions_window() -> bool {
     true
 }
 
+/// A vibrancy do macOS nao tem preferencia de fundo.
+pub fn apply_backdrop(_window: &WebviewWindow, _backdrop: &str) {}
+
 pub fn decorate(window: &WebviewWindow, _backdrop: &str) {
     use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
     if let Err(error) = apply_vibrancy(
