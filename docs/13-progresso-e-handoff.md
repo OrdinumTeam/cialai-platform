@@ -61,7 +61,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 4.5 Biometria e Secure Store | Código preparado, prova Android pendente | Política de sessão herdada usa autenticação local e tokens por desktop usam Secure Store com backup Android desligado. Typecheck, lint e introspecção passaram; biometria e Keystore não foram executados em aparelho |
 | 4.6 Distribuição Android | Preparada localmente, serviços externos pendentes | `android-play` compila o AAR com Go 1.26.5 e `gomobile` no runner, gera o projeto Expo, usa assinatura release por `key.properties`, produz o AAB e aponta para a faixa interna. Contrato YAML, plugin e prebuild passaram; app, credenciais, assinatura, AAB e publicação não foram criados nem executados |
 | 7.1 Atualizador | Preparado na frente C, assinatura pendente | Plugins Rust e JavaScript, interface em Preferências, artefatos do updater e endpoint `latest.json` configurados. O workflow exige os dois secrets e falha enquanto a chave pública mantiver o marcador. Nenhum artefato foi assinado ou publicado |
-| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.2 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 7.2 Documentação pública | Implementada na frente C | README em inglês usa três capturas reais com dados fictícios; guias de contribuição e segurança, código de conduta e modelos de issue e PR foram revisados. O contato e o prazo de segurança permanecem marcados para confirmação |
+| 3.9, 3.10, 4.7, 4.8, 5.1 a 6.8 e 7.3 a 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -531,6 +532,14 @@ git diff --check
 ```
 
 Resultados: 17 casos de sincronização e 46 checks de UI passaram; o recurso móvel teve 130 assets validados; o sidecar local foi recompilado; o crate com os plugins novos compilou. A release do GitHub, a assinatura, o download de `latest.json` e a instalação de uma atualização não foram executados e continuam dependentes do usuário e da infraestrutura externa.
+
+### 13/09/2026, documentação pública da tarefa 7.2 concluída na frente C
+
+O README público foi reescrito em inglês com descrição, recursos, estado honesto por plataforma, execução a partir do código, Headscale próprio, mapa do repositório, privacidade, segurança e licença. Foram inspecionadas as capturas reais e fictícias da tarefa 1.11. O README usa desktop escuro, lista móvel e arquivos móveis, que continuam atuais para o estúdio mostrado. A nova interface do updater fica em Preferências e não altera esses três estados.
+
+`CONTRIBUTING.md` agora descreve toolchains, desenvolvimento, testes, Cargo com sidecar, commits, PRs, segurança e a distinção entre código preparado e evidência externa. `SECURITY.md` mantém contato, prazo de confirmação e versões suportadas marcados como `TO BE CONFIRMED BEFORE PUBLICATION`. `CODE_OF_CONDUCT.md` foi alinhado ao Contributor Covenant 2.1 com o contato também pendente. Os três modelos de issue e o modelo de PR passaram a pedir ambiente, evidência sanitizada e classificação dos testes.
+
+A skill `dev-browser-panel` orientou a tentativa de captura. Não havia porta local desta lane, e a porta global pertencia a outro workspace; nenhum navegador alheio foi controlado. Como o conteúdo principal não mudou desde a evidência versionada, as imagens existentes foram inspecionadas diretamente e reutilizadas. `npm run check:public-docs` terminou com código 0 e confirmou idioma, links, imagens com conteúdo real, marcadores de contato e modelos. `git diff --check` também passou. Nenhum dado privado foi aberto ou copiado.
 
 ## Arquivos para retomar
 
