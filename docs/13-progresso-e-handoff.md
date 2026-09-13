@@ -23,7 +23,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 0.6 Spike 3 | Aprovado localmente | Headscale 0.29.3 e tsnet 1.102.0; oito verificações finais passaram em 35,830 s, incluindo persistência do módulo móvel no desktop. Workflow remoto preparado |
 | 0.5, 0.7 a 0.10 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja e assinatura não executados |
 | 0.11 Robustez do proxy | Ensaio local de 30 minutos aprovado; aceite de 24 horas pendente | Oito sockets enviaram 180 rajadas de 50 MiB em quadros de 1 MiB: 9.000 quadros, 9.437.184.000 bytes ecoados e zero desconexões do proxy. RSS foi de 49.299.456 para 62.767.104 bytes, pico de 63.569.920; heap foi de 2.459.656 para 1.673.648 bytes, pico de 2.720.568. Executar as 24 horas antes do aceite do spike |
-| 0.12 Decisões dos spikes | Atualizado parcialmente | Decisões 022 a 026 registram correções, aceite local do spike 3 e estado dos demais |
+| 0.12 Decisões dos spikes | Atualizada nesta raia | Decisões 032 a 034 consolidam o build móvel no Codemagic para os spikes 1, 2, 4, 5 e 6, registram o soak curto sem aprovar 24 horas e enumeram as dependências externas ainda sem evidência |
 | 1.1 Scaffold desktop | Concluído localmente | Tauri real, configurações macOS, Windows e Linux, capabilities, duas entradas Vite e ícones provisórios. Build macOS sem bundle aprovado. Configurações Windows e Linux aguardam a matriz remota |
 | 1.2 Extração Rust | Concluída localmente | Núcleo macOS extraído sem stack, reuniões e VPN. Clippy sem avisos, 118 testes ativos passaram, dois ensaios externos permaneceram ignorados e o binário Tauri compilou e iniciou |
 | 1.3 Extração da interface | Concluída localmente | Estúdio de Terminais e cascas desktop/celular compilam; `check-terminal-sync` 17/17, demais checks UI 32/32, raiz e Tauri verdes. Checks no Chromium visível terminaram em `PASS` nas duas entradas |
@@ -410,6 +410,14 @@ Criado o workspace puro `@cialai/i18n`, com normalização de locale, português
 `apps/mobile/src/i18n.ts` expõe a mesma instância, locale detectado, troca, assinatura e tradução ao aplicativo nativo. Esta branch nasceu de `fase-5/rust-multiplataforma`, onde `apps/mobile` continha somente o manifesto; as telas React Native mantidas pela frente A não estão disponíveis para edição sem trazer trabalho de outra raia. Por isso o adaptador está pronto, mas a substituição dos textos dessas telas deve acontecer na integração da frente A. A migração do desktop continua explicitamente para depois dessa integração.
 
 `packages/ui/scripts/check-mobile-i18n.mjs` percorre somente `packages/ui/src/mobile` e `apps/mobile`, exige paridade dos dicionários, valida chaves literais e rejeita texto JSX, propriedades acessíveis e mensagens nativas literais. Assim, as telas React Native ainda ausentes falharão no gate quando entrarem até adotarem as chaves. `npm run test:i18n` passou 3 casos, o gate passou com 20 chaves em dois idiomas e `npm run test:ui` passou os 39 casos, os 17 casos de sincronização e os checks estáticos existentes. `npm audit` informou zero vulnerabilidades.
+
+### 13/09/2026, decisões da tarefa 0.12 e passagem da Parte B
+
+As decisões 032 a 034 consolidam o Codemagic como ambiente de build, assinatura e distribuição para absorver os spikes móveis 1, 2, 4, 5 e 6 sem confundir pipeline verde com teste físico. Também preservam o soak de 24 horas como critério de aceite apesar do resultado verde de 30 minutos e listam as contas, credenciais, aparelhos, redes e runners ainda externos.
+
+Esta raia não alterou `main`, não fez push e não editou outros worktrees. A integração deve preservar como pendentes o Linux do Dev Browser e Office, toda validação Windows, os aparelhos, as lojas e o soak de 24 horas. Como as telas React Native da frente A não existiam na base Rust, a frente A deve aplicar nelas as chaves de `@cialai/i18n` ao integrar; o gate novo acusa os textos restantes. A tradução do desktop fica para depois da integração da frente A.
+
+Parte B pronta para merge
 
 ## Arquivos para retomar
 

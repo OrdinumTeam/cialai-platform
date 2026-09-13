@@ -131,3 +131,21 @@ Data: 12/09/2026. Contexto: o planejamento registrava 137 testes Rust, mas a ori
 ## 031 SheetJS oficial e ferramentas de teste sem alertas conhecidos
 
 Data: 12/09/2026. Contexto: a extração do visualizador de planilhas trouxe `xlsx@0.18.5` do registry npm, que a auditoria marcou com prototype pollution e ReDoS, sem correção disponível naquele registry. A documentação oficial informa que o CDN do SheetJS é a fonte autoritativa e oferece `xlsx@0.20.3` como tarball para npm. O `esbuild@0.21.5` herdado pelos checks também tinha um alerta moderado no servidor de desenvolvimento. Decisão: fixar `xlsx` no tarball oficial `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` e `esbuild` em 0.28.2. Consequência: `npm audit --audit-level=moderate` volta a zero alertas; o lockfile depende do CDN oficial do SheetJS e builds offline exigem o cache npm, condição a rever se o pacote for vendorizado.
+
+## 032 Build móvel no Codemagic absorve os spikes móveis restantes
+
+Data: 13/09/2026. Contexto: os spikes 1, 2, 4, 5 e 6 permanecem sem execução real por falta de Xcode completo, SDK Android, aparelhos, credenciais e distribuição externa neste host. Criar hosts descartáveis separados repetiria a integração que os aplicativos finais e seus pipelines precisam provar. Decisão: os builds móveis do Codemagic serão o ponto único de compilação, assinatura e distribuição que absorve esses cinco spikes. A geração real de XCFramework e AAR cobre a parte de build do spike 1; builds internos instalados em iPhone e Android cobrem as transições do spike 2 e os proxies WebView dos spikes 4 e 5; o build iOS final distribuído a um grupo externo do TestFlight executa o spike 6. Os workflows previstos continuam `ios-testflight`, `ios-archive` e `android-play`, com a geração dos artefatos Go como dependência anterior do mesmo fluxo.
+
+Limite da decisão: Codemagic produzir um artefato verde não aprova comportamento em aparelho. Cada spike só muda para aprovado com logs e medições do roteiro correspondente em iPhone ou Android real; o spike 6 exige distribuição externa e retorno da revisão. Até essas execuções existirem, a decisão consolida o caminho de execução, não o resultado.
+
+## 033 Soak curto orienta o proxy, mas não substitui 24 horas
+
+Data: 13/09/2026. Resultado observado: o proxy real em loopback manteve oito WebSockets por 1.800,064 segundos. Depois do aquecimento, foram 180 rajadas de 50 MiB, compostas por 9.000 quadros de 1 MiB e 9.437.184.000 bytes enviados e ecoados. Não houve desconexão atribuída ao proxy nem erro inesperado do backend. O RSS foi de 49.299.456 a 62.767.104 bytes, com pico de 63.569.920 e crescimento final de 13.467.648; o heap foi de 2.459.656 a 1.673.648 bytes, com pico de 2.720.568.
+
+Decisão: conservar a carga como suíte opt-in configurável, com padrão de 24 horas, e usar o ensaio de 30 minutos apenas como regressão local. Alternativa rejeitada: aceitar o spike 8 pela execução curta e pelo heap sem crescimento. Consequência: o resultado reduz o risco imediato e fornece uma linha de base, mas o aceite continua condicionado a `CIALAI_SOAK_DURATION=24h` sem desconexões e com memória estabilizada.
+
+## 034 Dependências externas permanecem critérios de aceite explícitos
+
+Data: 13/09/2026. Decisão: registrar separadamente tudo que a árvore local não consegue provar. O fluxo móvel depende do repositório conectado ao Codemagic, máquinas `mac_mini_m2`, App Store Connect com o app Cialai e API key, identidade e perfis de assinatura, grupo externo do TestFlight, conta e app no Google Play, service account, SDK e NDK compatíveis e ao menos um iPhone e um Android físicos. Os roteiros de rede dependem ainda de Headscale acessível por TLS válido, DERP funcional e redes Wi-Fi e LTE reais. App Review, revisão jurídica de exportação e contas de loja são decisões externas à compilação.
+
+Para a matriz desktop, Linux depende de espaço local acima de 5 GiB ou runner Ubuntu 22.04 equivalente; Windows depende de runner Windows ou `cargo-xwin`, WebView2, LibreOffice e validação real das APIs de arquivos. Decisão consequente: CI, mocks, checks estruturais e código preparado não serão promovidos a comportamento verificado. Cada dependência permanece pendente no handoff até existir artefato, log ou medição da plataforma correspondente.
