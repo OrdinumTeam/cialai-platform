@@ -725,6 +725,12 @@ O self test real do macOS, pelo binário de `tauri dev` com o roteiro final, pas
 
 Nenhum workflow foi disparado e nada foi executado no Windows. A instalação do Edge WebDriver, o WebView2, o ConPTY com PowerShell e o roteiro nos runners do GitHub continuam dependentes da primeira execução remota; o PowerShell do workflow nem pôde ser analisado localmente, porque `pwsh` não existe neste Mac.
 
+### 13/09/2026, espanhol no pacote compartilhado da tarefa 6.6
+
+`@cialai/i18n` passou a declarar português do Brasil, inglês e espanhol. Variantes regionais de inglês e espanhol são normalizadas para o dicionário base e qualquer valor não reconhecido continua usando português do Brasil. O dicionário espanhol recebeu as mesmas 20 chaves existentes, com texto neutro e sem traduzir Cialai.
+
+O teste foi escrito primeiro e falhou pela ausência de `es`. Depois da implementação, `npm run test:i18n` com Node 22.23.2 e npm 10.9.8 aprovou os três casos, incluindo paridade, normalização, troca observável e fallback fechado. `git diff --check` também passou nos arquivos do pacote.
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.

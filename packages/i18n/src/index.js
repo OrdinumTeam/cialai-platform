@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 export const DEFAULT_LOCALE = 'pt-BR';
-export const SUPPORTED_LOCALES = Object.freeze(['pt-BR', 'en']);
+export const SUPPORTED_LOCALES = Object.freeze(['pt-BR', 'en', 'es']);
 
 export const dictionaries = Object.freeze({
   'pt-BR': Object.freeze({
@@ -52,11 +52,37 @@ export const dictionaries = Object.freeze({
     'view.terminais.label': 'Terminals',
     'view.terminais.sub': 'Sessions, files and browser',
   }),
+  es: Object.freeze({
+    'action.closeSections': 'Cerrar secciones',
+    'action.openExternal': 'Abrir enlace fuera de Cialai',
+    'action.refresh': 'Actualizar datos',
+    'appearance.dark': 'Usar apariencia oscura',
+    'appearance.light': 'Usar apariencia clara',
+    'appearance.system': 'Usar apariencia del sistema',
+    'connection.connected': 'Conectado',
+    'connection.connecting': 'Conectando',
+    'connection.disabled': 'Esperando conexión',
+    'connection.disconnected': 'Sin conexión',
+    'connection.incompatible': 'Actualización necesaria',
+    'connection.removed': 'Teléfono eliminado',
+    'desktop.fallback': 'Computadora',
+    'language.current': 'Español',
+    'language.switch': 'Cambiar idioma',
+    'navigation.allSections': 'Todas las secciones',
+    'navigation.mainSections': 'Secciones principales',
+    'navigation.more': 'Más',
+    'navigation.moreSections': 'Más secciones',
+    'state.readOnly': 'Solo lectura',
+    'view.terminais.label': 'Terminales',
+    'view.terminais.sub': 'Sesiones, archivos y navegador',
+  }),
 });
 
 export function normalizeLocale(value) {
-  const locale = String(value ?? '').trim().toLowerCase();
-  return locale === 'en' || locale.startsWith('en-') ? 'en' : DEFAULT_LOCALE;
+  const locale = String(value ?? '').trim().toLowerCase().replaceAll('_', '-');
+  if (locale === 'en' || locale.startsWith('en-')) return 'en';
+  if (locale === 'es' || locale.startsWith('es-')) return 'es';
+  return DEFAULT_LOCALE;
 }
 
 export function translate(locale, key, values = {}) {

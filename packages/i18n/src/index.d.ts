@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-export type Locale = 'pt-BR' | 'en';
+export type Locale = 'pt-BR' | 'en' | 'es';
 export type TranslationValues = Record<string, string | number>;
 
 export declare const DEFAULT_LOCALE: Locale;
