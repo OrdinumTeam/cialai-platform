@@ -22,6 +22,7 @@ Cialai é o estúdio de terminais do Ordinum Control transformado em produto ope
 | 12 | [12-decisoes.md](./12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
 | Continuidade | [13-progresso-e-handoff.md](./13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
 | Referência | [14-diferencas-por-plataforma.md](./14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
+| Distribuição | [15-credenciais-de-build.md](./15-credenciais-de-build.md) | Onde ficam as credenciais do Codemagic para iOS e Android e como cadastrá-las |
 
 Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `Implementado`, `Preparado` e `Pendente`. O roteiro não considera workflow escrito como workflow executado, binding gerado como aplicativo nativo compilado, nem material de loja como submissão.
 
