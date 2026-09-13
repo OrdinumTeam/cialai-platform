@@ -135,6 +135,17 @@ pub async fn tunnel_delete_api_key(supervisor: State<'_, Supervisor>) -> Result<
         .map_err(tunnel_join_error)?
 }
 
+#[tauri::command(async)]
+pub async fn tunnel_doctor(
+    supervisor: State<'_, Supervisor>,
+    control_url: Option<String>,
+) -> Result<serde_json::Value, RpcProblem> {
+    let supervisor = supervisor.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || supervisor.doctor(control_url))
+        .await
+        .map_err(tunnel_join_error)?
+}
+
 /// O frontend montou a tela de abertura: a janela pequena pode aparecer.
 /// Roda fora da thread principal porque a coreografia espera giros do loop.
 #[tauri::command(async)]

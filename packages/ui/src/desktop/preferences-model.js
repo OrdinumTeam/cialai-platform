@@ -65,6 +65,15 @@ export function sanitizePreferences(value) {
       ...normalized.devBrowser,
       chromiumPath: optional(normalized.devBrowser.chromiumPath),
     },
+    network: {
+      ...normalized.network,
+      controlUrl: optional(normalized.network.controlUrl)?.replace(/\/+$/, '') || null,
+      userId: optional(normalized.network.userId),
+      userName: optional(normalized.network.userName),
+      desktopName: optional(normalized.network.desktopName),
+      requireApproval: Boolean(normalized.network.requireApproval),
+      keepAwakeWhilePaired: Boolean(normalized.network.keepAwakeWhilePaired),
+    },
   };
 }
 

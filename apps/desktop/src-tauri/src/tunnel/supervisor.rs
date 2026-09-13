@@ -303,6 +303,41 @@ impl Supervisor {
             .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))
     }
 
+    pub fn doctor(&self, control_url: Option<String>) -> PendingResult {
+        let mut command = Command::new(&self.inner.launch.binary);
+        command
+            .arg("doctor")
+            .arg("--state-dir")
+            .arg(&self.inner.launch.state_dir)
+            .stdin(Stdio::null())
+            .stderr(Stdio::null());
+        if let Some(url) = control_url.filter(|value| !value.trim().is_empty()) {
+            command.arg("--control-url").arg(url);
+        }
+        let output = command.output().map_err(|error| {
+            RpcProblem::local(
+                "doctor_unavailable",
+                format!("Não foi possível abrir o diagnóstico do túnel: {error}"),
+                true,
+            )
+        })?;
+        let result: Value = serde_json::from_slice(&output.stdout).map_err(|_| {
+            RpcProblem::local(
+                "doctor_invalid",
+                "O diagnóstico do túnel devolveu uma resposta inválida.",
+                false,
+            )
+        })?;
+        if !result.is_object() {
+            return Err(RpcProblem::local(
+                "doctor_invalid",
+                "O diagnóstico do túnel devolveu uma resposta inválida.",
+                false,
+            ));
+        }
+        Ok(result)
+    }
+
     pub fn shutdown_blocking(&self) {
         self.inner.shutdown();
     }
@@ -929,6 +964,47 @@ mod tests {
         assert!(validate_binary(Path::new("relative-sidecar")).is_err());
         let directory = std::env::temp_dir();
         assert!(validate_binary(&directory).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn doctor_uses_the_sidecar_cli_without_starting_another_node() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let root = std::env::temp_dir().join(format!("cialai-doctor-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("mobile")).unwrap();
+        let script = root.join("fake-doctor.sh");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+[ "$1" = doctor ] || exit 8
+[ "$2" = --state-dir ] || exit 9
+[ "$4" = --control-url ] || exit 10
+[ "$5" = https://headscale.example ] || exit 11
+printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
+"#,
+        )
+        .unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o700)).unwrap();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                script,
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("key")),
+        );
+        let result = supervisor
+            .doctor(Some("https://headscale.example".into()))
+            .unwrap();
+        assert_eq!(result["checks"]["control"]["ok"], true);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[cfg(unix)]

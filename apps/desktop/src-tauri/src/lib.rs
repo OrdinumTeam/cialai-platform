@@ -52,6 +52,7 @@ pub fn run() {
             commands::tunnel_control_rotate_api_key,
             commands::tunnel_api_key_status,
             commands::tunnel_delete_api_key,
+            commands::tunnel_doctor,
             commands::app_platform,
             commands::app_shell,
             commands::shell_probe,

@@ -51,7 +51,7 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   const sidebarGradient = getComputedStyle(document.querySelector('.mac-sidebar')).backgroundImage;
   assert(sidebarGradient.includes(dark ? '58, 27, 51' : '255, 214, 230'), 'Cialai sidebar gradient missing');
   assert(!/10, 42, 94|21, 63, 128|31, 87, 171/.test(sidebarGradient), 'Ordinum blue gradient remains visible');
-  assert(document.querySelectorAll('.mac-nav-item').length === 1, 'Registry must expose only Terminais');
+  assert(document.querySelectorAll('.mac-nav-item').length === 2, 'Desktop navigation must expose Terminais and Dispositivos');
   assert(!/Ordinum Control|Stack local|Reuniões/.test(document.body.textContent), 'Removed Control UI is visible');
   assert(runtime.orderedSessions().length >= 2, 'Terminal demo sessions missing');
 
