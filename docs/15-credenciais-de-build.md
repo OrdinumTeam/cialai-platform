@@ -15,7 +15,7 @@ Preparado em 13/09/2026.
 | Senhas e alias do keystore | `secrets/cialai/key.properties` | `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` do grupo `android_credentials` |
 | Token e identificadores | `secrets/cialai/cialai.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time, bundle, pacote e conta do Play |
 
-O `APP_STORE_APP_ID` continua vazio em `cialai.env` até o app `br.com.ordinum.cialai` existir no App Store Connect.
+O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e seu identificador `6811702125` já está em `APP_STORE_APP_ID` no `cialai.env`.
 
 ## Cadastro no Codemagic
 
@@ -39,7 +39,8 @@ pbcopy < secrets/cialai/google-play-service-account.json
 
 | Item | Estado |
 | --- | --- |
-| App `br.com.ordinum.cialai` no App Store Connect e no Google Play | Pendente |
+| App `br.com.ordinum.cialai` no App Store Connect | Criado em 13/09/2026 |
+| App `br.com.ordinum.cialai` no Google Play | Pendente |
 | App do Cialai no Codemagic com as integrações e grupos acima | Pendente |
 | Acesso da conta de serviço ao app Cialai em Usuários e permissões do Play Console | Pendente |
 | Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
