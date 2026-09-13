@@ -10,7 +10,8 @@ export type DataDownloadRequest = DownloadBase & { mime: string; dataUrl: string
 export type RemoteDownloadRequest = DownloadBase & { mime?: string; url: string; dataUrl?: never };
 export type DownloadRequest = DataDownloadRequest | RemoteDownloadRequest;
 export type OpenExternalRequest = { type: 'open-external'; url: string };
-export type PageMessage = AuthRequest | DownloadRequest | OpenExternalRequest;
+export type NavigateBackMessage = { type: 'navigate-back' };
+export type PageMessage = AuthRequest | DownloadRequest | OpenExternalRequest | NavigateBackMessage;
 export type ShellMessage = {
   type: 'shell';
   platform: 'ios' | 'android';
@@ -58,10 +59,13 @@ export function parsePageMessage(raw: string, allowDevelopmentLoopback = false):
     if (typeof value.url !== 'string' || !isSafeExternalUrl(value.url)) return null;
     return { type: 'open-external', url: value.url };
   }
+  if (value.type === 'navigate-back' && Object.keys(value).length === 1) {
+    return { type: 'navigate-back' };
+  }
   return null;
 }
 
-export function pageMessageScript(message: ShellMessage | AuthResponse): string {
+export function pageMessageScript(message: ShellMessage | AuthResponse | NavigateBackMessage): string {
   const serialized = JSON.stringify(message).replace(/</g, '\\u003c');
   return `window.__cialaiShellReceive?.(${serialized}); true;`;
 }

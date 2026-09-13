@@ -50,6 +50,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 3.5 Configuração iOS | Implementada e resolvida pelo Expo | Bundle `br.com.ordinum.cialai`, câmera, rede local, Face ID, criptografia não isenta e proteção até o primeiro desbloqueio aparecem no config prebuild. Assinatura e build iOS não foram executados |
 | 3.6 Página do celular | Implementada e testada em Node | Composição contém somente Terminais e cabeçalho compacto permanente com nome do computador e estado da ponte. Checks UI passaram com 17 casos de sincronização e 40 demais casos; WebView real continua pendente |
 | 4.1 Módulo Expo em Kotlin | Código preparado, build nativo pendente | Wrapper Kotlin usa uma fila serial, `noBackupFilesDir`, eventos Expo e `tunnelcore.aar` com mínimo Android 26. Manifesto e Gradle foram conferidos estruturalmente; compilação Kotlin aguarda o Codemagic |
+| 4.3 Voltar no Android | Implementado e testado em Node | BackHandler injeta `navigate-back`; página retorna prévia, arquivos, terminal e lista, pedindo a tela Computadores ao chegar na lista. Fluxo bidirecional passou no check UI; aparelho real pendente |
 
 ## Ambiente observado
 
@@ -367,6 +368,12 @@ O observador global de `AppState` chama `NotifyForeground`, preserva o bloqueio 
 `MobileApp` monta somente `VIEW_COMPONENTS.terminais`; `TabBar` e `MoreSheet` foram removidos. O cabeçalho compacto permanece visível com o nome recebido no `welcome` ou pela casca nativa e traduz conectado, conectando, removido, incompatível e desconectado. O bootstrap da WebView agora inclui `desktopName` em `__CIALAI_SHELL__`.
 
 Adicionado `check-mobile-shell.mjs` para renderizar o cabeçalho e impedir a volta das abas. `npm run test:ui` terminou com código 0: sincronização 17 de 17 e demais checks Node 40 de 40. `npm run typecheck --workspace @cialai/mobile` e lint também passaram antes da entrega. Isso prova composição e contratos locais, não carregamento em WKWebView ou WebView Android.
+
+### 12/09/2026, retorno Android da tarefa 4.3 implementado
+
+No Android, o `BackHandler` da casca injeta `{type: navigate-back}` na página. `PhoneWorkbench` usa a mesma transição do botão visível para voltar de prévia a arquivos, de arquivos a terminal e de terminal à lista. Quando já está na lista, a página devolve a mensagem à casca e o app abre Computadores. Mensagens com campos extras são recusadas.
+
+O novo caso bidirecional de `check-mobile-shell.mjs` passou. A suíte UI terminou com 17 casos de sincronização e 41 demais casos; typecheck e lint do app também passaram. O botão físico e o histórico real da WebView não foram executados em Android.
 
 ## Arquivos para retomar
 

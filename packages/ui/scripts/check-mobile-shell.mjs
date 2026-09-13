@@ -36,3 +36,27 @@ test('a composicao do celular contem somente Terminais', async () => {
   assert.match(source, /VIEW_COMPONENTS\.terminais/);
   assert.doesNotMatch(source, /TabBar|MoreSheet|PHONE_TABS/);
 });
+
+test('navigate-back percorre a ponte nos dois sentidos', async () => {
+  const shellBundle = await build({
+    entryPoints: ['src/lib/shell.js'],
+    bundle: true,
+    write: false,
+    format: 'cjs',
+  });
+  const sent = [];
+  const shellContext = vm.createContext({
+    module: { exports: {} },
+    exports: {},
+    window: { ReactNativeWebView: { postMessage: (message) => sent.push(message) } },
+    setTimeout,
+    clearTimeout,
+  });
+  vm.runInContext(shellBundle.outputFiles[0].text, shellContext);
+  let received = 0;
+  shellContext.module.exports.onNavigateBack(() => { received += 1; });
+  shellContext.module.exports.receiveShellMessage({ type: 'navigate-back' });
+  shellContext.module.exports.requestNavigateBack();
+  assert.equal(received, 1);
+  assert.deepEqual(sent, ['{"type":"navigate-back"}']);
+});

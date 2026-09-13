@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Alert, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
@@ -66,6 +66,15 @@ export function Shell({
     };
   }, [onOffline, url]);
 
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      webView.current?.injectJavaScript(pageMessageScript({ type: 'navigate-back' }));
+      return true;
+    });
+    return () => subscription.remove();
+  }, []);
+
   const openExternal = useCallback(async (externalUrl: string) => {
     if (!isSafeExternalUrl(externalUrl)) return;
     try {
@@ -92,6 +101,10 @@ export function Shell({
       return;
     }
     if (message.type === 'open-external') return void (await openExternal(message.url));
+    if (message.type === 'navigate-back') {
+      onDesktops();
+      return;
+    }
     if (downloadBusy.current) {
       Alert.alert('Download em andamento', 'Conclua o compartilhamento atual antes de iniciar outro.');
       return;
@@ -104,7 +117,7 @@ export function Shell({
     } finally {
       downloadBusy.current = false;
     }
-  }, [biometricSession, emitShellState, inject, openExternal, url]);
+  }, [biometricSession, emitShellState, inject, onDesktops, openExternal, url]);
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
