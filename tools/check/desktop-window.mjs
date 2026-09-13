@@ -109,7 +109,7 @@ assert.match(windowControlsSource, /onMaximizedChange/);
 const app = read(`${ui}/desktop/DesktopApp.jsx`);
 assert.match(app, /windowChrome\(platform\(\)\.os\)\.escapeGuard/);
 assert.match(read(`${ui}/desktop/menu.js`), /dataset\.platform !== 'macos'/);
-const css = read(`${ui}/desktop/macos.css`);
+const css = read(`${ui}/desktop/shell.css`);
 assert.match(css, /\[data-platform="macos"\] \.mac-sidebar__drag\{flex:0 0 52px;height:52px\}/);
 assert.match(css, /\[data-platform="macos"\] \.mac-toolbar\.is-sidebar-hidden\{padding-left:82px\}/);
 const platformCss = read(`${ui}/desktop/platform.css`);

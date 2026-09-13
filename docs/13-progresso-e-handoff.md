@@ -77,6 +77,7 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 5.10 Diagnóstico e hook | Testes Rust verificados no macOS e Linux; execução Windows pendente | O log usa `app_log_dir`, Unix redireciona stderr por `dup2` e Windows usa `SetStdHandle`; o hook tem instaladores POSIX e PowerShell. Rust passou no Ubuntu e compilou para Windows, mas o instalador PowerShell não foi executado nativamente |
 | 5.11 Janela por sistema | Preparada; janela nativa Linux e Windows pendente | `window/` tem backends macOS, Windows por `SetWindowPos` e Mica a partir do build 22621, e genérico com animação no X11 e salto no Wayland. Windows ganhou controles próprios e Linux e Windows ganharam o botão de menu da toolbar. Onze testes de janela passaram no macOS e no Ubuntu 22.04 em contêiner, Clippy passou nos dois e no alvo MSVC por `cargo-xwin`; nenhuma janela nativa Linux ou Windows foi aberta |
 | 5.12 Atalhos por sistema | Concluída localmente na main | Rótulos e handlers usam um contrato único no desktop, no Workbench, nos painéis, na paleta, no editor e no xterm. O Dev Browser da porta 64552 confirmou Windows, Linux e macOS detectado sem o parâmetro; não houve execução nativa em Windows ou Linux |
+| 5.13 CSS e fontes por sistema | Concluída localmente na main; renderização nativa pendente | `shell.css` aplica tokens e casca com `data-shell="desktop"` em qualquer sistema e deixa só semáforos e suavização de fonte no macOS. `platform.css` define as fontes de cada sistema e a JetBrains Mono empacotada fica como último recurso do terminal no Linux. O Dev Browser confirmou tokens, fontes e layout do estúdio em Windows, Linux e macOS nos dois temas; WebKitGTK e WebView2 reais não foram usados |
 | 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
 | 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
 | 5.19 Guia por plataforma | Concluída localmente | README traz preparação específica de macOS, Ubuntu e Windows; o guia 14 reúne janela, menu, fontes, terminal, processos, atalhos, caminhos, integrações, pacotes e o estado real de verificação |
@@ -90,7 +91,7 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
 | 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
 | 7.5 Release da versão 1 | Procedimento preparado na frente C, release pendente | Changelog público, roteiro da candidata e guarda local cobrem os seis gates do documento 10. A guarda final falha com todos os gates pendentes e nenhuma tag, assinatura, publicação ou instalação foi feita |
-| 3.10, 4.8, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.6 | Não iniciadas ou pendentes na main | CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos do desktop e publicação da versão 1 continuam pendentes. A autorização para avançar não aprova testes físicos, remotos, de assinatura ou de loja |
+| 3.10, 4.8, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.6 | Não iniciadas ou pendentes na main | Preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos do desktop e publicação da versão 1 continuam pendentes. A autorização para avançar não aprova testes físicos, remotos, de assinatura ou de loja |
 
 ## Ambiente observado
 
@@ -615,6 +616,32 @@ Resultados: onze testes de janela passaram no macOS arm64 e os mesmos onze passa
 No Dev Browser Panel da porta 64556, lida de `.dev-browser-panel/port` desta sessão, abas novas não receberam renderizador, então o ensaio reutilizou uma aba parada que apontava para um Vite 1420 desligado e serviu a interface num Vite próprio na porta 1431. Em 1440 por 960, `?platform=windows&terminais=demo` mostrou os três controles com 46 por 52 px encostados na borda direita, o botão de menu com catorze ações e rótulos Ctrl Shift, a marca a 16 px do topo e o espaçador com altura zero. `?platform=linux` mostrou o menu sem controles próprios. Sem o parâmetro, o macOS manteve o espaçador de 52 px e não mostrou menu nem controles. Não houve exceções nem overflow horizontal. As capturas ficaram em `~/.dev-browser/tmp/cialai-5-11-windows-window.png`, `cialai-5-11-windows-menu.png`, `cialai-5-11-linux-window.png`, `cialai-5-11-linux-menu.png` e `cialai-5-11-macos-window.png`. Elas também mostram que Linux e Windows ainda não recebem os tokens de `macos.css`, trabalho da 5.13.
 
 Nenhuma janela nativa Linux ou Windows foi aberta. X11, Wayland, Mica, `SetWindowPos`, as bordas de redimensionamento e os controles do Windows continuam dependentes de execução nos sistemas correspondentes.
+
+### 13/09/2026, CSS e fontes por sistema da tarefa 5.13
+
+A camada visual deixou de depender de `data-platform="macos"`. `shell.css` nasceu de `macos.css` por transformação mecânica: todos os seletores da casca passaram a valer em `:is([data-shell="desktop"],[data-platform="macos"])`, o que aplica tokens, casca, componentes e estúdio em Linux e Windows e mantém o mesmo resultado na fixture do celular, que marca a plataforma macOS. Ficaram restritos ao macOS somente o espaçador dos semáforos, a reserva de 82 px da toolbar e `-webkit-font-smoothing`. `Terminais.css` recebeu a mesma troca nos nove seletores. `macos.css` virou apenas `@import './shell.css'`, porque a página do celular pertence a outra frente e ainda importa esse caminho; a entrada desktop importa `shell.css` e depois `platform.css`.
+
+`platform.css` define `--mac-font` e `--mac-font-mono` por sistema com as pilhas do documento 04: San Francisco e SF Mono no macOS, Segoe UI Variable e Cascadia no Windows e fonte do sistema com JetBrains Mono, Fira Code, DejaVu e Noto no Linux. A JetBrains Mono 2.304, com Regular e Bold em WOFF2 e a licença OFL, veio do arquivo oficial `JetBrainsMono-2.304.zip` da release do GitHub, SHA-256 `6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf`, e está em `packages/ui/src/fonts` como `Cialai JetBrains Mono`, último recurso antes do genérico no terminal Linux. O tema MUI passou a usar `var(--mac-font)`. O atributo `switch`, exclusivo do WebKit do macOS, deu lugar ao interruptor `.mac-switch` desenhado em CSS sobre um checkbox, sem uso ainda nesta tarefa.
+
+`tools/check/platform-css.mjs` foi escrito antes e falhou com `shell.css ausente`. Depois da implementação passou, cobrindo o escopo dos seletores, os três seletores restritos ao macOS, o import de compatibilidade, as pilhas exatas por sistema, os arquivos WOFF2 e a licença, `.mac-switch` e o tema MUI. A guarda entrou no `npm test` como `check:platform-css`; `check:window` passou a ler `shell.css`.
+
+Comandos concluídos com código 0:
+
+```sh
+curl -fsSL -o jbm.zip https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip
+shasum -a 256 jbm.zip
+node tools/check/platform-css.mjs
+node tools/check/desktop-window.mjs
+npm run test:ui
+npm run build:ui --workspace @cialai/desktop
+git diff --check
+```
+
+Resultados: a suíte UI passou 17 casos de sincronização e 56 testes Node. O build Vite gerou `JetBrainsMono-Regular` com 92,16 kB e `JetBrainsMono-Bold` com 94,59 kB, manteve os 434 seletores ampliados no CSS minificado da entrada desktop e do recurso móvel e validou o recurso móvel com 130 assets.
+
+No Dev Browser Panel da porta 64556, com o mesmo Vite na porta 1431 e a demo de terminais em 1440 por 960, Windows, Linux e macOS foram conferidos nos temas claro e escuro. Os três sistemas receberam `--mac-bg` do tema, o padding de 52 px da área do estúdio e as mesmas posições das colunas de sessões, trabalho e arquivos. As fontes computadas foram as pilhas de cada sistema; no Linux as duas faces da `Cialai JetBrains Mono` carregaram, o que prova o caminho do arquivo empacotado. Um `.mac-switch` de prova mediu 32 por 18 px, sem aparência nativa e com o acento do tema. Não houve exceções nem overflow. Na entrada `mobile.html` em 393 por 852, a página continuou sem tokens sem o atributo de plataforma, como antes, e recebeu fundo, fonte e suavização ao marcar a plataforma macOS como a fixture faz. As capturas ficaram em `~/.dev-browser/tmp/cialai-5-13-windows-light.png`, `cialai-5-13-windows-dark.png`, `cialai-5-13-linux-light.png`, `cialai-5-13-linux-dark.png`, `cialai-5-13-macos-light.png` e `cialai-5-13-macos-dark.png`.
+
+A conferência usou Chromium com a plataforma simulada. A renderização em WebKitGTK e WebView2, a disponibilidade real de Segoe UI Variable, Cascadia e das fontes Linux e o `:has()` de `Terminais.css`, que exige WebKitGTK 2.40, continuam dependentes dos sistemas correspondentes.
 
 ### 12/09/2026, fonte de processos da tarefa 5.1
 

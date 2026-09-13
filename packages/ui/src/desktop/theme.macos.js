@@ -51,7 +51,7 @@ export function buildMacTheme(mode) {
       text: { primary: c.label, secondary: c.label2, disabled: c.label3 },
     },
     typography: {
-      fontFamily: MAC_FONT,
+      fontFamily: 'var(--mac-font)',
       fontSize: 13,
       h5: { fontSize: 17, fontWeight: 600 },
       h6: { fontSize: 15, fontWeight: 600 },

@@ -1,9 +1,32 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Casca da janela por sistema. O macOS reserva o espaço dos semáforos em
-   macos.css. Linux e Windows não têm semáforos: a barra lateral começa pela
-   marca, alinhada ao centro da toolbar, e a toolbar encosta na borda com a
-   barra lateral oculta. Só o Windows, sem moldura, desenha os controles da
-   janela no fim da toolbar e na altura inteira dela. */
+/* Fontes e casca da janela por sistema, sobre os tokens de shell.css.
+
+   Cada sistema usa a própria família de interface e de terminal. No Linux,
+   onde a fonte monoespaçada instalada varia por distribuição, a JetBrains
+   Mono empacotada fica como último recurso antes do genérico, para cobrir os
+   caracteres de caixa do terminal. Licença OFL em ../fonts/OFL.txt. */
+
+@font-face{font-family:"Cialai JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/JetBrainsMono-Regular.woff2") format("woff2")}
+@font-face{font-family:"Cialai JetBrains Mono";font-style:normal;font-weight:700;font-display:swap;src:url("../fonts/JetBrainsMono-Bold.woff2") format("woff2")}
+
+[data-shell="desktop"][data-platform="macos"]{
+  --mac-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
+  --mac-font-mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace;
+}
+[data-shell="desktop"][data-platform="windows"]{
+  --mac-font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --mac-font-mono:"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace;
+}
+[data-shell="desktop"][data-platform="linux"]{
+  --mac-font:system-ui,"Inter",Cantarell,Ubuntu,"Noto Sans",sans-serif;
+  --mac-font-mono:ui-monospace,"JetBrains Mono","Fira Code","DejaVu Sans Mono","Noto Sans Mono","Cialai JetBrains Mono",monospace;
+}
+
+/* O macOS reserva o espaço dos semáforos em shell.css. Linux e Windows não
+   têm semáforos: a barra lateral começa pela marca, alinhada ao centro da
+   toolbar, e a toolbar encosta na borda com a barra lateral oculta. Só o
+   Windows, sem moldura, desenha os controles da janela no fim da toolbar e
+   na altura inteira dela. */
 
 [data-platform="linux"] .mac-sidebar__brand,
 [data-platform="windows"] .mac-sidebar__brand{padding-top:16px}

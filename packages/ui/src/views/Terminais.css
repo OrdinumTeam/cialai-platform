@@ -7,11 +7,11 @@
    das proprias margens. O terminal e o protagonista: superficie suave com
    raio de painel, sem borda, e o resto em canvas com fios de cabelo. */
 
-[data-platform="macos"] .mac-content:has(> .terminais-page){padding:52px 0 0;overflow:hidden;scroll-behavior:auto}
-[data-platform="macos"] .view.terminais-page{display:flex;height:100%;min-height:0;max-width:none;margin:0;animation:macFade var(--mac-normal) var(--mac-ease) both}
-[data-platform="macos"] .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
+:is([data-shell="desktop"],[data-platform="macos"]) .mac-content:has(> .terminais-page){padding:52px 0 0;overflow:hidden;scroll-behavior:auto}
+:is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page{display:flex;height:100%;min-height:0;max-width:none;margin:0;animation:macFade var(--mac-normal) var(--mac-ease) both}
+:is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
 
-[data-platform="macos"]{
+:is([data-shell="desktop"],[data-platform="macos"]){
   --terminais-editor-line:rgba(226,59,132,.045);
   --terminais-editor-match:rgba(226,59,132,.16);
   --terminais-editor-search:rgba(194,122,0,.22);
@@ -25,7 +25,7 @@
   --terminais-syn-tag:#b23b3b;
   --terminais-syn-regexp:#c25e00;
 }
-[data-platform="macos"][data-theme="dark"]{
+:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"]{
   --terminais-editor-line:rgba(255,122,178,.10);
   --terminais-editor-match:rgba(255,122,178,.26);
   --terminais-syn-keyword:#d09aee;
@@ -91,7 +91,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-search{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:26px;margin:0 10px 6px;padding:0 6px 0 8px;border-radius:7px;background:var(--mac-surface-2);color:var(--mac-label-3)}
 .terminais-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
 .terminais-search input::placeholder{color:var(--mac-label-3)}
-[data-platform="macos"] .terminais-search input:focus-visible{box-shadow:none;outline:none}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-search input:focus-visible{box-shadow:none;outline:none}
 .terminais-search:focus-within{box-shadow:0 0 0 3px var(--mac-accent-ring)}
 .terminais-search__clear{display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;border:0;border-radius:4px;background:transparent;color:var(--mac-label-3);cursor:default}
 .terminais-search__clear:hover{background:var(--mac-hover);color:var(--mac-label)}
@@ -242,7 +242,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 
 .terminais-find{position:absolute;top:8px;right:14px;z-index:4;display:flex;align-items:center;gap:4px;height:30px;padding:0 4px 0 9px;border-radius:8px;background:var(--mac-glass);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:var(--mac-shadow-popover);color:var(--mac-label-3);animation:macPop 160ms var(--mac-ease)}
 .terminais-find input{width:180px;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
-[data-platform="macos"] .terminais-find input:focus-visible{box-shadow:none}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-find input:focus-visible{box-shadow:none}
 .terminais-find input::placeholder{color:var(--mac-label-3)}
 
 /* ── editor ────────────────────────────────────────────────────────── */
@@ -309,7 +309,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-browser__url{flex:1;min-width:0;display:flex}
 .terminais-browser__url input{flex:1;min-width:0;height:26px;padding:0 10px;border:0;border-radius:7px;background:var(--mac-surface-2);font:inherit;font-size:12.5px;color:var(--mac-label);outline:none;box-shadow:none}
 .terminais-browser__url input::placeholder{color:var(--mac-label-3)}
-[data-platform="macos"] .terminais-browser__url input:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring);outline:none}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-browser__url input:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring);outline:none}
 .terminais-browser__port{display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 8px;border:0;border-radius:6px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11.5px;cursor:default;white-space:nowrap;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-browser__port strong{font-weight:600;font-variant-numeric:tabular-nums}
 .terminais-browser__port:hover{background:var(--mac-accent-soft-hover)}
@@ -443,7 +443,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-pop__search{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--mac-separator);color:var(--mac-label-3)}
 .terminais-pop__search input,.terminais-pop__namefield input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:13px;color:var(--mac-label);box-shadow:none}
 .terminais-pop__search input::placeholder,.terminais-pop__namefield input::placeholder{color:var(--mac-label-3)}
-[data-platform="macos"] .terminais-pop__search input:focus-visible,[data-platform="macos"] .terminais-pop__namefield input:focus-visible{box-shadow:none;outline:none}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-pop__search input:focus-visible,:is([data-shell="desktop"],[data-platform="macos"]) .terminais-pop__namefield input:focus-visible{box-shadow:none;outline:none}
 .terminais-pop__list{overflow:auto;padding:6px;min-height:80px}
 .terminais-pop__label{padding:8px 8px 4px;font-size:11px;font-weight:500;color:var(--mac-label-3)}
 .terminais-pop__item{display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 8px;border:0;border-radius:7px;background:transparent;font:inherit;font-size:13px;color:var(--mac-label);text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}

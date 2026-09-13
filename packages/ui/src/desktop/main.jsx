@@ -2,7 +2,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import '../styles.css';
-import './macos.css';
+import './shell.css';
 import './platform.css';
 import './brand.css';
 import DesktopApp from './DesktopApp.jsx';
