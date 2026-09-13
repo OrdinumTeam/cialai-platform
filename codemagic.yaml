@@ -1,0 +1,187 @@
+# Builds móveis do Cialai. Não há disparo automático configurado.
+# O app, as integrações e os grupos de credenciais são criados no Codemagic pelo usuário.
+
+workflows:
+  ios-testflight:
+    name: iOS TestFlight interno
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Cialai ASC API Key
+    environment:
+      groups:
+        - appstore_credentials
+      node: 22.23.2
+      npm: 10.9.8
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "br.com.ordinum.cialai"
+        APP_ENV: "production"
+    scripts:
+      - name: Validar ambiente do TestFlight
+        script: |
+          set -euo pipefail
+          : "${APP_STORE_APP_ID:?Configure APP_STORE_APP_ID no aplicativo do Codemagic}"
+          : "${CERTIFICATE_PRIVATE_KEY:?Configure CERTIFICATE_PRIVATE_KEY no grupo appstore_credentials}"
+          case "$APP_STORE_APP_ID" in
+            *[!0-9]*|'') echo "APP_STORE_APP_ID deve conter somente dígitos" >&2; exit 1 ;;
+          esac
+      - name: Instalar Go
+        script: |
+          set -euo pipefail
+          source tools/release/install-go.sh 1.26.5
+          test "$(go env GOVERSION)" = "go1.26.5"
+      - name: Compilar núcleo iOS
+        script: |
+          set -euo pipefail
+          artifact_dir="$CM_BUILD_DIR/build/mobile/ios"
+          bash tools/build-tunnel-mobile.sh ios "$artifact_dir"
+          cd "$artifact_dir"
+          shasum -a 256 -c Tunnelcore.xcframework.zip.sha256
+          cd "$CM_BUILD_DIR"
+          ditto "$artifact_dir/Tunnelcore.xcframework" \
+            apps/mobile/modules/cialai-tunnel/ios/Tunnelcore.xcframework
+      - name: Instalar e validar dependências
+        script: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck --workspace @cialai/mobile
+          npm run lint --workspace @cialai/mobile
+          npm run test --workspace @cialai/mobile
+          swift tools/release/check-app-icon.swift apps/desktop/design/app-icon-1024.png
+          bash tools/release/cm-build-number.test.sh
+          bash tools/release/cm-download.test.sh
+          node --test tools/release/cm-config.test.cjs
+      - name: Gerar projeto iOS
+        script: |
+          set -euo pipefail
+          cd apps/mobile
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Configurar assinatura iOS
+        script: |
+          set -euo pipefail
+          keychain initialize
+          key_path="$(mktemp "$CM_BUILD_DIR/cialai-signing.XXXXXX.pem")"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s' "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$key_path"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key=@file:"$key_path" \
+            --create
+          keychain add-certificates
+          security find-identity -v -p codesigning
+          xcode-project use-profiles
+      - name: Numerar e compilar IPA
+        script: |
+          set -euo pipefail
+          set -o pipefail
+          next="$(tools/release/cm-next-build-number.sh)"
+          cd apps/mobile/ios
+          agvtool new-version -all "$next"
+          cd "$CM_BUILD_DIR"
+          xcode-project build-ipa \
+            --workspace apps/mobile/ios/Cialai.xcworkspace \
+            --scheme Cialai 2>&1 | tee build_ipa.log
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/mobile/ios/Tunnelcore.xcframework.zip
+      - build/mobile/ios/Tunnelcore.xcframework.zip.sha256
+      - build_ipa.log
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: false
+        submit_to_app_store: false
+
+  ios-archive:
+    name: iOS IPA assinado sem publicar
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Cialai ASC API Key
+    environment:
+      groups:
+        - appstore_credentials
+      node: 22.23.2
+      npm: 10.9.8
+      xcode: latest
+      cocoapods: default
+      vars:
+        BUNDLE_ID: "br.com.ordinum.cialai"
+        APP_ENV: "production"
+    scripts:
+      - name: Validar ambiente do archive
+        script: |
+          set -euo pipefail
+          : "${CERTIFICATE_PRIVATE_KEY:?Configure CERTIFICATE_PRIVATE_KEY no grupo appstore_credentials}"
+          : "${PROJECT_BUILD_NUMBER:?PROJECT_BUILD_NUMBER não foi injetado pelo Codemagic}"
+          case "$PROJECT_BUILD_NUMBER" in
+            *[!0-9]*|'') echo "PROJECT_BUILD_NUMBER deve conter somente dígitos" >&2; exit 1 ;;
+          esac
+      - name: Instalar Go
+        script: |
+          set -euo pipefail
+          source tools/release/install-go.sh 1.26.5
+          test "$(go env GOVERSION)" = "go1.26.5"
+      - name: Compilar núcleo iOS
+        script: |
+          set -euo pipefail
+          artifact_dir="$CM_BUILD_DIR/build/mobile/ios"
+          bash tools/build-tunnel-mobile.sh ios "$artifact_dir"
+          cd "$artifact_dir"
+          shasum -a 256 -c Tunnelcore.xcframework.zip.sha256
+          cd "$CM_BUILD_DIR"
+          ditto "$artifact_dir/Tunnelcore.xcframework" \
+            apps/mobile/modules/cialai-tunnel/ios/Tunnelcore.xcframework
+      - name: Instalar e validar dependências
+        script: |
+          set -euo pipefail
+          npm ci
+          npm run typecheck --workspace @cialai/mobile
+          npm run lint --workspace @cialai/mobile
+          npm run test --workspace @cialai/mobile
+          swift tools/release/check-app-icon.swift apps/desktop/design/app-icon-1024.png
+          bash tools/release/cm-build-number.test.sh
+          bash tools/release/cm-download.test.sh
+          node --test tools/release/cm-config.test.cjs
+      - name: Gerar projeto iOS
+        script: |
+          set -euo pipefail
+          cd apps/mobile
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Configurar assinatura iOS
+        script: |
+          set -euo pipefail
+          keychain initialize
+          key_path="$(mktemp "$CM_BUILD_DIR/cialai-signing.XXXXXX.pem")"
+          trap 'rm -f "$key_path"' EXIT
+          printf '%s' "$CERTIFICATE_PRIVATE_KEY" | base64 --decode > "$key_path"
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key=@file:"$key_path" \
+            --create
+          keychain add-certificates
+          security find-identity -v -p codesigning
+          xcode-project use-profiles
+      - name: Compilar IPA
+        script: |
+          set -euo pipefail
+          set -o pipefail
+          cd apps/mobile/ios
+          agvtool new-version -all "$PROJECT_BUILD_NUMBER"
+          cd "$CM_BUILD_DIR"
+          xcode-project build-ipa \
+            --workspace apps/mobile/ios/Cialai.xcworkspace \
+            --scheme Cialai 2>&1 | tee build_ipa.log
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/mobile/ios/Tunnelcore.xcframework.zip
+      - build/mobile/ios/Tunnelcore.xcframework.zip.sha256
+      - build_ipa.log
+      - /tmp/xcodebuild_logs/*.log
