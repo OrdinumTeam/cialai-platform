@@ -737,6 +737,25 @@ Os textos saíram do ponto de entrada de `@cialai/i18n` para módulos próprios 
 
 `npm run test:i18n` com Node 22.23.2 e npm 10.9.8 continuou aprovando os três casos de comportamento e paridade. `git diff --check` passou no pacote reorganizado.
 
+### 13/09/2026, validação final das tarefas 5.11, 5.13, 5.14 e 5.18
+
+Commits desta frente, na ordem: `d2678e7` janela por sistema, `d64207d` CSS e fontes, `b1a4efe` preferências por sistema, `bfccb08` ordem do CSS no build de produção, `745d7ad` nightly e self test e `2b71a48` guarda da extração. A primeira execução completa de `npm test`, sobre `745d7ad`, parou em `tools/check/desktop-extraction.mjs`, que ainda exigia `src/window.rs` depois da mudança para `window/mod.rs` da 5.11. A guarda passou a exigir `window/mod.rs`, e todas as guardas Node do job `desktop-check` foram repetidas antes do commit `2b71a48`. Nenhuma falha apareceu em arquivos da frente de tradução.
+
+Comandos concluídos com código 0 sobre `2b71a48`, que já incluía o commit `9d76801` da frente de tradução:
+
+```sh
+CARGO_TARGET_DIR=~/.cache/cialai-target CARGO_BUILD_JOBS=2 npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
+cd packages/tunnel-core && go test -race -mod=readonly ./...
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+git diff --check
+```
+
+Resultados: todas as guardas da raiz passaram, inclusive `check:nightly`, `check:window`, `check:platform-css`, `check:platform-preferences` e `check:css-cascade`; i18n aprovou 3 casos, a sincronização 17, a interface 56 e o protocolo 9; o Clippy com `-D warnings` passou e a suíte Rust do macOS aprovou 163 testes, com os 2 ensaios externos ignorados; todos os pacotes Go passaram no `npm test` e de novo com race detector; Jest aprovou 101 casos em 15 suítes; `cargo fmt --check` e `git diff --check` passaram. O commit `0e2f628` da frente de tradução chegou depois dessa rodada e não foi validado por ela.
+
+A imagem Docker `cialai-linux-desktop:agente-a`, os volumes `cialai-a-linux-target` e `cialai-a-cargo-registry`, o cache de build do Docker criado nesta frente e o alvo Cargo extra `~/.cache/cialai-target/target` do self test do macOS foram removidos; o disco voltou a 19 GiB livres. As evidências do self test Linux continuam em `target/selftest-linux-coldfinal`, pasta ignorada pelo Git. Nenhum push, tag, release ou workflow foi disparado.
+
+Dependem de execução externa: a primeira rodada remota de `nightly-e2e.yml` e de `ci.yml`; Windows nativo com controles próprios, `SetWindowPos`, Mica ao abrir e ao salvar, WebView2, Edge WebDriver, ConPTY e o roteiro com PowerShell; Linux em desktop real com Wayland, WebKitGTK visível e IME; e a disponibilidade real das fontes de cada sistema.
+
 ### 12/09/2026, fonte de processos da tarefa 5.1
 
 `workspace/procs.rs` foi dividido em `procs/mod.rs` e `procs/macos.rs`. O contrato portável usa `ProcInfo`, `ProcState`, `Usage`, `ProcSource` e `SystemProcs`; a política de limites da árvore e a identificação de agentes ficaram compartilhadas. `TerminalManager::metrics` usa a trait e o diretório pessoal já resolvido pelo Tauri. `FakeProcs` cobre árvore, duas amostras de CPU, memória, cwd e perfil do agente sem depender da tabela de processos real.
