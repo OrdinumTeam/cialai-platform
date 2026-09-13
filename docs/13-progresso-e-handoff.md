@@ -65,7 +65,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
 | 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
 | 3.9 Roteiros em iPhone | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06, limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
-| 3.10, 4.7, 4.8, 5.1 a 6.8, 7.5 e 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
+| 4.7 Roteiros em Android | Roteiro preparado na frente C, execução pendente | Folha imprimível cobre os treze cenários do documento 06 e quatro verificações específicas do Android, com limites, identificação do ambiente e campos de evidência. Nenhum cenário foi executado ou aprovado |
+| 3.10, 4.8, 5.1 a 6.8, 7.5 e 7.6 | Não iniciadas na main | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
 
 ## Ambiente observado
 
@@ -582,6 +583,12 @@ O primeiro comando aprovou os três documentos e seus campos obrigatórios. A bu
 Criado `docs/testes/roteiro-3.9-ios.md` para uma execução por combinação de iPhone, iOS, build móvel, desktop e Headscale. A folha mantém em branco identificação, tempos, resultado, evidência, defeitos e assinaturas. Os treze cenários do documento 06 aparecem com os limites originais: modo avião, atraso, revogação, reinícios, troca de rede, segundo plano, relé, Headscale fora do ar, desvio do relógio, multiplicidade, foto do QR e permissões.
 
 `npm run check:manual-mobile` terminou com código 0 e confirmou os treze blocos, nove limites numéricos, treze campos de resultado e o estado pendente. `git diff --check` passou. Nenhum iPhone, build interno, rede móvel, relé ou servidor externo foi usado; a tarefa 3.9 continua sem aceite físico.
+
+### 13/09/2026, roteiro imprimível da tarefa 4.7 preparado na frente C
+
+Criado `docs/testes/roteiro-4.7-android.md` para uma execução por combinação de aparelho Android, versão do sistema, build móvel, desktop e Headscale. A folha reproduz os treze cenários do documento 06 e acrescenta navegação pelo botão Voltar, retorno após mais de 120 segundos em segundo plano, biometria e armazenamento protegido.
+
+`npm run check:manual-mobile` terminou com código 0 e confirmou trinta blocos pendentes nos dois roteiros, sendo dezessete do Android, seus limites numéricos e campos de resultado. `git diff --check` passou. Nenhum aparelho, AAB, rede móvel, suspensão, biometria ou servidor externo foi usado; a tarefa 4.7 continua sem aceite físico.
 
 ## Arquivos para retomar
 
