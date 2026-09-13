@@ -54,7 +54,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.9 Browser e Office | Testes Rust verificados no macOS e Linux; execução real pendente | Descoberta e instalador por sistema passaram no macOS e no Ubuntu após tornar o fixture do cache específico ao sistema. Chromium, WebView2 e LibreOffice reais ainda não foram executados no Linux ou Windows |
 | 5.10 Diagnóstico e hook | Testes Rust verificados no macOS e Linux; execução Windows pendente | O log usa `app_log_dir`, Unix redireciona stderr por `dup2` e Windows usa `SetStdHandle`; o hook tem instaladores POSIX e PowerShell. Rust passou no Ubuntu e compilou para Windows, mas o instalador PowerShell não foi executado nativamente |
 | 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados e o teste parcial da 2.8 foi filtrado. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
-| 5.11 a 5.14 e 5.16 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
+| 5.11 a 5.14 e 5.17 a 7.6 | Não iniciadas | Demais backends, release, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -412,6 +413,25 @@ git diff --check
 ```
 
 A parte Playwright de `tools/browser/run-browser-checks.mjs` não pertence a esta entrega Rust e permanece na tarefa 5.15 geral. A execução Windows nativa e a matriz remota continuam pendentes.
+
+### 13/09/2026, matriz local de CI da tarefa 5.16
+
+O job `desktop` de `.github/workflows/ci.yml` usa a matriz `ubuntu-22.04`, `windows-2022` e `macos-14`, com falha rápida desativada e prazo de 60 minutos. Rust 1.98.1 recebe rustfmt e Clippy, Go segue o `go.mod` e Node segue `.nvmrc` com npm 10.9.8. Ubuntu instala as dependências Tauri e WebKitGTK previstas no documento 10. `CARGO_BUILD_JOBS=2` mantém o limite das compilações Rust também nos runners.
+
+Depois de `npm ci`, cada sistema compila seu sidecar antes de `npm test`. Somente com a suíte verde o workflow chama o build Tauri sem credenciais. `actions/upload-artifact@v4` exige pelo menos um arquivo e cobre dmg, AppImage, deb, rpm, nsis e msi sob nomes distintos por sistema e arquitetura. Não há referência a `secrets` nesse workflow de push e PR.
+
+`tools/check/ci-matrix.mjs` fixa localmente os três runners, as oito dependências Linux, toolchains, ordem sidecar, suíte e bundle, limite de jobs e seis grupos de artefatos. A guarda foi adicionada a `npm test`. O teste foi escrito antes da mudança e falhou inicialmente em `libwebkit2gtk-4.1-dev`, então passou com a matriz nova. O parser YAML do Ruby também aceitou o arquivo.
+
+Comandos concluídos com código 0:
+
+```sh
+node tools/check/ci-matrix.mjs
+ruby -e 'require "yaml"; YAML.load_file(".github/workflows/ci.yml"); puts "PASS yaml"'
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run check:ci
+git diff --check
+```
+
+Nenhuma execução remota foi iniciada e nenhum artefato foi publicado. A parte `release.yml` da tarefa 5.16 não estava no escopo desta entrega da matriz e segue pendente. Os passos Playwright e `check:text` serão ligados depois que seus scripts existirem; até lá o workflow executa apenas comandos reais do repositório.
 
 ## Arquivos para retomar
 

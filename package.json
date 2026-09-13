@@ -9,9 +9,10 @@
   "packageManager": "npm@10.9.8",
   "scripts": {
     "check:foundation": "node tools/check/foundation.mjs",
+    "check:ci": "node tools/check/ci-matrix.mjs",
     "dev:desktop": "npm run dev --workspace @cialai/desktop",
     "build:desktop": "npm run build --workspace @cialai/desktop",
-    "test": "npm run check:foundation && npm run test:ui && npm run test:protocol && npm run test:desktop && npm run test:tunnel && npm run test:mobile",
+    "test": "npm run check:foundation && npm run check:ci && npm run test:ui && npm run test:protocol && npm run test:desktop && npm run test:tunnel && npm run test:mobile",
     "test:ui": "npm run test --workspace @cialai/ui --if-present",
     "test:protocol": "npm run test --workspace @cialai/protocol --if-present",
     "test:desktop": "node tools/run.mjs desktop-check",
