@@ -30,6 +30,9 @@ type Options struct {
 	Alive            func(int) bool
 	HandshakeTimeout time.Duration
 	AdminFactory     func(string, string, string) (control.ControlAdmin, error)
+	// AllowLoopbackHTTP accepts an http control URL on loopback in pairing
+	// payloads. Only development and the Docker integration suite set it.
+	AllowLoopbackHTTP bool
 }
 
 type readResult struct {

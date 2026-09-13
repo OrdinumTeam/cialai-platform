@@ -4,6 +4,7 @@ module github.com/OrdinumTeam/cialai-platform/packages/tunnel-core
 go 1.26.5
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/mitchellh/go-ps v1.0.0
 	tailscale.com v1.102.0
 )
@@ -13,7 +14,6 @@ require (
 	github.com/akutz/memconn v0.1.0 // indirect
 	github.com/alexbrainman/sspi v0.0.0-20231016080023-1a75b4708caa // indirect
 	github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
 	github.com/creachadair/msync v0.8.1 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
 	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect

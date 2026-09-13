@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Headscale integration
+
+on:
+  push:
+    paths:
+      - packages/tunnel-core/**
+      - .github/workflows/headscale-integration.yml
+  pull_request:
+    paths:
+      - packages/tunnel-core/**
+      - .github/workflows/headscale-integration.yml
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: headscale-integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop-phone-flow:
+    name: Desktop and phone through Headscale 0.29.3
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+      - run: docker pull headscale/headscale:0.29.3
+      - name: Vet integration packages
+        working-directory: packages/tunnel-core
+        run: go vet -tags=integration ./integration ./testutil
+      - name: Run the end to end flow
+        working-directory: packages/tunnel-core
+        run: go test -mod=readonly -tags=integration -count=1 -timeout=12m -v ./integration

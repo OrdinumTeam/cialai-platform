@@ -24,6 +24,13 @@ const jobs = {
     cwd: 'packages/tunnel-core',
     commands: [['node', '../../tools/check/headscale-infra.mjs'], ['go', 'vet', './...'], ['go', 'test', '-mod=readonly', './...']],
   },
+  'integration-headscale': {
+    cwd: 'packages/tunnel-core',
+    commands: [
+      ['go', 'vet', '-tags=integration', './integration', './testutil'],
+      ['go', 'test', '-mod=readonly', '-tags=integration', '-count=1', '-timeout=12m', '-v', './integration'],
+    ],
+  },
   'spike-headscale': {
     cwd: 'packages/tunnel-core',
     commands: [['go', 'test', '-mod=readonly', '-tags=integration', '-count=1', '-timeout=6m', '-v', './spikes/headscale']],
