@@ -23,7 +23,6 @@ use tauri::{Manager, RunEvent};
 static APP_STOPPED: AtomicBool = AtomicBool::new(false);
 
 pub fn run() {
-    diagnostics::install();
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .register_uri_scheme_protocol(workspace::preview::SCHEME, |context, request| {
@@ -105,6 +104,7 @@ pub fn run() {
             commands::preview_register,
         ])
         .setup(|app| {
+            diagnostics::install(app.handle());
             let mobile_site =
                 tunnel::MobileSite::resolve(app.handle()).map_err(std::io::Error::other)?;
             app.manage(mobile_site.clone());

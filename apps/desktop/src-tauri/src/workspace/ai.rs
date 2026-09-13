@@ -13,9 +13,9 @@
 //!   configurado: basta ler a cauda do arquivo mais recente de cada home.
 //! - **Claude Code** nao guarda isso em lugar nenhum do disco. O unico lugar
 //!   onde o numero aparece e a entrada do hook de linha de estado, que recebe
-//!   `rate_limits` a cada redesenho. O script `macos/scripts/claude-statusline.py`
-//!   publica o que recebe em `ai-usage/claude/<perfil>.json`, dentro do
-//!   Application Support do app, e aqui so lemos esses arquivos.
+//!   `rate_limits` a cada redesenho. O script `scripts/claude-statusline.py`
+//!   publica o que recebe em `ai-usage/claude/<perfil>.json`, dentro da pasta
+//!   de dados do app, e aqui so lemos esses arquivos.
 //!
 //! O uso vale para a conta, nao para a pasta. Como o usuario tem varios
 //! perfis do mesmo agente, cada um com a propria conta, o numero e publicado

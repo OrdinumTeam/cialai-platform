@@ -1,6 +1,6 @@
 # Progresso e passagem de contexto
 
-Atualizado em 12/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
+Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
 
 ## Regras de continuidade
 
@@ -52,7 +52,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.7 Arquivos portáveis | Concluída localmente no macOS; lixeira Linux e Windows pendente | Caminhos devolvidos usam barras normais, entradas preservam as duas formas aceitas no Windows, a sujeira é filtrada por sistema, links são recriados somente no Unix e `trash` 5 cobre Linux e Windows sem apagar quando a lixeira recusa |
 | 5.8 Prévia portável | Concluída localmente no macOS; WebView2 pendente | O handler aceita `preview://` e `http://preview.localhost`, `native.js` escolhe a forma do Windows e `dunce::canonicalize` protege raiz e alvo. As duas rotas passaram em teste Rust; a forma Windows ainda não foi aberta no WebView2 |
 | 5.9 Browser e Office | Concluída localmente no macOS; execução Linux e Windows pendente | Chromium e LibreOffice têm descoberta por sistema, Playwright usa cache e shell nativos, processos auxiliares não abrem janela no Windows e o browser usa Job Object. A origem `http://tauri.localhost` e URLs `file:///C:/` estão cobertas |
-| 5.10 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.10 Diagnóstico e hook | Concluída localmente no macOS; Linux e Windows pendentes | O log usa `app_log_dir`, stderr é redirecionado por `dup2` no Unix e `SetStdHandle` no Windows, arquivos móveis ficam restritos ao Unix e o hook do Claude tem instaladores POSIX e PowerShell. Seis testes Python, 40 testes da UI e seis testes Rust passaram; os braços nativos Linux e Windows aguardam compilação e execução |
+| 5.11 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -360,6 +361,27 @@ Com 9,9 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --ma
 O LibreOffice agora é descoberto em Homebrew e aplicativos no macOS, PATH, `/usr`, `/opt` e Snap no Linux, e Program Files ou PATH no Windows. A URL do perfil emite `file:///C:/...` corretamente, o PATH usa o separador nativo, `HOME` só é definido no Unix e o processo recebe `CREATE_NO_WINDOW` no Windows. As mensagens de instalação não recomendam Homebrew fora do macOS.
 
 Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::browser` passou 13 casos e manteve apenas o download real ignorado. O filtro `workspace::office` passou 5 casos e manteve só a conversão real ignorada. Os testes incluem layouts artificiais Linux e Windows, URLs do Windows, instalação simulada, prazo e origens. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis erros conhecidos de `bridge/`, sem aviso novo. Browser, instalador e LibreOffice ainda não foram executados no Linux ou Windows.
+
+### 13/09/2026, diagnóstico e hook portáveis da tarefa 5.10
+
+O diagnóstico resolve `app.log` pela pasta de logs do Tauri. Fora de um terminal, Unix redireciona stderr com `dup2` e Windows usa `SetStdHandle`; o hook de panic e as linhas de ciclo de vida permanecem comuns. `workspace/mobile_files.rs` inteiro ficou restrito ao Unix e os dois comandos devolvem indisponibilidade explícita no Windows até a implementação Win32 da tarefa 6.4.
+
+O hook do Claude agora fica em `scripts/claude-statusline.py`, publica por perfil na pasta de dados própria de cada sistema, faz troca atômica e usa `fcntl` ou `msvcrt` para exclusão mútua. Os instaladores `.sh` e `.ps1` preservam uma `statusLine` própria sem `--force`, criam backup antes da alteração e oferecem `--dry-run`. O PowerShell conserva no hook o launcher realmente encontrado, inclusive `py -3` quando `python` não existe. A interface indica o instalador `.ps1` no Windows e o `.sh` no macOS e Linux. O primeiro teste detectou que uma janela `five_hour` sem `window_minutes` era ordenada depois da semana; a ordenação passou a reconhecer as durações canônicas sem mudar o rótulo Sessão.
+
+Comandos concluídos com código 0:
+
+```sh
+python3 scripts/test-claude-statusline.py
+sh -n scripts/install-claude-statusline.sh
+node --test packages/ui/scripts/tests/claude-hook-help.test.cjs
+npm test --workspace @cialai/ui
+npm run sidecar --workspace @cialai/desktop
+cargo --config build.jobs=2 fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2 workspace::ai
+git diff --check
+```
+
+Os seis testes Python, o caso Node do instalador, os 17 testes de sincronização e os 40 testes Node da UI passaram. A compilação Rust no macOS levou quatro minutos e os seis testes de `workspace::ai` passaram; permaneceram somente cinco avisos conhecidos de `bridge/` da tarefa 2.8 parcial. O branch da Fase 5 nasceu antes do script `sidecar`; por isso o comando obrigatório foi executado na `main` imediatamente antes de cada invocação Cargo sobre o manifesto deste worktree. Uma limpeza Cargo do alvo compartilhado removeu 5,7 GiB de artefatos recompiláveis quando o disco chegou a 4,7 GiB livres; a compilação só começou depois de recuperar 8,8 GiB. Não houve compilação nem execução Linux ou Windows nesta tarefa.
 
 ## Arquivos para retomar
 

@@ -1,27 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Registro do app em disco.
 //!
-//! Aberto pelo Dock, o stderr do app vai para lugar nenhum, e o macOS pode
-//! nao guardar o relatorio de um crash: na queda de 10/09/2026 o ReportCrash
-//! respondeu `Destination unavailable` e nada ficou. Por isso, fora de um
-//! terminal, o stderr passa a ir para
-//! `~/Library/Logs/br.com.ordinum.cialai/app.log`, com os `eprintln!` do
-//! app, a mensagem de qualquer panic com a thread e o local, o inicio e a
-//! saida pedida. Uma linha de inicio sem uma saida antes dela marca uma
-//! queda. Rodando num terminal, como no `npm run dev`, nada muda.
+//! Fora de um terminal, o stderr passa a ir para `app.log` na pasta de logs
+//! que o Tauri resolve para o sistema atual. O arquivo recebe os `eprintln!`
+//! do app, a mensagem de qualquer panic com a thread e o local, o inicio e a
+//! saida pedida. Uma linha de inicio sem uma saida antes dela marca uma queda.
+//! Rodando num terminal, como no `npm run dev`, nada muda.
 
 use std::fs::{self, OpenOptions};
+use std::io::IsTerminal;
+#[cfg(unix)]
 use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
+
+use tauri::{AppHandle, Manager};
 
 /// Acima disto o log vira `app.log.1` na abertura seguinte.
 const LOG_LIMIT: u64 = 5 * 1024 * 1024;
 
-pub fn install() {
-    // SAFETY: isatty so consulta o descritor.
-    let interactive = unsafe { libc::isatty(libc::STDERR_FILENO) } == 1;
-    if !interactive {
-        if let Some(path) = log_path() {
+pub fn install(app: &AppHandle) {
+    if !std::io::stderr().is_terminal() {
+        if let Some(path) = log_path(app) {
             redirect_stderr(&path);
         }
     }
@@ -52,9 +51,8 @@ fn timestamp() -> String {
         .to_string()
 }
 
-fn log_path() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    Some(PathBuf::from(home).join("Library/Logs/br.com.ordinum.cialai/app.log"))
+fn log_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_log_dir().ok().map(|dir| dir.join("app.log"))
 }
 
 fn redirect_stderr(path: &Path) {
@@ -68,9 +66,26 @@ fn redirect_stderr(path: &Path) {
     let Ok(file) = OpenOptions::new().create(true).append(true).open(path) else {
         return;
     };
-    // SAFETY: dup2 poe uma copia do arquivo no descritor 2. O arquivo pode
-    // fechar ao sair daqui porque o descritor 2 segura a propria copia.
-    unsafe {
-        libc::dup2(file.as_raw_fd(), libc::STDERR_FILENO);
+    #[cfg(unix)]
+    {
+        // SAFETY: dup2 poe uma copia do arquivo no descritor 2. O arquivo pode
+        // fechar ao sair daqui porque o descritor 2 segura a propria copia.
+        unsafe {
+            libc::dup2(file.as_raw_fd(), libc::STDERR_FILENO);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::io::IntoRawHandle;
+        use windows_sys::Win32::System::Console::{STD_ERROR_HANDLE, SetStdHandle};
+
+        let handle = file.into_raw_handle();
+        // SAFETY: o handle passa a pertencer ao stderr do processo e permanece
+        // aberto ate a saida do aplicativo.
+        if unsafe { SetStdHandle(STD_ERROR_HANDLE, handle as _) } == 0 {
+            // Reconstruir fecha o handle quando o redirecionamento falha.
+            use std::os::windows::io::FromRawHandle;
+            unsafe { drop(std::fs::File::from_raw_handle(handle)) };
+        }
     }
 }

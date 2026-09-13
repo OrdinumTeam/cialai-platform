@@ -14,6 +14,8 @@ import { fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '.
 import { describe, isWorking, runningLabel, sessionAccent, sessionModel } from '../runtime.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
+import { platform } from '../../lib/platform.js';
+import { claudeHookMissingTitle } from '../claude-hook-help.js';
 
 function AttentionIcon({ kind }) {
   if (kind === 'finished') return <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />;
@@ -64,7 +66,7 @@ function fmtAgo(ms) {
 // Agente com perfil conhecido, mas sem numero publicado para ele.
 function missingTitle(activity) {
   const profile = activity.profileName || activity.profile;
-  if (activity.agent === 'Claude Code') return `Perfil ${profile} sem o hook de linha de estado. Rode macos/scripts/install-claude-statusline.sh`;
+  if (activity.agent === 'Claude Code') return claudeHookMissingTitle(profile, platform().os);
   if (activity.agent === 'Codex') return `Sem sessão recente do Codex em ${shortPath(activity.configDir || '')}`;
   return undefined;
 }
