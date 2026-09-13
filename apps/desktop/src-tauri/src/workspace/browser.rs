@@ -29,7 +29,6 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
-use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -38,6 +37,8 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
+
+use crate::platform;
 
 use super::procs;
 
@@ -48,6 +49,7 @@ pub const PORT_DIR: &str = ".dev-browser-panel";
 /// Prazo para o Chromium anunciar a porta do DevTools.
 const START_TIMEOUT: Duration = Duration::from_secs(20);
 /// Entre o SIGTERM e o SIGKILL ao encerrar.
+#[cfg(unix)]
 const STOP_GRACE: Duration = Duration::from_millis(500);
 /// Cache de disco por perfil; o disco do usuario anda apertado.
 const DISK_CACHE_BYTES: u64 = 50 * 1024 * 1024;
@@ -55,9 +57,6 @@ const DISK_CACHE_BYTES: u64 = 50 * 1024 * 1024;
 const STDERR_TAIL: usize = 4 * 1024;
 /// Evento global com o andamento da instalacao automatica do Chromium.
 pub const EVENT_BROWSER_INSTALL: &str = "browser://install";
-/// Pasta do Playwright na home: onde `find_binary` procura e o instalador
-/// grava.
-const PLAYWRIGHT_CACHE: &str = "Library/Caches/ms-playwright";
 /// Teto da instalacao automatica. O download passa de 200 MiB.
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(10 * 60);
 /// Linhas finais do instalador guardadas para explicar uma falha.
@@ -127,6 +126,8 @@ struct Running {
     info: BrowserInfo,
     cwd: String,
     stderr: Arc<Mutex<String>>,
+    #[cfg(target_os = "windows")]
+    job: crate::platform::win_job::JobHandle,
 }
 
 pub struct BrowserManager {
@@ -141,26 +142,6 @@ pub struct BrowserManager {
     install_lock: Mutex<()>,
 }
 
-fn alive(pid: u32) -> bool {
-    if pid == 0 {
-        return false;
-    }
-    // SAFETY: kill com sinal 0 so testa a existencia do processo.
-    unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
-}
-
-fn kill_group(pid: u32, signal: libc::c_int) {
-    if pid == 0 {
-        return;
-    }
-    // SAFETY: o Chromium foi lancado como lider do proprio grupo, entao o
-    // grupo tem o pid dele; o pior caso e o pid ja ter sido reaproveitado
-    // por outro grupo, e por isso quem chama confere a linha de comando.
-    unsafe {
-        libc::kill(-(pid as libc::pid_t), signal);
-    }
-}
-
 /// Confirma que o pid ainda e o Chromium daquele perfil, pela linha de
 /// comando, antes de mandar sinal.
 fn is_chromium_of(pid: u32, profile: &Path) -> bool {
@@ -173,7 +154,10 @@ fn is_chromium_of(pid: u32, profile: &Path) -> bool {
 /// Origens que podem falar com o CDP a partir do webview: a do app e as de
 /// desenvolvimento em loopback.
 pub fn allowed_origin(origin: &str) -> bool {
-    if origin == "tauri://localhost" || origin == "https://tauri.localhost" {
+    if matches!(
+        origin,
+        "tauri://localhost" | "https://tauri.localhost" | "http://tauri.localhost"
+    ) {
         return true;
     }
     if let Some(rest) = origin.strip_prefix("http://") {
@@ -216,6 +200,7 @@ fn newest_revision(dir: &Path, prefix: &str) -> Option<PathBuf> {
 }
 
 /// Navegadores em `/Applications` aceitos quando nao ha nada do Playwright.
+#[cfg(target_os = "macos")]
 const APP_FALLBACKS: [&str; 3] = [
     "/Applications/Google Chrome.app",
     "/Applications/Chromium.app",
@@ -223,8 +208,7 @@ const APP_FALLBACKS: [&str; 3] = [
 ];
 
 /// O executavel de dentro de um bundle `.app`, sem fixar o nome do binario.
-/// O Playwright ja entregou `Chromium.app` e hoje entrega
-/// `Google Chrome for Testing.app`; fixar o nome quebra a cada renomeacao.
+#[cfg(target_os = "macos")]
 fn app_binary(app: &Path) -> Option<PathBuf> {
     let macos = app.join("Contents/MacOS");
     if let Some(stem) = app.file_stem() {
@@ -243,54 +227,137 @@ fn app_binary(app: &Path) -> Option<PathBuf> {
     found.into_iter().next()
 }
 
-/// O primeiro bundle `.app` de uma pasta de build do Playwright.
+#[cfg(target_os = "macos")]
 fn bundled_app(dir: &Path) -> Option<PathBuf> {
     let mut apps: Vec<PathBuf> = fs::read_dir(dir)
         .ok()?
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| path.extension().map(|ext| ext == "app").unwrap_or(false))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "app"))
         .collect();
     apps.sort();
     apps.into_iter().find_map(|app| app_binary(&app))
 }
 
-/// Binario do Chromium: a preferencia do app, o headless shell do
-/// Playwright, o Chromium completo do Playwright, um navegador instalado
-/// em `/Applications`.
+fn prefixed_binary(dir: &Path, prefix: &str, binary: &str) -> Option<PathBuf> {
+    let mut builds: Vec<PathBuf> = fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(prefix))
+        })
+        .collect();
+    builds.sort();
+    builds
+        .into_iter()
+        .map(|build| build.join(binary))
+        .find(|path| path.is_file())
+}
+
+fn find_playwright_binary(cache: &Path, os: &str) -> Option<PathBuf> {
+    if let Some(dir) = newest_revision(cache, "chromium_headless_shell-") {
+        let found = match os {
+            "macos" => prefixed_binary(&dir, "chrome-headless-shell-mac", "chrome-headless-shell"),
+            "linux" => {
+                prefixed_binary(&dir, "chrome-headless-shell-linux", "chrome-headless-shell")
+            }
+            "windows" => prefixed_binary(
+                &dir,
+                "chrome-headless-shell-win",
+                "chrome-headless-shell.exe",
+            ),
+            _ => None,
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    let dir = newest_revision(cache, "chromium-")?;
+    match os {
+        #[cfg(target_os = "macos")]
+        "macos" => {
+            let mut builds: Vec<PathBuf> = fs::read_dir(&dir)
+                .ok()?
+                .flatten()
+                .map(|entry| entry.path())
+                .filter(|path| {
+                    path.file_name()
+                        .and_then(|name| name.to_str())
+                        .is_some_and(|name| name.starts_with("chrome-mac"))
+                })
+                .collect();
+            builds.sort();
+            builds.into_iter().find_map(|build| bundled_app(&build))
+        }
+        "linux" => prefixed_binary(&dir, "chrome-linux", "chrome"),
+        "windows" => prefixed_binary(&dir, "chrome-win", "chrome.exe"),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn installed_binary(_home: &Path) -> Option<PathBuf> {
+    APP_FALLBACKS
+        .iter()
+        .find_map(|app| app_binary(Path::new(app)))
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn installed_binary(_home: &Path) -> Option<PathBuf> {
+    [
+        "google-chrome",
+        "google-chrome-stable",
+        "chromium",
+        "chromium-browser",
+        "microsoft-edge",
+    ]
+    .into_iter()
+    .find_map(|name| which::which(name).ok())
+    .or_else(|| {
+        ["/snap/bin/chromium", "/snap/bin/microsoft-edge"]
+            .into_iter()
+            .map(PathBuf::from)
+            .find(|path| path.is_file())
+    })
+}
+
+#[cfg(target_os = "windows")]
+fn installed_binary(_home: &Path) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    for variable in ["PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"] {
+        if let Some(root) = std::env::var_os(variable).map(PathBuf::from) {
+            candidates.push(root.join("Google/Chrome/Application/chrome.exe"));
+            candidates.push(root.join("Microsoft/Edge/Application/msedge.exe"));
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .or_else(|| {
+            ["chrome.exe", "msedge.exe"]
+                .into_iter()
+                .find_map(|name| which::which(name).ok())
+        })
+}
+
+/// Binario do Chromium: a preferencia do app, o cache do Playwright e as
+/// instalacoes usuais de cada sistema.
 pub fn find_binary(home: &Path, preferred: Option<&str>) -> Option<PathBuf> {
     if let Some(path) = preferred.map(str::trim).filter(|value| !value.is_empty()) {
         let candidate = PathBuf::from(path);
         if candidate.is_file() {
             return Some(candidate);
         }
-        // A preferencia tambem aceita o bundle, nao so o executavel de dentro.
+        #[cfg(target_os = "macos")]
         if let Some(binary) = app_binary(&candidate) {
             return Some(binary);
         }
     }
-    let cache = home.join(PLAYWRIGHT_CACHE);
-    if let Some(dir) = newest_revision(&cache, "chromium_headless_shell-") {
-        for relative in [
-            "chrome-headless-shell-mac-arm64/chrome-headless-shell",
-            "chrome-headless-shell-mac/chrome-headless-shell",
-        ] {
-            let candidate = dir.join(relative);
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-        }
-    }
-    if let Some(dir) = newest_revision(&cache, "chromium-") {
-        for build in ["chrome-mac-arm64", "chrome-mac"] {
-            if let Some(binary) = bundled_app(&dir.join(build)) {
-                return Some(binary);
-            }
-        }
-    }
-    APP_FALLBACKS
-        .iter()
-        .find_map(|app| app_binary(Path::new(app)))
+    find_playwright_binary(&platform::playwright_cache(home), std::env::consts::OS)
+        .or_else(|| installed_binary(home))
 }
 
 /// Traduz uma linha do `playwright install` para o painel: o inicio de cada
@@ -325,9 +392,8 @@ fn install_progress(line: &str, current: &mut String) -> Option<String> {
     Some(format!("Baixando {name}, {percent:.0}% de {}", size.trim()))
 }
 
-/// Roda o instalador num zsh de login, que e como o app aberto pelo Dock
-/// acha o `npx` do Homebrew, e repassa o andamento a `progress`. No teto de
-/// tempo mata o grupo todo, porque o `npx` deixa um node filho.
+/// Roda o instalador no shell do sistema e repassa o andamento a `progress`.
+/// No teto de tempo recolhe tambem os processos filhos.
 fn run_install(
     script: &str,
     home: &Path,
@@ -336,21 +402,48 @@ fn run_install(
     timeout: Duration,
     mut progress: impl FnMut(String),
 ) -> Result<(), String> {
-    let mut child = Command::new("/bin/zsh")
-        .arg("-lc")
-        .arg(script)
-        .arg("zsh")
-        .arg(cache)
+    #[cfg(unix)]
+    let mut command = {
+        let shell = if cfg!(target_os = "macos") {
+            "/bin/zsh".to_string()
+        } else {
+            std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".into())
+        };
+        let mut command = Command::new(&shell);
+        command.arg("-lc").arg(script).arg(&shell).arg(cache);
+        command.env("HOME", home);
+        command
+    };
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let _ = script;
+        let mut command = Command::new("cmd.exe");
+        command.args([
+            "/d",
+            "/s",
+            "/c",
+            "npx.cmd --yes playwright install chromium 2>&1",
+        ]);
+        command.env("PLAYWRIGHT_BROWSERS_PATH", cache);
+        command
+    };
+    command
         .current_dir(cwd)
-        .env("HOME", home)
-        .env("PATH", super::office::search_path())
+        .env("PATH", super::office::search_path(home))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .process_group(0)
+        .stderr(Stdio::null());
+    platform::configure_background_command(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| format!("Não foi possível iniciar a instalação do Chromium: {error}"))?;
     let pid = child.id();
+    #[cfg(target_os = "windows")]
+    let install_job = crate::platform::win_job::assign(pid).map_err(|error| {
+        let _ = child.kill();
+        let _ = child.wait();
+        format!("Não foi possível isolar a instalação do Chromium: {error}")
+    })?;
     let stdout = child
         .stdout
         .take()
@@ -397,7 +490,10 @@ fn run_install(
             break status;
         }
         if started.elapsed() > timeout {
-            kill_group(pid, libc::SIGKILL);
+            #[cfg(unix)]
+            platform::terminate_background_process(pid, true);
+            #[cfg(target_os = "windows")]
+            let _ = install_job.terminate();
             let _ = child.wait();
             let seconds = timeout.as_secs();
             let limit = if seconds >= 60 {
@@ -447,7 +543,9 @@ fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String> {
 
 /// O dono registrado num `owner.json` ainda esta vivo: o app ou o Chromium.
 fn owner_alive(owner: &Owner) -> bool {
-    alive(owner.app_pid) || alive(owner.chromium_pid) || owner.pid.map(alive).unwrap_or(false)
+    platform::process_alive(owner.app_pid)
+        || platform::process_alive(owner.chromium_pid)
+        || owner.pid.map(platform::process_alive).unwrap_or(false)
 }
 
 /// Reivindica `<dir>/port` para este browser, a menos que outro dono vivo
@@ -578,11 +676,13 @@ impl BrowserManager {
             let Some(owner) = read_owner(&owner_path) else {
                 continue;
             };
-            if owner.app_pid == std::process::id() || alive(owner.app_pid) {
+            if owner.app_pid == std::process::id() || platform::process_alive(owner.app_pid) {
                 continue;
             }
-            if alive(owner.chromium_pid) && is_chromium_of(owner.chromium_pid, &profile) {
-                kill_group(owner.chromium_pid, libc::SIGKILL);
+            if platform::process_alive(owner.chromium_pid)
+                && is_chromium_of(owner.chromium_pid, &profile)
+            {
+                platform::terminate_background_process(owner.chromium_pid, true);
             }
             let _ = fs::remove_file(&owner_path);
             if !owner.cwd.is_empty() {
@@ -609,7 +709,7 @@ impl BrowserManager {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dead = guard
             .get(session_id)
-            .map(|running| !alive(running.info.pid))
+            .map(|running| !platform::process_alive(running.info.pid))
             .unwrap_or(false);
         if dead {
             guard.remove(session_id);
@@ -622,7 +722,7 @@ impl BrowserManager {
             .instances
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        guard.retain(|_, running| alive(running.info.pid));
+        guard.retain(|_, running| platform::process_alive(running.info.pid));
         let mut list: Vec<BrowserInfo> =
             guard.values().map(|running| running.info.clone()).collect();
         list.sort_by(|a, b| a.session_id.cmp(&b.session_id));
@@ -640,7 +740,7 @@ impl BrowserManager {
         if let Some(binary) = find_binary(&self.home, preferred) {
             return Ok(binary);
         }
-        let cache = self.home.join(PLAYWRIGHT_CACHE);
+        let cache = platform::playwright_cache(&self.home);
         fs::create_dir_all(&self.root).map_err(|error| {
             format!("Não foi possível preparar a instalação do Chromium: {error}")
         })?;
@@ -729,12 +829,18 @@ impl BrowserManager {
             .env("HOME", &self.home)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .process_group(0);
+            .stderr(Stdio::piped());
+        platform::configure_background_command(&mut command);
         let mut child = command
             .spawn()
             .map_err(|error| format!("Não foi possível iniciar o Chromium: {error}"))?;
         let pid = child.id();
+        #[cfg(target_os = "windows")]
+        let job = crate::platform::win_job::assign(pid).map_err(|error| {
+            let _ = child.kill();
+            let _ = child.wait();
+            format!("Não foi possível isolar o Chromium: {error}")
+        })?;
         let stderr = child
             .stderr
             .take()
@@ -790,7 +896,10 @@ impl BrowserManager {
             }
         };
         let Some((port, ws_url)) = announced else {
-            kill_group(pid, libc::SIGKILL);
+            #[cfg(unix)]
+            platform::terminate_background_process(pid, true);
+            #[cfg(target_os = "windows")]
+            let _ = job.terminate();
             let _ = child.wait();
             let detail = tail.lock().map(|guard| guard.clone()).unwrap_or_default();
             return Err(format!(
@@ -841,6 +950,8 @@ impl BrowserManager {
                     info: info.clone(),
                     cwd: cwd.to_string(),
                     stderr: Arc::clone(&tail),
+                    #[cfg(target_os = "windows")]
+                    job: job.clone(),
                 },
             );
         }
@@ -851,15 +962,16 @@ impl BrowserManager {
         let cwd_owned = cwd.to_string();
         let global_dir = self.global_dir();
         let root = self.root.clone();
+        #[cfg(target_os = "windows")]
+        let wait_job = job;
         thread::Builder::new()
             .name(format!("browser-wait-{session_id}"))
             .spawn(move || {
+                #[cfg(target_os = "windows")]
+                let _keep_job_alive = wait_job;
                 let status = child.wait().ok();
-                let code = status.and_then(|value| value.code());
-                let signal = status.and_then(|value| {
-                    use std::os::unix::process::ExitStatusExt;
-                    value.signal()
-                });
+                let code = status.as_ref().and_then(std::process::ExitStatus::code);
+                let signal = exit_signal(status.as_ref());
                 let stderr_tail = tail.lock().map(|guard| guard.clone()).unwrap_or_default();
                 let _ = fs::remove_file(root.join(&session).join("profile").join("owner.json"));
                 release_port_file(
@@ -895,15 +1007,20 @@ impl BrowserManager {
         };
         if let Some(running) = removed {
             let pid = running.info.pid;
-            if alive(pid) {
-                kill_group(pid, libc::SIGTERM);
+            #[cfg(unix)]
+            if platform::process_alive(pid) {
+                platform::terminate_background_process(pid, false);
                 let deadline = Instant::now() + STOP_GRACE;
-                while alive(pid) && Instant::now() < deadline {
+                while platform::process_alive(pid) && Instant::now() < deadline {
                     thread::sleep(Duration::from_millis(25));
                 }
-                if alive(pid) {
-                    kill_group(pid, libc::SIGKILL);
+                if platform::process_alive(pid) {
+                    platform::terminate_background_process(pid, true);
                 }
+            }
+            #[cfg(target_os = "windows")]
+            if platform::process_alive(pid) {
+                let _ = running.job.terminate();
             }
             release_port_file(
                 &Path::new(&running.cwd).join(PORT_DIR),
@@ -933,6 +1050,17 @@ impl BrowserManager {
             self.stop(&id, false);
         }
     }
+}
+
+#[cfg(unix)]
+fn exit_signal(status: Option<&std::process::ExitStatus>) -> Option<i32> {
+    use std::os::unix::process::ExitStatusExt;
+    status.and_then(ExitStatusExt::signal)
+}
+
+#[cfg(target_os = "windows")]
+fn exit_signal(_status: Option<&std::process::ExitStatus>) -> Option<i32> {
+    None
 }
 
 /// `DevToolsActivePort` no perfil: a porta numa linha e o caminho do
@@ -973,6 +1101,7 @@ mod tests {
     #[test]
     fn origins_are_restricted_to_the_app_and_loopback() {
         assert!(allowed_origin("tauri://localhost"));
+        assert!(allowed_origin("http://tauri.localhost"));
         assert!(allowed_origin("http://127.0.0.1:1420"));
         assert!(allowed_origin("http://localhost:1420"));
         assert!(!allowed_origin("https://evil.example"));
@@ -980,6 +1109,30 @@ mod tests {
         assert!(!allowed_origin(""));
     }
 
+    #[test]
+    fn finds_playwright_layouts_for_linux_and_windows() {
+        let root = sandbox("layouts");
+        let linux = root.join(
+            "linux/chromium_headless_shell-1200/chrome-headless-shell-linux-arm64/chrome-headless-shell",
+        );
+        let windows = root.join("windows/chromium-1201/chrome-win64/chrome.exe");
+        fs::create_dir_all(linux.parent().unwrap()).unwrap();
+        fs::create_dir_all(windows.parent().unwrap()).unwrap();
+        fs::write(&linux, b"").unwrap();
+        fs::write(&windows, b"").unwrap();
+
+        assert_eq!(
+            find_playwright_binary(&root.join("linux"), "linux"),
+            Some(linux)
+        );
+        assert_eq!(
+            find_playwright_binary(&root.join("windows"), "windows"),
+            Some(windows)
+        );
+        fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
     fn fake_app(parent: &Path, bundle: &str) -> PathBuf {
         let app = parent.join(bundle);
         let macos = app.join("Contents/MacOS");
@@ -990,6 +1143,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn finds_the_newest_playwright_binary() {
         let home = sandbox("binario");
         let cache = home.join("Library/Caches/ms-playwright");
@@ -1037,6 +1191,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn accepts_the_renamed_playwright_bundle() {
         // O Playwright entrega `Google Chrome for Testing.app` desde a v1.5x.
         // Fixar `Chromium.app` deixava o painel sem binario mesmo com o
@@ -1050,6 +1205,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
     fn reads_the_executable_inside_a_bundle() {
         let dir = sandbox("bundle");
         let binary = fake_app(&dir, "Chromium.app");
@@ -1203,9 +1359,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn install_reports_progress_and_leaves_the_binary() {
         let home = sandbox("instalacao");
-        let cache = home.join(PLAYWRIGHT_CACHE);
+        let cache = platform::playwright_cache(&home);
         // Instalador de mentira: fala como o Playwright e deixa o headless
         // shell onde `find_binary` procura.
         let script = "exec 2>&1; \
@@ -1236,9 +1393,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn install_failures_say_what_to_do() {
         let home = sandbox("instalacao-falha");
-        let cache = home.join(PLAYWRIGHT_CACHE);
+        let cache = platform::playwright_cache(&home);
         let failed = run_install(
             "exec 2>&1; echo 'Error: getaddrinfo ENOTFOUND cdn.playwright.dev'; exit 1",
             &home,
@@ -1290,10 +1448,11 @@ mod tests {
     /// Roda a mao, de preferencia com o PATH curto que o app herda do Dock:
     /// `PATH=/usr/bin:/bin cargo test --lib installs_the_real_playwright_chromium -- --ignored --nocapture`.
     #[test]
+    #[cfg(unix)]
     #[ignore = "baixa o Chromium de verdade"]
     fn installs_the_real_playwright_chromium() {
         let home = sandbox("instalacao-real");
-        let cache = home.join(PLAYWRIGHT_CACHE);
+        let cache = platform::playwright_cache(&home);
         let mut seen: Vec<String> = Vec::new();
         run_install(
             INSTALL_SCRIPT,
@@ -1318,8 +1477,8 @@ mod tests {
 
     #[test]
     fn dead_pids_are_not_alive() {
-        assert!(alive(std::process::id()));
-        assert!(!alive(0));
-        assert!(!alive(999_999));
+        assert!(platform::process_alive(std::process::id()));
+        assert!(!platform::process_alive(0));
+        assert!(!platform::process_alive(999_999));
     }
 }

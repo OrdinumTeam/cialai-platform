@@ -17,6 +17,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
+use crate::platform;
+
 use super::files::{FsError, FsResult};
 use super::preview::PreviewRoots;
 
@@ -52,8 +54,8 @@ pub struct ConvertResult {
     pub size: u64,
 }
 
-/// Onde o LibreOffice costuma estar: o link do Homebrew, o cask, o app na
-/// pasta de aplicativos do sistema ou do usuario.
+/// Onde o LibreOffice costuma estar em cada sistema.
+#[cfg(target_os = "macos")]
 pub fn find_soffice(home: &Path) -> Option<PathBuf> {
     let candidates = [
         PathBuf::from("/opt/homebrew/bin/soffice"),
@@ -62,6 +64,51 @@ pub fn find_soffice(home: &Path) -> Option<PathBuf> {
         home.join("Applications/LibreOffice.app/Contents/MacOS/soffice"),
     ];
     candidates.into_iter().find(|path| path.is_file())
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+pub fn find_soffice(_home: &Path) -> Option<PathBuf> {
+    if let Some(path) = ["soffice", "libreoffice"]
+        .into_iter()
+        .find_map(|name| which::which(name).ok())
+    {
+        return Some(path);
+    }
+    for candidate in [
+        "/usr/lib/libreoffice/program/soffice",
+        "/snap/bin/libreoffice",
+    ] {
+        let path = PathBuf::from(candidate);
+        if path.is_file() {
+            return Some(path);
+        }
+    }
+    fs::read_dir("/opt")
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("libreoffice"))
+        })
+        .map(|path| path.join("program/soffice"))
+        .find(|path| path.is_file())
+}
+
+#[cfg(target_os = "windows")]
+pub fn find_soffice(_home: &Path) -> Option<PathBuf> {
+    let mut candidates = Vec::new();
+    for variable in ["PROGRAMFILES", "PROGRAMFILES(X86)"] {
+        if let Some(root) = std::env::var_os(variable).map(PathBuf::from) {
+            candidates.push(root.join("LibreOffice/program/soffice.exe"));
+        }
+    }
+    candidates
+        .into_iter()
+        .find(|path| path.is_file())
+        .or_else(|| which::which("soffice.exe").ok())
+        .or_else(|| which::which("soffice").ok())
 }
 
 pub fn supported(path: &Path) -> bool {
@@ -97,13 +144,27 @@ fn io_error(error: std::io::Error, what: &str) -> FsError {
     }
 }
 
+fn missing_soffice_message() -> &'static str {
+    #[cfg(target_os = "macos")]
+    return "LibreOffice não encontrado. Instale pelo site oficial ou pelo Homebrew";
+    #[cfg(target_os = "windows")]
+    return "LibreOffice não encontrado. Instale pelo site oficial";
+    #[cfg(all(unix, not(target_os = "macos")))]
+    return "LibreOffice não encontrado. Instale pelo gerenciador do sistema";
+}
+
 /// `file://` com espacos e caracteres fora do ASCII codificados, para o
 /// `-env:UserInstallation` do LibreOffice.
 fn file_url(path: &Path) -> String {
     let mut out = String::from("file://");
-    for byte in path.to_string_lossy().as_bytes() {
+    let portable = platform::to_portable(path);
+    if !portable.starts_with('/') {
+        out.push('/');
+    }
+    for byte in portable.as_bytes() {
         let value = *byte;
-        if value.is_ascii_alphanumeric() || matches!(value, b'/' | b'-' | b'_' | b'.' | b'~') {
+        if value.is_ascii_alphanumeric() || matches!(value, b'/' | b':' | b'-' | b'_' | b'.' | b'~')
+        {
             out.push(value as char);
         } else {
             out.push_str(&format!("%{value:02X}"));
@@ -112,11 +173,26 @@ fn file_url(path: &Path) -> String {
     out
 }
 
-/// PATH dos processos que o app lanca: Homebrew e `/usr/local` na frente,
-/// porque aberto pelo Dock o app herda um PATH minimo.
-pub(crate) fn search_path() -> String {
-    let inherited = std::env::var("PATH").unwrap_or_default();
-    format!("/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:{inherited}")
+/// PATH dos processos auxiliares, montado com o separador nativo.
+pub(crate) fn search_path(_home: &Path) -> std::ffi::OsString {
+    let mut paths = Vec::new();
+    #[cfg(target_os = "macos")]
+    paths.extend(["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin"].map(PathBuf::from));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    paths.extend([
+        _home.join(".local/bin"),
+        PathBuf::from("/usr/local/bin"),
+        PathBuf::from("/home/linuxbrew/.linuxbrew/bin"),
+        PathBuf::from("/snap/bin"),
+        PathBuf::from("/usr/bin"),
+        PathBuf::from("/bin"),
+    ]);
+    #[cfg(target_os = "windows")]
+    let _ = _home;
+    if let Some(inherited) = std::env::var_os("PATH") {
+        paths.extend(std::env::split_paths(&inherited));
+    }
+    std::env::join_paths(paths).unwrap_or_else(|_| std::env::var_os("PATH").unwrap_or_default())
 }
 
 /// Toca o marcador de uso do item, para o corte do cache respeitar quem foi
@@ -238,8 +314,7 @@ pub fn convert(
     }
     let soffice = find_soffice(home).ok_or_else(|| FsError {
         code: "missing_tool".to_string(),
-        message: "LibreOffice não encontrado. Instale com brew install --cask libreoffice"
-            .to_string(),
+        message: missing_soffice_message().to_string(),
     })?;
 
     let _guard = queue
@@ -261,7 +336,8 @@ pub fn convert(
     let profile = cache_dir.join("soffice-profile");
     let _ = fs::create_dir_all(&profile);
     let started = Instant::now();
-    let spawned = Command::new(&soffice)
+    let mut command = Command::new(&soffice);
+    command
         .arg("--headless")
         .arg("--norestore")
         .arg("--nologo")
@@ -272,12 +348,14 @@ pub fn convert(
         .arg("--outdir")
         .arg(&out_dir)
         .arg(&canonical)
-        .env("HOME", home)
-        .env("PATH", search_path())
+        .env("PATH", search_path(home))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+        .stderr(Stdio::null());
+    #[cfg(unix)]
+    command.env("HOME", home);
+    platform::configure_background_command(&mut command);
+    let spawned = command.spawn();
     let mut child = match spawned {
         Ok(child) => child,
         Err(error) => {
@@ -401,6 +479,10 @@ mod tests {
             "file:///tmp/a%20b/%C3%A7"
         );
         assert_eq!(file_url(Path::new("/tmp/perfil-1")), "file:///tmp/perfil-1");
+        assert_eq!(
+            file_url(Path::new("C:/Users/Ana Silva/perfil")),
+            "file:///C:/Users/Ana%20Silva/perfil"
+        );
     }
 
     #[test]

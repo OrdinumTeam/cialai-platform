@@ -51,7 +51,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.6 Observador de arquivos | Concluída localmente no macOS; Linux e Windows pendentes | `watch/` mantém contagem de referências e coalescimento comum, usa kqueue no macOS e `notify` 8 com observação não recursiva no Linux e Windows. Escrita, troca atômica e remoção passaram no macOS; os outros backends aguardam a matriz da fase |
 | 5.7 Arquivos portáveis | Concluída localmente no macOS; lixeira Linux e Windows pendente | Caminhos devolvidos usam barras normais, entradas preservam as duas formas aceitas no Windows, a sujeira é filtrada por sistema, links são recriados somente no Unix e `trash` 5 cobre Linux e Windows sem apagar quando a lixeira recusa |
 | 5.8 Prévia portável | Concluída localmente no macOS; WebView2 pendente | O handler aceita `preview://` e `http://preview.localhost`, `native.js` escolhe a forma do Windows e `dunce::canonicalize` protege raiz e alvo. As duas rotas passaram em teste Rust; a forma Windows ainda não foi aberta no WebView2 |
-| 5.9 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.9 Browser e Office | Concluída localmente no macOS; execução Linux e Windows pendente | Chromium e LibreOffice têm descoberta por sistema, Playwright usa cache e shell nativos, processos auxiliares não abrem janela no Windows e o browser usa Job Object. A origem `http://tauri.localhost` e URLs `file:///C:/` estão cobertas |
+| 5.10 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -351,6 +352,14 @@ Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --man
 `PreviewRoots` e o alvo servido usam `dunce::canonicalize`. O handler extrai o token tanto de `preview://<token>/<caminho>` quanto de `http://preview.localhost/<token>/<caminho>`, rejeita outras origens e conserva a verificação de contenção depois da canonização. `native.js::previewAddress` escolhe a segunda forma somente no Windows e mantém o protocolo próprio no macOS e Linux.
 
 Com 9,9 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::preview` passou 2/2. O teste serve HTML e CSS pelas duas formas, recusa caminho externo e token desconhecido e confere a decodificação percentual. `node packages/ui/scripts/check-platform.mjs` com Node 22.23.2 e npm 10.9.8 passou 4/4, incluindo as três URLs por sistema. `cargo fmt`, `git diff --check` e o código da tarefa no Clippy passaram; o Clippy completo parou somente nos seis erros conhecidos de `bridge/`. A URL Windows ainda não foi exercitada em WebView2 real.
+
+### 12/09/2026, browser e Office portáveis da tarefa 5.9
+
+`platform` passou a concentrar o cache do Playwright, a consulta de processo vivo, a configuração de processo auxiliar e o encerramento de reserva. O browser procura os layouts headless e completos do Playwright para macOS, Linux e Windows, depois Chrome, Chromium ou Edge instalados. O instalador usa zsh no macOS, o shell do usuário no Linux e `cmd.exe` com `npx.cmd` no Windows. No Windows, Chromium e instalador recebem `CREATE_NO_WINDOW` e Job Object. A origem local `http://tauri.localhost` entrou na lista estrita.
+
+O LibreOffice agora é descoberto em Homebrew e aplicativos no macOS, PATH, `/usr`, `/opt` e Snap no Linux, e Program Files ou PATH no Windows. A URL do perfil emite `file:///C:/...` corretamente, o PATH usa o separador nativo, `HOME` só é definido no Unix e o processo recebe `CREATE_NO_WINDOW` no Windows. As mensagens de instalação não recomendam Homebrew fora do macOS.
+
+Com 11 GiB livres e `CARGO_TARGET_DIR=~/.cache/cialai-target`, `cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::browser` passou 13 casos e manteve apenas o download real ignorado. O filtro `workspace::office` passou 5 casos e manteve só a conversão real ignorada. Os testes incluem layouts artificiais Linux e Windows, URLs do Windows, instalação simulada, prazo e origens. `cargo fmt --check` e `git diff --check` passaram. O Clippy completo falhou apenas nos seis erros conhecidos de `bridge/`, sem aviso novo. Browser, instalador e LibreOffice ainda não foram executados no Linux ou Windows.
 
 ## Arquivos para retomar
 
