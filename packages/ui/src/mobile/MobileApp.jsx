@@ -10,6 +10,7 @@ import { buildMacTheme } from '../desktop/theme.macos.js';
 import * as remote from '../lib/remote.js';
 import { VIEW_COMPONENTS } from '../views/registry.js';
 import MobileHeader from './MobileHeader.jsx';
+import { translate } from './i18n.js';
 import { useKeyboardBox } from './keyboard-viewport.js';
 
 function ErrorNotice() {
@@ -28,6 +29,6 @@ export default function MobileApp() {
   const connection = useSyncExternalStore(remote.subscribeState, remote.state);
   const keyboard = useKeyboardBox(true);
   useEffect(() => { installShellBridge({ navigate() {}, setSidebarHidden() {}, openPalette() {} }, { sidebarHidden: true }); }, []);
-  const desktopName = connection.desktop?.name || window.__CIALAI_SHELL__?.desktopName || 'Computador';
+  const desktopName = connection.desktop?.name || window.__CIALAI_SHELL__?.desktopName || translate('desktop.fallback');
   return <AppearanceContext.Provider value={appearance}><ThemeProvider theme={theme}><CssBaseline enableColorScheme /><ToastProvider><ErrorNotice /><div className={`ios-shell ios-shell--terminal${keyboard ? ' ios-shell--keyboard' : ''}`} style={keyboard ? { '--ios-keyboard-top': `${keyboard.top}px`, '--ios-keyboard-height': `${keyboard.height}px` } : undefined}><MobileHeader desktopName={desktopName} connection={connection.status} /><main className="ios-content" id="content"><ContentArea ViewComponent={VIEW_COMPONENTS.terminais} viewId="terminais" /></main></div></ToastProvider></ThemeProvider></AppearanceContext.Provider>;
 }

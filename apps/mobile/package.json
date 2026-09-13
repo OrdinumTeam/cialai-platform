@@ -13,6 +13,7 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@cialai/i18n": "0.1.0",
     "@react-native-community/netinfo": "12.0.1",
     "cialai-tunnel": "file:modules/cialai-tunnel",
     "expo": "~57.0.7",

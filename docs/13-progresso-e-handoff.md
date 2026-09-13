@@ -23,8 +23,9 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 0.3 CI mínima | Implementada, execução remota pendente | `.github/workflows/ci.yml` para macOS, Linux e Windows. `npm test` passou localmente em macOS arm64. Sem remoto configurado ou push. A consulta GitHub não conseguiu resolver `OrdinumTeam/cialai-platform`, por inexistência ou falta de acesso |
 | 0.4 Spike 1 | Preparação parcial | API Go experimental, interfaces Java e Objective-C geradas e script de build. Sem XCFramework, AAR ou execução em aparelhos |
 | 0.6 Spike 3 | Aprovado localmente | Headscale 0.29.3 e tsnet 1.102.0; oito verificações finais passaram em 35,830 s, incluindo persistência do módulo móvel no desktop. Workflow remoto preparado |
-| 0.5, 0.7 a 0.11 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja, assinatura e soak não executados |
-| 0.12 Decisões dos spikes | Atualizado parcialmente | Decisões 022 a 026 registram correções, aceite local do spike 3 e estado dos demais |
+| 0.5, 0.7 a 0.10 | Pendentes | Sem Xcode em `/Applications`, nenhum Android conectado e SDK não encontrado no caminho padrão. Ensaios móveis, loja e assinatura não executados |
+| 0.11 Robustez do proxy | Ensaio local de 30 minutos aprovado; aceite de 24 horas pendente | Oito sockets enviaram 180 rajadas de 50 MiB em quadros de 1 MiB: 9.000 quadros, 9.437.184.000 bytes ecoados e zero desconexões do proxy. RSS foi de 49.299.456 para 62.767.104 bytes, pico de 63.569.920; heap foi de 2.459.656 para 1.673.648 bytes, pico de 2.720.568. Executar as 24 horas antes do aceite do spike |
+| 0.12 Decisões dos spikes | Atualizada nesta raia | Decisões 032 a 034 consolidam o build móvel no Codemagic para os spikes 1, 2, 4, 5 e 6, registram o soak curto sem aprovar 24 horas e enumeram as dependências externas ainda sem evidência |
 | 1.1 Scaffold desktop | Concluído localmente | Tauri real, configurações macOS, Windows e Linux, capabilities, duas entradas Vite e ícones provisórios. Build macOS sem bundle aprovado. Configurações Windows e Linux aguardam a matriz remota |
 | 1.2 Extração Rust | Concluída localmente | Núcleo macOS extraído sem stack, reuniões e VPN. Clippy sem avisos, 118 testes ativos passaram, dois ensaios externos permaneceram ignorados e o binário Tauri compilou e iniciou |
 | 1.3 Extração da interface | Concluída localmente | Estúdio de Terminais e cascas desktop/celular compilam; `check-terminal-sync` 17/17, demais checks UI 32/32, raiz e Tauri verdes. Checks no Chromium visível terminaram em `PASS` nas duas entradas |
@@ -76,7 +77,11 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
 | 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
 | 5.19 Guia por plataforma | Concluída localmente | README traz preparação específica de macOS, Ubuntu e Windows; o guia 14 reúne janela, menu, fontes, terminal, processos, atalhos, caminhos, integrações, pacotes e o estado real de verificação |
-| 3.9, 3.10, 4.7, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18 e 6.1 a 7.6 | Não iniciadas na main | Demais backends, release, matriz remota e testes físicos continuam pendentes |
+| 6.1 Dev Browser no Linux | Preparado; imagem Ubuntu validada; testes Linux e Windows pendentes | A imagem Ubuntu 22.04 com Rust 1.98.1, Node 22.23.2 e dependências Tauri foi construída. O runner limita Docker a 6 GiB, usa Cargo com dois jobs, testa descoberta e baixa o Chromium real pelo Playwright. A compilação no contêiner não começou porque o disco caiu abaixo de 5 GiB; Windows permanece pendente |
+| 6.2 Prévias Office | Validada no macOS; Linux e Windows pendentes | O LibreOffice real converteu a fixture RTF em PDF válido de 17.799 bytes no macOS. O runner Ubuntu 22.04 está preparado com contêiner efêmero e limite de 6 GiB, mas parou no preflight de disco antes de executar |
+| 6.4 `mobile_files` no Windows | Implementada; compilação e execução Windows pendentes | Usa `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT`, recusa reparse points e hard links e confere o caminho final de cada handle dentro da raiz. O check estrutural passou; `cargo-xwin` não está instalado e o disco está abaixo do piso para instalar ou compilar |
+| 6.6 Preparação de tradução | Página web do celular migrada; app nativo pendente | `@cialai/i18n` fornece os dicionários em português e inglês com troca observável e fallback. Na integração, o cabeçalho atual da página do celular passou a usar as chaves de conexão e o nome reserva do computador, preservando os textos em português; o seletor de idioma do cabeçalho antigo não foi portado e o idioma segue o navegador ou o valor salvo. O gate cobre `packages/ui/src/mobile`; as telas React Native de `apps/mobile` ainda têm textos literais e ficam fora do gate até a migração |
+| 3.9, 3.10, 4.7, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.1 a 7.6 | Não iniciadas ou pendentes na main | Janela, CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos e lançamento continuam pendentes; a integração da frente C atualiza a Fase 7 |
 
 ## Ambiente observado
 
@@ -684,6 +689,56 @@ git diff --check
 ```
 
 Com isso, a parte Rust da branch `fase-5/rust-multiplataforma`, formada pelas tarefas 5.10, parte Rust da 5.15, matriz da 5.16 e 5.19, ficou pronta para merge.
+
+### 13/09/2026, soak local do proxy da tarefa 0.11
+
+Criada em `packages/tunnel-core/soak` uma suíte Go opt-in com duração e intervalo configuráveis. Ela sobe o proxy real sobre loopback, mantém oito WebSockets, usa quadros binários de 1 MiB em rajadas agregadas de 50 MiB, confere o eco byte a byte e registra RSS, heap, goroutines, conexões da borda e desconexões observadas pelo cliente do proxy. `go test -mod=readonly ./soak` e `go vet -tags=soak ./soak` passaram. Um smoke posterior de 2 segundos também passou com a versão final da contagem por socket.
+
+Execução real concluída com código 0:
+
+```sh
+CIALAI_SOAK_DURATION=30m CIALAI_SOAK_BURST_INTERVAL=10s \
+CIALAI_SOAK_REPORT="$PWD/build/soak/proxy-soak-30m.json" \
+go test -tags=soak -count=1 -run '^TestProxySoak$' -timeout=35m -v ./soak
+```
+
+O teste durou 1.800,064 segundos. Depois de uma rajada de aquecimento, foram 180 rajadas medidas, 9.000 quadros e 9.437.184.000 bytes enviados e ecoados. Houve oito conexões aceitas, zero desconexões atribuídas ao proxy e zero erros inesperados no backend. O RSS começou em 49.299.456 bytes, terminou em 62.767.104, atingiu 63.569.920 e cresceu 13.467.648. O heap começou em 2.459.656 bytes, terminou em 1.673.648, atingiu 2.720.568 e não apresentou crescimento final. O relatório completo local está no caminho ignorado `packages/tunnel-core/build/soak/proxy-soak-30m.json`. O soak de 24 horas não foi executado e continua obrigatório para aceitar o spike 8.
+
+### 13/09/2026, runner Linux do Dev Browser da tarefa 6.1
+
+Adicionados `tools/docker/linux-desktop.Dockerfile` e `tools/test-linux-browser.sh`. A imagem fixa Ubuntu 22.04, Rust 1.98.1 e Node 22.23.2, instala as bibliotecas de compilação do Tauri e aceita `amd64` e `arm64`. O runner usa `docker build --memory 6g`, `docker run --rm --memory 6g`, `CARGO_TARGET_DIR=/root/.cache/cialai-target-d` e Cargo com `-j 2`. Ele executa os testes de `workspace::browser`, incluindo a descoberta Linux simulada, e depois o teste ignorado que baixa e descobre um Chromium real pelo Playwright. O teste simulado do instalador também passou a criar o layout correto no Linux.
+
+A imagem foi construída de verdade em Docker Desktop arm64. A construção reduziu o espaço livre do host de 8,6 GiB para 1,4 GiB; antes de iniciar Cargo, a imagem e o cache criados nesta raia foram removidos e o reclaim do Docker elevou o espaço para 5,2 GiB. O espaço voltou a 4,2 GiB por atividade externa. O preflight incorporado ao runner então terminou com código 2 e `Espaço livre abaixo de 5 GiB`, sem iniciar uma compilação grande. Assim, nenhum teste Rust ou download real do Playwright rodou no Linux e nada foi validado no Windows.
+
+Antes de qualquer comando Cargo desta raia, `npm run sidecar --workspace @cialai/desktop` foi executado com Node 22.23.2 e npm 10.9.8. O sidecar arm64 do macOS foi criado com 19,9 MiB e SHA-256 `3ed3418600f789d9749c567d840dc21f5aa66d3de50f5c393e1b57206714c3f1`. `cargo fmt`, sem compilação, e `git diff --check` passaram. O código está preparado; o comportamento Linux e Windows não está verificado.
+
+### 13/09/2026, conversão Office da tarefa 6.2
+
+Adicionados uma fixture RTF mínima e `tools/test-office-conversion.sh`. No macOS, o script descobre `soffice`, converte em diretório temporário e exige conteúdo não vazio com assinatura `%PDF`. A execução real com `/opt/homebrew/bin/soffice` terminou com código 0 e produziu PDF de 17.799 bytes; o temporário foi removido pelo próprio runner.
+
+No Linux, o mesmo script prepara um contêiner efêmero Ubuntu 22.04, instala `libreoffice-writer`, converte a fixture e valida a assinatura. O comando usa `docker run --rm --memory 6g`. A tentativa terminou no preflight com código 2 e `Espaço livre abaixo de 5 GiB`, portanto nenhum contêiner foi criado e a conversão Linux não foi executada. LibreOffice no Windows não foi executado. O runner e `sh -n` estão aprovados; só o comportamento macOS foi verificado.
+
+### 13/09/2026, `mobile_files` Windows da tarefa 6.4
+
+O código comum de `workspace/mobile_files.rs` ficou restrito a Unix e o novo backend `workspace/mobile_files/windows.rs` implementa as mesmas operações de lista e leitura. Cada raiz, cwd e alvo é aberto por `CreateFileW` com `FILE_FLAG_OPEN_REPARSE_POINT` e `FILE_FLAG_BACKUP_SEMANTICS`; atributos vindos do handle recusam reparse points, `GetFinalPathNameByHandleW` prova a contenção depois da resolução e `GetFileInformationByHandle` recusa arquivos com mais de um hard link. Permanecem os limites de 200 entradas, 128 KiB, texto válido e nomes ou conteúdos sensíveis.
+
+`node tools/check/mobile-files-windows.mjs` passou e confirmou o feature do `windows-sys`, as APIs, flags, contenção final, proteção de hard links e ausência do stub indisponível. `cargo fmt` e `git diff --check` passaram. `cargo-xwin` não foi encontrado no PATH; como o host tinha somente 4,2 GiB livres, sua instalação e a compilação Windows não foram iniciadas. O backend está implementado, mas não foi compilado nem executado no Windows.
+
+### 13/09/2026, preparação de tradução da tarefa 6.6
+
+Criado o workspace puro `@cialai/i18n`, com normalização de locale, português do Brasil como fallback seguro, inglês como segundo idioma, interpolação fechada quando falta chave ou valor e assinatura observável para React. Os dois dicionários têm as mesmas 20 chaves. `packages/ui/src/mobile` passou a resolver por chave todos os textos visíveis de cabeçalho, conexão, aparência, navegação, estado somente leitura e abertura externa. O botão de idioma no cabeçalho alterna entre português e inglês, persiste em `localStorage` e atualiza o atributo `lang` do documento.
+
+`apps/mobile/src/i18n.ts` expõe a mesma instância, locale detectado, troca, assinatura e tradução ao aplicativo nativo. Esta branch nasceu de `fase-5/rust-multiplataforma`, onde `apps/mobile` continha somente o manifesto; as telas React Native mantidas pela frente A não estão disponíveis para edição sem trazer trabalho de outra raia. Por isso o adaptador está pronto, mas a substituição dos textos dessas telas deve acontecer na integração da frente A. A migração do desktop continua explicitamente para depois dessa integração.
+
+`packages/ui/scripts/check-mobile-i18n.mjs` percorre somente `packages/ui/src/mobile` e `apps/mobile`, exige paridade dos dicionários, valida chaves literais e rejeita texto JSX, propriedades acessíveis e mensagens nativas literais. Assim, as telas React Native ainda ausentes falharão no gate quando entrarem até adotarem as chaves. `npm run test:i18n` passou 3 casos, o gate passou com 20 chaves em dois idiomas e `npm run test:ui` passou os 39 casos, os 17 casos de sincronização e os checks estáticos existentes. `npm audit` informou zero vulnerabilidades.
+
+### 13/09/2026, decisões da tarefa 0.12 e passagem da Parte B
+
+As decisões 032 a 034 consolidam o Codemagic como ambiente de build, assinatura e distribuição para absorver os spikes móveis 1, 2, 4, 5 e 6 sem confundir pipeline verde com teste físico. Também preservam o soak de 24 horas como critério de aceite apesar do resultado verde de 30 minutos e listam as contas, credenciais, aparelhos, redes e runners ainda externos.
+
+Esta raia não alterou `main`, não fez push e não editou outros worktrees. A integração deve preservar como pendentes o Linux do Dev Browser e Office, toda validação Windows, os aparelhos, as lojas e o soak de 24 horas. Como as telas React Native da frente A não existiam na base Rust, a frente A deve aplicar nelas as chaves de `@cialai/i18n` ao integrar; o gate novo acusa os textos restantes. A tradução do desktop fica para depois da integração da frente A.
+
+Parte B pronta para merge
 
 ## Arquivos para retomar
 

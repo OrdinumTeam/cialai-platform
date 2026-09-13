@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isMobileShell, requireSensitive } from '../lib/shell.js';
 import { openExternal } from '../lib/downloads.js';
+import { translate } from './i18n.js';
 
 // Covers ordinary anchors as well as the shared download helpers.
 export function installMobileLinks() {
@@ -11,7 +12,7 @@ export function installMobileLinks() {
     if (!isMobileShell() || url.origin === location.origin) return;
     event.preventDefault();
     try {
-      await requireSensitive('action', 'Abrir link fora do Cialai');
+      await requireSensitive('action', translate('action.openExternal'));
       await openExternal(url.href);
     } catch (error) {
       window.dispatchEvent(new CustomEvent('cialai:mobile-error', { detail: error.message }));

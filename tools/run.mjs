@@ -10,6 +10,7 @@ const jobs = {
       ['node', 'tools/check/desktop-scaffold.mjs'],
       ['node', 'tools/check/desktop-icon.mjs'],
       ['node', 'tools/check/desktop-extraction.mjs'],
+      ['node', 'tools/check/mobile-files-windows.mjs'],
       ['node', 'tools/check/onboarding.mjs'],
       ['node', 'tools/check/selftest.mjs'],
       ['node', 'tools/check/release-sidecar.mjs'],
