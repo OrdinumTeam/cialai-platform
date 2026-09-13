@@ -55,7 +55,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.9 Browser e Office | Concluída localmente no macOS; execução Linux e Windows pendente | Chromium e LibreOffice têm descoberta por sistema, Playwright usa cache e shell nativos, processos auxiliares não abrem janela no Windows e o browser usa Job Object. A origem `http://tauri.localhost` e URLs `file:///C:/` estão cobertas |
 | 5.10 a 5.19 | Não iniciadas nesta base | Demais backends e matriz remota continuam dependentes da integração das outras raias |
 | 6.1 Dev Browser no Linux | Preparado; imagem Ubuntu validada; testes Linux e Windows pendentes | A imagem Ubuntu 22.04 com Rust 1.98.1, Node 22.23.2 e dependências Tauri foi construída. O runner limita Docker a 6 GiB, usa Cargo com dois jobs, testa descoberta e baixa o Chromium real pelo Playwright. A compilação no contêiner não começou porque o disco caiu abaixo de 5 GiB; Windows permanece pendente |
-| 6.2 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
+| 6.2 Prévias Office | Validada no macOS; Linux e Windows pendentes | O LibreOffice real converteu a fixture RTF em PDF válido de 17.799 bytes no macOS. O runner Ubuntu 22.04 está preparado com contêiner efêmero e limite de 6 GiB, mas parou no preflight de disco antes de executar |
+| 6.3 a 7.6 | Não iniciadas nesta base | Demais validações da Fase 6, lançamento e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -385,6 +386,12 @@ Adicionados `tools/docker/linux-desktop.Dockerfile` e `tools/test-linux-browser.
 A imagem foi construída de verdade em Docker Desktop arm64. A construção reduziu o espaço livre do host de 8,6 GiB para 1,4 GiB; antes de iniciar Cargo, a imagem e o cache criados nesta raia foram removidos e o reclaim do Docker elevou o espaço para 5,2 GiB. O espaço voltou a 4,2 GiB por atividade externa. O preflight incorporado ao runner então terminou com código 2 e `Espaço livre abaixo de 5 GiB`, sem iniciar uma compilação grande. Assim, nenhum teste Rust ou download real do Playwright rodou no Linux e nada foi validado no Windows.
 
 Antes de qualquer comando Cargo desta raia, `npm run sidecar --workspace @cialai/desktop` foi executado com Node 22.23.2 e npm 10.9.8. O sidecar arm64 do macOS foi criado com 19,9 MiB e SHA-256 `3ed3418600f789d9749c567d840dc21f5aa66d3de50f5c393e1b57206714c3f1`. `cargo fmt`, sem compilação, e `git diff --check` passaram. O código está preparado; o comportamento Linux e Windows não está verificado.
+
+### 13/09/2026, conversão Office da tarefa 6.2
+
+Adicionados uma fixture RTF mínima e `tools/test-office-conversion.sh`. No macOS, o script descobre `soffice`, converte em diretório temporário e exige conteúdo não vazio com assinatura `%PDF`. A execução real com `/opt/homebrew/bin/soffice` terminou com código 0 e produziu PDF de 17.799 bytes; o temporário foi removido pelo próprio runner.
+
+No Linux, o mesmo script prepara um contêiner efêmero Ubuntu 22.04, instala `libreoffice-writer`, converte a fixture e valida a assinatura. O comando usa `docker run --rm --memory 6g`. A tentativa terminou no preflight com código 2 e `Espaço livre abaixo de 5 GiB`, portanto nenhum contêiner foi criado e a conversão Linux não foi executada. LibreOffice no Windows não foi executado. O runner e `sh -n` estão aprovados; só o comportamento macOS foi verificado.
 
 ## Arquivos para retomar
 
