@@ -496,6 +496,7 @@ func (runtime *runtimeState) deviceRevoke(ctx context.Context, raw json.RawMessa
 	if runtime.edge != nil {
 		runtime.edge.RevokeConnections(args.DeviceID)
 	}
+	runtime.emit("devices.changed", map[string]any{"deviceId": args.DeviceID, "revoked": true})
 	if args.Network {
 		admin, err := runtime.requireAdmin()
 		if err != nil {
@@ -514,7 +515,6 @@ func (runtime *runtimeState) deviceRevoke(ctx context.Context, raw json.RawMessa
 			return nil, deleteErr
 		}
 	}
-	runtime.emit("devices.changed", map[string]any{"deviceId": args.DeviceID})
 	return map[string]any{}, nil
 }
 
@@ -532,7 +532,7 @@ func (runtime *runtimeState) deviceRename(raw json.RawMessage) (any, error) {
 	if err := runtime.devices.Rename(args.DeviceID, args.Name); err != nil {
 		return nil, err
 	}
-	runtime.emit("devices.changed", map[string]any{"deviceId": args.DeviceID})
+	runtime.emit("devices.changed", map[string]any{"deviceId": args.DeviceID, "name": args.Name})
 	return map[string]any{}, nil
 }
 

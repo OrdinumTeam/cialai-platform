@@ -143,9 +143,13 @@ pub fn run() {
             let bridge_control = bridge::start(app.handle().clone(), bridge_config)
                 .map_err(std::io::Error::other)?;
             debug_assert_eq!(bridge_control.port(), bridge_session.port());
-            let supervisor =
-                tunnel::Supervisor::for_app(app.handle(), &mobile_site, bridge_session)
-                    .map_err(std::io::Error::other)?;
+            let supervisor = tunnel::Supervisor::for_app(
+                app.handle(),
+                &mobile_site,
+                bridge_session,
+                bridge_control,
+            )
+            .map_err(std::io::Error::other)?;
             app.manage(supervisor);
 
             if let Some(main_window) = app.get_webview_window("main") {

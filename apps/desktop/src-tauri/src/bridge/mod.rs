@@ -80,7 +80,6 @@ pub(super) fn lock<T>(value: &Mutex<T>) -> MutexGuard<'_, T> {
 pub(super) struct Connection {
     id: u64,
     pub(super) device_id: Option<String>,
-    node_key: Option<String>,
     tx: mpsc::Sender<Message>,
     closed: Arc<AtomicBool>,
     stop: Arc<Notify>,
@@ -130,6 +129,14 @@ impl Connection {
 
 type Registry = Arc<Mutex<HashMap<u64, Arc<Connection>>>>;
 type Dispatch = Arc<dyn Fn(&Connection, &str, Value) -> Result<Value, String> + Send + Sync>;
+
+#[derive(Clone)]
+struct ServeContext {
+    registry: Registry,
+    terminals: TerminalManager,
+    dispatch: Dispatch,
+    global_calls: Arc<Semaphore>,
+}
 
 #[derive(Clone, Default)]
 struct IdentityState {
@@ -220,6 +227,36 @@ impl BridgeControl {
     }
 }
 
+pub(crate) trait IdentityControl: Send + Sync {
+    fn set_desktop(&self, value: &Value);
+    fn upsert_device(&self, value: &Value);
+    fn sync_devices(&self, value: &Value);
+    fn rename_device(&self, device_id: &str, name: &str);
+    fn revoke_device(&self, device_id: &str) -> usize;
+}
+
+impl IdentityControl for BridgeControl {
+    fn set_desktop(&self, value: &Value) {
+        BridgeControl::set_desktop(self, value);
+    }
+
+    fn upsert_device(&self, value: &Value) {
+        BridgeControl::upsert_device(self, value);
+    }
+
+    fn sync_devices(&self, value: &Value) {
+        BridgeControl::sync_devices(self, value);
+    }
+
+    fn rename_device(&self, device_id: &str, name: &str) {
+        BridgeControl::rename_device(self, device_id, name);
+    }
+
+    fn revoke_device(&self, device_id: &str) -> usize {
+        BridgeControl::revoke_device(self, device_id)
+    }
+}
+
 fn value_identity(value: &Value) -> Option<protocol::WelcomeIdentity> {
     let id = value.get("id")?.as_str()?.trim();
     let name = value.get("name")?.as_str()?.trim();
@@ -266,28 +303,26 @@ pub fn start(app: AppHandle, config: BridgeConfig) -> Result<BridgeControl, Stri
         let terminals = app.state::<TerminalManager>().inner().clone();
         let dispatch: Dispatch =
             Arc::new(move |conn, cmd, args| dispatch::dispatch(&app, conn, cmd, args));
+        let serve_context = ServeContext {
+            registry: registry.clone(),
+            terminals,
+            dispatch,
+            global_calls: calls,
+        };
         while let Ok((stream, _)) = listener.accept().await {
             let Ok(slot) = slots.clone().try_acquire_owned() else {
                 continue;
             };
             let id = next.fetch_add(1, Ordering::Relaxed);
             let config = config.clone();
-            let registry = registry.clone();
-            let terminals = terminals.clone();
-            let dispatch = dispatch.clone();
-            let calls = calls.clone();
+            let serve_context = serve_context.clone();
             let identities = identities.clone();
             tauri::async_runtime::spawn(async move {
                 let _slot = slot;
-                let Ok((socket, device_id, node_key)) =
-                    handshake(stream, &config, &identities).await
-                else {
+                let Ok((socket, device_id)) = handshake(stream, &config, &identities).await else {
                     return;
                 };
-                serve(
-                    socket, device_id, node_key, id, registry, terminals, dispatch, calls,
-                )
-                .await;
+                serve(socket, device_id, id, serve_context).await;
             });
         }
     });
@@ -298,7 +333,7 @@ async fn handshake(
     stream: TcpStream,
     config: &BridgeConfig,
     identities: &Arc<Mutex<IdentityState>>,
-) -> Result<(WebSocketStream<TcpStream>, Option<String>, Option<String>), ()> {
+) -> Result<(WebSocketStream<TcpStream>, Option<String>), ()> {
     let mut bearer = None;
     let mut device_id = None;
     let mut node_key = None;
@@ -434,24 +469,19 @@ async fn handshake(
     .await
     .map_err(|_| ())?
     .map_err(|_| ())?;
-    Ok((socket, device_id, node_key))
+    Ok((socket, device_id))
 }
 
 async fn serve(
     mut socket: WebSocketStream<TcpStream>,
     device_id: Option<String>,
-    node_key: Option<String>,
     id: u64,
-    registry: Registry,
-    terminals: TerminalManager,
-    dispatch: Dispatch,
-    global_calls: Arc<Semaphore>,
+    context: ServeContext,
 ) {
     let (tx, mut rx) = mpsc::channel(OUTBOUND_DEPTH);
     let conn = Arc::new(Connection {
         id,
         device_id,
-        node_key,
         tx,
         closed: Arc::new(AtomicBool::new(false)),
         stop: Arc::new(Notify::new()),
@@ -462,7 +492,7 @@ async fn serve(
     if let Some(device_id) = conn.device_id.as_deref() {
         eprintln!("Ponte conectada ao dispositivo {device_id}");
     }
-    lock(&registry).insert(id, conn.clone());
+    lock(&context.registry).insert(id, conn.clone());
     let calls = Arc::new(Semaphore::new(MAX_CALLS));
     // PTY writes, ACKs and replacement channels follow receive order. Slow
     // Disk and metrics calls use the independent bounded blocking pool.
@@ -498,7 +528,7 @@ async fn serve(
                         if !args.is_object() { conn.result(id, Err("Argumentos inválidos.".into())); continue; }
                         if !protocol::allowed_command(&cmd) { conn.result(id, Err("Disponível só no Mac.".into())); continue; }
                         if !lock(&conn.pending).insert(id) { break; }
-                        let permits = (calls.clone().try_acquire_owned(), global_calls.clone().try_acquire_owned());
+                        let permits = (calls.clone().try_acquire_owned(), context.global_calls.clone().try_acquire_owned());
                         let (Ok(local_permit), Ok(global_permit)) = permits else {
                             lock(&conn.pending).remove(&id);
                             conn.result(id, Err("Muitas chamadas simultâneas. Tente novamente.".into()));
@@ -506,7 +536,7 @@ async fn serve(
                         };
                         let ordered = matches!(cmd.as_str(), "pty_spawn" | "pty_attach" | "pty_ack" | "pty_write" | "pty_kill" | "pty_view_claim" | "pty_view_renew" | "pty_view_release");
                         let target = conn.clone();
-                        let dispatch = dispatch.clone();
+                        let dispatch = context.dispatch.clone();
                         let job = move || {
                             let _permits = (local_permit, global_permit);
                             if !target.closed.load(Ordering::SeqCst) {
@@ -528,8 +558,8 @@ async fn serve(
         }
     }
     conn.close();
-    lock(&registry).remove(&id);
-    terminals.detach_all(conn.key());
+    lock(&context.registry).remove(&id);
+    context.terminals.detach_all(conn.key());
     let frame = lock(&conn.close_frame).take();
     let _ = timeout(WRITE_TIMEOUT, socket.close(frame)).await;
 }
@@ -542,12 +572,18 @@ mod tests {
     async fn test_server(
         dispatch: Dispatch,
         token: Option<String>,
-    ) -> (String, tokio::task::JoinHandle<()>) {
+    ) -> (String, tokio::task::JoinHandle<()>, BridgeControl) {
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
             .unwrap();
         let address = format!("ws://{}/pty", listener.local_addr().unwrap());
         let identities = Arc::new(Mutex::new(IdentityState::default()));
+        let registry = Arc::new(Mutex::new(HashMap::new()));
+        let control = BridgeControl {
+            port: listener.local_addr().unwrap().port(),
+            registry: registry.clone(),
+            identities: identities.clone(),
+        };
         let task = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
             let config = BridgeConfig {
@@ -555,27 +591,27 @@ mod tests {
                 dev_open: token.is_none(),
                 proxy_secret: token,
             };
-            if let Ok((socket, device_id, node_key)) = handshake(stream, &config, &identities).await
-            {
+            if let Ok((socket, device_id)) = handshake(stream, &config, &identities).await {
                 serve(
                     socket,
                     device_id,
-                    node_key,
                     1,
-                    Arc::new(Mutex::new(HashMap::new())),
-                    TerminalManager::with_notifier(Arc::new(|_| {})),
-                    dispatch,
-                    Arc::new(Semaphore::new(128)),
+                    ServeContext {
+                        registry,
+                        terminals: TerminalManager::with_notifier(Arc::new(|_| {})),
+                        dispatch,
+                        global_calls: Arc::new(Semaphore::new(128)),
+                    },
                 )
                 .await;
             }
         });
-        (address, task)
+        (address, task, control)
     }
 
     #[tokio::test]
     async fn websocket_rejects_origin_before_upgrade_and_call_before_hello() {
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(|_, _, _| Ok(Value::Null)),
             Some("fixture-secret".into()),
         )
@@ -593,7 +629,7 @@ mod tests {
         );
         task.await.unwrap();
 
-        let (url, task) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
+        let (url, task, _) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
         let (mut socket, _) = connect_async(url).await.unwrap();
         socket
             .send(Message::Text(
@@ -610,7 +646,7 @@ mod tests {
 
     #[tokio::test]
     async fn websocket_welcome_and_allowlist_work_without_touching_real_managers() {
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(|_, cmd, _| {
                 assert_eq!(cmd, "pty_list");
                 Ok(json!([]))
@@ -655,7 +691,7 @@ mod tests {
     async fn terminal_calls_preserve_wire_order_when_first_write_is_slow() {
         let writes = Arc::new(Mutex::new(Vec::new()));
         let output = writes.clone();
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(move |_, _, args| {
                 let part = args["data"].as_str().unwrap().to_owned();
                 if part == "a" {
@@ -693,7 +729,7 @@ mod tests {
 
     #[tokio::test]
     async fn hello_deadline_closes_an_idle_upgraded_socket() {
-        let (url, task) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
+        let (url, task, _) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
         let (mut socket, _) = connect_async(url).await.unwrap();
         tokio::time::pause();
         tokio::time::advance(Duration::from_secs(6)).await;
@@ -706,7 +742,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_pongs_disconnect_within_forty_seconds() {
-        let (url, task) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
+        let (url, task, _) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
         let (mut socket, _) = connect_async(url).await.unwrap();
         socket
             .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
@@ -725,7 +761,7 @@ mod tests {
 
     #[tokio::test]
     async fn missing_proxy_secret_is_rejected_before_upgrade() {
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(|_, _, _| Ok(Value::Null)),
             Some("fixture-secret".into()),
         )
@@ -739,11 +775,17 @@ mod tests {
 
     #[tokio::test]
     async fn proxy_secret_marks_the_connection_as_a_device() {
-        let (url, task) = test_server(
+        let (url, task, control) = test_server(
             Arc::new(|_, _, _| Ok(Value::Null)),
             Some("fixture-secret".into()),
         )
         .await;
+        control.set_desktop(&json!({"id":"desktop_fixture", "name":"MacBook"}));
+        control.upsert_device(&json!({
+            "id":"dev_fixture",
+            "name":"iPhone de Teste",
+            "nodeKey":"nodekey:fixture"
+        }));
         let mut request = url.into_client_request().unwrap();
         request
             .headers_mut()
@@ -751,6 +793,9 @@ mod tests {
         request
             .headers_mut()
             .insert("x-cialai-device-id", "dev_fixture".parse().unwrap());
+        request
+            .headers_mut()
+            .insert("x-cialai-node-key", "nodekey:fixture".parse().unwrap());
         let (mut socket, _) = connect_async(request).await.unwrap();
         socket
             .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
@@ -761,13 +806,28 @@ mod tests {
             serde_json::from_str::<Value>(&welcome).unwrap()["auth"],
             "device"
         );
-        socket.close(None).await.unwrap();
+        let welcome: Value = serde_json::from_str(&welcome).unwrap();
+        assert_eq!(welcome["device"]["name"], "iPhone de Teste");
+        assert_eq!(welcome["desktop"]["name"], "MacBook");
+
+        let started = Instant::now();
+        assert_eq!(control.revoke_device("dev_fixture"), 1);
+        let Message::Close(Some(frame)) = timeout(Duration::from_secs(1), socket.next())
+            .await
+            .expect("revogação precisa fechar em menos de um segundo")
+            .unwrap()
+            .unwrap()
+        else {
+            panic!("revogação precisa enviar um close WebSocket")
+        };
+        assert_eq!(u16::from(frame.code), 4401);
+        assert!(started.elapsed() < Duration::from_secs(1));
         task.await.unwrap();
     }
 
     #[tokio::test]
     async fn unsupported_version_closes_with_4426() {
-        let (url, task) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
+        let (url, task, _) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;
         let (mut socket, _) = connect_async(url).await.unwrap();
         socket
             .send(Message::Text(r#"{"type":"hello","version":2}"#.into()))
@@ -782,7 +842,7 @@ mod tests {
 
     #[tokio::test]
     async fn oversized_message_never_reaches_dispatch() {
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(|_, _, _| panic!("oversized call dispatched")),
             None,
         )
@@ -805,7 +865,6 @@ mod tests {
         let conn = Connection {
             id: 1,
             device_id: None,
-            node_key: None,
             tx,
             closed: Arc::new(AtomicBool::new(false)),
             stop: Arc::new(Notify::new()),
@@ -831,7 +890,7 @@ mod tests {
             }
         }
         let release = Release(gate.clone());
-        let (url, task) = test_server(
+        let (url, task, _) = test_server(
             Arc::new(move |_, _, _| {
                 let mut ready = lock(&gate.0);
                 while !*ready {
