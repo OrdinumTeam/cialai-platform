@@ -20,7 +20,7 @@ const jobs = {
   },
   'tunnel-check': {
     cwd: 'packages/tunnel-core',
-    commands: [['go', 'vet', './...'], ['go', 'test', '-mod=readonly', './...']],
+    commands: [['node', '../../tools/check/headscale-infra.mjs'], ['go', 'vet', './...'], ['go', 'test', '-mod=readonly', './...']],
   },
   'spike-headscale': {
     cwd: 'packages/tunnel-core',

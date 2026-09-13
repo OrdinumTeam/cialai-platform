@@ -43,7 +43,7 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 2.7 Supervisor Rust | Concluída localmente | Processo filho, protocolo limitado, eventos Tauri, reinício, encerramento, keyring por sistema e segredo efêmero da ponte passaram em 140 testes Rust ativos e no fake sidecar real |
 | 2.8 Ponte com identidade | Concluída localmente | O supervisor sincroniza a identidade do computador, a lista e os eventos dos dispositivos com `BridgeControl`; o handshake exige id e chave do nó, o `welcome` traz os nomes conhecidos e a revogação fecha com 4401 em menos de 1 s. Clippy sem avisos, 142 testes Rust ativos e `go test -race` passaram |
 | 2.9 Interface de rede | Concluída localmente | Assistente do Headscale no onboarding e em Preferências, diálogo Vincular celular com QR de 280 px girando a cada 90 s e aprovação por código, tela Dispositivos com renomear, revogar e diagnóstico, ponto de estado na sidebar e na toolbar. Checks Node, Rust com `tunnel_doctor` e check visível nos temas claro e escuro passaram; validade da chave da API depende de o sidecar informar `expiresAt` |
-| 2.10 Receita Headscale | Não iniciada | `infra/headscale` ainda não existe |
+| 2.10 Receita Headscale | Concluída localmente | `infra/headscale` com Compose fixado por digest, modelo do `config.yaml` do documento 06, `policy.json` com `autogroup:self`, `bootstrap.sh` validado e README com guia, diagnóstico e atualização com backup. Check estrutural, `shellcheck`, `configtest` e smoke em contêiner descartável passaram; certificado Let's Encrypt real não foi emitido |
 | 2.11 Integração Docker | Não iniciada | Pacote de integração e workflow ainda não existem |
 | 2.12 Sidecars de release | Não iniciada | Workflow de release e `externalBin` ainda não existem |
 | 3.1 a 7.6 | Não iniciadas | A autorização para avançar não aprova os testes físicos, remotos, de assinatura ou de loja pendentes |
@@ -329,6 +329,14 @@ Limite conhecido: `control.configure` do sidecar devolve somente o prefixo da ch
 
 Validação: `npm run test:ui` com 17 sincronizações e 43 testes Node, incluindo o novo `tunnel-model.test.cjs` e `check-network.mjs`; `cargo fmt --check`, Clippy com `-D warnings` e `cargo test` com 143 aprovados, zero falhas e dois ignorados; checks de onboarding, extração e `git diff --check`. No Dev Browser Panel da sessão atual, `scripts/check-network-browser.js` terminou em `PASS: Cialai network screens and rotating QR in light theme` e `in dark theme`, com rota Dispositivos, QR de 280 px, contador em 1:30, aprovação 4827 e nenhum separador proibido no texto visível. Capturas em `~/.dev-browser/tmp/cialai-2-9-pair-light.png` e `cialai-2-9-pair-dark.png`. Nenhum Headscale real ou celular foi usado.
 
+### 12/09/2026, receita Headscale da tarefa 2.10 concluída localmente
+
+`infra/headscale/docker-compose.yml` sobe `headscale/headscale:0.29.3` fixado pelo digest `sha256:0e7f1c6e4ce6c2a2a001103ecd3fa645a045adf30ac8a5234fe037b43000cd72`, publica 443, 80 e 3478 UDP, monta `config` somente leitura, guarda dados no volume `headscale-data` e mantém o socket em `tmpfs`. A imagem não tem shell nem `curl`, então a verificação de saúde usa `/ko-app/headscale health`, desvio consciente do `/health` citado no documento 06. `config/config.yaml.template` reproduz o modelo do documento com marcadores de domínio e IPv4; `config/policy.json` mantém os comentários, aceitos pelo Headscale.
+
+`bootstrap.sh` normaliza e valida domínio e IPv4, recusa domínios dentro de `cialai.internal`, não sobrescreve `config/config.yaml` sem `--force`, roda `configtest` antes de subir, espera `https://<domínio>/health` por até 300 s e só imprime o comando `apikeys create --expiration 365d`, sem criar chave. O README traz o guia de 10 minutos, a tabela de diagnóstico de DNS, 443, certificado, versão, saúde e STUN, a atualização com backup do volume e as notas de segurança. `tools/check/headscale-infra.mjs` entrou no job `tunnel-check` e protege imagem, portas, modelo, política, bootstrap e texto do README.
+
+Validação: check estrutural e `shellcheck` verdes; `bash -n`; numa cópia temporária, entradas inválidas terminaram com código 1, a geração funcionou, `docker compose config` e `docker compose run headscale configtest` passaram. Um smoke com a mesma configuração, trocando apenas TLS por HTTP local, ficou `running`, respondeu `/health`, `headscale health` pelo socket em `/var/run/headscale` e `headscale version` pelo PATH, carregou a política e iniciou o relé DERP e o STUN. Contêiner, rede, volume e cópia temporária foram removidos. A emissão real do certificado, DNS e portas públicas dependem de um servidor com domínio e não foram exercitadas.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -374,6 +382,7 @@ Validação: `npm run test:ui` com 17 sincronizações e 43 testes Node, incluin
 | `packages/ui/src/desktop/TunnelContext.jsx`, `tunnel-model.js`, `views.js` | Estado da rede, comandos e eventos do túnel e rotas do desktop da tarefa 2.9 |
 | `packages/ui/src/desktop/NetworkSetup.jsx`, `PairingDialog.jsx`, `Devices.jsx` | Assistente do Headscale, QR rotativo e gestão de dispositivos |
 | `packages/ui/scripts/check-network.mjs`, `check-network-browser.js`, `tests/tunnel-model.test.cjs` | Contratos Node e check visível das telas de rede, com `?tunnel=demo&network-check=1` |
+| `infra/headscale/`, `tools/check/headscale-infra.mjs` | Receita auto hospedada da tarefa 2.10 e guarda estrutural |
 | `tools/spikes/build-mobile.mjs` | Preflight e build experimental iOS ou Android |
 | `tools/spikes/README.md` | Escopo, comandos e medições pendentes dos spikes |
 | `docs/evidence/control-source.json` | Commit base e hashes da origem |
