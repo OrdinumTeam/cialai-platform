@@ -9,10 +9,16 @@
 //! entao o tamanho minimo e o redimensionamento sao liberados e a tela cheia
 //! lembrada e devolvida.
 //!
-//! Tudo que mexe no NSWindow roda na thread principal, em giros separados do
-//! loop: o tao aplica posicao e mascara de estilo em despachos assincronos, e
-//! um quadro definido no mesmo giro seria sobrescrito por eles. Toda troca de
-//! mascara de estilo do tao tira o teclado do webview; `focus_webview` devolve.
+//! Tudo que mexe na janela nativa roda na thread principal, em giros separados
+//! do loop: o tao aplica posicao e mascara de estilo em despachos assincronos,
+//! e um quadro definido no mesmo giro seria sobrescrito por eles. Toda troca
+//! de mascara de estilo do tao tira o teclado do webview; `focus_webview`
+//! devolve.
+//!
+//! Cada sistema tem um backend com as mesmas funcoes: `macos` move o NSWindow
+//! em pontos com origem embaixo; `windows` usa `SetWindowPos` em pixels
+//! fisicos; `generic` anima posicao e tamanho no X11 e, no Wayland, onde o
+//! compositor controla a posicao, salta direto ao tamanho final.
 
 use std::sync::mpsc;
 use std::thread;
@@ -20,6 +26,23 @@ use std::time::{Duration, Instant};
 
 use tauri::{LogicalSize, WebviewWindow};
 use tauri_plugin_window_state::{StateFlags, WindowExt};
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use self::macos as backend;
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+use self::windows as backend;
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+mod generic;
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+use self::generic as backend;
+
+use backend::{current_frame, set_frame, visible_area};
 
 /// Tamanho da janela de abertura, em pontos. O mesmo de `tauri.conf.json`.
 pub const SPLASH_WIDTH: f64 = 440.0;
@@ -34,35 +57,27 @@ const SHOW_FALLBACK: Duration = Duration::from_secs(6);
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(2500);
 /// A posicao lembrada e aplicada pelo tao no giro seguinte do loop principal.
 const RESTORE_SETTLE: Duration = Duration::from_millis(40);
-/// Uma janela recem mostrada ainda esta na animacao de aparecer do macOS.
+/// Uma janela recem mostrada ainda esta na animacao de aparecer do sistema.
 const REVEAL_SETTLE: Duration = Duration::from_millis(160);
 /// Duracao e passo do crescimento ate o tamanho de trabalho.
 const GROW_DURATION: Duration = Duration::from_millis(520);
 const GROW_STEP: Duration = Duration::from_millis(16);
+/// Primeiro build do Windows 11 22H2, a partir do qual o Mica e aplicado.
+#[cfg(any(test, target_os = "windows"))]
+const MICA_MIN_BUILD: u32 = 22621;
 
-/// Aplica o material translucido de sidebar do macOS atras de toda a janela e
-/// arma a rede de seguranca da abertura. O frontend pinta a janela inteira, o
-/// conteudo em branco e a sidebar no gradiente da marca, entao a vibrancy fica
-/// so como material de fundo, para a janela nunca aparecer vazada enquanto o
-/// webview ainda nao pintou.
-pub fn decorate(window: &WebviewWindow) {
-    #[cfg(target_os = "macos")]
-    {
-        use window_vibrancy::{NSVisualEffectMaterial, NSVisualEffectState, apply_vibrancy};
-        if let Err(error) = apply_vibrancy(
-            window,
-            NSVisualEffectMaterial::Sidebar,
-            Some(NSVisualEffectState::FollowsWindowActiveState),
-            None,
-        ) {
-            eprintln!("[window] vibrancy indisponivel: {error}");
-        }
-    }
+/// Aplica o material de fundo do sistema e arma a rede de seguranca da
+/// abertura. O frontend pinta a janela inteira, o conteudo em branco e a
+/// sidebar no gradiente da marca, entao vibrancy no macOS e Mica no Windows
+/// ficam so como material de fundo, para a janela nunca aparecer vazada
+/// enquanto o webview ainda nao pintou. `backdrop` vem das preferencias.
+pub fn decorate(window: &WebviewWindow, backdrop: &str) {
+    backend::decorate(window, backdrop);
 
     let _ = window.set_title("Cialai");
 
     // Se o webview falhar antes de montar a abertura, a janela ainda aparece e
-    // cresce, para o erro ficar visivel em vez de um app invisivel no Dock.
+    // cresce, para o erro ficar visivel em vez de um app invisivel.
     let handle = window.clone();
     thread::spawn(move || {
         thread::sleep(SHOW_FALLBACK);
@@ -89,6 +104,16 @@ fn reveal(window: &WebviewWindow) -> bool {
         return false;
     }
 
+    // Sem controle de posicao, como no Wayland, a abertura fica onde o
+    // compositor decidir.
+    if !backend::positions_window() {
+        on_main_thread(window, |handle| {
+            let _ = handle.show();
+            let _ = handle.set_focus();
+        });
+        return true;
+    }
+
     // Primeiro giro: pede a posicao lembrada. O tao aplica no giro seguinte.
     let before = on_main_thread(window, |handle| {
         let before = current_frame(handle);
@@ -107,7 +132,7 @@ fn reveal(window: &WebviewWindow) -> bool {
             if is_splash_sized(after) {
                 let remembered =
                     (after.x - before.x).abs() > 1.0 || (after.y - before.y).abs() > 1.0;
-                let frame = splash_frame(after, remembered, visible_area(handle));
+                let frame = splash_frame(after, remembered, visible_area(handle), backend::ORIGIN);
                 set_frame(handle, frame, false);
             }
         }
@@ -125,6 +150,10 @@ fn reveal(window: &WebviewWindow) -> bool {
 pub fn grow(window: &WebviewWindow) -> bool {
     if reveal(window) {
         thread::sleep(REVEAL_SETTLE);
+    }
+
+    if !backend::positions_window() {
+        return jump(window);
     }
 
     let plan = on_main_thread(window, |handle| {
@@ -167,6 +196,38 @@ pub fn grow(window: &WebviewWindow) -> bool {
     true
 }
 
+/// Crescimento sem animacao nem posicao, para quem nao pode mover a janela:
+/// um unico pedido de tamanho, com o minimo calculado sobre o alvo, porque o
+/// compositor confirma o tamanho de forma assincrona. Chamar de novo com a
+/// janela ja grande so reaplica o minimo e a tela cheia lembrada.
+fn jump(window: &WebviewWindow) -> bool {
+    let resized = on_main_thread(window, |handle| {
+        let _ = handle.set_resizable(true);
+        let scale = handle.scale_factor().unwrap_or(1.0);
+        let mut working = handle
+            .inner_size()
+            .map(|size| size.to_logical::<f64>(scale))
+            .map(|size| (size.width, size.height))
+            .unwrap_or((MIN_WIDTH, MIN_HEIGHT));
+        let resized = is_splash_sized_size(working.0, working.1);
+        if resized {
+            working = fit_working_size(visible_area(handle));
+            let _ = handle.set_size(LogicalSize::new(working.0, working.1));
+            eprintln!(
+                "[window] tamanho de trabalho {}x{} sem animacao",
+                working.0, working.1
+            );
+        }
+        let (min_width, min_height) = working_min_size(working);
+        let _ = handle.set_min_size(Some(LogicalSize::new(min_width, min_height)));
+        let _ = handle.restore_state(StateFlags::FULLSCREEN);
+        resized
+    })
+    .unwrap_or(false);
+    focus_webview(window);
+    resized
+}
+
 /// Depois de crescer, a janela volta a ser redimensionavel, ganha o minimo
 /// utilizavel e volta a tela cheia se estava nela ao sair. Em telas menores
 /// que o minimo, o minimo vira o proprio tamanho.
@@ -176,8 +237,7 @@ fn release_working_size(window: &WebviewWindow) {
         let (mut min_width, mut min_height) = (MIN_WIDTH, MIN_HEIGHT);
         if let (Ok(scale), Ok(size)) = (handle.scale_factor(), handle.inner_size()) {
             let logical = size.to_logical::<f64>(scale);
-            min_width = min_width.min(logical.width);
-            min_height = min_height.min(logical.height);
+            (min_width, min_height) = working_min_size((logical.width, logical.height));
         }
         let _ = handle.set_min_size(Some(LogicalSize::new(min_width, min_height)));
         let _ = handle.restore_state(StateFlags::FULLSCREEN);
@@ -212,7 +272,11 @@ fn on_main_thread<T: Send + 'static>(
 }
 
 fn is_splash_sized(frame: Rect) -> bool {
-    frame.width <= SPLASH_WIDTH + 2.0 && frame.height <= SPLASH_HEIGHT + 2.0
+    is_splash_sized_size(frame.width, frame.height)
+}
+
+fn is_splash_sized_size(width: f64, height: f64) -> bool {
+    width <= SPLASH_WIDTH + 2.0 && height <= SPLASH_HEIGHT + 2.0
 }
 
 fn ease_out(progress: f64) -> f64 {
@@ -240,14 +304,14 @@ fn working_frame(current: Rect, visible: Option<Rect>) -> Rect {
 /// trabalho: a abertura fica no centro dela, e o crescimento devolve a janela
 /// ao lugar lembrado. Sem posicao lembrada, a abertura fica onde o sistema a
 /// centralizou.
-fn splash_frame(current: Rect, remembered: bool, visible: Option<Rect>) -> Rect {
+fn splash_frame(current: Rect, remembered: bool, visible: Option<Rect>, origin: Origin) -> Rect {
     let (center_x, center_y) = if remembered {
         let (width, height) = fit_working_size(visible);
-        let top = current.y + current.height;
+        let top = origin.top(current);
         let target = clamp_into(
             Rect {
                 x: current.x,
-                y: top - height,
+                y: origin.y_below(top, height),
                 width,
                 height,
             },
@@ -282,6 +346,11 @@ fn fit_working_size(visible: Option<Rect>) -> (f64, f64) {
     }
 }
 
+/// Minimo utilizavel para uma janela do tamanho dado.
+fn working_min_size((width, height): (f64, f64)) -> (f64, f64) {
+    (MIN_WIDTH.min(width), MIN_HEIGHT.min(height))
+}
+
 fn clamp_into(frame: Rect, visible: Option<Rect>) -> Rect {
     let Some(area) = visible else {
         return frame.rounded();
@@ -297,7 +366,37 @@ fn clamp_into(frame: Rect, visible: Option<Rect>) -> Rect {
     .rounded()
 }
 
-/// Retangulo em pontos, origem no canto inferior esquerdo como no AppKit.
+/// Sentido do eixo vertical no sistema de coordenadas do backend. Cada
+/// sistema constroi so a sua variante.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Origin {
+    /// AppKit: y cresce para cima a partir do canto inferior esquerdo.
+    #[cfg_attr(not(any(test, target_os = "macos")), allow(dead_code))]
+    BottomLeft,
+    /// Windows, X11 e Wayland: y cresce para baixo a partir do topo.
+    #[cfg_attr(all(target_os = "macos", not(test)), allow(dead_code))]
+    TopLeft,
+}
+
+impl Origin {
+    /// Coordenada da borda de cima do retangulo.
+    fn top(self, frame: Rect) -> f64 {
+        match self {
+            Self::BottomLeft => frame.y + frame.height,
+            Self::TopLeft => frame.y,
+        }
+    }
+
+    /// `y` de um retangulo de altura `height` cuja borda de cima fica em `top`.
+    fn y_below(self, top: f64, height: f64) -> f64 {
+        match self {
+            Self::BottomLeft => top - height,
+            Self::TopLeft => top,
+        }
+    }
+}
+
+/// Retangulo em pontos logicos, no sistema de coordenadas do backend.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Rect {
     x: f64,
@@ -328,75 +427,57 @@ impl Rect {
     }
 }
 
-#[cfg(target_os = "macos")]
-mod platform {
-    use objc2_app_kit::NSWindow;
-    use objc2_foundation::{NSPoint, NSRect, NSSize};
-    use tauri::WebviewWindow;
-
-    use super::Rect;
-
-    fn ns_window(window: &WebviewWindow) -> Option<&NSWindow> {
-        let pointer = window.ns_window().ok()?;
-        if pointer.is_null() {
-            return None;
-        }
-        // SAFETY: o Tauri devolve o NSWindow vivo da janela e estas funcoes so
-        // rodam na thread principal, via `on_main_thread`.
-        Some(unsafe { &*(pointer as *const NSWindow) })
-    }
-
-    fn rect(frame: NSRect) -> Rect {
-        Rect {
-            x: frame.origin.x,
-            y: frame.origin.y,
-            width: frame.size.width,
-            height: frame.size.height,
-        }
-    }
-
-    pub fn current_frame(window: &WebviewWindow) -> Option<Rect> {
-        ns_window(window).map(|ns_window| rect(ns_window.frame()))
-    }
-
-    /// Area visivel da tela em que a janela esta, sem menu bar e Dock.
-    pub fn visible_area(window: &WebviewWindow) -> Option<Rect> {
-        ns_window(window)?
-            .screen()
-            .map(|screen| rect(screen.visibleFrame()))
-    }
-
-    pub fn set_frame(window: &WebviewWindow, frame: Rect, display: bool) {
-        if let Some(ns_window) = ns_window(window) {
-            let frame = NSRect::new(
-                NSPoint::new(frame.x, frame.y),
-                NSSize::new(frame.width, frame.height),
-            );
-            ns_window.setFrame_display(frame, display);
-        }
+/// Converte um retangulo em pixels fisicos para pontos logicos.
+#[cfg(any(test, not(target_os = "macos")))]
+fn logical_rect(x: i32, y: i32, width: u32, height: u32, scale: f64) -> Rect {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    Rect {
+        x: f64::from(x) / scale,
+        y: f64::from(y) / scale,
+        width: f64::from(width) / scale,
+        height: f64::from(height) / scale,
     }
 }
 
-#[cfg(target_os = "macos")]
-use platform::{current_frame, set_frame, visible_area};
-
-#[cfg(not(target_os = "macos"))]
-fn current_frame(_window: &WebviewWindow) -> Option<Rect> {
-    None
+/// Converte um retangulo logico para pixels fisicos inteiros.
+#[cfg(any(test, target_os = "windows"))]
+fn physical_rect(frame: Rect, scale: f64) -> (i32, i32, i32, i32) {
+    let scale = if scale > 0.0 { scale } else { 1.0 };
+    let pixels = |value: f64| (value * scale).round() as i32;
+    (
+        pixels(frame.x),
+        pixels(frame.y),
+        pixels(frame.width),
+        pixels(frame.height),
+    )
 }
 
-#[cfg(not(target_os = "macos"))]
-fn visible_area(_window: &WebviewWindow) -> Option<Rect> {
-    None
+/// Sessao Wayland: `WAYLAND_DISPLAY` presente e o GTK sem `GDK_BACKEND`
+/// pedindo X11 como primeira opcao. Pelo XWayland a janela volta a ser
+/// posicionavel.
+#[cfg(any(test, not(any(target_os = "macos", target_os = "windows"))))]
+fn is_wayland_session(
+    wayland_display: Option<&std::ffi::OsStr>,
+    gdk_backend: Option<&std::ffi::OsStr>,
+) -> bool {
+    let has_display = wayland_display.is_some_and(|value| !value.is_empty());
+    let prefers_x11 = gdk_backend
+        .and_then(|value| value.to_str())
+        .and_then(|value| value.split(',').next())
+        .is_some_and(|first| first.trim().eq_ignore_ascii_case("x11"));
+    has_display && !prefers_x11
 }
 
-#[cfg(not(target_os = "macos"))]
-fn set_frame(window: &WebviewWindow, frame: Rect, _display: bool) {
-    let _ = window.set_size(LogicalSize::new(frame.width, frame.height));
+/// Mica so a partir do Windows 11 22H2; antes disso a pagina pinta o fundo.
+#[cfg(any(test, target_os = "windows"))]
+fn mica_supported(build: u32) -> bool {
+    build >= MICA_MIN_BUILD
 }
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsStr;
+
     use super::*;
 
     const SCREEN: Rect = Rect {
@@ -467,7 +548,7 @@ mod tests {
             width: SPLASH_WIDTH,
             height: SPLASH_HEIGHT,
         };
-        let splash = splash_frame(restored, true, Some(SCREEN));
+        let splash = splash_frame(restored, true, Some(SCREEN), Origin::BottomLeft);
         let grown = working_frame(splash, Some(SCREEN));
         assert_eq!(grown.x, 200.0);
         assert_eq!(grown.y + grown.height, 1000.0);
@@ -481,7 +562,10 @@ mod tests {
             width: SPLASH_WIDTH,
             height: SPLASH_HEIGHT,
         };
-        assert_eq!(splash_frame(centered, false, Some(SCREEN)), centered);
+        assert_eq!(
+            splash_frame(centered, false, Some(SCREEN), Origin::BottomLeft),
+            centered
+        );
     }
 
     #[test]
@@ -506,5 +590,83 @@ mod tests {
             (50.0, 25.0, 200.0, 150.0)
         );
         assert!(ease_out(0.5) > 0.5 && ease_out(1.0) == 1.0 && ease_out(0.0) == 0.0);
+    }
+
+    #[test]
+    fn splash_frame_with_top_left_origin_returns_to_the_remembered_corner() {
+        // Windows e X11 contam y de cima para baixo: a posicao restaurada deixa
+        // o canto superior esquerdo da janela de trabalho em (200, 120).
+        let screen = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1920.0,
+            height: 1040.0,
+        };
+        let restored = Rect {
+            x: 200.0,
+            y: 120.0,
+            width: SPLASH_WIDTH,
+            height: SPLASH_HEIGHT,
+        };
+        let splash = splash_frame(restored, true, Some(screen), Origin::TopLeft);
+        let grown = working_frame(splash, Some(screen));
+        assert_eq!((grown.x, grown.y), (200.0, 120.0));
+        assert_eq!((grown.width, grown.height), (DEFAULT_WIDTH, DEFAULT_HEIGHT));
+    }
+
+    #[test]
+    fn logical_and_physical_frames_round_trip_with_the_scale() {
+        let frame = logical_rect(300, 150, 660, 480, 1.5);
+        assert_eq!(
+            frame,
+            Rect {
+                x: 200.0,
+                y: 100.0,
+                width: SPLASH_WIDTH,
+                height: SPLASH_HEIGHT,
+            }
+        );
+        assert_eq!(physical_rect(frame, 1.5), (300, 150, 660, 480));
+        assert_eq!(
+            physical_rect(logical_rect(-1920, 0, 1920, 1040, 1.0), 1.0),
+            (-1920, 0, 1920, 1040)
+        );
+    }
+
+    #[test]
+    fn wayland_is_detected_without_the_x11_override() {
+        let wayland = Some(OsStr::new("wayland-0"));
+        assert!(is_wayland_session(wayland, None));
+        assert!(is_wayland_session(wayland, Some(OsStr::new("wayland,x11"))));
+        assert!(!is_wayland_session(wayland, Some(OsStr::new("x11"))));
+        assert!(!is_wayland_session(
+            wayland,
+            Some(OsStr::new(" x11,wayland"))
+        ));
+        assert!(!is_wayland_session(None, None));
+        assert!(!is_wayland_session(Some(OsStr::new("")), None));
+    }
+
+    #[test]
+    fn mica_starts_at_windows_11_22h2() {
+        assert!(!mica_supported(0));
+        assert!(!mica_supported(19045));
+        assert!(!mica_supported(22000));
+        assert!(mica_supported(MICA_MIN_BUILD));
+        assert!(mica_supported(26100));
+    }
+
+    #[test]
+    fn jump_size_fills_the_screen_up_to_the_working_size() {
+        assert_eq!(fit_working_size(None), (DEFAULT_WIDTH, DEFAULT_HEIGHT));
+        let small = Rect {
+            x: 0.0,
+            y: 0.0,
+            width: 1280.0,
+            height: 700.0,
+        };
+        assert_eq!(fit_working_size(Some(small)), (1280.0, 700.0));
+        assert_eq!(working_min_size((1280.0, 700.0)), (MIN_WIDTH, 680.0));
+        assert_eq!(working_min_size((900.0, 600.0)), (900.0, 600.0));
     }
 }

@@ -109,6 +109,45 @@ export async function watchFullscreen(handler) {
   return () => { off(); };
 }
 
+// Controles da janela sem moldura do Windows. Fechar passa pelo mesmo pedido
+// de saída da janela nativa, com a confirmação de terminais abertos. Fora do
+// app nada acontece e a janela nunca está maximizada.
+async function currentWindow() {
+  const { getCurrentWindow } = await import('@tauri-apps/api/window');
+  return getCurrentWindow();
+}
+
+export const windowControls = {
+  async minimize() {
+    if (isTauri()) await (await currentWindow()).minimize();
+  },
+  async toggleMaximize() {
+    if (isTauri()) await (await currentWindow()).toggleMaximize();
+  },
+  async close() {
+    if (isTauri()) await (await currentWindow()).close();
+  },
+  async isMaximized() {
+    return isTauri() ? (await currentWindow()).isMaximized() : false;
+  },
+  // Chama o handler na hora e a cada mudança; maximizar e restaurar sempre
+  // redimensionam a janela.
+  async onMaximizedChange(handler) {
+    if (!isTauri()) return () => {};
+    const current = await currentWindow();
+    let last = null;
+    const probe = async () => {
+      try {
+        const value = await current.isMaximized();
+        if (value !== last) { last = value; handler(value); }
+      } catch (_error) { /* janela indisponivel */ }
+    };
+    await probe();
+    const off = await current.onResized(() => { probe(); });
+    return () => { off(); };
+  },
+};
+
 // theme: 'light', 'dark' ou null para seguir o sistema.
 export async function setWindowTheme(theme) {
   if (!isTauri()) return;

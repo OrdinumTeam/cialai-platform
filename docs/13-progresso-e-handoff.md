@@ -75,6 +75,7 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 5.8 Prévia portável | Testes Rust verificados no macOS e Linux; WebView2 pendente | O handler aceita `preview://` e `http://preview.localhost`, `native.js` escolhe a forma do Windows e `dunce::canonicalize` protege raiz e alvo. O código Windows compilou, mas a forma local ainda não foi aberta no WebView2 |
 | 5.9 Browser e Office | Testes Rust verificados no macOS e Linux; execução real pendente | Descoberta e instalador por sistema passaram no macOS e no Ubuntu após tornar o fixture do cache específico ao sistema. Chromium, WebView2 e LibreOffice reais ainda não foram executados no Linux ou Windows |
 | 5.10 Diagnóstico e hook | Testes Rust verificados no macOS e Linux; execução Windows pendente | O log usa `app_log_dir`, Unix redireciona stderr por `dup2` e Windows usa `SetStdHandle`; o hook tem instaladores POSIX e PowerShell. Rust passou no Ubuntu e compilou para Windows, mas o instalador PowerShell não foi executado nativamente |
+| 5.11 Janela por sistema | Preparada; janela nativa Linux e Windows pendente | `window/` tem backends macOS, Windows por `SetWindowPos` e Mica a partir do build 22621, e genérico com animação no X11 e salto no Wayland. Windows ganhou controles próprios e Linux e Windows ganharam o botão de menu da toolbar. Onze testes de janela passaram no macOS e no Ubuntu 22.04 em contêiner, Clippy passou nos dois e no alvo MSVC por `cargo-xwin`; nenhuma janela nativa Linux ou Windows foi aberta |
 | 5.12 Atalhos por sistema | Concluída localmente na main | Rótulos e handlers usam um contrato único no desktop, no Workbench, nos painéis, na paleta, no editor e no xterm. O Dev Browser da porta 64552 confirmou Windows, Linux e macOS detectado sem o parâmetro; não houve execução nativa em Windows ou Linux |
 | 5.15 Testes Rust por sistema | Parte Rust concluída no macOS e Linux; Windows compilado | `TestShell` e `TestChild` exercitam processos e terminais reais por sistema. macOS passou 151 casos e Linux passou 145; dois ensaios externos ficaram ignorados. `cargo-xwin --all-targets` passou; execução Windows permanece pendente |
 | 5.16 Matriz de CI | Matriz do `ci.yml` concluída localmente; execução remota pendente | Ubuntu 22.04, Windows 2022 e macOS 14 instalam toolchains, limitam Rust a dois jobs, compilam o sidecar, executam `npm test`, geram bundle sem assinatura e anexam os formatos por sistema. Release, Playwright, check de texto e resultado remoto permanecem pendentes |
@@ -89,7 +90,7 @@ Handoff da branch `fase-5/rust-multiplataforma`: **Parte Rust pronta para merge*
 | 7.3 Materiais das lojas | Preparados na frente C, publicação pendente | Políticas de privacidade em inglês e português, respostas propostas para Apple e Google, textos nas duas línguas e plano de capturas por tamanho estão versionados. Auditoria do binário, capturas nativas e preenchimento dos formulários dependem do usuário |
 | 7.4 Pacote de revisão | Preparado na frente C, execução pendente | Notas em inglês, roteiro do desktop isolado e roteiro de vídeo de até 90 segundos estão prontos. Máquina, acesso, gravação, TestFlight externo e submissões não foram criados nem executados |
 | 7.5 Release da versão 1 | Procedimento preparado na frente C, release pendente | Changelog público, roteiro da candidata e guarda local cobrem os seis gates do documento 10. A guarda final falha com todos os gates pendentes e nenhuma tag, assinatura, publicação ou instalação foi feita |
-| 3.10, 4.8, 5.11, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.6 | Não iniciadas ou pendentes na main | Janela, CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos do desktop e publicação da versão 1 continuam pendentes. A autorização para avançar não aprova testes físicos, remotos, de assinatura ou de loja |
+| 3.10, 4.8, 5.13, 5.14, 5.17, 5.18, 6.3, 6.5, 6.7 e 7.6 | Não iniciadas ou pendentes na main | CSS e preferências por sistema, assinatura, e2e noturno, uso do plano, testes físicos do desktop e publicação da versão 1 continuam pendentes. A autorização para avançar não aprova testes físicos, remotos, de assinatura ou de loja |
 
 ## Ambiente observado
 
@@ -583,6 +584,37 @@ O cache do Playwright estava vazio e a preferência do VS Code apontava para a r
 No Dev Browser Panel indicado pelo usuário, porta 64552, a URL exata `?platform=windows` renderizou com `data-platform="windows"` e sem exceções. As demos Windows e Linux exibiram rótulos Ctrl Shift. No terminal Windows, Ctrl F não abriu a busca do aplicativo e Ctrl Shift F abriu. A demo sem `platform` detectou macOS e mostrou ⌘, ⇧, ⌃ e ⌥, inclusive na paleta aberta por ⌘K. As capturas temporárias ficaram em `~/.dev-browser/tmp/cialai-5-12-windows-palette.png`, `cialai-5-12-linux-demo.png`, `cialai-5-12-macos-demo.png` e `cialai-5-12-macos-palette.png`.
 
 `npm run test:ui` terminou com código 0, com 17 casos de sincronização e 54 testes Node. `npm run build:ui --workspace @cialai/desktop` terminou com código 0, gerou as duas entradas e validou o recurso móvel com 130 assets. `git diff --check` também passou. O override de plataforma só é aceito fora do Tauri. Essa evidência não representa compilação ou execução nativa em Windows ou Linux.
+
+### 13/09/2026, janela por sistema da tarefa 5.11
+
+`window.rs` virou `window/mod.rs`, com a coreografia comum de abertura e um backend por sistema escolhido por `cfg`. `macos.rs` conserva `setFrame_display` e a vibrancy de sidebar sem mudança de comportamento. `windows.rs` move a janela sem moldura com um `SetWindowPos` por quadro, em pixels físicos, com `SWP_NOZORDER` e `SWP_NOACTIVATE`; o quadro vem de `outer_position` e `outer_size` e a área útil, de `work_area`. O Mica só é aplicado com `backdrop` automático a partir do build 22621, lido por `RtlGetVersion`, e a falha fica apenas registrada. `generic.rs` anima posição e tamanho interno no X11; no Wayland nativo, detectado por `WAYLAND_DISPLAY` sem `GDK_BACKEND` iniciado por `x11`, a abertura fica onde o compositor decidir e a janela salta direto ao tamanho final. A geometria passou a receber a origem do eixo vertical, porque o AppKit conta de baixo e Windows e X11 contam do topo. `window-vibrancy` ficou restrito a macOS e Windows, sem mudança no `Cargo.lock`.
+
+Na interface, `window-chrome.js` define por sistema a menubar nativa, o botão de menu, os controles próprios, os semáforos e a guarda do Escape. O Windows ganhou `WindowControls.jsx` com minimizar, maximizar ou restaurar e fechar por `windowControls` de `native.js`; a capability `window-controls.json` concede somente `allow-minimize` e `allow-toggle-maximize` na plataforma Windows. Linux e Windows ganharam o botão de menu da toolbar com as ações da menubar do macOS e os rótulos do contrato da 5.12. O espaçador dos semáforos e a reserva de 82 px da toolbar ficaram sob `data-platform="macos"`; o novo `platform.css` alinha a marca ao centro da toolbar e desenha os controles do Windows.
+
+Os testes vieram primeiro. `tools/check/desktop-window.mjs` falhou em `window/mod.rs` ausente, e os cinco testes Rust novos não compilaram por falta de `Origin`, `logical_rect`, `physical_rect`, `is_wayland_session` e `mica_supported`. Depois da implementação os dois passaram. A guarda entrou no `npm test` como `check:window`.
+
+Comandos concluídos com código 0:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run sidecar --workspace @cialai/desktop
+node tools/check/desktop-window.mjs
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib -j 2 window::
+CARGO_TARGET_DIR=~/.cache/cialai-target cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --all-targets -j 2 -- -D warnings
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+PATH="$SCRATCHPAD/xwin-shim:$PATH" CIALAI_SKIP_WINDOWS_RESOURCES=1 CARGO_TARGET_DIR=~/.cache/cialai-target cargo-xwin clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --locked -j 2 -- -D warnings
+node tools/build-tunnel.mjs --target aarch64-unknown-linux-gnu
+docker build --memory 6g --tag cialai-linux-desktop:agente-a - < tools/docker/linux-desktop.Dockerfile
+docker run --rm --memory 6g --memory-swap 6g --cpus 2 -v "$PWD:/workspace" -v cialai-a-linux-target:/target -v cialai-a-cargo-registry:/root/.cargo/registry -e CARGO_TARGET_DIR=/target -e CARGO_BUILD_JOBS=2 -e CARGO_INCREMENTAL=0 -e CARGO_PROFILE_DEV_DEBUG=0 -e CARGO_PROFILE_TEST_DEBUG=0 cialai-linux-desktop:agente-a bash -lc 'rustup component add clippy rustfmt; cd /workspace/apps/desktop/src-tauri; cargo test --locked --lib -j 2 window::; cargo clippy --locked --all-targets -j 2 -- -D warnings'
+npm run test:ui
+npm run build:ui --workspace @cialai/desktop
+git diff --check
+```
+
+Resultados: onze testes de janela passaram no macOS arm64 e os mesmos onze passaram no Ubuntu 22.04 arm64 em contêiner com 6 GiB, em 4 min 22 s de compilação; o Clippy do Linux levou 1 min 26 s. O Clippy com `-D warnings` passou no macOS, no Linux e no alvo `x86_64-pc-windows-msvc`, e o arquivo de dependências confirmou `window/windows.rs` nessa checagem. O `cargo-xwin` passou a exigir `llvm-lib` para o `ring`, que entrou com o atualizador depois da 5.15 e não existe neste Mac; como o Clippy não liga binários, um shim temporário no scratchpad só criou os arquivos estáticos pedidos, e nada no repositório depende dele. A imagem foi construída sem enviar o repositório como contexto. A suíte UI passou 17 casos de sincronização e 56 testes Node, e o build Vite validou o recurso móvel com 130 assets.
+
+No Dev Browser Panel da porta 64556, lida de `.dev-browser-panel/port` desta sessão, abas novas não receberam renderizador, então o ensaio reutilizou uma aba parada que apontava para um Vite 1420 desligado e serviu a interface num Vite próprio na porta 1431. Em 1440 por 960, `?platform=windows&terminais=demo` mostrou os três controles com 46 por 52 px encostados na borda direita, o botão de menu com catorze ações e rótulos Ctrl Shift, a marca a 16 px do topo e o espaçador com altura zero. `?platform=linux` mostrou o menu sem controles próprios. Sem o parâmetro, o macOS manteve o espaçador de 52 px e não mostrou menu nem controles. Não houve exceções nem overflow horizontal. As capturas ficaram em `~/.dev-browser/tmp/cialai-5-11-windows-window.png`, `cialai-5-11-windows-menu.png`, `cialai-5-11-linux-window.png`, `cialai-5-11-linux-menu.png` e `cialai-5-11-macos-window.png`. Elas também mostram que Linux e Windows ainda não recebem os tokens de `macos.css`, trabalho da 5.13.
+
+Nenhuma janela nativa Linux ou Windows foi aberta. X11, Wayland, Mica, `SetWindowPos`, as bordas de redimensionamento e os controles do Windows continuam dependentes de execução nos sistemas correspondentes.
 
 ### 12/09/2026, fonte de processos da tarefa 5.1
 

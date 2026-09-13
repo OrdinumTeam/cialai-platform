@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "window-controls",
+  "description": "Minimize and maximize for the frameless Windows window; close and state reads come from the default capability",
+  "windows": ["main"],
+  "platforms": ["windows"],
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-toggle-maximize"
+  ]
+}

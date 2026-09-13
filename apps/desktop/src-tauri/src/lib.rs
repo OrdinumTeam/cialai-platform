@@ -113,6 +113,7 @@ pub fn run() {
             app.manage(mobile_site.clone());
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
+            let backdrop = preferences.window.backdrop.clone();
             let prefs = prefs::PrefsState::new(preferences);
             app.manage(prefs.clone());
             app.manage(workspace::terminal::TerminalManager::new(
@@ -156,7 +157,7 @@ pub fn run() {
             app.manage(supervisor);
 
             if let Some(main_window) = app.get_webview_window("main") {
-                window::decorate(&main_window);
+                window::decorate(&main_window, &backdrop);
                 let keyboard_owner = main_window.clone();
                 let exit_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {

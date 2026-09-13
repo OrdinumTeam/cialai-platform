@@ -303,7 +303,7 @@
 /* sidebar */
 .mac-sidebar{position:relative;display:flex;flex-direction:column;flex:0 0 232px;width:232px;background:var(--mac-sidebar-bg);transition:margin-left var(--mac-normal) var(--mac-ease);user-select:none;-webkit-user-select:none}
 .mac-sidebar.is-hidden{margin-left:-232px;visibility:hidden}
-.mac-sidebar__drag{flex:0 0 52px;height:52px}
+[data-platform="macos"] .mac-sidebar__drag{flex:0 0 52px;height:52px}
 .mac-sidebar__brand{display:flex;align-items:center;gap:9px;padding:0 18px 14px}
 .mac-sidebar__logo{width:20px;height:20px;object-fit:contain;flex:0 0 auto;filter:brightness(0) invert(1)}
 .mac-sidebar__logo{filter:brightness(0) invert(1)}
@@ -393,7 +393,7 @@
 .mac-main{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;background:var(--mac-bg);color:var(--mac-label);transition:background-color var(--mac-normal) var(--mac-ease)}
 
 .mac-toolbar{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 16px 0 10px;background:var(--mac-toolbar-bg);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--mac-separator);user-select:none;-webkit-user-select:none;transition:background-color var(--mac-normal) var(--mac-ease)}
-.mac-toolbar.is-sidebar-hidden{padding-left:82px}
+[data-platform="macos"] .mac-toolbar.is-sidebar-hidden{padding-left:82px}
 /* Em tela cheia o macOS esconde os semaforos: a reserva da esquerda some e
    o botao da barra lateral encosta na borda, como as acoes da direita. */
 [data-fullscreen="true"] .mac-toolbar.is-sidebar-hidden{padding-left:10px}

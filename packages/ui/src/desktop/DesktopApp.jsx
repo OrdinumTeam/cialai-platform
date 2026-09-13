@@ -8,6 +8,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { ToastProvider } from '../components/ui.jsx';
 import ContentArea from '../components/ContentArea.jsx';
 import { closeCurrentWindow, invoke, watchFullscreen } from '../lib/native.js';
+import { platform } from '../lib/platform.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
@@ -21,6 +22,7 @@ import { buildMacTheme } from './theme.macos.js';
 import Toolbar from './Toolbar.jsx';
 import { TunnelProvider, useTunnel } from './TunnelContext.jsx';
 import { DESKTOP_VIEWS, DESKTOP_VIEW_COMPONENTS, getDesktopView, useDesktopViewRoute } from './views.js';
+import { windowChrome } from './window-chrome.js';
 
 const BOOT_RUNTIME_LIMIT_MS = 1500;
 const BOOT_GROW_TIMEOUT_MS = 1600;
@@ -37,7 +39,7 @@ function writeStored(key, value) {
 
 function useEscapeGuard() {
   useEffect(() => {
-    if (document.documentElement.dataset.platform !== 'macos') return undefined;
+    if (!windowChrome(platform().os).escapeGuard) return undefined;
     const onKeyDown = (event) => {
       if (event.key === 'Escape') event.preventDefault();
     };
@@ -177,7 +179,7 @@ function DesktopShell() {
           <div className={`mac-window${sidebarHidden ? ' mac-window--sidebar-hidden' : ''}${boot === 'ready' ? ' is-booted' : ''}${boot === 'splash' ? ' is-booting' : ''}`}>
             <Sidebar views={DESKTOP_VIEWS} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
-              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} />
+              <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={DESKTOP_VIEWS} />
               <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={DESKTOP_VIEWS} actions={actions} appearance={appearance} />
