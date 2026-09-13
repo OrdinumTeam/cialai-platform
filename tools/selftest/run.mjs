@@ -2,26 +2,23 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { bridgeEnv, freePort, reportPath, targetDirProblem } from './common.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const targetProblem = targetDirProblem(process.env.CARGO_TARGET_DIR);
+if (targetProblem) throw new Error(targetProblem);
 
-function reportPath() {
-  if (process.platform === 'darwin') return join(homedir(), 'Library', 'Logs', 'br.com.ordinum.cialai', 'selftest.json');
-  if (process.platform === 'win32') return join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'br.com.ordinum.cialai', 'logs', 'selftest.json');
-  return join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'br.com.ordinum.cialai', 'logs', 'selftest.json');
-}
-
-const output = reportPath();
+const output = reportPath({ platform: process.platform, env: process.env, home: homedir() });
 if (existsSync(output)) unlinkSync(output);
+const env = bridgeEnv(process.env, await freePort());
 
 const child = spawn('npm', [
   'run', 'dev', '--workspace', '@cialai/desktop', '--',
   '--config', 'src-tauri/tauri.selftest.conf.json',
 ], {
   cwd: root,
-  env: process.env,
+  env,
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: process.platform !== 'win32',
 });

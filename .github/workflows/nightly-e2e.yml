@@ -1,0 +1,103 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Nightly E2E
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  selftest:
+    name: Self test / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      CARGO_BUILD_JOBS: 2
+      CARGO_TERM_COLOR: always
+      TAURI_DRIVER_VERSION: 2.0.6
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências do desktop e do WebDriver no Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev \
+            libssl-dev \
+            zsh \
+            webkit2gtk-driver \
+            xvfb
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.8
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Instalar tauri-driver
+        run: cargo install tauri-driver --locked --version ${{ env.TAURI_DRIVER_VERSION }}
+
+      - name: Instalar o Edge WebDriver da versão do WebView2
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $key = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          $version = (Get-ItemProperty -Path $key -Name pv).pv
+          if (-not $version) { throw 'Versão do WebView2 não encontrada' }
+          $zip = Join-Path $env:RUNNER_TEMP 'edgedriver_win64.zip'
+          $dir = Join-Path $env:RUNNER_TEMP 'msedgedriver'
+          Invoke-WebRequest -Uri "https://msedgedriver.microsoft.com/$version/edgedriver_win64.zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $dir -Force
+          & (Join-Path $dir 'msedgedriver.exe') --version
+          $dir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Compilar sidecar local
+        run: npm run sidecar --workspace @cialai/desktop
+
+      - name: Compilar o app de depuração
+        run: npm run build --workspace @cialai/desktop -- --debug --no-bundle
+
+      - name: Self test no Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm run test:selftest:driver -- --artifacts selftest-artifacts
+
+      - name: Self test no Windows
+        if: runner.os == 'Windows'
+        run: npm run test:selftest:driver -- --artifacts selftest-artifacts
+
+      - name: Anexar evidências
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-${{ runner.os }}-${{ runner.arch }}
+          if-no-files-found: warn
+          path: selftest-artifacts/

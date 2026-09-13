@@ -98,14 +98,14 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.8 | Preparado | Prévia testada no macOS e Linux; WebView2 não exercitado |
 | 5.9 | Preparado | Descoberta testada no macOS e Linux; Chromium, WebView2 e LibreOffice reais pendentes fora do macOS |
 | 5.10 | Preparado | Diagnóstico e hook testados no macOS e Linux; instalador PowerShell sem execução nativa |
-| 5.11 | Preparado | Backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; janela nativa Linux e Windows não exercitada |
+| 5.11 | Preparado | Backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; animação X11 medida sob Xvfb, Wayland e Windows nativo não exercitados |
 | 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; sem execução nativa Linux ou Windows |
 | 5.13 | Implementado | Casca, fontes, `.mac-switch` e JetBrains Mono conferidos no Dev Browser nos três sistemas; WebKitGTK e WebView2 reais não exercitados |
 | 5.14 | Implementado | Terminal, Dev Browser, Janela e caminhos por sistema conferidos no Dev Browser e em testes Rust nos três alvos; troca do Mica ao salvar sem execução Windows |
 | 5.15 | Preparado | Suíte Rust passou no macOS e Linux; Windows apenas compilado |
 | 5.16 | Preparado | Matriz do `ci.yml` versionada sem execução remota; release, Playwright e check de texto pendentes |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |
-| 5.18 | Pendente | Nightly e self test remoto não existem |
+| 5.18 | Preparado | `nightly-e2e.yml`, runner por `tauri-driver` e roteiro portátil existem; self test Linux passou em contêiner com Xvfb e macOS por `tauri dev`; execução remota e Windows pendentes |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
 
 ### Fase 6

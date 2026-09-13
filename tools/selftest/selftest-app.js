@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 // Runs inside the real Tauri webview. It touches only an app-owned cache run
-// returned by Rust and writes the final report under app_log_dir.
+// returned by Rust and writes the final report under app_log_dir. Commands,
+// quoting and system metadata follow the platform and the shell flavor, so the
+// same script runs on macOS, Linux and Windows.
 
 import * as runtime from '../../packages/ui/src/terminals/runtime.js';
-import { fs } from '../../packages/ui/src/terminals/files.js';
+import { fs, shellQuote } from '../../packages/ui/src/terminals/files.js';
 import { invoke } from '../../packages/ui/src/lib/native.js';
+import { platform } from '../../packages/ui/src/lib/platform.js';
+import { EXECUTED_PATH, noiseFixtures, PTY_ATTEMPTS, PTY_MARKER, PTY_OUTPUT_MS, ptyMarkerCommand, quotedTail, TERMINAL_READY_MS } from './portable.js';
 
 const pause = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
 let sessionId = null;
+let shellFlavor = null;
 let paths = null;
 
 async function until(test, what, limit = 20000) {
@@ -56,7 +61,10 @@ function center(node) {
   return { x: rect.left + rect.width / 2, y: rect.top + Math.min(rect.height / 2, 12) };
 }
 
-async function drag(source, target) {
+// Arrasta pelo gesto do estúdio e confere o destaque do próprio alvo: pasta
+// com is-drop e terminal com is-dropping. O destaque de outro elemento no
+// caminho do mouse não conta.
+async function drag(source, target, highlight) {
   const from = center(source);
   mouse(source, 'mousedown', from.x, from.y);
   await pause(30);
@@ -67,7 +75,7 @@ async function drag(source, target) {
   const deadline = Date.now() + 1500;
   let highlighted = false;
   while (Date.now() < deadline) {
-    highlighted = Boolean(document.querySelector('.terminais-row.is-drop, .terminais-tree.is-drop-root, .terminais-terminal.is-drop'));
+    highlighted = target.matches(highlight);
     if (highlighted) break;
     await pause(40);
   }
@@ -110,12 +118,24 @@ async function run() {
   await until(() => runtime.getSession(sessionId)?.status === 'running', 'o shell abrir');
   runtime.selectSession(sessionId);
   const session = runtime.getSession(sessionId);
+  shellFlavor = session.shellFlavor || null;
   await until(() => row('destino'), 'a árvore listar a pasta destino');
+  // Na primeira abertura, WebKitGTK e WebView2 ainda criam caches de fonte e de
+  // renderização; os itens do terminal só começam com o xterm montado na tela.
+  await until(() => document.querySelector('.terminais-terminal__host .xterm-screen'), 'o terminal montar', TERMINAL_READY_MS);
 
   await check('PTY real', async () => {
-    runtime.insertText(sessionId, "printf 'CIALAI_SELFTEST_PTY\\n'\n");
-    await until(() => bufferText(session).includes('CIALAI_SELFTEST_PTY'), 'a saída do PTY', 10000);
-    return `shell ${session.shellFlavor} respondeu no PTY`;
+    await until(() => bufferText(session).trim(), 'o prompt do shell', TERMINAL_READY_MS);
+    for (let attempt = 1; attempt <= PTY_ATTEMPTS; attempt += 1) {
+      runtime.insertText(sessionId, ptyMarkerCommand(session.shellFlavor));
+      try {
+        await until(() => bufferText(session).includes(PTY_MARKER), 'a saída do PTY', PTY_OUTPUT_MS);
+        return `shell ${session.shellFlavor} respondeu no PTY${attempt > 1 ? ` na tentativa ${attempt}` : ''}`;
+      } catch (error) {
+        if (attempt === PTY_ATTEMPTS) throw error;
+      }
+    }
+    return '';
   });
 
   await check('arquivos pelo Rust', async () => {
@@ -132,7 +152,7 @@ async function run() {
   await check('arraste entre pastas', async () => {
     const source = await until(() => row('origem.txt'), 'a linha origem.txt');
     const target = row('destino');
-    const gesture = await drag(source, target);
+    const gesture = await drag(source, target, '.is-drop');
     if (!gesture.ghost) throw new Error('o gesto não mostrou a marca de arraste');
     if (!gesture.highlighted) throw new Error('a pasta não mostrou o destaque de destino');
     await untilAsync(() => exists(`${paths.root}/destino/origem.txt`), 'o arquivo entrar na pasta');
@@ -143,24 +163,25 @@ async function run() {
   await check('caminho no terminal', async () => {
     runtime.insertText(sessionId, '\x03');
     const source = await until(() => row('com espaço.txt'), 'a linha com espaço');
-    const target = document.querySelector('.terminais-terminal');
-    const gesture = await drag(source, target);
+    const target = session.term.element?.closest('.terminais-terminal') || document.querySelector('.terminais-terminal');
+    const gesture = await drag(source, target, '.is-dropping');
     if (!gesture.ghost || !gesture.highlighted) throw new Error('o terminal não aceitou o gesto de arraste');
     await until(() => bufferText(session).includes('com espaço.txt'), 'o caminho no terminal');
     const text = bufferText(session);
-    if (!text.includes("/com espaço.txt'")) throw new Error('o caminho não veio absoluto e protegido por aspas');
-    if (/command not found|not found/i.test(text)) throw new Error('o caminho foi executado sem confirmação');
+    const quoted = shellQuote(`${paths.root}/com espaço.txt`, session.shellFlavor);
+    if (!text.includes(quotedTail(quoted))) throw new Error(`o caminho não veio absoluto e protegido por aspas de ${session.shellFlavor}`);
+    if (EXECUTED_PATH.test(text)) throw new Error('o caminho foi executado sem confirmação');
     runtime.insertText(sessionId, '\x03');
     return 'caminho absoluto inserido sem executar o arquivo';
   });
 
   await check('sujeira do sistema filtrada', async () => {
-    await fs.writeText(`${paths.root}/.DS_Store`, 'fixture', null);
-    await fs.writeText(`${paths.root}/._oculto.txt`, 'fixture', null);
+    const fixtures = noiseFixtures(platform().os);
+    for (const name of fixtures) await fs.writeText(`${paths.root}/${name}`, 'fixture', null);
     const listing = await fs.listDir(paths.root);
-    const noise = listing.entries.filter((item) => item.name === '.DS_Store' || item.name.startsWith('._'));
+    const noise = listing.entries.filter((item) => fixtures.includes(item.name));
     if (noise.length) throw new Error(`a listagem expôs ${noise.map((item) => item.name).join(', ')}`);
-    return 'arquivos de metadados não aparecem na listagem';
+    return `${fixtures.join(' e ')} não aparecem na listagem de ${platform().os}`;
   });
 
   await check('editor de CSV', async () => {
@@ -216,6 +237,8 @@ if (!window.__CIALAI_SELFTEST_RUNNING__) {
 
   const report = {
     ok: results.length > 0 && results.every((item) => item.ok),
+    platform: platform().os,
+    shellFlavor,
     startedAt,
     finishedAt: new Date().toISOString(),
     results,

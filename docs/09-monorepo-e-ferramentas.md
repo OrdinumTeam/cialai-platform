@@ -46,7 +46,7 @@ cialai-platform/
     run.mjs                          orquestra checks desktop, túnel e integrações
 ```
 
-O diretório `tools/browser` e `nightly-e2e.yml` continuam planejados para as tarefas 5.15 e 5.18. Diretórios gerados como `dist`, `target`, `node_modules`, binários e recursos móveis podem existir no ambiente local e permanecem ignorados pelo Git.
+O diretório `tools/browser` continua planejado para a tarefa 5.15. `nightly-e2e.yml` e `tools/selftest/driver.mjs` existem desde a tarefa 5.18, sem execução remota observada. Diretórios gerados como `dist`, `target`, `node_modules`, binários e recursos móveis podem existir no ambiente local e permanecem ignorados pelo Git.
 
 ## Pacotes
 

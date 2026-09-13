@@ -10,7 +10,7 @@ A distribuição foi desenhada com GitHub Actions para desktop, núcleo do túne
 | `spike-headscale.yml` | Preparado | Contrato existe e o spike passou localmente; execução no GitHub não foi observada |
 | `headscale-integration.yml` | Preparado | Workflow e integração Docker existem; o gate remoto no SHA da candidata está pendente |
 | `release.yml` | Preparado | Matriz desktop, cinco sidecars, updater e rascunho existem; assinaturas de plataforma, publicação dos sidecars brutos e execução por tag continuam pendentes |
-| `nightly-e2e.yml` | Pendente | O workflow ainda não existe nesta linha |
+| `nightly-e2e.yml` | Preparado | Self test diário no Ubuntu 22.04 e no Windows 2022 por `tauri-driver` 2.0.6, com WebKitWebDriver e Xvfb no Linux e Edge WebDriver da versão do WebView2 no Windows; nenhuma execução remota foi observada |
 | `mobile-artifacts.yml` | Pendente | O workflow dedicado ao XCFramework e ao AAR ainda não existe; Codemagic pode compilar os bindings no runner |
 | `ios-testflight`, `ios-archive` e `android-play` | Preparado | Configuração e checks locais existem; apps, integrações, credenciais, builds e uploads não foram executados |
 | Scripts em `tools/release` | Implementado | Contratos locais, modo de ensaio e guardas estão versionados e testados sem credenciais reais |
@@ -30,7 +30,7 @@ Go está fixado em 1.26.5 pela decisão 022 e Rust em 1.98.1. As tabelas seguint
 | `release.yml` | tag `v*` e manual | Bloqueia a chave pública provisória e secrets vazios; testa e compila cinco sidecars; entrega o artefato à matriz `macos-14`, `macos-13`, `ubuntu-22.04` e `windows-2022`; `tauri-action` compila os bundles e mantém a release em rascunho. Assinatura de plataforma, sidecars brutos, hashes, notas do changelog e artefatos móveis ainda não estão completos no workflow |
 | `headscale-integration.yml` | mudanças no túnel, diário e manual | `ubuntu-22.04` com Docker; vet e integração contra `headscale/headscale:0.29.3` com prazo de doze minutos |
 | `spike-headscale.yml` | PR no túnel e manual | Executa o spike de política e expiração com Headscale 0.29.3 no Linux |
-| `nightly-e2e.yml` | Planejado para execução diária | Ainda ausente; deve executar o self test no Linux e no Windows e anexar evidências |
+| `nightly-e2e.yml` | Diário às 05:17 UTC e manual | Matriz `ubuntu-22.04` e `windows-2022`; instala dependências, `tauri-driver` 2.0.6 e, no Windows, o Edge WebDriver da versão do WebView2; compila sidecar e app de depuração sem bundle; roda `tools/selftest/driver.mjs`, sob Xvfb no Linux, e anexa `selftest.json`, `app.log` e o log do driver mesmo em falha. Não consome secrets |
 | `mobile-artifacts.yml` | Planejado para tag e manual | Ainda ausente; deve publicar `Tunnelcore.xcframework.zip`, `tunnelcore.aar` e hashes para a release |
 
 O workflow atual referencia somente `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Os nomes planejados para Developer ID, notarização e Azure Trusted Signing ainda precisam ser ligados ao workflow sem expor valores. Builds de PR nunca devem receber secrets.
