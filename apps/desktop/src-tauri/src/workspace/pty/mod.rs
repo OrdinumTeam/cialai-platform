@@ -117,13 +117,40 @@ impl TestShell {
         }
     }
 
+    pub(crate) fn print(&self, text: &str) -> Vec<u8> {
+        match self.spec.flavor {
+            ShellFlavor::Posix => {
+                format!("printf '%s\\n' '{}'\n", text.replace('\'', "'\\''")).into_bytes()
+            }
+            ShellFlavor::Powershell => {
+                format!("Write-Output '{}'\r\n", text.replace('\'', "''")).into_bytes()
+            }
+            ShellFlavor::Cmd => format!("echo {text}\r\n").into_bytes(),
+        }
+    }
+
+    pub(crate) fn exit(&self) -> Vec<u8> {
+        match self.spec.flavor {
+            ShellFlavor::Posix => b"exit\n".to_vec(),
+            ShellFlavor::Powershell => b"exit\r\n".to_vec(),
+            ShellFlavor::Cmd => b"exit /b\r\n".to_vec(),
+        }
+    }
+
     pub(crate) fn burn_cpu(&self) -> Vec<u8> {
         match self.spec.flavor {
             ShellFlavor::Posix => b"yes > /dev/null\n".to_vec(),
-            ShellFlavor::Powershell => {
-                b"while ($true) { [Math]::Sqrt(144) | Out-Null }\r\n".to_vec()
+            ShellFlavor::Powershell | ShellFlavor::Cmd => b"powershell.exe -NoLogo -NoProfile -Command \"while ($true) { [void][Math]::Sqrt(144) }\"\r\n".to_vec(),
+        }
+    }
+
+    pub(crate) fn cpu_process(&self, command: &str) -> bool {
+        match self.spec.flavor {
+            ShellFlavor::Posix => command == "yes",
+            ShellFlavor::Powershell | ShellFlavor::Cmd => {
+                command.eq_ignore_ascii_case("powershell.exe")
+                    || command.eq_ignore_ascii_case("powershell")
             }
-            ShellFlavor::Cmd => b"for /L %i in (1,0,2) do @ver >nul\r\n".to_vec(),
         }
     }
 }
@@ -143,6 +170,13 @@ mod tests {
         let command = String::from_utf8(shell.print_and_exit("cialai", 7)).unwrap();
         assert!(command.contains("cialai"));
         assert!(command.contains('7'));
+        assert!(!shell.print("cialai").is_empty());
+        assert!(!shell.exit().is_empty());
         assert!(!shell.burn_cpu().is_empty());
+        assert!(shell.cpu_process(if cfg!(windows) {
+            "powershell.exe"
+        } else {
+            "yes"
+        }));
     }
 }

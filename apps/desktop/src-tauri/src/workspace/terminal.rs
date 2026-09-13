@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Sessoes de terminal sobre PTY.
 //!
-//! Cada sessao abre um `/bin/zsh -l` num PTY do `portable-pty` e transmite a
-//! saida ao webview por um `Channel` do Tauri em bytes brutos. Tres threads
+//! Cada sessao abre o shell escolhido para o sistema num PTY do
+//! `portable-pty` e transmite a saida ao webview por um `Channel` do Tauri em
+//! bytes brutos. Tres threads
 //! por sessao: a leitora do master, a que espera o processo terminar e a de
 //! lote, que junta os chunks por ate 4 ms, respeita a marca d'agua de bytes
 //! sem confirmacao e envia o fim da sessao pelo mesmo canal, depois do ultimo
@@ -38,8 +39,6 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
-#[cfg(test)]
-use super::DEFAULT_SHELL;
 use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, ProcSource, ProcState, SystemProcs};
@@ -632,6 +631,7 @@ impl TerminalManager {
         self.journal = Some(store.clone());
         let weak = Arc::downgrade(&self.inner);
         let commands = self.commands.clone();
+        let home = self.home.clone();
         let _ = thread::Builder::new()
             .name("terminais-estado".into())
             .spawn(move || {
@@ -640,7 +640,7 @@ impl TerminalManager {
                     let Some(inner) = weak.upgrade() else {
                         break;
                     };
-                    snapshot(&inner, &store, &commands);
+                    snapshot(&inner, &store, &commands, &home);
                 }
             });
         self
@@ -655,53 +655,6 @@ impl TerminalManager {
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
         self.spawn_configured(cwd, cols, rows, tag, SubscriberKey::Webview, channel)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn spawn_with_args(
-        &self,
-        cwd: &str,
-        cols: u16,
-        rows: u16,
-        tag: &str,
-        channel: Channel,
-        args: &[&str],
-    ) -> Result<TerminalInfo, String> {
-        let shell = ShellSpec::new(
-            DEFAULT_SHELL,
-            args.iter().map(|value| (*value).to_string()).collect(),
-        );
-        let prefs = self.prefs.get();
-        self.spawn_for_with_spec(
-            cwd,
-            cols,
-            rows,
-            tag,
-            SubscriberKey::Webview,
-            channel,
-            &shell,
-            &prefs,
-        )
-    }
-
-    #[cfg(test)]
-    #[allow(clippy::too_many_arguments)]
-    fn spawn_for_with_args(
-        &self,
-        cwd: &str,
-        cols: u16,
-        rows: u16,
-        tag: &str,
-        key: SubscriberKey,
-        channel: Channel,
-        args: &[&str],
-    ) -> Result<TerminalInfo, String> {
-        let shell = ShellSpec::new(
-            DEFAULT_SHELL,
-            args.iter().map(|value| (*value).to_string()).collect(),
-        );
-        let prefs = self.prefs.get();
-        self.spawn_for_with_spec(cwd, cols, rows, tag, key, channel, &shell, &prefs)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1454,7 +1407,12 @@ impl TerminalManager {
 /// Grava pasta, tamanho e agente de cada sessao viva. As leituras do kernel
 /// ficam fora do lock das sessoes, e a escrita confere de novo que a sessao
 /// continua a mesma, para uma amostra atrasada nao desfazer o fim dela.
-fn snapshot(inner: &Mutex<Inner>, store: &JournalStore, commands: &Mutex<CommandCache>) {
+fn snapshot(
+    inner: &Mutex<Inner>,
+    store: &JournalStore,
+    commands: &Mutex<CommandCache>,
+    home: &Path,
+) {
     let targets = lock(inner)
         .sessions
         .values()
@@ -1473,12 +1431,11 @@ fn snapshot(inner: &Mutex<Inner>, store: &JournalStore, commands: &Mutex<Command
             )
         })
         .collect::<Vec<_>>();
-    let home = user_home();
     for (id, tag, cwd, cols, rows, pid) in targets {
         let agent = pid.and_then(|pid| {
             let mut tree = vec![pid];
             tree.extend(procs::descendants(pid));
-            resume::detect(pid, &tree, &mut lock(commands), &home)
+            resume::detect(pid, &tree, &mut lock(commands), home)
         });
         store.write_meta(&SavedMeta::sample(&tag, &cwd, cols, rows, agent), || {
             lock(inner)
@@ -1497,13 +1454,6 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 fn closed_error() -> String {
     "Sessão encerrada".to_string()
-}
-
-/// Pasta do usuario, para resolver o perfil padrao dos agentes.
-fn user_home() -> PathBuf {
-    std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/"))
 }
 
 /// Descreve o lider do grupo em primeiro plano. Se o lider ja saiu, vale o
@@ -1576,6 +1526,19 @@ fn validate_view_size(cols: u16, rows: u16) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn spawn_test_shell(
+        manager: &TerminalManager,
+        shell: &pty::TestShell,
+        tag: &str,
+        key: SubscriberKey,
+        channel: Channel,
+    ) -> TerminalInfo {
+        let prefs = manager.prefs.get();
+        manager
+            .spawn_for_with_spec(shell.cwd(), 80, 24, tag, key, channel, shell.spec(), &prefs)
+            .expect("spawn")
+    }
+
     #[test]
     fn mobile_presentation_accepts_default_color_and_rejects_wrong_types() {
         let value = serde_json::json!({"name":"Codex", "subtitle":"Projeto", "color":null, "pinned":true, "order":3});
@@ -1605,23 +1568,21 @@ mod tests {
             }
         }
         let _cleanup = Cleanup(manager.clone());
-        let id = manager
-            .spawn_with_args(
-                "/tmp",
-                80,
-                24,
-                "resize-isolated",
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .unwrap()
-            .id;
+        let shell = pty::TestShell::isolated();
+        let id = spawn_test_shell(
+            &manager,
+            &shell,
+            "resize-isolated",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        )
+        .id;
         let key = SubscriberKey::Remote(8);
         assert!(manager.subscribed_cwd(id, key).is_err());
         manager
             .attach_for(id, key, Channel::new(|_| Ok(())))
             .unwrap();
-        assert_eq!(manager.subscribed_cwd(id, key).unwrap(), "/tmp");
+        assert_eq!(manager.subscribed_cwd(id, key).unwrap(), shell.cwd());
         let view = manager.view_claim(id, key, 40, 20).unwrap();
         let local = manager.clone();
         let resize = thread::spawn(move || {
@@ -1659,17 +1620,15 @@ mod tests {
             }
         }
         let _cleanup = Cleanup(manager.clone());
-        let id = manager
-            .spawn_with_args(
-                "/tmp",
-                80,
-                24,
-                "mobile-isolated",
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .unwrap()
-            .id;
+        let shell = pty::TestShell::isolated();
+        let id = spawn_test_shell(
+            &manager,
+            &shell,
+            "mobile-isolated",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        )
+        .id;
         let a = SubscriberKey::Remote(1);
         let b = SubscriberKey::Remote(2);
         assert!(manager.view_claim(id, a, 40, 20).is_err());
@@ -1721,17 +1680,15 @@ mod tests {
             }
         }
         let _cleanup = Cleanup(manager.clone());
-        let id = manager
-            .spawn_with_args(
-                "/tmp",
-                80,
-                24,
-                "expiry-isolated",
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .unwrap()
-            .id;
+        let shell = pty::TestShell::isolated();
+        let id = spawn_test_shell(
+            &manager,
+            &shell,
+            "expiry-isolated",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        )
+        .id;
         let key = SubscriberKey::Remote(7);
         manager
             .attach_for(id, key, Channel::new(|_| Ok(())))
@@ -1900,28 +1857,21 @@ mod tests {
             }
         }
         let _cleanup = Cleanup(manager.clone());
-        let first = manager
-            .spawn_for_with_args(
-                "/tmp",
-                80,
-                24,
-                "isolated-one",
-                SubscriberKey::Remote(4),
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .unwrap();
-        let second = manager
-            .spawn_for_with_args(
-                "/tmp",
-                80,
-                24,
-                "isolated-two",
-                SubscriberKey::Remote(4),
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .unwrap();
+        let shell = pty::TestShell::isolated();
+        let first = spawn_test_shell(
+            &manager,
+            &shell,
+            "isolated-one",
+            SubscriberKey::Remote(4),
+            Channel::new(|_| Ok(())),
+        );
+        let second = spawn_test_shell(
+            &manager,
+            &shell,
+            "isolated-two",
+            SubscriberKey::Remote(4),
+            Channel::new(|_| Ok(())),
+        );
         manager
             .attach_for(first.id, SubscriberKey::Remote(5), Channel::new(|_| Ok(())))
             .unwrap();
@@ -1941,7 +1891,7 @@ mod tests {
                     .subscribers
                     .contains_key(&SubscriberKey::Webview)
             );
-            manager.write(id, b"printf isolated\n").unwrap();
+            manager.write(id, &shell.print("isolated")).unwrap();
         }
         assert!(
             lock(&manager.output(first.id).unwrap().0.state)
@@ -1970,8 +1920,14 @@ mod tests {
     #[test]
     fn configured_path_prefix_wins() {
         let mut prefs = Preferences::default();
-        prefs.terminal.path_prefix = vec!["/cialai-test-bin".into()];
-        assert!(platform::path_env(&prefs, Path::new("/tmp")).starts_with("/cialai-test-bin"));
+        let home = std::env::temp_dir();
+        let prefix = home.join("cialai-test-bin");
+        prefs.terminal.path_prefix = vec![prefix.to_string_lossy().into_owned()];
+        let path = platform::path_env(&prefs, &home);
+        assert_eq!(
+            std::env::split_paths(&path).next().as_deref(),
+            Some(prefix.as_path())
+        );
     }
 
     fn collect_until_exit(
@@ -2045,23 +2001,22 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("oc-terminal-journal-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let manager = TerminalManager::with_notifier(Arc::new(|_| {})).with_journal(dir.clone());
+        let shell = pty::TestShell::isolated();
         let (tx, rx) = channel::<InvokeResponseBody>();
         let sink = Channel::new(move |body| {
             let _ = tx.send(body);
             Ok(())
         });
-        let info = manager
-            .spawn_with_args("/tmp", 80, 24, "s_journal", sink, &["-f"])
-            .expect("spawn");
+        let info = spawn_test_shell(&manager, &shell, "s_journal", SubscriberKey::Webview, sink);
         let saved = manager.saved("s_journal").expect("estado gravado ao abrir");
         assert_eq!(
             (saved.cwd.as_str(), saved.cols, saved.rows),
-            ("/tmp", 80, 24)
+            (shell.cwd(), 80, 24)
         );
         assert!(saved.resume.is_none());
         assert_eq!(manager.live_count(), 1);
         manager
-            .write(info.id, b"printf 'historico-%s\\n' $((40+2)); exit 0\n")
+            .write(info.id, &shell.print_and_exit("historico-42", 0))
             .expect("write");
         let (_, exit) = collect_until_exit(&rx);
         assert!(exit.is_some());
@@ -2078,8 +2033,14 @@ mod tests {
     fn rejects_missing_directory() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
         let sink = Channel::new(|_| Ok(()));
+        let missing = std::env::temp_dir().join(format!(
+            "cialai-missing-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&missing);
         let error = manager
-            .spawn("/definitivamente/nao/existe", 80, 24, "t2", sink)
+            .spawn(&missing.to_string_lossy(), 80, 24, "t2", sink)
             .unwrap_err();
         assert!(error.contains("Pasta não encontrada"));
     }
@@ -2115,12 +2076,13 @@ mod tests {
     #[test]
     fn metrics_follow_the_foreground_job_and_measure_cpu() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
         let (tx, rx) = channel::<InvokeResponseBody>();
         let sink = Channel::new(move |body| {
             let _ = tx.send(body);
             Ok(())
         });
-        let info = manager.spawn("/tmp", 80, 24, "m1", sink).expect("spawn");
+        let info = spawn_test_shell(&manager, &shell, "m1", SubscriberKey::Webview, sink);
         // Espera o prompt: o shell em primeiro plano e sem job.
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut idle = false;
@@ -2141,14 +2103,14 @@ mod tests {
 
         // Um job que ocupa a CPU: o lider do grupo em primeiro plano e o yes
         // e a soma de CPU da arvore precisa aparecer na segunda amostra.
-        manager.write(info.id, b"yes > /dev/null\n").expect("write");
+        manager.write(info.id, &shell.burn_cpu()).expect("write");
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut seen = None;
         while Instant::now() < deadline {
             thread::sleep(Duration::from_millis(250));
             let sample = manager.metrics().remove(0);
             if let Some(foreground) = &sample.foreground {
-                if foreground.command == "yes" {
+                if shell.cpu_process(&foreground.command) {
                     if let Some(cpu) = sample.cpu_percent {
                         if cpu > 20.0 {
                             seen = Some((foreground.clone(), cpu, sample.memory_bytes));
@@ -2159,7 +2121,7 @@ mod tests {
             }
         }
         let (foreground, cpu, memory) = seen.expect("yes em primeiro plano com CPU medida");
-        assert_eq!(foreground.command, "yes");
+        assert!(shell.cpu_process(&foreground.command));
         assert!(foreground.agent.is_none());
         assert!(cpu > 20.0 && cpu < 800.0, "cpu fora da faixa: {cpu}");
         assert!(
@@ -2168,7 +2130,7 @@ mod tests {
         );
 
         manager.write(info.id, &[0x03]).expect("ctrl-c");
-        manager.write(info.id, b"exit\n").expect("exit");
+        manager.write(info.id, &shell.exit()).expect("exit");
         let (_, exit) = collect_until_exit(&rx);
         assert!(exit.is_some());
         assert!(manager.metrics().is_empty());
@@ -2187,16 +2149,14 @@ mod tests {
             }
         }
         let _cleanup = Cleanup(manager.clone());
-        let info = manager
-            .spawn_with_args(
-                "/tmp",
-                80,
-                24,
-                "fake-metrics",
-                Channel::new(|_| Ok(())),
-                &["-f"],
-            )
-            .expect("spawn");
+        let test_shell = pty::TestShell::isolated();
+        let info = spawn_test_shell(
+            &manager,
+            &test_shell,
+            "fake-metrics",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
         let shell = info.pid.expect("pid do shell");
         let agent = shell.saturating_add(10_000);
         fake.set_children(shell, vec![agent]);
@@ -2253,7 +2213,8 @@ mod tests {
             },
         );
         fake.set_name(agent, "claude");
-        fake.set_cwd(shell, "/tmp/projeto");
+        let project = std::env::temp_dir().join("projeto");
+        fake.set_cwd(shell, project.to_string_lossy());
 
         let first = manager.metrics().remove(0);
         assert_eq!(first.cpu_percent, None);
@@ -2264,6 +2225,9 @@ mod tests {
         assert!(second.cpu_percent.is_some_and(|cpu| cpu > 0.0));
         assert_eq!(second.agent.as_deref(), Some("Claude Code"));
         assert_eq!(second.agent_profile.as_deref(), Some("claude"));
-        assert_eq!(second.shell_cwd.as_deref(), Some("/tmp/projeto"));
+        assert_eq!(
+            second.shell_cwd.as_deref(),
+            Some(project.to_string_lossy().as_ref())
+        );
     }
 }

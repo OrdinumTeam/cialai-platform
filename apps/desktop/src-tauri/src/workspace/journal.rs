@@ -49,7 +49,10 @@ const LINE_SEARCH: usize = 64 * 1024;
 /// mostra o cursor, desliga teclas de aplicacao, mouse, foco, colagem entre
 /// colchetes e teclado estendido, e desce ao fim da tela para a linha
 /// seguinte nao cobrir nada.
+#[cfg(not(target_os = "windows"))]
 pub const TERMINAL_RESET: &[u8] = b"\x1b[?2026l\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1004l\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?7h\x1b[0m\x1b[999B\r\n";
+#[cfg(target_os = "windows")]
+pub const TERMINAL_RESET: &[u8] = b"\x1b[?1049l\x1b7\x1b[r\x1b8\x1b[?25h\x1b[?1l\x1b>\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1004l\x1b[?2004l\x1b[>4;0m\x1b[?7h\x1b[0m\x1b[999B\r\n";
 
 /// Estado gravado de uma sessao.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -304,7 +307,7 @@ pub struct JournalWriter {
 
 impl JournalWriter {
     fn open(path: PathBuf) -> Option<Self> {
-        match OpenOptions::new().create(true).append(true).open(&path) {
+        match open_append(&path, true) {
             Ok(file) => {
                 let size = file.metadata().map(|meta| meta.len()).unwrap_or(0);
                 Some(Self {
@@ -362,8 +365,22 @@ fn compact(path: &Path) -> io::Result<(File, u64)> {
     let (tail, _) = read_tail(path, LOG_KEEP)?;
     let kept = &tail[line_start(&tail)..];
     write_atomic(path, kept)?;
-    let file = OpenOptions::new().append(true).open(path)?;
+    let file = open_append(path, false)?;
     Ok((file, kept.len() as u64))
+}
+
+fn open_append(path: &Path, create: bool) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.create(create).append(true);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        // A compactação troca o arquivo enquanto o handle anterior ainda está
+        // vivo. Sem compartilhamento de exclusão, o rename falha no Windows.
+        const SHARE_READ_WRITE_DELETE: u32 = 0x0000_0001 | 0x0000_0002 | 0x0000_0004;
+        options.share_mode(SHARE_READ_WRITE_DELETE);
+    }
+    options.open(path)
 }
 
 /// Ultimos `limit` bytes do arquivo e se houve corte.
@@ -449,6 +466,19 @@ mod tests {
         for bad in ["", "../x", "a/b", "a.b", "a b", long.as_str()] {
             assert!(!valid_tag(bad), "{bad}");
         }
+    }
+
+    #[test]
+    fn terminal_reset_avoids_sequences_unsupported_by_conpty() {
+        assert_eq!(
+            contains(TERMINAL_RESET, b"\x1b[?2026l").is_some(),
+            !cfg!(target_os = "windows")
+        );
+        assert_eq!(
+            contains(TERMINAL_RESET, b"\x1b[<u").is_some(),
+            !cfg!(target_os = "windows")
+        );
+        assert!(contains(TERMINAL_RESET, b"\x1b[?1049l").is_some());
     }
 
     #[test]

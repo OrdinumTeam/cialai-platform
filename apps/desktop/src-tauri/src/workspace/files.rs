@@ -983,6 +983,7 @@ mod tests {
         fs::create_dir_all(dir.join("origem/sub")).unwrap();
         fs::write(dir.join("origem/a.txt"), "a").unwrap();
         fs::write(dir.join("origem/sub/b.txt"), "b").unwrap();
+        #[cfg(unix)]
         std::os::unix::fs::symlink("a.txt", dir.join("origem/link.txt")).unwrap();
         let origem = dir.join("origem").to_string_lossy().to_string();
         let destino = dir.join("destino").to_string_lossy().to_string();
@@ -991,6 +992,7 @@ mod tests {
             fs::read_to_string(dir.join("destino/sub/b.txt")).unwrap(),
             "b"
         );
+        #[cfg(unix)]
         assert!(
             fs::symlink_metadata(dir.join("destino/link.txt"))
                 .unwrap()

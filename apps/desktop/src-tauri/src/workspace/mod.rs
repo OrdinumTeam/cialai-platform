@@ -89,6 +89,3 @@ pub mod watch;
 
 /// Evento global emitido quando o shell de uma sessao termina.
 pub const EVENT_PTY_EXIT: &str = "pty://exit";
-
-/// Shell das sessoes, aberto como login shell para herdar o PATH do usuario.
-pub const DEFAULT_SHELL: &str = "/bin/zsh";

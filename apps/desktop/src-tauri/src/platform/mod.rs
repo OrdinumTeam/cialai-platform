@@ -148,7 +148,8 @@ pub fn process_alive(pid: u32) -> bool {
     }
     let mut code = 0_u32;
     // SAFETY: `process` e `code` sao validos durante a chamada.
-    let running = unsafe { GetExitCodeProcess(process, &mut code) } != 0 && code == STILL_ACTIVE;
+    let running =
+        unsafe { GetExitCodeProcess(process, &mut code) } != 0 && code == STILL_ACTIVE as u32;
     // SAFETY: o handle foi aberto acima e nao escapa.
     unsafe { CloseHandle(process) };
     running

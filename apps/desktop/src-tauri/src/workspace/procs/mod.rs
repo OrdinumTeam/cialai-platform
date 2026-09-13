@@ -494,6 +494,75 @@ impl ProcSource for FakeProcs {
 mod tests {
     use super::*;
 
+    struct TestChild(std::process::Child);
+
+    impl TestChild {
+        fn sleeping() -> Self {
+            let child = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "workspace::procs::tests::test_child_waits_until_parent_finishes",
+                    "--nocapture",
+                ])
+                .env("CIALAI_TEST_CHILD", "wait")
+                .env("CLAUDE_PROFILE", "Teste nativo")
+                .env("SEGREDO_QUALQUER", "nao-deve-aparecer")
+                .current_dir(std::env::temp_dir())
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn()
+                .unwrap();
+            Self(child)
+        }
+
+        fn id(&self) -> u32 {
+            self.0.id()
+        }
+    }
+
+    impl Drop for TestChild {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    #[test]
+    fn test_child_waits_until_parent_finishes() {
+        if std::env::var("CIALAI_TEST_CHILD").as_deref() == Ok("wait") {
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
+    }
+
+    #[test]
+    fn system_source_reads_a_native_test_child() {
+        let child = TestChild::sleeping();
+        let source = SystemProcs::default();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        let command = loop {
+            source.refresh();
+            if let Some(command) = source.command_line(child.id()) {
+                break command;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "o processo filho não apareceu no backend"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        assert!(source.children(std::process::id()).contains(&child.id()));
+        assert!(source.descendants(std::process::id()).contains(&child.id()));
+        assert_eq!(source.info(child.id()).unwrap().ppid, std::process::id());
+        assert!(source.usage(child.id()).is_some());
+        assert!(source.cwd(child.id()).is_some());
+        assert_eq!(
+            command.env.get("CLAUDE_PROFILE").map(String::as_str),
+            Some("Teste nativo")
+        );
+        assert!(!command.env.contains_key("SEGREDO_QUALQUER"));
+    }
+
     #[test]
     fn fake_source_obeys_tree_limits_and_breaks_cycles() {
         let fake = FakeProcs::default();
