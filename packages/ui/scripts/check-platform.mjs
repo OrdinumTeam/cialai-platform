@@ -25,4 +25,7 @@ test('shell quoting follows posix, PowerShell and cmd contracts', () => {
   assert.equal(shellQuote("/tmp/d'água", 'posix'), "'/tmp/d'\\''água'");
   assert.equal(shellQuote("C:\\Meu d'água", 'powershell'), "'C:\\Meu d''água'");
   assert.equal(shellQuote('C:\\Meu Projeto', 'cmd'), '"C:\\Meu Projeto"');
+  assert.equal(shellQuote('=comando', 'posix'), "'=comando'");
+  assert.equal(shellQuote("C:\\Ana's", 'powershell'), "'C:\\Ana''s'");
+  assert.equal(shellQuote('C:\\A&B', 'cmd'), '"C:\\A&B"');
 });

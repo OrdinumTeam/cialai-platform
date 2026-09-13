@@ -1201,7 +1201,8 @@ impl TerminalManager {
 
     /// Estado guardado de uma sessao, com o comando de retomada do agente.
     pub fn saved(&self, tag: &str) -> Option<SavedTerminal> {
-        self.journal.as_ref()?.saved(tag)
+        let flavor = platform::default_shell(&self.prefs.get()).flavor;
+        self.journal.as_ref()?.saved(tag, flavor)
     }
 
     /// Historico gravado da sessao, vazio quando nao ha.

@@ -29,6 +29,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::platform::ShellFlavor;
+
 use super::resume::{self, AgentSession};
 
 /// Historico mantido depois de reescrever o arquivo.
@@ -193,7 +195,7 @@ impl JournalStore {
     }
 
     /// Estado guardado, com o comando de retomada ja validado.
-    pub fn saved(&self, tag: &str) -> Option<SavedTerminal> {
+    pub fn saved(&self, tag: &str, flavor: ShellFlavor) -> Option<SavedTerminal> {
         if !self.accepts(tag) {
             return None;
         }
@@ -212,7 +214,7 @@ impl JournalStore {
             });
         };
         let resume = meta.agent.as_ref().and_then(|agent| {
-            resume::resume_command(agent, &meta.cwd).map(|command| ResumePlan {
+            resume::resume_command(agent, &meta.cwd, flavor).map(|command| ResumePlan {
                 agent: agent.agent.clone(),
                 session_id: agent.session_id.clone(),
                 command,
@@ -502,7 +504,7 @@ mod tests {
             &SavedMeta::sample("s_m", "/tmp", 120, 40, Some(agent.clone())),
             || true,
         );
-        let saved = store.saved("s_m").unwrap();
+        let saved = store.saved("s_m", ShellFlavor::Posix).unwrap();
         assert_eq!((saved.cols, saved.rows, saved.history_bytes), (120, 40, 0));
         assert!(saved.updated_at_ms > 0);
         let plan = saved.resume.unwrap();
@@ -518,11 +520,17 @@ mod tests {
             &SavedMeta::sample("s_m", "/tmp", 120, 40, Some(agent)),
             || true,
         );
-        assert!(store.saved("s_m").is_none());
+        assert!(store.saved("s_m", ShellFlavor::Posix).is_none());
         store.write_meta(&SavedMeta::sample("s_m", "/tmp", 120, 40, None), || false);
-        assert!(store.saved("s_m").is_none());
+        assert!(store.saved("s_m", ShellFlavor::Posix).is_none());
         store.write_meta(&SavedMeta::sample("s_m", "/tmp", 120, 40, None), || true);
-        assert!(store.saved("s_m").unwrap().resume.is_none());
+        assert!(
+            store
+                .saved("s_m", ShellFlavor::Posix)
+                .unwrap()
+                .resume
+                .is_none()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -536,7 +544,13 @@ mod tests {
         });
         fs::write(dir.join("s_t.json"), body.to_string()).unwrap();
         let store = JournalStore::new(dir.clone());
-        assert!(store.saved("s_t").unwrap().resume.is_none());
+        assert!(
+            store
+                .saved("s_t", ShellFlavor::Posix)
+                .unwrap()
+                .resume
+                .is_none()
+        );
         let _ = fs::remove_dir_all(dir);
     }
 
@@ -549,17 +563,17 @@ mod tests {
             store.write_meta(&SavedMeta::sample(tag, "/tmp", 80, 24, None), || true);
         }
         store.forget("s_closed");
-        assert!(store.saved("s_closed").is_none());
+        assert!(store.saved("s_closed", ShellFlavor::Posix).is_none());
         store.write_meta(
             &SavedMeta::sample("s_closed", "/tmp", 100, 30, None),
             || true,
         );
         assert!(store.writer("s_closed").is_none());
-        assert!(store.saved("s_closed").is_none());
+        assert!(store.saved("s_closed", ShellFlavor::Posix).is_none());
         let keep: HashSet<String> = ["s_keep".to_string()].into_iter().collect();
         assert_eq!(store.prune(&keep), 2);
-        assert!(store.saved("s_keep").is_some());
-        assert!(store.saved("s_gone").is_none());
+        assert!(store.saved("s_keep", ShellFlavor::Posix).is_some());
+        assert!(store.saved("s_gone", ShellFlavor::Posix).is_none());
         assert!(store.writer("../fora").is_none());
         let _ = fs::remove_dir_all(dir);
     }

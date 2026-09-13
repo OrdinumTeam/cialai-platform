@@ -13,17 +13,21 @@
 //!   descritores do processo.
 //!
 //! [`detect`] roda a cada amostra do estado da sessao e [`resume_command`]
-//! monta, na hora de reabrir, `claude --resume <id>` ou `codex resume <id>`
-//! com o perfil, a pasta e as opcoes de permissao e modelo da linha de
-//! comando original. As opcoes passam por listas fechadas tambem ao montar o
-//! comando e todo valor vai citado, entao um arquivo de estado alterado nao
-//! injeta nada no shell.
+//! monta, na hora de reabrir e conforme o sabor do shell, `claude --resume
+//! <id>` ou `codex resume <id>` com o perfil, a pasta e as opcoes de permissao
+//! e modelo da linha de comando original. As opcoes passam por listas fechadas
+//! tambem ao montar o comando e todo valor vai citado, entao um arquivo de
+//! estado alterado nao injeta nada no shell.
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
+use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
+
+use crate::platform::ShellFlavor;
 
 use super::procs::{self, CommandCache, CommandLine};
 
@@ -38,6 +42,8 @@ const VALUE_LIMIT: usize = 1024;
 const STARTED_SLACK_SECS: u64 = 5;
 /// Profundidade dada a um processo cuja cadeia nao chega ao shell.
 const DETACHED_DEPTH: usize = 1024;
+/// Limite defensivo para uma busca de reserva nas sessoes do Codex.
+const CODEX_FILE_LIMIT: usize = 4096;
 
 /// Conversa de um agente que pode ser retomada num shell novo.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,7 +159,7 @@ pub fn detect(
         };
         let session = match procs::agent_of(&command) {
             Some(CLAUDE) => claude_session(&command, pid, start_sec, home),
-            Some(CODEX) => codex_session(&command, pid, home),
+            Some(CODEX) => codex_session(&command, pid, start_sec, home),
             _ => None,
         };
         let Some(session) = session else { continue };
@@ -232,21 +238,124 @@ fn claude_session(
     })
 }
 
-fn codex_session(command: &CommandLine, pid: u32, home: &Path) -> Option<AgentSession> {
+fn codex_session(
+    command: &CommandLine,
+    pid: u32,
+    start_sec: u64,
+    home: &Path,
+) -> Option<AgentSession> {
     let profile = procs::agent_profile(command, CODEX, home)?;
     let sessions = Path::new(&profile.config_dir).join("sessions");
+    let cwd = procs::cwd(pid);
     let session_id = procs::open_files(pid)
         .iter()
         .filter(|path| Path::new(path.as_str()).starts_with(&sessions))
-        .find_map(|path| rollout_session_id(path))?;
+        .find_map(|path| rollout_session_id(path))
+        .or_else(|| {
+            cwd.as_deref()
+                .and_then(|cwd| newest_codex_rollout(&sessions, cwd, start_sec))
+        })?;
     Some(AgentSession {
         agent: CODEX.to_string(),
         session_id,
-        cwd: procs::cwd(pid),
+        cwd,
         config_dir: profile.explicit.then_some(profile.config_dir),
         profile_name: profile.name,
         args: keep_flags(program_args(&command.argv), &CODEX_FLAGS),
     })
+}
+
+#[derive(Deserialize)]
+struct CodexRecord {
+    #[serde(rename = "type")]
+    kind: String,
+    payload: CodexSessionMeta,
+}
+
+#[derive(Deserialize)]
+struct CodexSessionMeta {
+    id: Option<String>,
+    cwd: String,
+}
+
+/// Reserva para Windows, onde enumerar handles abertos exigiria privilegios:
+/// escolhe o rollout mais recente criado depois do processo e cuja primeira
+/// linha `session_meta` aponta para o mesmo cwd. Dois Codex simultaneos na
+/// mesma pasta continuam sendo uma ambiguidade conhecida.
+fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<String> {
+    let expected_cwd = dunce::canonicalize(cwd).ok()?;
+    let mut pending = vec![sessions.to_path_buf()];
+    let mut inspected = 0usize;
+    let mut best: Option<(u64, String)> = None;
+    while let Some(dir) = pending.pop() {
+        let Ok(entries) = fs::read_dir(dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            inspected += 1;
+            if inspected > CODEX_FILE_LIMIT {
+                return best.map(|(_, id)| id);
+            }
+            let path = entry.path();
+            let Ok(file_type) = entry.file_type() else {
+                continue;
+            };
+            if file_type.is_symlink() {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if meta.is_dir() {
+                pending.push(path);
+                continue;
+            }
+            if !meta.is_file() {
+                continue;
+            }
+            let Some(id) = rollout_session_id(path.to_string_lossy().as_ref()) else {
+                continue;
+            };
+            let Some(modified_sec) = meta
+                .modified()
+                .ok()
+                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
+                .map(|elapsed| elapsed.as_secs())
+                .filter(|modified| *modified >= start_sec)
+            else {
+                continue;
+            };
+            let Some(record) = first_codex_record(&path) else {
+                continue;
+            };
+            if record.kind != "session_meta"
+                || record
+                    .payload
+                    .id
+                    .as_deref()
+                    .is_some_and(|value| !is_session_id(value) || !value.eq_ignore_ascii_case(&id))
+                || dunce::canonicalize(&record.payload.cwd).ok().as_deref()
+                    != Some(expected_cwd.as_path())
+            {
+                continue;
+            }
+            if best
+                .as_ref()
+                .is_none_or(|(known_modified, _)| modified_sec > *known_modified)
+            {
+                best = Some((modified_sec, id));
+            }
+        }
+    }
+    best.map(|(_, id)| id)
+}
+
+fn first_codex_record(path: &Path) -> Option<CodexRecord> {
+    let file = fs::File::open(path).ok()?;
+    let mut line = String::new();
+    BufReader::new(file)
+        .take(SESSION_FILE_LIMIT)
+        .read_line(&mut line)
+        .ok()?;
+    serde_json::from_str(&line).ok()
 }
 
 fn read_small(path: &Path) -> Option<String> {
@@ -284,11 +393,13 @@ fn program_args(argv: &[String]) -> &[String] {
     let first = argv
         .first()
         .map(|value| procs::basename(value))
-        .unwrap_or_default();
-    let skip = if matches!(
-        first.as_str(),
-        "node" | "bun" | "deno" | "python" | "python3"
-    ) {
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let first = first
+        .strip_suffix(".exe")
+        .or_else(|| first.strip_suffix(".cmd"))
+        .unwrap_or(&first);
+    let skip = if matches!(first, "node" | "bun" | "deno" | "python" | "python3") {
         2
     } else {
         1
@@ -359,7 +470,11 @@ fn keep_flags(args: &[String], spec: &FlagSpec) -> Vec<String> {
 /// Comando que devolve a conversa num shell novo aberto em `shell_cwd`, ou
 /// `None` quando o registro nao passa na validacao. O shell interpreta o
 /// comando, entao a funcao `claude` do usuario continua valendo.
-pub fn resume_command(session: &AgentSession, shell_cwd: &str) -> Option<String> {
+pub fn resume_command(
+    session: &AgentSession,
+    shell_cwd: &str,
+    flavor: ShellFlavor,
+) -> Option<String> {
     if !is_session_id(&session.session_id) {
         return None;
     }
@@ -379,52 +494,112 @@ pub fn resume_command(session: &AgentSession, shell_cwd: &str) -> Option<String>
             ),
             _ => return None,
         };
-    let mut parts = Vec::new();
-    if let Some(cwd) = session
+    let cwd = session
         .cwd
         .as_deref()
-        .filter(|cwd| *cwd != shell_cwd && valid_value(cwd) && Path::new(cwd).is_dir())
-    {
-        parts.push("cd".to_string());
-        parts.push(shell_quote(cwd));
-        parts.push("&&".to_string());
-    }
+        .filter(|cwd| *cwd != shell_cwd && valid_value(cwd) && Path::new(cwd).is_dir());
+    let mut environment = Vec::new();
     if let Some(dir) = session.config_dir.as_deref() {
         if !valid_value(dir) || !Path::new(dir).is_absolute() {
             return None;
         }
-        parts.push(format!("{dir_key}={}", shell_quote(dir)));
+        environment.push((dir_key, dir));
     }
     if let Some(name) = session
         .profile_name
         .as_deref()
         .filter(|name| valid_value(name))
     {
-        parts.push(format!("{name_key}={}", shell_quote(name)));
+        environment.push((name_key, name));
     }
-    parts.extend(program.iter().map(|word| word.to_string()));
-    parts.push(session.session_id.to_ascii_lowercase());
-    parts.extend(
-        keep_flags(&session.args, spec)
-            .iter()
-            .map(|value| shell_quote(value)),
-    );
+    let mut command = program
+        .iter()
+        .map(|word| word.to_string())
+        .collect::<Vec<_>>();
+    command.push(session.session_id.to_ascii_lowercase());
+    command.extend(keep_flags(&session.args, spec).iter().map(|value| {
+        if value.starts_with("--") {
+            value.clone()
+        } else {
+            shell_quote(value, flavor)
+        }
+    }));
+    let command = command.join(" ");
+
+    let mut parts = Vec::new();
+    match flavor {
+        ShellFlavor::Posix => {
+            if let Some(cwd) = cwd {
+                parts.push(format!("cd {} &&", shell_quote(cwd, flavor)));
+            }
+            parts.extend(
+                environment
+                    .iter()
+                    .map(|(key, value)| format!("{key}={}", shell_quote(value, flavor))),
+            );
+        }
+        ShellFlavor::Powershell => {
+            if let Some(cwd) = cwd {
+                parts.push(format!(
+                    "Set-Location -LiteralPath {};",
+                    shell_quote_always(cwd, flavor)
+                ));
+            }
+            parts.extend(
+                environment.iter().map(|(key, value)| {
+                    format!("$env:{key}={};", shell_quote_always(value, flavor))
+                }),
+            );
+        }
+        ShellFlavor::Cmd => {
+            if let Some(cwd) = cwd {
+                parts.push(format!("cd /d {} &&", shell_quote_always(cwd, flavor)));
+            }
+            parts.extend(environment.iter().map(|(key, value)| {
+                // `set` altera o ambiente deste cmd; isso e intencional e a
+                // variavel permanece no shell depois que o agente encerra.
+                format!("set \"{key}={}\" &&", cmd_inner(value))
+            }));
+        }
+    }
+    parts.push(command);
     Some(parts.join(" "))
 }
 
-/// Cita para o zsh quando o valor tem algo alem de letras, numeros e
-/// pontuacao inerte. `=` no inicio viraria expansao de comando no zsh.
-pub fn shell_quote(value: &str) -> String {
+/// Cita um argumento para o sabor do shell. `=` no inicio viraria expansao
+/// de comando no zsh; PowerShell dobra apostrofos em literais; cmd usa aspas
+/// duplas e dobra as aspas internas, o mesmo contrato do frontend.
+pub fn shell_quote(value: &str, flavor: ShellFlavor) -> String {
+    let punctuation: &[u8] = match flavor {
+        ShellFlavor::Cmd => b"_./\\~+@%:,=-",
+        ShellFlavor::Posix | ShellFlavor::Powershell => b"_./~+@%:,=-",
+    };
+    let starts_special = value
+        .as_bytes()
+        .first()
+        .is_some_and(|byte| matches!(byte, b'=' | b'~' | b'-'));
     let plain = !value.is_empty()
-        && !value.starts_with('=')
+        && !starts_special
         && value
             .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"_-./:@,+=".contains(&byte));
+            .all(|byte| byte.is_ascii_alphanumeric() || punctuation.contains(&byte));
     if plain {
         value.to_string()
     } else {
-        format!("'{}'", value.replace('\'', "'\\''"))
+        shell_quote_always(value, flavor)
     }
+}
+
+fn shell_quote_always(value: &str, flavor: ShellFlavor) -> String {
+    match flavor {
+        ShellFlavor::Posix => format!("'{}'", value.replace('\'', "'\\''")),
+        ShellFlavor::Powershell => format!("'{}'", value.replace('\'', "''")),
+        ShellFlavor::Cmd => format!("\"{}\"", cmd_inner(value)),
+    }
+}
+
+fn cmd_inner(value: &str) -> String {
+    value.replace('"', "\"\"")
 }
 
 #[cfg(test)]
@@ -512,6 +687,21 @@ mod tests {
             keep_flags(program_args(&wrapper), &CLAUDE_FLAGS),
             strings(&["--verbose"])
         );
+        let windows_wrapper = strings(&[
+            "node.exe",
+            r"C:\\tools\\claude.cmd",
+            "--verbose",
+            "continue o trabalho",
+        ]);
+        assert_eq!(
+            keep_flags(program_args(&windows_wrapper), &CLAUDE_FLAGS),
+            strings(&["--verbose"])
+        );
+        let windows_command = strings(&["claude.cmd", "--model", "opus"]);
+        assert_eq!(
+            keep_flags(program_args(&windows_command), &CLAUDE_FLAGS),
+            strings(&["--model", "opus"])
+        );
     }
 
     #[test]
@@ -543,11 +733,14 @@ mod tests {
     fn resume_command_quotes_values_and_restores_the_profile() {
         let cwd = scratch("command");
         let cwd_text = cwd.to_string_lossy().to_string();
+        let profile = cwd.join("claude profile");
+        fs::create_dir_all(&profile).unwrap();
+        let profile_text = profile.to_string_lossy().to_string();
         let session = AgentSession {
             agent: CLAUDE.into(),
             session_id: ID.into(),
             cwd: Some(cwd_text.clone()),
-            config_dir: Some("/Users/exemplo/.claude webrota".into()),
+            config_dir: Some(profile_text.clone()),
             profile_name: Some("WebRota".into()),
             args: strings(&[
                 "--dangerously-skip-permissions",
@@ -558,16 +751,51 @@ mod tests {
             ]),
         };
         assert_eq!(
-            resume_command(&session, "/").unwrap(),
+            resume_command(&session, "/", ShellFlavor::Posix).unwrap(),
             format!(
-                "cd {} && CLAUDE_CONFIG_DIR='/Users/exemplo/.claude webrota' CLAUDE_PROFILE=WebRota claude --resume {ID} --dangerously-skip-permissions --model 'opus; rm -rf ~'",
-                shell_quote(&cwd_text)
+                "cd {} && CLAUDE_CONFIG_DIR={} CLAUDE_PROFILE=WebRota claude --resume {ID} --dangerously-skip-permissions --model 'opus; rm -rf ~'",
+                shell_quote(&cwd_text, ShellFlavor::Posix),
+                shell_quote(&profile_text, ShellFlavor::Posix),
             )
         );
         assert!(
-            resume_command(&session, &cwd_text)
+            resume_command(&session, &cwd_text, ShellFlavor::Posix)
                 .unwrap()
                 .starts_with("CLAUDE_CONFIG_DIR=")
+        );
+        let _ = fs::remove_dir_all(cwd);
+    }
+
+    #[test]
+    fn resume_command_uses_powershell_and_cmd_syntax() {
+        let cwd = scratch("command-flavors");
+        let cwd_text = cwd.to_string_lossy().to_string();
+        let profile = cwd.join("perfil d'agua");
+        fs::create_dir_all(&profile).unwrap();
+        let profile_text = profile.to_string_lossy().to_string();
+        let session = AgentSession {
+            agent: CLAUDE.into(),
+            session_id: ID.into(),
+            cwd: Some(cwd_text.clone()),
+            config_dir: Some(profile_text.clone()),
+            profile_name: Some("Web Rota".into()),
+            args: strings(&["--model", "opus max"]),
+        };
+        assert_eq!(
+            resume_command(&session, "", ShellFlavor::Powershell).unwrap(),
+            format!(
+                "Set-Location -LiteralPath {}; $env:CLAUDE_CONFIG_DIR={}; $env:CLAUDE_PROFILE='Web Rota'; claude --resume {ID} --model 'opus max'",
+                shell_quote_always(&cwd_text, ShellFlavor::Powershell),
+                shell_quote_always(&profile_text, ShellFlavor::Powershell),
+            )
+        );
+        assert_eq!(
+            resume_command(&session, "", ShellFlavor::Cmd).unwrap(),
+            format!(
+                "cd /d {} && set \"CLAUDE_CONFIG_DIR={}\" && set \"CLAUDE_PROFILE=Web Rota\" && claude --resume {ID} --model \"opus max\"",
+                shell_quote_always(&cwd_text, ShellFlavor::Cmd),
+                cmd_inner(&profile_text),
+            )
         );
         let _ = fs::remove_dir_all(cwd);
     }
@@ -583,7 +811,7 @@ mod tests {
             args: Vec::new(),
         };
         assert_eq!(
-            resume_command(&base, "/"),
+            resume_command(&base, "/", ShellFlavor::Posix),
             Some(format!("codex resume {ID}"))
         );
         assert!(
@@ -592,7 +820,8 @@ mod tests {
                     session_id: format!("{ID}; rm -rf ~"),
                     ..base.clone()
                 },
-                "/"
+                "/",
+                ShellFlavor::Posix
             )
             .is_none()
         );
@@ -602,7 +831,8 @@ mod tests {
                     agent: "Aider".into(),
                     ..base.clone()
                 },
-                "/"
+                "/",
+                ShellFlavor::Posix
             )
             .is_none()
         );
@@ -612,7 +842,8 @@ mod tests {
                     config_dir: Some("relativo".into()),
                     ..base.clone()
                 },
-                "/"
+                "/",
+                ShellFlavor::Posix
             )
             .is_none()
         );
@@ -621,12 +852,12 @@ mod tests {
             ..base.clone()
         };
         assert_eq!(
-            resume_command(&missing_dir, "/"),
+            resume_command(&missing_dir, "/", ShellFlavor::Posix),
             Some(format!("codex resume {ID}"))
         );
-        assert_eq!(shell_quote("it's"), "'it'\\''s'");
-        assert_eq!(shell_quote("=cmd"), "'=cmd'");
-        assert_eq!(shell_quote(""), "''");
+        assert_eq!(shell_quote("it's", ShellFlavor::Posix), "'it'\\''s'");
+        assert_eq!(shell_quote("=cmd", ShellFlavor::Posix), "'=cmd'");
+        assert_eq!(shell_quote("", ShellFlavor::Posix), "''");
     }
 
     #[test]
@@ -688,7 +919,7 @@ mod tests {
             argv: strings(&["codex", "--yolo"]),
             env,
         };
-        let found = codex_session(&command, std::process::id(), &home)
+        let found = codex_session(&command, std::process::id(), 0, &home)
             .expect("rollout aberto pelo proprio teste");
         assert_eq!(found.session_id, ID);
         assert_eq!(
@@ -701,6 +932,51 @@ mod tests {
             strings(&["--dangerously-bypass-approvals-and-sandbox"])
         );
         drop(open_rollout);
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn codex_fallback_matches_cwd_and_process_time() {
+        let home = scratch("codex-fallback");
+        let project = home.join("projeto");
+        let other = home.join("outro");
+        let day = home.join("sessions/2026/09/12");
+        fs::create_dir_all(&project).unwrap();
+        fs::create_dir_all(&other).unwrap();
+        fs::create_dir_all(&day).unwrap();
+        let rollout = day.join(format!("rollout-2026-09-12T10-00-00-{ID}.jsonl"));
+        fs::write(
+            &rollout,
+            format!(
+                "{}\n{{\"type\":\"response_item\"}}\n",
+                serde_json::json!({
+                    "type": "session_meta",
+                    "payload": {"id": ID, "cwd": project.to_string_lossy()}
+                })
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            newest_codex_rollout(
+                &home.join("sessions"),
+                project.to_string_lossy().as_ref(),
+                0
+            )
+            .as_deref(),
+            Some(ID)
+        );
+        assert!(
+            newest_codex_rollout(&home.join("sessions"), other.to_string_lossy().as_ref(), 0)
+                .is_none()
+        );
+        assert!(
+            newest_codex_rollout(
+                &home.join("sessions"),
+                project.to_string_lossy().as_ref(),
+                u64::MAX
+            )
+            .is_none()
+        );
         let _ = fs::remove_dir_all(home);
     }
 

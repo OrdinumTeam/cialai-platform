@@ -47,7 +47,8 @@ Execução em andamento. A implementação local e os critérios automatizáveis
 | 5.2 Processos Linux | Implementada, execução Linux pendente | Backend usa `sysinfo` 0.36.1 e completa filhos, grupo, estado, PSS e arquivos abertos por `/proc`; os testes Linux serão executados no contêiner Ubuntu 22.04 da validação da fase |
 | 5.3 Processos Windows | Implementada, compilação Windows pendente | Backend usa `sysinfo`, working set privado, Job Object por shell e heurística de folha mais nova. `cargo-xwin` não está instalado neste host; a tentativa de compilação fica pendente da validação final ou da CI remota |
 | 5.4 PTY por sistema | Concluída localmente no macOS; Windows pendente | `pty/` centraliza spawn, foreground e encerramento; `TestShell` elimina perfis nos testes e o Windows usa Job Object com encerramento gracioso seguido de término forçado após 400 ms. A variante Windows ainda não foi compilada nem executada |
-| 5.5 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
+| 5.5 Retomada por shell | Concluída localmente no macOS; Windows pendente | Comandos de retomada cobrem POSIX, PowerShell e cmd; wrappers `.exe` e `.cmd` são reconhecidos, e a reserva do Codex seleciona rollout por cwd canônico e mtime. `shellQuote` compartilha os três contratos no frontend |
+| 5.6 a 7.6 | Não iniciadas | Demais backends, matriz remota e testes físicos continuam pendentes |
 
 ## Ambiente observado
 
@@ -323,6 +324,12 @@ O backend Windows usa o mesmo snapshot `sysinfo` para pais, CPU acumulada, cwd, 
 O spawn, a descoberta do processo em primeiro plano e o encerramento saíram de `terminal.rs` para `workspace/pty/{mod,unix,windows}.rs`. No Unix, o encerramento forçado usa `SIGKILL`; no Windows, cada ConPTY conserva o Job Object criado na 5.3 e a segunda etapa termina a árvore inteira depois dos 400 ms de graça. `TestShell` seleciona `/bin/sh` sem perfil no Unix e `%COMSPEC% /Q` no Windows, com comandos portáveis de saída e carga de CPU. As métricas atualizam `ProcSource` antes de estimar a folha em primeiro plano no Windows.
 
 No macOS, `cargo fmt --check` e `git diff --check` passaram. Os filtros `workspace::pty`, `spawns_a_shell_streams_output_and_reports_exit`, `kill_ends_the_session` e `metrics_use_the_injected_process_source` passaram, um caso em cada execução. `cargo clippy --all-targets -- -D warnings` falhou exclusivamente nos seis diagnósticos conhecidos de `bridge/`; não houve aviso fora dessa pasta. Antes dessa validação, o preflight chegou a 4,6 GiB livres e a compilação iniciada na mesma sequência foi interrompida; `cargo clean --manifest-path apps/desktop/src-tauri/Cargo.toml -p cialai-desktop` removeu 3,1 GiB de artefatos recompiláveis do alvo compartilhado e restaurou 6,3 GiB. A validação registrada acima começou com 6,0 GiB livres. O código Windows permanece sem compilação ou execução real.
+
+### 12/09/2026, retomada por sabor de shell da tarefa 5.5
+
+`resume_command` agora recebe `ShellFlavor`: POSIX preserva `cd` e variáveis prefixadas; PowerShell usa `Set-Location -LiteralPath` e `$env:`; cmd usa `cd /d` e `set "CHAVE=valor"`. No cmd essas variáveis intencionalmente permanecem no ambiente do shell depois que o agente encerra. `program_args` normaliza nomes sem distinguir caixa e reconhece `node.exe` e executáveis `.cmd`. O fallback necessário no Windows percorre no máximo 4096 entradas sob `<CODEX_HOME>/sessions`, ignora links, exige `session_meta` na primeira linha, cwd canônico igual e mtime não anterior ao processo, então escolhe o rollout mais recente; duas instâncias do Codex na mesma pasta permanecem uma ambiguidade documentada.
+
+`packages/ui/src/terminals/files.js::shellQuote(path, flavor)`, que já tinha os três braços preparados, passou a também citar valores iniciados por `=` de modo coerente com o Rust. O teste Node `check-platform.mjs` passou 3/3 com Node 22.23.2. No macOS, `cargo test ... workspace::resume` passou 11/11 e `cargo fmt --check`/`git diff --check` passaram; o Clippy completo voltou a falhar somente nos seis diagnósticos conhecidos de `bridge/`, sem aviso desta tarefa. Dois preflights ficaram poucos MiB abaixo de 5 GiB depois das compilações; nenhuma compilação grande foi iniciada nessas condições. Duas limpezas limitadas ao pacote `cialai-desktop` removeram respectivamente 1,5 e 1,7 GiB de artefatos recompiláveis antes de retomar com mais de 6 GiB. PowerShell e cmd foram verificados como strings em testes portáveis, não executados no Windows.
 
 ## Arquivos para retomar
 
