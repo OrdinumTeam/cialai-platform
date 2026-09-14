@@ -32,7 +32,7 @@ for (const required of [
   'npm ci',
   'npm run sidecar --workspace @cialai/desktop',
   'npm test',
-  'npm run build --workspace @cialai/desktop',
+  'npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json',
   'actions/upload-artifact@v4',
   'if-no-files-found: error',
   'bundle/dmg/*.dmg',
@@ -54,5 +54,8 @@ assert.ok(
   'o bundle só pode ser criado depois da suíte',
 );
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
+
+const ciConfig = JSON.parse(readFileSync(`${root}/apps/desktop/src-tauri/tauri.ci.conf.json`, 'utf8'));
+assert.equal(ciConfig.bundle.createUpdaterArtifacts, false, 'o bundle da CI não pode exigir a chave privada do updater');
 
 console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned and artifacts');

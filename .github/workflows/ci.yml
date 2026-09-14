@@ -67,8 +67,9 @@ jobs:
       - name: Executar suítes
         run: npm test
 
+      # A CI não recebe a chave do atualizador; o bundle sai sem os arquivos assinados do updater.
       - name: Criar bundle sem assinatura
-        run: npm run build --workspace @cialai/desktop
+        run: npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
 
       - name: Anexar bundles
         uses: actions/upload-artifact@v4

@@ -1,0 +1,17 @@
+# Checkout com LF em todos os sistemas; os checks leem arquivos de texto e comparam linhas.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.pdf binary
+*.rtf binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.jks binary
+*.aar binary
+*.zip binary
