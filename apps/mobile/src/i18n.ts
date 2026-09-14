@@ -18,6 +18,17 @@ export const getLocale = i18n.getLocale;
 export const subscribeLocale = i18n.subscribe;
 export const t = i18n.t;
 
+const SENSITIVE_REASON_KEYS = Object.freeze<Record<string, string>>({
+  'Autorizar digitação neste terminal': 'mobile.biometric.authorizeTyping',
+  'Encerrar este terminal': 'mobile.biometric.closeTerminal',
+  'Autorizar alteração no computador': 'mobile.biometric.changeComputer',
+});
+
+export function localizeSensitiveReason(reason: string): string {
+  const key = SENSITIVE_REASON_KEYS[reason];
+  return key ? t(key) : reason;
+}
+
 export async function hydrateLocale(): Promise<Locale> {
   try {
     const stored = await SecureStore.getItemAsync(LANGUAGE_STORAGE_KEY);

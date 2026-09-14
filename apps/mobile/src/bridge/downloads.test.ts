@@ -1,4 +1,5 @@
 import { prepareDataDownload, prepareRemoteDownload } from './downloads';
+import { setLocale } from '../i18n';
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
@@ -66,5 +67,16 @@ describe('download validation', () => {
   ])('rejects an unsafe remote download URL', url => {
     expect(() => prepareRemoteDownload({ type: 'download', name: 'fatura.pdf',
       mime: 'application/pdf', url })).toThrow();
+  });
+
+  test('localizes errors for the active language', async () => {
+    await setLocale('es-MX');
+    expect(() => prepareRemoteDownload({ type: 'download', name: 'archivo.exe',
+      mime: 'application/octet-stream', url: 'https://bucket.example/archivo.exe' }))
+      .toThrow('Este tipo de archivo no está permitido.');
+    expect(() => prepareRemoteDownload({ type: 'download', name: 'archivo.pdf',
+      mime: 'application/pdf', url: 'http://bucket.example/archivo.pdf' }))
+      .toThrow('La dirección de descarga no es segura.');
+    await setLocale('pt-BR');
   });
 });

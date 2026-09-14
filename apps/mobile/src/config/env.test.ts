@@ -11,6 +11,6 @@ describe('runtime environment', () => {
     expect(resolveAppEnvironment(undefined, false)).toBe('production');
   });
   test('rejects malformed native extra values', () => {
-    expect(() => resolveAppEnvironment('unknown', false)).toThrow('APP_ENV');
+    expect(() => resolveAppEnvironment('unknown', false)).toThrow('app_env_invalid');
   });
 });

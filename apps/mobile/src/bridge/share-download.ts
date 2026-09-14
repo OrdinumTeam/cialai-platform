@@ -1,11 +1,12 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 
+import { t } from '../i18n';
 import type { DownloadRequest } from './messages';
 import { MAX_DOWNLOAD_BYTES, prepareDataDownload, prepareRemoteDownload } from './downloads';
 
 export async function shareDownload(message: DownloadRequest, allowDevelopmentLoopback = false): Promise<void> {
-  if (!(await Sharing.isAvailableAsync())) throw new Error('O compartilhamento não está disponível neste aparelho.');
+  if (!(await Sharing.isAvailableAsync())) throw new Error(t('mobile.download.sharingUnavailable'));
   const prepared = typeof message.dataUrl === 'string'
     ? prepareDataDownload(message as Extract<DownloadRequest, { dataUrl: string }>)
     : prepareRemoteDownload(message as Extract<DownloadRequest, { url: string }>, allowDevelopmentLoopback);
@@ -24,9 +25,9 @@ export async function shareDownload(message: DownloadRequest, allowDevelopmentLo
           if (bytesWritten > MAX_DOWNLOAD_BYTES || totalBytes > MAX_DOWNLOAD_BYTES) controller.abort();
         }
       });
-      if (file.size > MAX_DOWNLOAD_BYTES) throw new Error('O arquivo excede o limite de 8 MB.');
+      if (file.size > MAX_DOWNLOAD_BYTES) throw new Error(t('mobile.download.fileTooLarge'));
     }
-    await Sharing.shareAsync(file.uri, { dialogTitle: `Compartilhar ${prepared.name}`, mimeType: prepared.mime });
+    await Sharing.shareAsync(file.uri, { dialogTitle: t('mobile.download.shareTitle', { name: prepared.name }), mimeType: prepared.mime });
   } finally {
     if (file.exists) file.delete();
   }

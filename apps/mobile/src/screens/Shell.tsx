@@ -8,7 +8,7 @@ import type { BiometricSession } from '../auth/biometrics';
 import { pageMessageScript, parsePageMessage, shellMessageScript, type ShellMessage } from '../bridge/messages';
 import { shareDownload } from '../bridge/share-download';
 import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '../config/url';
-import { useI18n } from '../i18n';
+import { localizeSensitiveReason, useI18n } from '../i18n';
 import { checkControlHealth, HEALTH_POLL_INTERVAL_MS } from '../network/health';
 import { usePalette } from '../theme';
 
@@ -97,7 +97,7 @@ export function Shell({
     const message = parsePageMessage(event.nativeEvent.data, __DEV__);
     if (!message) return;
     if (message.type === 'auth') {
-      const ok = await biometricSession.authorize(message.level, message.reason);
+      const ok = await biometricSession.authorize(message.level, localizeSensitiveReason(message.reason));
       inject(pageMessageScript({ type: 'auth', id: message.id, ok }));
       if (ok && message.level === 'session') emitShellState(true);
       return;

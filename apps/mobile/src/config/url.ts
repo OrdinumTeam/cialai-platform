@@ -6,20 +6,20 @@ export function validateControlUrl(value: string, allowDevelopmentWithoutNonce =
   try {
     url = new URL(value.trim());
   } catch {
-    throw new Error('O endereço local do computador é inválido.');
+    throw new Error('control_url_invalid_host');
   }
   if (url.protocol !== 'http:' || url.hostname !== LOOPBACK_HOST || !url.port ||
       url.username || url.password || url.hash || (url.pathname !== '/' && url.pathname !== '')) {
-    throw new Error('O endereço precisa usar o proxy local do Cialai.');
+    throw new Error('control_url_invalid_origin');
   }
   const port = Number(url.port);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
-    throw new Error('A porta do proxy local é inválida.');
+    throw new Error('control_url_invalid_port');
   }
   const keys = [...url.searchParams.keys()];
   if (allowDevelopmentWithoutNonce && keys.length === 0) return `${url.origin}/`;
   if (keys.length !== 1 || keys[0] !== 'k' || !NONCE_PATTERN.test(url.searchParams.get('k') ?? '')) {
-    throw new Error('A abertura local não contém um código válido.');
+    throw new Error('control_url_invalid_token');
   }
   return `${url.origin}/?k=${url.searchParams.get('k')}`;
 }
@@ -27,7 +27,7 @@ export function validateControlUrl(value: string, allowDevelopmentWithoutNonce =
 export function buildHealthUrl(controlUrl: string): string {
   const url = new URL(controlUrl);
   if (url.protocol !== 'http:' || url.hostname !== LOOPBACK_HOST || !url.port) {
-    throw new Error('O endereço de saúde não pertence ao proxy local.');
+    throw new Error('health_url_invalid_origin');
   }
   return new URL('/api/health', url.origin).toString();
 }

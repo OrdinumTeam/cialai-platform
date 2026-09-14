@@ -5,7 +5,7 @@ export type AppEnvironment = 'development' | 'preview' | 'production';
 export function resolveAppEnvironment(value: unknown, isDevelopment: boolean): AppEnvironment {
   if (value === undefined || value === null || value === '') return isDevelopment ? 'development' : 'production';
   if (value === 'development' || value === 'preview' || value === 'production') return value;
-  throw new Error('APP_ENV inválido na configuração nativa.');
+  throw new Error('app_env_invalid');
 }
 
 export function getAppEnvironment(): AppEnvironment {
@@ -14,6 +14,6 @@ export function getAppEnvironment(): AppEnvironment {
 
 export function getAppVersion(): string {
   const value = Constants.expoConfig?.version;
-  if (!value) throw new Error('Versão do app ausente na configuração nativa.');
+  if (!value) throw new Error('app_version_missing');
   return value;
 }

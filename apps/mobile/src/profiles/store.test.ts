@@ -61,10 +61,10 @@ describe('profile store', () => {
   test('parses valid profiles and rejects corrupt or duplicate data', () => {
     const raw = JSON.stringify(paired());
     expect(parseProfileStore(raw)).toEqual(paired());
-    expect(() => parseProfileStore('not json')).toThrow('corrompidos');
+    expect(() => parseProfileStore('not json')).toThrow('profile_store_corrupt');
     const duplicate = paired();
     duplicate.profiles.push(duplicate.profiles[0]!);
-    expect(() => parseProfileStore(JSON.stringify(duplicate))).toThrow('duplicados');
+    expect(() => parseProfileStore(JSON.stringify(duplicate))).toThrow('profile_store_duplicate_profiles');
   });
 
   test('marks use and renames a desktop without changing identity', () => {
@@ -101,7 +101,7 @@ describe('profile store', () => {
   test('reads only a validated desktop token key', async () => {
     const get = jest.spyOn(SecureStore, 'getItemAsync').mockResolvedValue(result.token);
     await expect(readDeviceToken(desktopId)).resolves.toBe(result.token);
-    expect(() => readDeviceToken('../secret')).toThrow('inválido');
+    expect(() => readDeviceToken('../secret')).toThrow('desktop_id_invalid');
     get.mockRestore();
   });
 });

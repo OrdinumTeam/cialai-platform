@@ -23,3 +23,15 @@ test('hydrates a regional locale and persists the normalized selection', async (
   await expect(localeModule.setLocale('en-US')).resolves.toBe('en');
   expect(set).toHaveBeenLastCalledWith('cialai.language', 'en');
 });
+
+test('localizes biometric reasons received from the shared page', async () => {
+  await localeModule.setLocale('es-MX');
+
+  expect(localeModule.localizeSensitiveReason('Autorizar digitação neste terminal'))
+    .toBe('Autorizar escritura en este terminal');
+  expect(localeModule.localizeSensitiveReason('Encerrar este terminal'))
+    .toBe('Cerrar este terminal');
+  expect(localeModule.localizeSensitiveReason('Autorizar alteração no computador'))
+    .toBe('Autorizar cambios en la computadora');
+  expect(localeModule.localizeSensitiveReason('Motivo externo')).toBe('Motivo externo');
+});

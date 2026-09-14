@@ -53,7 +53,7 @@ function validateDesktop(value: unknown): DesktopProfile {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.name !== 'string' ||
       typeof value.port !== 'number' || typeof value.nodeKey !== 'string' ||
       typeof value.deviceId !== 'string' || typeof value.pairedAt !== 'string' ||
-      typeof value.lastSeenAt !== 'string') throw new Error('Perfil de computador inválido.');
+      typeof value.lastSeenAt !== 'string') throw new Error('desktop_profile_invalid');
   return value as DesktopProfile;
 }
 
@@ -61,7 +61,7 @@ function validateProfile(value: unknown): HeadscaleProfile {
   if (!isRecord(value) || typeof value.id !== 'string' || typeof value.controlUrl !== 'string' ||
       typeof value.userId !== 'string' || typeof value.userName !== 'string' ||
       typeof value.lastUsedAt !== 'string' || !Array.isArray(value.desktops)) {
-    throw new Error('Perfil de servidor inválido.');
+    throw new Error('server_profile_invalid');
   }
   return { ...value, desktops: value.desktops.map(validateDesktop) } as HeadscaleProfile;
 }
@@ -71,21 +71,21 @@ export function parseProfileStore(raw: string): ProfileStore {
   try {
     value = JSON.parse(raw);
   } catch {
-    throw new Error('Os perfis guardados estão corrompidos.');
+    throw new Error('profile_store_corrupt');
   }
   if (!isRecord(value) || !Array.isArray(value.profiles) ||
       (value.lastProfileId !== null && typeof value.lastProfileId !== 'string') ||
       (value.lastDesktopId !== null && typeof value.lastDesktopId !== 'string')) {
-    throw new Error('Os perfis guardados são inválidos.');
+    throw new Error('profile_store_invalid');
   }
   const profiles = value.profiles.map(validateProfile);
   const ids = new Set<string>();
   const desktopIds = new Set<string>();
   for (const profile of profiles) {
-    if (ids.has(profile.id)) throw new Error('Há perfis duplicados.');
+    if (ids.has(profile.id)) throw new Error('profile_store_duplicate_profiles');
     ids.add(profile.id);
     for (const desktop of profile.desktops) {
-      if (desktopIds.has(desktop.id)) throw new Error('Há computadores duplicados.');
+      if (desktopIds.has(desktop.id)) throw new Error('profile_store_duplicate_desktops');
       desktopIds.add(desktop.id);
     }
   }
@@ -187,7 +187,7 @@ export function removeProfile(store: ProfileStore, profileId: string): ProfileSt
 }
 
 function tokenKey(desktopId: string): string {
-  if (!/^d_[A-Za-z0-9_-]{16,32}$/.test(desktopId)) throw new Error('Identificador de computador inválido.');
+  if (!/^d_[A-Za-z0-9_-]{16,32}$/.test(desktopId)) throw new Error('desktop_id_invalid');
   return TOKEN_PREFIX + desktopId;
 }
 
@@ -196,7 +196,7 @@ export function readDeviceToken(desktopId: string): Promise<string | null> {
 }
 
 export function saveDeviceToken(desktopId: string, token: string): Promise<void> {
-  if (!token.startsWith('cdt1.')) throw new Error('Token do computador inválido.');
+  if (!token.startsWith('cdt1.')) throw new Error('desktop_token_invalid');
   return SecureStore.setItemAsync(tokenKey(desktopId), token, SECURE_OPTIONS);
 }
 

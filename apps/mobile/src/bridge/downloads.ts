@@ -1,4 +1,5 @@
 import { isSafeDownloadUrl } from '../config/url';
+import { t } from '../i18n';
 import type { DataDownloadRequest, RemoteDownloadRequest } from './messages';
 
 export const MAX_DOWNLOAD_BYTES = 8 * 1024 * 1024;
@@ -44,29 +45,29 @@ function normalizeMime(rawMime: string): string {
 function validateMetadata(name: string, rawMime: string): { name: string; mime: string } {
   const mime = normalizeMime(rawMime);
   const extensions = MIME_EXTENSIONS[mime];
-  if (!extensions) throw new Error('Este tipo de arquivo não é permitido.');
+  if (!extensions) throw new Error(t('mobile.download.typeNotAllowed'));
   const lowerName = name.toLowerCase();
   const extension = extensions.find(candidate => lowerName.endsWith(candidate)) ?? extensions[0];
-  if (!extension) throw new Error('Este tipo de arquivo não é permitido.');
+  if (!extension) throw new Error(t('mobile.download.typeNotAllowed'));
   return { name: safeFileName(name, extension), mime };
 }
 
 export function prepareDataDownload(message: DataDownloadRequest): PreparedDownload {
   const mime = normalizeMime(message.mime);
   const metadataForFile = validateMetadata(message.name, mime);
-  if (!message.dataUrl.startsWith('data:')) throw new Error('O conteúdo do arquivo não é válido.');
+  if (!message.dataUrl.startsWith('data:')) throw new Error(t('mobile.download.contentInvalid'));
   const comma = message.dataUrl.indexOf(',');
   const metadata = comma > 5 ? message.dataUrl.slice(5, comma).split(';') : [];
   const declaredMime = normalizeMime(metadata.shift() ?? '');
   const encoding = metadata.pop();
   const validParameters = metadata.every(parameter => /^[A-Za-z0-9!#$&^_.+-]+=[A-Za-z0-9!#$&^_.+:-]+$/.test(parameter));
   if (declaredMime !== mime || encoding !== 'base64' || !validParameters) {
-    throw new Error('O conteúdo do arquivo não corresponde ao tipo informado.');
+    throw new Error(t('mobile.download.contentMismatch'));
   }
   const base64 = message.dataUrl.slice(comma + 1);
-  if (decodedByteLength(base64) > MAX_DOWNLOAD_BYTES) throw new Error('O arquivo excede o limite de 8 MB.');
+  if (decodedByteLength(base64) > MAX_DOWNLOAD_BYTES) throw new Error(t('mobile.download.fileTooLarge'));
   if (!base64 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(base64)) {
-    throw new Error('O conteúdo do arquivo está corrompido.');
+    throw new Error(t('mobile.download.contentCorrupt'));
   }
   const binary = globalThis.atob(base64);
   return { ...metadataForFile, bytes: Uint8Array.from(binary, character => character.charCodeAt(0)) };
@@ -78,8 +79,8 @@ export function prepareRemoteDownload(message: RemoteDownloadRequest, allowDevel
     .find(extension => lowerName.endsWith(extension));
   const inferredMime = inferredExtension ? EXTENSION_MIMES[inferredExtension] : undefined;
   const rawMime = message.mime?.trim() || inferredMime;
-  if (!rawMime) throw new Error('Não foi possível identificar o tipo do arquivo.');
+  if (!rawMime) throw new Error(t('mobile.download.typeUnknown'));
   const metadata = validateMetadata(message.name, rawMime);
-  if (!isSafeDownloadUrl(message.url, allowDevelopmentLoopback)) throw new Error('O endereço do download não é seguro.');
+  if (!isSafeDownloadUrl(message.url, allowDevelopmentLoopback)) throw new Error(t('mobile.download.unsafeAddress'));
   return { ...metadata, url: message.url };
 }
