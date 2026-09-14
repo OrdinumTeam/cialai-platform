@@ -155,16 +155,9 @@ async function run() {
   // Na primeira abertura, WebKitGTK e WebView2 ainda criam caches de fonte e de
   // renderização; os itens do terminal só começam com o xterm montado na tela.
   await until(() => document.querySelector('.terminais-terminal__host .xterm-screen'), 'o terminal montar', TERMINAL_READY_MS);
-  // Renderizador do terminal, GPU vista pelo WebGL e atraso da fila de eventos: num
-  // runner sem GPU o WebGL por software pode explicar um terminal lento.
-  progress.diagnostics.renderer = session.webgl ? 'webgl' : 'dom';
-  try {
-    const gl = document.createElement('canvas').getContext('webgl2');
-    const info = gl?.getExtension('WEBGL_debug_renderer_info');
-    progress.diagnostics.gpu = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl ? 'webgl2' : 'sem webgl2';
-  } catch (_error) {
-    progress.diagnostics.gpu = 'erro ao consultar';
-  }
+  // Renderizador do terminal, GPU vista pelo WebGL do xterm e atraso da fila de
+  // eventos; o roteiro não cria contexto WebGL próprio.
+  progress.diagnostics.renderer = runtime.terminalRenderer();
   const lag = { maxMs: 0 };
   progress.diagnostics.eventLoopLag = lag;
   let tick = Date.now();

@@ -788,8 +788,35 @@ async function resumeAgent(session, plan) {
   }
 }
 
+// WebGL sem aceleracao, como o SwiftShader do WebView2 numa maquina sem GPU
+// ou o driver basico do Windows em maquinas virtuais e acesso remoto, deixa o
+// xterm mais lento que o renderizador DOM e chegou a travar a pagina no runner
+// do Windows. A GPU e conferida no primeiro contexto do xterm e, se for por
+// software, todos os terminais seguem no DOM.
+const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render/i;
+const renderer = { gpu: '', software: false };
+
+export function isSoftwareRenderer(name) {
+  return SOFTWARE_GL.test(String(name || ''));
+}
+
+export function terminalRenderer() {
+  const hosted = state.hostedId ? state.sessions.get(state.hostedId) : null;
+  return { webgl: Boolean(hosted?.webgl), gpu: renderer.gpu, software: renderer.software };
+}
+
+function webglGpu(addon) {
+  try {
+    const gl = addon?._renderer?._gl;
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    return info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL) || '') : '';
+  } catch (_error) {
+    return '';
+  }
+}
+
 function loadWebgl(session) {
-  if (session.webgl) return;
+  if (session.webgl || renderer.software) return;
   try {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
@@ -797,6 +824,13 @@ function loadWebgl(session) {
       session.webgl = null;
     });
     session.term.loadAddon(addon);
+    renderer.gpu = webglGpu(addon) || renderer.gpu;
+    if (isSoftwareRenderer(renderer.gpu)) {
+      renderer.software = true;
+      addon.dispose();
+      session.webgl = null;
+      return;
+    }
     session.webgl = addon;
   } catch (_error) {
     // Sem WebGL o xterm segue no renderizador DOM.
