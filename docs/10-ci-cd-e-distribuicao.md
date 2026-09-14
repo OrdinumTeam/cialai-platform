@@ -9,7 +9,9 @@ A distribuição foi desenhada com GitHub Actions para desktop, núcleo do túne
 | `OrdinumTeam/cialai-platform` | Privado | Desenvolvimento, histórico completo, CI e Codemagic enquanto o projeto não for aberto |
 | Organização `Cialai`, em https://github.com/Cialai | Pública | Destino do projeto open source quando todo o trabalho estiver concluído: código, releases dos binários de macOS, Linux e Windows, issues e contribuições. Nome do repositório a definir |
 
-A exportação para a organização `Cialai` só acontece depois da conclusão. Antes dela:
+Em 13/09/2026 o repositório público `Cialai/cialai` foi criado com histórico limpo, em um único commit gerado por `tools/release/public-export/export_public.py` e auditado por `audit_public.py` na mesma pasta. A cópia exclui o diário de execução, o mapa de credenciais, `AGENTS.md`, a guarda de proveniência do Control, as capturas do Control e a própria pasta de exportação, e troca caminhos locais e referências internas. A suíte completa passou na cópia antes do push. Novas sincronizações repetem os dois scripts e publicam por cima do repositório público.
+
+Checklist original da exportação:
 
 1. Decidir se o público recebe o histórico completo ou um ponto de partida limpo. O histórico e os documentos internos citam caminhos locais, o Ordinum Control e o diário de execução.
 2. Revisar `docs/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
@@ -75,7 +77,7 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Identificador do desktop | `br.com.ordinum.cialai` no `tauri.conf.json` |
 | Esquema de URL | `cialai`, reservado para deep links futuros |
 | App no App Store Connect | Criado em 13/09/2026, `APP_STORE_APP_ID` igual a `6811702125` |
-| App no Codemagic | Criado em 13/09/2026 a partir do repositório privado `OrdinumTeam/cialai-platform`, `CODEMAGIC_APP_ID` igual a `6aa7525c8ec3de31de94f9ee` |
+| App no Codemagic | Pendente: adicionar pelo painel com a integração GitHub. Apps criados pela API ficaram como repositório genérico sem acesso ao repositório privado e foram apagados; a organização também não permite deploy keys |
 | App no Google Play | Criado em 13/09/2026 na conta `7730543760992383205`, Play App ID `4975087090602407034` |
 | Conta de serviço do Play | `ordinum-play-publisher@ordinum.iam.gserviceaccount.com`, do projeto `ordinum`, compartilhada pelos apps da Ordinum e validada pela API em 13/09/2026 |
 | Nome de exibição | Cialai |
