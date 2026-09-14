@@ -8,7 +8,7 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | --- | --- | --- |
 | Marca, acento e gradiente | Implementado | `brand.css`, splash e superfícies Cialai passam no check de marca |
 | Tema ANSI e paleta das sessões | Implementado | Azul semântico e dezoito ids foram preservados e testados |
-| Ícones desktop e móvel | Implementado | Fontes opacas e formatos do Tauri foram gerados e o ícone móvel passou no check de assets; lançadores externos não foram conferidos |
+| Ícones desktop e móvel | Implementado | Ícone aprovado `brand/logo/cialai-icon.png` gera a fonte opaca do iOS, a fonte arredondada do desktop e o primeiro plano adaptativo do Android; lançadores reais não foram conferidos |
 | Tipografia, movimento e dimensões | Implementado | Valores foram preservados na interface compartilhada e nas capturas macOS |
 | Regras de texto da interface | Implementado | Checks de interface e revisão dos materiais cobrem os textos atuais |
 | Interface em três idiomas | Implementado | Português do Brasil, inglês e espanhol neutro têm dicionários com paridade |
@@ -32,7 +32,7 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | Acento | `--mac-accent #1a4fa0` claro e `#4a8ae6` escuro | `--mac-accent #E23B84` claro e `#FF7AB2` escuro; `--mac-accent-hover #c9317a` claro e `#ff8fc0` escuro; `--mac-accent-soft-hover rgba(226,59,132,.14)` claro e `rgba(255,122,178,.24)` escuro |
 | Sidebar | Gradiente da marca Ordinum em azuis | Claro: gradiente de `#FFD6E6` para `#ffffff`; escuro: de `#3A1B33` para `#1c1c1e`; item ativo em pílula magenta |
 | Bloco de destaque, número principal | Azul Ordinum | Magenta |
-| Ícone do app | Marca Ordinum em fundo navy | Marca Cialai em fundo branco no macOS e no Windows; no Linux o mesmo PNG; no iOS fundo branco opaco; no Android ícone adaptativo com primeiro plano da marca e fundo `#FFD6E6` |
+| Ícone do app | Marca Ordinum em fundo navy | Cabeça do louva-a-deus em placa branca arredondada: no macOS, Windows e Linux a placa ocupa 824 de 1024 px com margem transparente; no iOS quadrado branco opaco mascarado pelo sistema; no Android ícone adaptativo com a arte na zona segura e fundo `#FFFFFF` |
 | Splash | Marca Ordinum | Marca Cialai centralizada, mesmo tempo e mesma coreografia de janela |
 | Diálogo Vincular celular | Não existe | QR em preto sobre branco, sem tingir, com a marca pequena acima e o nome do computador; nunca colorir o QR |
 | Ponto de estado do túnel | Não existe | Verde conectado, âmbar reconectando, cinza sem rede, vermelho falha, com os tokens `--mac-ok`, `--mac-warn` e `--mac-bad` |
@@ -131,9 +131,9 @@ Tudo que aparece surge em 140 a 240 ms, só com opacidade e deslocamento, no `--
 
 | Plataforma | Geração | Verificação |
 | --- | --- | --- |
-| Desktop | `tauri icon apps/desktop/design/app-icon-1024.png` a partir da marca em fundo branco, como `macos/design` no Control | Conferência visual em claro e escuro no Dock, na barra de tarefas e no lançador |
-| iOS | PNG opaco de 1024 px em `apps/mobile/assets/icon.png` | `tools/check-app-icon.swift`, herdado de `scripts/check-app-icon.swift`: 1024 por 1024, sem alfa, mais de 1000 amostras claras e mais de 1000 escuras |
-| Android | Ícone adaptativo com `foregroundImage` da marca e `backgroundColor #FFD6E6` no `app.json` | Pré-visualização nas máscaras circular, arredondada e quadrada |
+| Desktop | `tauri icon apps/desktop/design/desktop-icon-1024.png`, placa arredondada de 824 px em tela transparente de 1024 px | `tools/check/desktop-icon.mjs` e conferência visual em claro e escuro no Dock, na barra de tarefas e no lançador |
+| iOS | PNG opaco de 1024 px em `apps/desktop/design/app-icon-1024.png`, usado como `icon` do Expo | `tools/release/check-app-icon.swift` no Codemagic: 1024 por 1024, sem alfa, com rosa e ameixa da marca |
+| Android | Ícone adaptativo com `foregroundImage` em `apps/desktop/design/android-foreground-1024.png` e `backgroundColor #FFFFFF` no `app.config.ts` | Arte dentro do raio seguro de 33 dp; pré-visualização nas máscaras circular, arredondada e quadrada |
 | Favicon e site | SVG da marca | Legibilidade a 32 px |
 
 ## Regras de texto na interface

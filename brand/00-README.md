@@ -45,7 +45,7 @@ SVG ainda.
 |------|--------|
 | SVG vetorizado | Pendente. Símbolo e letras precisam ser redesenhados como formas, com as cores ajustadas aos tokens |
 | Assinatura para fundo escuro | Pendente. Só o símbolo tem versão branca; a assinatura existe apenas em cores |
-| Ícone de app | Pendente. Duas rodadas de knockout foram descartadas; o símbolo em 4K é a fonte |
+| Ícone de app | Aprovado em 13/09/2026: `logo/cialai-icon.png`, placa branca arredondada de 2048 px, fonte dos ícones de desktop, iOS e Android |
 | Assinatura empilhada | Pendente. Só existe a horizontal |
 | Tipografia de interface | Não definida. O lettering do nome é desenho, não fonte, e não serve para texto corrido |
 | Fonte vetorial | As versões branca e preta foram feitas em vetor fora do repositório. O arquivo de origem não está versionado aqui |

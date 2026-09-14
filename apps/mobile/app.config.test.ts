@@ -54,6 +54,15 @@ describe('Expo app config', () => {
     expect(config.plugins).toContainEqual(['./plugins/with-android-locales.cjs', { locales: [...SUPPORTED_LOCALES] }]);
   });
 
+  test('uses the approved Cialai icon on iOS and an adaptive icon on Android', () => {
+    const config = buildConfig(context);
+    expect(config.icon).toBe('../desktop/design/app-icon-1024.png');
+    expect(config.android?.adaptiveIcon).toEqual({
+      foregroundImage: '../desktop/design/android-foreground-1024.png',
+      backgroundColor: '#FFFFFF'
+    });
+  });
+
   test('fails clearly for an invalid application environment', () => {
     process.env.APP_ENV = 'invalid';
     expect(() => buildConfig(context)).toThrow('APP_ENV');

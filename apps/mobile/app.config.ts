@@ -62,6 +62,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     android: {
       package: 'br.com.ordinum.cialai',
       versionCode: resolveAndroidVersionCode(),
+      adaptiveIcon: {
+        foregroundImage: '../desktop/design/android-foreground-1024.png',
+        backgroundColor: '#FFFFFF'
+      },
       allowBackup: false,
       softwareKeyboardLayoutMode: 'resize',
       permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC'],

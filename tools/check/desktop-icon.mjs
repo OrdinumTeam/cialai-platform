@@ -84,6 +84,14 @@ assert.ok(pink > 100_000, `Expected the Cialai pink symbol, found ${pink} pink p
 assert.ok(plum > 5_000, `Expected the Cialai plum details, found ${plum} plum pixels`);
 
 const desktopPackage = JSON.parse(readFileSync(`${root}/apps/desktop/package.json`, 'utf8'));
-assert.match(desktopPackage.scripts.icon, /design\/app-icon-1024\.png$/);
+assert.match(desktopPackage.scripts.icon, /design\/desktop-icon-1024\.png$/);
 
-console.log('PASS desktop icon: approved Cialai symbol on an opaque 1024 px white source');
+const desktopSource = readFileSync(`${root}/apps/desktop/design/desktop-icon-1024.png`);
+assert.equal(desktopSource.readUInt32BE(16), 1024, 'Desktop icon source must be 1024 px wide');
+assert.equal(desktopSource.readUInt32BE(20), 1024, 'Desktop icon source must be 1024 px high');
+assert.equal(desktopSource[25], 6, 'Desktop icon source keeps transparent margins in RGBA');
+const foreground = readFileSync(`${root}/apps/desktop/design/android-foreground-1024.png`);
+assert.equal(foreground.readUInt32BE(16), 1024, 'Android foreground must be 1024 px wide');
+assert.equal(foreground[25], 6, 'Android foreground must be RGBA');
+
+console.log('PASS desktop icon: approved Cialai icon as opaque mobile source, rounded desktop source and Android foreground');
