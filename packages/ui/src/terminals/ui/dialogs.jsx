@@ -5,6 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
+import { getLocale, translate } from '../../shared/i18n.js';
 
 function Sheet({ open, title, children, actions, onClose }) {
   return (
@@ -22,18 +23,18 @@ export function CloseSessionDialog({ request, onCancel, onConfirm }) {
   const open = Boolean(request);
   const running = request?.running || null;
   const dirty = request?.dirtyTabs || 0;
-  let message = 'A sessão será encerrada e o histórico do terminal deixará de existir.';
-  if (running) message = `${running} está em execução nesta sessão. Encerrar interrompe o trabalho em andamento.`;
-  if (dirty) message += ` ${dirty === 1 ? 'Há um arquivo com alterações não salvas.' : `Há ${dirty} arquivos com alterações não salvas.`}`;
+  let message = translate('terminal.dialog.closeDescription');
+  if (running) message = translate('terminal.dialog.closeRunning', { running });
+  if (dirty) message += ` ${translate(dirty === 1 ? 'terminal.dialog.oneDirty' : 'terminal.dialog.manyDirty', { count: dirty.toLocaleString(getLocale()) })}`;
   return (
     <Sheet
       open={open}
-      title={request?.name ? `Encerrar ${request.name}` : 'Encerrar sessão'}
+      title={translate(request?.name ? 'terminal.dialog.closeNamed' : 'terminal.dialog.closeSession', { name: request?.name })}
       onClose={onCancel}
       actions={(
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={onConfirm}>Encerrar</Button>
+          <Button onClick={onCancel}>{translate('terminal.common.cancel')}</Button>
+          <Button variant="contained" color="error" onClick={onConfirm}>{translate('terminal.dialog.closeSession')}</Button>
         </>
       )}
     >
@@ -47,17 +48,17 @@ export function UnsavedDialog({ request, onCancel, onDiscard, onSave }) {
   return (
     <Sheet
       open={Boolean(request)}
-      title="Alterações não salvas"
+      title={translate('terminal.dialog.unsavedTitle')}
       onClose={onCancel}
       actions={(
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          <Button color="error" onClick={onDiscard}>Descartar</Button>
-          <Button variant="contained" onClick={onSave}>Salvar</Button>
+          <Button onClick={onCancel}>{translate('terminal.common.cancel')}</Button>
+          <Button color="error" onClick={onDiscard}>{translate('terminal.dialog.discard')}</Button>
+          <Button variant="contained" onClick={onSave}>{translate('terminal.common.save')}</Button>
         </>
       )}
     >
-      {request ? `${request.name} tem alterações que ainda não foram salvas.` : ''}
+      {request ? translate('terminal.dialog.unsavedDescription', { name: request.name }) : ''}
     </Sheet>
   );
 }
@@ -68,19 +69,19 @@ export function ConflictDialog({ request, onCancel, onReload, onOverwrite }) {
   return (
     <Sheet
       open={Boolean(request)}
-      title={deleted ? 'O arquivo foi removido do disco' : 'O arquivo mudou no disco'}
+      title={translate(deleted ? 'terminal.dialog.deletedTitle' : 'terminal.dialog.changedTitle')}
       onClose={onCancel}
       actions={(
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          {!deleted ? <Button color="error" onClick={onReload}>Recarregar do disco</Button> : null}
-          <Button variant="contained" onClick={onOverwrite}>{deleted ? 'Salvar de novo' : 'Sobrescrever'}</Button>
+          <Button onClick={onCancel}>{translate('terminal.common.cancel')}</Button>
+          {!deleted ? <Button color="error" onClick={onReload}>{translate('terminal.editor.reloadDisk')}</Button> : null}
+          <Button variant="contained" onClick={onOverwrite}>{translate(deleted ? 'terminal.editor.saveAgain' : 'terminal.editor.overwrite')}</Button>
         </>
       )}
     >
       {deleted
-        ? `${request?.name || 'O arquivo'} não existe mais no disco. Salvar de novo recria o arquivo com o conteúdo do editor.`
-        : `${request?.name || 'O arquivo'} foi alterado por outro programa. Sobrescrever descarta a versão do disco; recarregar descarta o que está no editor.`}
+        ? translate('terminal.dialog.deletedDescription', { name: request?.name || translate('terminal.dialog.fileFallback') })
+        : translate('terminal.dialog.changedDescription', { name: request?.name || translate('terminal.dialog.fileFallback') })}
     </Sheet>
   );
 }
@@ -90,16 +91,16 @@ export function DeleteDialog({ request, onCancel, onConfirm }) {
   return (
     <Sheet
       open={Boolean(request)}
-      title={isDir ? 'Mover pasta para a Lixeira' : 'Mover arquivo para a Lixeira'}
+      title={translate(isDir ? 'terminal.dialog.trashFolderTitle' : 'terminal.dialog.trashFileTitle')}
       onClose={onCancel}
       actions={(
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          <Button variant="contained" color="error" onClick={onConfirm}>Mover para a Lixeira</Button>
+          <Button onClick={onCancel}>{translate('terminal.common.cancel')}</Button>
+          <Button variant="contained" color="error" onClick={onConfirm}>{translate('terminal.dialog.moveTrash')}</Button>
         </>
       )}
     >
-      {request ? `${request.name}${isDir ? ' e tudo que está dentro' : ''} vai para a Lixeira do macOS.` : ''}
+      {request ? translate(isDir ? 'terminal.dialog.trashFolderDescription' : 'terminal.dialog.trashFileDescription', { name: request.name }) : ''}
     </Sheet>
   );
 }
@@ -122,12 +123,12 @@ export function NameDialog({ request, onCancel, onConfirm }) {
   return (
     <Sheet
       open={Boolean(request)}
-      title={request?.title || 'Nome'}
+      title={request?.title || translate('terminal.common.name')}
       onClose={onCancel}
       actions={(
         <>
-          <Button onClick={onCancel}>Cancelar</Button>
-          <Button variant="contained" onClick={submit} disabled={Boolean(request?.required) && !value.trim()}>{request?.confirmLabel || 'Salvar'}</Button>
+          <Button onClick={onCancel}>{translate('terminal.common.cancel')}</Button>
+          <Button variant="contained" onClick={submit} disabled={Boolean(request?.required) && !value.trim()}>{request?.confirmLabel || translate('terminal.common.save')}</Button>
         </>
       )}
     >
@@ -143,7 +144,7 @@ export function NameDialog({ request, onCancel, onConfirm }) {
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
-          aria-label={request?.title || 'Nome'}
+          aria-label={request?.title || translate('terminal.common.name')}
         />
       </div>
     </Sheet>

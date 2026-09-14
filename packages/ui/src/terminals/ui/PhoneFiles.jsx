@@ -2,9 +2,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, ChevronRight, Eye, File, Folder, FolderOpen, RefreshCw } from 'lucide-react';
 import { invoke } from '../../lib/native.js';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 // The server derives the allowed root from the PTY. Never send a client root.
 export default function PhoneFiles({ session, path, preview, onPreview }) {
+  useI18n();
   const [nodes, setNodes] = useState({});
   const [expanded, setExpanded] = useState(new Set(['']));
   const [revision, setRevision] = useState(0);
@@ -41,7 +43,7 @@ export default function PhoneFiles({ session, path, preview, onPreview }) {
   }
   function branch(parent, depth = 0) {
     const node = nodes[parent];
-    if (!node || node.loading) return <p className="phone-files__message" role="status">Carregando arquivos…</p>;
+    if (!node || node.loading) return <p className="phone-files__message" role="status">{translate('terminal.phone.loadingFiles')}</p>;
     if (node.error) return <p className="phone-files__message" role="status">{node.error}</p>;
     return <ul className="phone-files__branch">
       {node.value.entries.map(entry => <li key={entry.path}>
@@ -52,16 +54,16 @@ export default function PhoneFiles({ session, path, preview, onPreview }) {
         </button>
         {entry.kind === 'dir' && expanded.has(entry.path) && branch(entry.path, depth + 1)}
       </li>)}
-      {!node.value.entries.length && <li className="phone-files__message">Pasta vazia ou sem arquivos disponíveis para consulta.</li>}
-      {node.value.truncated && <li className="phone-files__message">Exibindo os primeiros 200 itens.</li>}
+      {!node.value.entries.length && <li className="phone-files__message">{translate('terminal.phone.emptyFolder')}</li>}
+      {node.value.truncated && <li className="phone-files__message">{translate('terminal.phone.firstItems')}</li>}
     </ul>;
   }
   const currentFile = file?.path === path ? file : null;
-  return <section className="phone-files" aria-label={preview ? 'Prévia do arquivo' : 'Arquivos do diretório'}>
-    <div className="phone-files__bar"><span><Eye size={14} aria-hidden="true" />Somente leitura</span>{!preview && <button type="button" className="mac-tool" aria-label="Atualizar arquivos" onClick={() => { setExpanded(new Set([''])); setRevision(value => value + 1); }}><RefreshCw size={17} /></button>}</div>
+  return <section className="phone-files" aria-label={translate(preview ? 'terminal.phone.filePreview' : 'terminal.phone.directoryFiles')}>
+    <div className="phone-files__bar"><span><Eye size={14} aria-hidden="true" />{translate('terminal.phone.readOnly')}</span>{!preview && <button type="button" className="mac-tool" aria-label={translate('terminal.phone.refreshFiles')} onClick={() => { setExpanded(new Set([''])); setRevision(value => value + 1); }}><RefreshCw size={17} /></button>}</div>
     {preview ? <div className="phone-files__preview">
       <p className="phone-files__path">{path}</p>
-      {!currentFile ? <p role="status">Carregando arquivo…</p> : currentFile.error ? <p role="status">{currentFile.error}</p> : <pre tabIndex={0} aria-label="Conteúdo do arquivo">{currentFile.content}</pre>}
+      {!currentFile ? <p role="status">{translate('terminal.phone.loadingFile')}</p> : currentFile.error ? <p role="status">{currentFile.error}</p> : <pre tabIndex={0} aria-label={translate('terminal.phone.fileContent')}>{currentFile.content}</pre>}
     </div> : <div className="phone-files__tree"><p className="phone-files__root">{session.cwd.split('/').at(-1)}</p>{branch('')}</div>}
   </section>;
 }

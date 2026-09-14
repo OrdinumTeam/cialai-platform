@@ -13,13 +13,13 @@ import {
   FilePlus2, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput,
 } from 'lucide-react';
 import { useToast } from '../../components/ui.jsx';
-import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE } from '../../lib/native.js';
+import { hasBridge } from '../../lib/native.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { registerPaletteProvider } from '../../desktop/palette-registry.js';
 import { shell } from '../../desktop/shell-bridge.js';
 import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
-  getState, hydrate, insertPaths, insertText, isDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pasteText, pickAndOpen,
+  getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pasteText, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
   setSessionColor, setSessionSubtitle, subscribe, togglePinned, viewMounted,
 } from '../runtime.js';
@@ -38,6 +38,7 @@ import QuickOpen from './QuickOpen.jsx';
 import { CloseSessionDialog, ConflictDialog, DeleteDialog, NameDialog, UnsavedDialog } from './dialogs.jsx';
 import { isTerminalFocused, shortcutLabel } from '../../lib/keys.js';
 import { isTerminalAppShortcut, terminalEditAction, workbenchShortcutAction } from '../shortcut-actions.js';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 // Abaixo destas larguras os paineis laterais recolhem sozinhos, sem mexer
 // na preferencia do usuario, e voltam quando a janela cresce.
@@ -57,6 +58,7 @@ function swatch(color) {
 
 export default function Workbench() {
   const notify = useToast();
+  const { locale } = useI18n();
   useRuntimeEvents(['sessions', 'editor', 'theme']);
   const layout = useLayout();
   const [picker, setPicker] = useState(null);
@@ -86,7 +88,7 @@ export default function Workbench() {
   /* ── ciclo de vida ───────────────────────────────────────────────── */
 
   const openPicker = useCallback(() => {
-    if (!native) { notify(NATIVE_ONLY_MESSAGE, 'warning'); return; }
+    if (!native) { notify(translate('terminal.common.desktopOnly'), 'warning'); return; }
     const rect = newButtonRef.current?.getBoundingClientRect();
     setPicker(rect ? { top: rect.bottom, right: rect.right } : { top: 52, right: 16 });
   }, [native, notify]);
@@ -98,7 +100,7 @@ export default function Workbench() {
   // pasta vem antes.
   const newFile = useCallback(() => {
     const current = getState().selected;
-    if (!current) { notify('Abra uma sessão para criar um arquivo', 'info'); openPickerRef.current?.(); return; }
+    if (!current) { notify(translate('terminal.session.openOneFirst'), 'info'); openPickerRef.current?.(); return; }
     newUntitled(current.id);
     setEditorFocusKey((value) => value + 1);
   }, [notify]);
@@ -148,6 +150,8 @@ export default function Workbench() {
 
   useEffect(() => { setFindOpen(false); }, [selectedId]);
 
+  useEffect(() => { localizeDemo(); }, [locale]);
+
   // Recolhimento automatico em janelas estreitas.
   useEffect(() => {
     const root = rootRef.current;
@@ -193,7 +197,7 @@ export default function Workbench() {
     const busy = session.status === 'running' && Boolean(session.activity?.foreground);
     const dirty = session.editor.tabs.filter((tab) => tab.dirty).length;
     if (!busy && !dirty) { closeSession(session.id); return; }
-    setCloseRequest({ id: session.id, name: session.name, running: busy ? (running?.text || 'Um processo') : null, dirtyTabs: dirty });
+    setCloseRequest({ id: session.id, name: session.name, running: busy ? (running?.text || translate('terminal.session.processFallback')) : null, dirtyTabs: dirty });
   }, []);
 
   // Grade de amostras: com dezoito tons a lista vertical ficaria maior que
@@ -201,13 +205,13 @@ export default function Workbench() {
   const colorMenu = useCallback((session, anchor) => {
     const dark = isDark();
     const items = [
-      { id: 'default', label: 'Sem cor', icon: swatch('transparent'), hint: !session.color ? 'atual' : undefined, run: () => setSessionColor(session.id, null) },
+      { id: 'default', label: translate('terminal.menu.noColor'), icon: swatch('transparent'), hint: !session.color ? translate('terminal.common.current') : undefined, run: () => setSessionColor(session.id, null) },
       { separator: true },
       {
         id: 'colors',
         swatches: SESSION_COLORS.map((color) => ({
           id: color.id,
-          label: color.label,
+          label: translate(`terminal.color.${color.id}`),
           color: dark ? color.dark : color.light,
           current: session.color === color.id,
           run: () => setSessionColor(session.id, color.id),
@@ -219,25 +223,25 @@ export default function Workbench() {
 
   const sessionMenu = useCallback((session, anchor) => {
     const items = [
-      { id: 'rename', label: 'Renomear sessão', icon: TextCursorInput, run: () => setRenamingId(session.id) },
-      { id: 'subtitle', label: session.subtitle ? 'Editar subtítulo…' : 'Definir subtítulo…', icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: 'Subtítulo da sessão', description: 'Para que serve esta sessão. Aparece sob o nome e entra na busca.', initial: session.subtitle, placeholder: 'Servidor de desenvolvimento', confirmLabel: 'Salvar' }) },
-      { id: 'color', label: 'Cor da sessão…', icon: Palette, run: () => setTimeout(() => colorMenu(session, anchor), 0) },
-      { id: 'pin', label: session.pinned ? 'Desafixar do topo' : 'Fixar no topo', icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
-      { id: 'up', label: 'Mover para cima', icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
-      { id: 'down', label: 'Mover para baixo', icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
+      { id: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput, run: () => setRenamingId(session.id) },
+      { id: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: translate('terminal.menu.subtitleTitle'), description: translate('terminal.menu.subtitleDescription'), initial: session.subtitle, placeholder: translate('terminal.menu.subtitlePlaceholder'), confirmLabel: translate('terminal.common.save') }) },
+      { id: 'color', label: translate('terminal.menu.sessionColor'), icon: Palette, run: () => setTimeout(() => colorMenu(session, anchor), 0) },
+      { id: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
+      { id: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
+      { id: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
       { separator: true },
-      { id: 'browser', label: 'Abrir Dev Browser', icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
+      { id: 'browser', label: translate('terminal.browser.openDevBrowser'), icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
       session.browser?.status === 'ready' || session.browser?.status === 'starting'
-        ? { id: 'browser-stop', label: 'Encerrar Dev Browser', icon: Globe, run: () => stopBrowser(session.id).catch(() => {}) }
+        ? { id: 'browser-stop', label: translate('terminal.browser.stopDevBrowser'), icon: Globe, run: () => stopBrowser(session.id).catch(() => {}) }
         : null,
       { separator: true },
-      { id: 'copy', label: 'Copiar caminho', icon: Copy, run: async () => { const ok = await copyToClipboard(session.cwd); notify(ok ? 'Caminho copiado' : 'Não foi possível copiar', ok ? 'success' : 'warning'); } },
-      { id: 'finder', label: 'Abrir pasta no Finder', icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
-      { id: 'clone', label: 'Nova sessão neste diretório', icon: Plus, run: () => openSession(session.cwd) },
-      { id: 'dir', label: 'Trocar pasta…', icon: FolderSearch, run: () => changeDirectory(session.id).catch((error) => notify(error.message, 'warning')) },
+      { id: 'copy', label: translate('terminal.explorer.copyPath'), icon: Copy, run: async () => { const ok = await copyToClipboard(session.cwd); notify(translate(ok ? 'terminal.common.pathCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning'); } },
+      { id: 'finder', label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
+      { id: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
+      { id: 'dir', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, run: () => changeDirectory(session.id).catch((error) => notify(error.message, 'warning')) },
       { separator: true },
-      { id: 'restart', label: 'Reiniciar terminal', icon: RotateCcw, run: () => restart(session.id) },
-      { id: 'close', label: 'Encerrar sessão', icon: Power, danger: true, run: () => requestCloseSession(session) },
+      { id: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw, run: () => restart(session.id) },
+      { id: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true, run: () => requestCloseSession(session) },
     ];
     setMenu({ anchor, items });
   }, [notify, requestCloseSession, colorMenu]);
@@ -279,7 +283,7 @@ export default function Workbench() {
       // Uma aba temporaria abre o painel de salvar; fechar o painel sem
       // escolher devolve false e nada acontece.
       if (!await saveTab(tab)) return;
-      notify(`${tab.name} salvo`, 'success');
+      notify(translate('terminal.session.saved', { name: tab.name }), 'success');
       after?.();
     } catch (error) {
       if (error?.code === 'conflict' || tab.conflict) setConflictRequest({ tab, name: tab.name, conflict: tab.conflict || 'disk-changed', after });
@@ -297,7 +301,7 @@ export default function Workbench() {
     refreshPreview: (tab) => refreshPreview(tab),
     reload: (tab) => reloadTab(tab).catch((error) => notify(error?.message || String(error), 'warning')),
     keepConflict: (tab) => { tab.conflict = null; setTabMode(tab, tab.mode); },
-    saveAgain: (tab) => saveTab(tab, { force: true }).then(() => notify(`${tab.name} salvo`, 'success')).catch((error) => notify(error?.message || String(error), 'warning')),
+    saveAgain: (tab) => saveTab(tab, { force: true }).then(() => notify(translate('terminal.session.saved', { name: tab.name }), 'success')).catch((error) => notify(error?.message || String(error), 'warning')),
     openDefault: (tab) => fs.openDefault(tab.path).catch((error) => notify(error.message, 'warning')),
     reveal: (tab) => fs.reveal(tab.path).catch((error) => notify(error.message, 'warning')),
     reconvert: (tab) => reconvertTab(tab).catch((error) => notify(error?.message || String(error), 'warning')),
@@ -333,14 +337,14 @@ export default function Workbench() {
     const isShiftEnter = (event) => event.key === 'Enter' && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
     const copyTerminalSelection = () => {
       const text = selected.term.getSelection();
-      if (!text) { notify('Nada selecionado no terminal', 'info'); return; }
-      copyToClipboard(text).then((ok) => notify(ok ? 'Seleção copiada' : 'Não foi possível copiar', ok ? 'success' : 'warning'));
+      if (!text) { notify(translate('terminal.common.nothingSelected'), 'info'); return; }
+      copyToClipboard(text).then((ok) => notify(translate(ok ? 'terminal.common.selectionCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning'));
     };
     const pasteTerminalClipboard = () => {
-      if (!navigator.clipboard?.readText) { notify('Não foi possível colar', 'warning'); return; }
+      if (!navigator.clipboard?.readText) { notify(translate('terminal.common.pasteFailed'), 'warning'); return; }
       navigator.clipboard.readText()
         .then((text) => { if (text) pasteText(selected.id, text); })
-        .catch(() => notify('Não foi possível colar', 'warning'));
+        .catch(() => notify(translate('terminal.common.pasteFailed'), 'warning'));
     };
     selected.term.attachCustomKeyEventHandler((event) => {
       if (isShiftEnter(event)) {
@@ -391,36 +395,36 @@ export default function Workbench() {
 
   useEffect(() => registerPaletteProvider(() => {
     const items = [
-      { id: 'terminais:new', kind: 'Sessões', label: 'Nova sessão', shortcut: shortcutLabel('Mod+T'), icon: Plus, run: () => openPickerRef.current?.() },
-      { id: 'terminais:new-file', kind: 'Estúdio', label: 'Novo arquivo temporário', shortcut: shortcutLabel('Mod+N'), icon: FilePlus2, run: () => newFileRef.current?.() },
+      { id: 'terminais:new', kind: translate('terminal.palette.sessions'), label: translate('terminal.session.new'), shortcut: shortcutLabel('Mod+T'), icon: Plus, run: () => openPickerRef.current?.() },
+      { id: 'terminais:new-file', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.newTemporaryFile'), shortcut: shortcutLabel('Mod+N'), icon: FilePlus2, run: () => newFileRef.current?.() },
     ];
     orderedSessions().forEach((session) => {
       const state = describe(session);
-      items.push({ id: `terminais:go:${session.id}`, kind: 'Sessões', label: `Ir para ${session.name}${session.subtitle ? `, ${session.subtitle}` : ''}`, hint: state.label, icon: SquareTerminal, run: () => { shell.navigate('terminais'); selectSession(session.id); setTimeout(focusSelected, 80); } });
+      items.push({ id: `terminais:go:${session.id}`, kind: translate('terminal.palette.sessions'), label: translate(session.subtitle ? 'terminal.palette.goToSubtitle' : 'terminal.palette.goTo', { name: session.name, subtitle: session.subtitle }), hint: state.label, icon: SquareTerminal, run: () => { shell.navigate('terminais'); selectSession(session.id); setTimeout(focusSelected, 80); } });
     });
     if (sessionsNeedingAttention().length) {
-      items.push({ id: 'terminais:attention', kind: 'Sessões', label: 'Ir para a próxima sessão que pede atenção', icon: Bell, run: () => { shell.navigate('terminais'); selectNextAttention(); } });
+      items.push({ id: 'terminais:attention', kind: translate('terminal.palette.sessions'), label: translate('terminal.session.attentionNext'), icon: Bell, run: () => { shell.navigate('terminais'); selectNextAttention(); } });
     }
     getRecent().slice(0, 6).forEach((path) => {
-      items.push({ id: `terminais:recent:${path}`, kind: 'Recentes', label: `Reabrir ${baseName(path)}`, hint: shortPath(path), icon: FolderOpen, run: () => { shell.navigate('terminais'); openSession(path); } });
+      items.push({ id: `terminais:recent:${path}`, kind: translate('terminal.palette.recent'), label: translate('terminal.palette.reopen', { name: baseName(path) }), hint: shortPath(path), icon: FolderOpen, run: () => { shell.navigate('terminais'); openSession(path); } });
     });
     const current = getState().selected;
     if (current && current.status !== 'disconnected') {
-      items.push({ id: 'terminais:file', kind: 'Estúdio', label: 'Buscar arquivo no projeto', shortcut: shortcutLabel('Mod+P'), icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
+      items.push({ id: 'terminais:file', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.findProjectFile'), shortcut: shortcutLabel('Mod+P'), icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
     }
-    items.push({ id: 'terminais:explorer', kind: 'Estúdio', label: layout.explorerCollapsed ? 'Mostrar explorador de arquivos' : 'Ocultar explorador de arquivos', shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => setLayout({ explorerCollapsed: !layout.explorerCollapsed }) });
-    items.push({ id: 'terminais:sessions', kind: 'Estúdio', label: layout.sessionsCollapsed ? 'Mostrar coluna de sessões' : 'Ocultar coluna de sessões', shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }) });
-    items.push({ id: 'terminais:focus', kind: 'Estúdio', label: layout.focus ? 'Sair do modo foco' : 'Modo foco', icon: Maximize2, run: toggleFocus });
-    if (current) items.push({ id: 'terminais:restart', kind: 'Estúdio', label: `Reiniciar terminal de ${current.name}`, icon: RotateCcw, run: () => restart(current.id) });
+    items.push({ id: 'terminais:explorer', kind: translate('terminal.palette.studio'), label: translate(layout.explorerCollapsed ? 'terminal.palette.showExplorer' : 'terminal.palette.hideExplorer'), shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => setLayout({ explorerCollapsed: !layout.explorerCollapsed }) });
+    items.push({ id: 'terminais:sessions', kind: translate('terminal.palette.studio'), label: translate(layout.sessionsCollapsed ? 'terminal.palette.showSessions' : 'terminal.palette.hideSessions'), shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }) });
+    items.push({ id: 'terminais:focus', kind: translate('terminal.palette.studio'), label: translate(layout.focus ? 'terminal.work.exitFocus' : 'terminal.work.focusMode'), icon: Maximize2, run: toggleFocus });
+    if (current) items.push({ id: 'terminais:restart', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.restartNamed', { name: current.name }), icon: RotateCcw, run: () => restart(current.id) });
     if (current && current.status !== 'disconnected') {
-      items.push({ id: 'terminais:browser', kind: 'Estúdio', label: `Abrir o Dev Browser de ${current.name}`, shortcut: shortcutLabel('Mod+Shift+B'), icon: Globe, run: () => { shell.navigate('terminais'); openBrowserTab(current.id); } });
+      items.push({ id: 'terminais:browser', kind: translate('terminal.palette.studio'), label: translate('terminal.browser.openForSession', { name: current.name }), shortcut: shortcutLabel('Mod+Shift+B'), icon: Globe, run: () => { shell.navigate('terminais'); openBrowserTab(current.id); } });
       if (current.browser?.status === 'ready') {
-        items.push({ id: 'terminais:browser-port', kind: 'Estúdio', label: `Copiar a porta do Dev Browser, ${current.browser.info?.port || ''}`, icon: Copy, run: () => copyPort(current.id) });
-        items.push({ id: 'terminais:browser-stop', kind: 'Estúdio', label: `Encerrar o Dev Browser de ${current.name}`, icon: Power, run: () => stopBrowser(current.id).catch(() => {}) });
+        items.push({ id: 'terminais:browser-port', kind: translate('terminal.palette.studio'), label: translate('terminal.browser.copyPort', { port: current.browser.info?.port || '' }), icon: Copy, run: () => copyPort(current.id) });
+        items.push({ id: 'terminais:browser-stop', kind: translate('terminal.palette.studio'), label: translate('terminal.browser.stopForSession', { name: current.name }), icon: Power, run: () => stopBrowser(current.id).catch(() => {}) });
       }
     }
     return items;
-  }), [layout.explorerCollapsed, layout.sessionsCollapsed, layout.focus, toggleFocus]);
+  }), [layout.explorerCollapsed, layout.sessionsCollapsed, layout.focus, toggleFocus, locale]);
 
   /* ── layout ──────────────────────────────────────────────────────── */
 
@@ -449,7 +453,7 @@ export default function Workbench() {
     const current = getState().selected;
     if (!current) return;
     const ok = insertPaths(current.id, [path]);
-    if (!ok) notify('O terminal desta sessão não está aberto', 'warning');
+    if (!ok) notify(translate('terminal.session.terminalClosed'), 'warning');
   }, [notify]);
 
   const openDiffFor = useCallback((root, path) => {
@@ -469,7 +473,7 @@ export default function Workbench() {
       orderedSessions().forEach((session) => {
         session.editor.tabs.filter((tab) => tab.path && (tab.path === request.path || tab.path.startsWith(`${request.path}/`))).forEach((tab) => closeTab(session.id, tab));
       });
-      notify(`${request.name} foi para a Lixeira`, 'success');
+      notify(translate('terminal.session.trashed', { name: request.name }), 'success');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
     }
@@ -479,9 +483,9 @@ export default function Workbench() {
 
   const toolbar = (
     <ToolbarSlot>
-      <button ref={newButtonRef} type="button" className="mac-tool" onClick={openPicker} disabled={!native} title={`Abrir uma sessão numa pasta, ${shortcutLabel('Mod+T')}`}>
+      <button ref={newButtonRef} type="button" className="mac-tool" onClick={openPicker} disabled={!native} title={translate('terminal.session.openFolderShortcut', { shortcut: shortcutLabel('Mod+T') })}>
         <Plus size={15} strokeWidth={1.75} />
-        <span>Nova sessão</span>
+        <span>{translate('terminal.session.new')}</span>
       </button>
     </ToolbarSlot>
   );
@@ -504,13 +508,13 @@ export default function Workbench() {
         {toolbar}
         <section className="page-empty terminais-empty" aria-labelledby="terminais-empty-title">
           <SquareTerminal strokeWidth={1.75} aria-hidden="true" />
-          <h2 className="page-empty__title" id="terminais-empty-title">Nenhuma sessão aberta</h2>
+          <h2 className="page-empty__title" id="terminais-empty-title">{translate('terminal.session.noneOpen')}</h2>
           <p className="page-empty__text">
             {native
-              ? 'Abra uma sessão numa pasta de projeto. Cada sessão tem o próprio terminal, os arquivos do projeto e um card para acompanhar o que está rodando.'
-              : NATIVE_ONLY_MESSAGE}
+              ? translate('terminal.session.emptyDescription')
+              : translate('terminal.common.desktopOnly')}
           </p>
-          {native ? <div className="terminais-empty__actions"><button type="button" className="btn btn-primary" onClick={openPicker}><Plus size={14} strokeWidth={2} />Nova sessão</button><button type="button" className="btn btn-secondary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}>Vincular celular</button></div> : null}
+          {native ? <div className="terminais-empty__actions"><button type="button" className="btn btn-primary" onClick={openPicker}><Plus size={14} strokeWidth={2} />{translate('terminal.session.new')}</button><button type="button" className="btn btn-secondary" onClick={() => window.dispatchEvent(new CustomEvent('cialai:pair-device'))}>{translate('terminal.session.pairPhone')}</button></div> : null}
           {native && recent.length ? (
             <div className="terminais-empty__recent">
               {recent.map((path) => (
@@ -558,11 +562,11 @@ export default function Workbench() {
             onReopenAll={reopenAll}
             onCollapse={() => setLayout({ sessionsCollapsed: true })}
           />
-          <Splitter orientation="vertical" label="Largura das sessões" onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
+          <Splitter orientation="vertical" label={translate('terminal.work.sessionsWidth')} onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
         </>
       ) : (
         <div className="terminais-edge terminais-edge--left">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ sessionsCollapsed: false, focus: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar sessões" title={`Mostrar sessões, ${shortcutLabel('Mod+Shift+J')}`}><ChevronRight size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ sessionsCollapsed: false, focus: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showSessions')} title={translate('terminal.work.showSessionsShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}><ChevronRight size={12} strokeWidth={2} /></button>
         </div>
       )}
       {selected ? (
@@ -585,7 +589,7 @@ export default function Workbench() {
       ) : <section className="terminais-work" />}
       {!explorerCollapsed && selected ? (
         <>
-          <Splitter orientation="vertical" label="Largura do explorador" onDrag={dragExplorer} onReset={() => setLayout({ explorerWidth: LAYOUT_LIMITS.explorer.default })} onStep={(step) => setLayout({ explorerWidth: layout.explorerWidth - step })} />
+          <Splitter orientation="vertical" label={translate('terminal.work.explorerWidth')} onDrag={dragExplorer} onReset={() => setLayout({ explorerWidth: LAYOUT_LIMITS.explorer.default })} onStep={(step) => setLayout({ explorerWidth: layout.explorerWidth - step })} />
           <ExplorerPane
             key={`${selected.id}:${selected.explorer.root}`}
             session={selected}
@@ -601,11 +605,11 @@ export default function Workbench() {
         </>
       ) : (
         <div className="terminais-edge terminais-edge--right">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ explorerCollapsed: false }); if (layout.focus) toggleFocus(); }} aria-label="Mostrar arquivos" title={`Mostrar arquivos, ${shortcutLabel('Mod+Shift+E')}`}><ChevronLeft size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ explorerCollapsed: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showFiles')} title={translate('terminal.work.showFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><ChevronLeft size={12} strokeWidth={2} /></button>
         </div>
       )}
       {pickerNode}
-      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label="Ações da sessão" /> : null}
+      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={translate('terminal.menu.sessionActions')} /> : null}
       {quickOpen && selected ? (
         <QuickOpen
           root={selected.explorer.root}
@@ -629,7 +633,7 @@ export default function Workbench() {
         request={conflictRequest}
         onCancel={() => setConflictRequest(null)}
         onReload={() => { const { tab, after } = conflictRequest || {}; setConflictRequest(null); if (tab) reloadTab(tab).then(() => after?.()).catch((error) => notify(error?.message || String(error), 'warning')); }}
-        onOverwrite={() => { const { tab, after } = conflictRequest || {}; setConflictRequest(null); if (tab) saveTab(tab, { force: true }).then(() => { notify(`${tab.name} salvo`, 'success'); after?.(); }).catch((error) => notify(error?.message || String(error), 'warning')); }}
+        onOverwrite={() => { const { tab, after } = conflictRequest || {}; setConflictRequest(null); if (tab) saveTab(tab, { force: true }).then(() => { notify(translate('terminal.session.saved', { name: tab.name }), 'success'); after?.(); }).catch((error) => notify(error?.message || String(error), 'warning')); }}
       />
       <DeleteDialog request={deleteRequest} onCancel={() => setDeleteRequest(null)} onConfirm={confirmDelete} />
       <NameDialog

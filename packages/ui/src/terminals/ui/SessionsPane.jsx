@@ -18,6 +18,7 @@ import { beginDrag, inside, onDrag } from '../drag.js';
 import { shortPath } from '../files.js';
 import { onNativeDragDrop } from '../../lib/native.js';
 import { shortcutLabel } from '../../lib/keys.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -33,6 +34,7 @@ export default function SessionsPane({
   sessions, selectedId, onSelect, onNew, onMenu, renamingId, onRename, onRenameDone, attentionCount,
   onJumpAttention, disconnectedCount, onReopenAll, onCollapse,
 }) {
+  useI18n();
   const [query, setQuery] = useState('');
   const [drag, setDrag] = useState(null);
   const [dropTarget, setDropTarget] = useState(null);
@@ -157,21 +159,21 @@ export default function SessionsPane({
   };
 
   return (
-    <aside className="terminais-sessions" aria-label="Sessões">
+    <aside className="terminais-sessions" aria-label={translate('terminal.session.sessions')}>
       <div className="terminais-pane__head">
-        <span className="terminais-pane__title">Sessões</span>
-        <span className="terminais-pane__count">{sessions.length}</span>
+        <span className="terminais-pane__title">{translate('terminal.session.sessions')}</span>
+        <span className="terminais-pane__count">{sessions.length.toLocaleString(getLocale())}</span>
         {attentionCount > 0 ? (
-          <button type="button" className="terminais-pane__chip" onClick={onJumpAttention} title="Ir para a próxima sessão que pede atenção">
+          <button type="button" className="terminais-pane__chip" onClick={onJumpAttention} title={translate('terminal.session.attentionNext')}>
             <Bell size={11} strokeWidth={2} aria-hidden="true" />
-            {attentionCount}
+            {attentionCount.toLocaleString(getLocale())}
           </button>
         ) : null}
         <span className="terminais-pane__spacer" />
-        <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label="Nova sessão" title={`Nova sessão, ${shortcutLabel('Mod+T')}`}>
+        <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label={translate('terminal.session.new')} title={translate('terminal.session.newShortcut', { shortcut: shortcutLabel('Mod+T') })}>
           <Plus size={15} strokeWidth={2} aria-hidden="true" />
         </button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher sessões" title={`Recolher sessões, ${shortcutLabel('Mod+Shift+J')}`}>
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.session.collapse')} title={translate('terminal.session.collapseShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}>
           <PanelLeftClose size={14} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
@@ -180,22 +182,22 @@ export default function SessionsPane({
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="Buscar por nome, subtítulo ou pasta"
-          aria-label="Buscar sessão"
+          placeholder={translate('terminal.session.searchPlaceholder')}
+          aria-label={translate('terminal.session.search')}
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
           onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); setQuery(''); } }}
         />
-        {query ? <button type="button" className="terminais-search__clear" onClick={() => setQuery('')} aria-label="Limpar busca"><X size={12} strokeWidth={2} /></button> : null}
+        {query ? <button type="button" className="terminais-search__clear" onClick={() => setQuery('')} aria-label={translate('terminal.session.clearSearch')}><X size={12} strokeWidth={2} /></button> : null}
       </div>
       {disconnectedCount > 0 ? (
         <button type="button" className="terminais-sessions__reopen" onClick={onReopenAll}>
           <RotateCcw size={12} strokeWidth={2} aria-hidden="true" />
-          <span>{disconnectedCount === 1 ? 'Reabrir a sessão desconectada' : `Reabrir ${disconnectedCount} desconectadas`}</span>
+          <span>{translate(disconnectedCount === 1 ? 'terminal.session.reopenDisconnectedOne' : 'terminal.session.reopenDisconnectedMany', { count: disconnectedCount.toLocaleString(getLocale()) })}</span>
         </button>
       ) : null}
-      <div className="terminais-sessions__list" role="listbox" aria-label="Sessões abertas" ref={listRef} onKeyDown={onListKeyDown}>
+      <div className="terminais-sessions__list" role="listbox" aria-label={translate('terminal.session.openSessions')} ref={listRef} onKeyDown={onListKeyDown}>
         {filtered.map((session, index) => (
           <SessionCard
             key={session.id}
@@ -214,7 +216,7 @@ export default function SessionsPane({
             onDragStart={onDragStart}
           />
         ))}
-        {filtered.length === 0 && sessions.length > 0 ? <div className="terminais-sessions__empty">Nenhuma sessão com esse nome</div> : null}
+        {filtered.length === 0 && sessions.length > 0 ? <div className="terminais-sessions__empty">{translate('terminal.session.noMatch')}</div> : null}
         {drag && !filtering ? <div className={`terminais-sessions__dropend${dropTarget?.end ? ' is-active' : ''}`} aria-hidden="true" /> : null}
       </div>
     </aside>

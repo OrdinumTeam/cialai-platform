@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 import { lazy } from 'react';
 import { SquareTerminal } from 'lucide-react';
+import { translate } from '../shared/i18n.js';
 
 export const DEFAULT_VIEW = 'terminais';
 export const VIEW_COMPONENTS = { terminais: lazy(() => import('./Terminais.jsx')) };
 export const VIEWS = [
-  { id: 'terminais', label: 'Terminais', sub: 'Sessões, arquivos e navegador', icon: SquareTerminal },
+  { id: 'terminais', label: translate('view.terminais.label'), sub: translate('view.terminais.sub'), icon: SquareTerminal },
 ];
 
 export function sanitizeView(id) {

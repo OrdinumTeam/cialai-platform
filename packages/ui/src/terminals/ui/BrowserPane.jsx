@@ -14,6 +14,7 @@ import {
   attachCanvas, copyPort, detachCanvas, goBack, goForward, navigate, recoverTab, reload, startBrowser, stopBrowser, stopLoading,
 } from '../browser/runtime.js';
 import { shortcutLabel } from '../../lib/keys.js';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 function Overlay({ browser, sessionId }) {
   if (browser.status === 'ready' && !browser.error) return null;
@@ -24,11 +25,11 @@ function Overlay({ browser, sessionId }) {
     return (
       <div className="terminais-browser__overlay" role="status">
         <Globe size={22} strokeWidth={1.5} aria-hidden="true" />
-        <strong>{installing ? 'Instalando o Chromium' : 'Abrindo o Chromium'}</strong>
+        <strong>{translate(installing ? 'terminal.browser.installingChromium' : 'terminal.browser.openingChromium')}</strong>
         <span>
           {installing
-            ? (browser.install || 'Esta máquina ainda não tem Chromium. O painel está baixando o do Playwright, só desta vez.')
-            : 'Um browser só desta sessão, com perfil e porta próprios.'}
+            ? (browser.install || translate('terminal.browser.installingDescription'))
+            : translate('terminal.browser.sessionDescription')}
         </span>
       </div>
     );
@@ -37,7 +38,7 @@ function Overlay({ browser, sessionId }) {
     return (
       <div className="terminais-browser__overlay" role="alert">
         <strong>{browser.error}</strong>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => recoverTab(sessionId)}><RotateCcw size={12} />Recarregar aba</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={() => recoverTab(sessionId)}><RotateCcw size={12} />{translate('terminal.browser.reloadTab')}</button>
       </div>
     );
   }
@@ -45,16 +46,17 @@ function Overlay({ browser, sessionId }) {
   return (
     <div className="terminais-browser__overlay" role={failed ? 'alert' : 'status'}>
       <Globe size={22} strokeWidth={1.5} aria-hidden="true" />
-      <strong>{failed ? (browser.error || 'Browser encerrado') : 'Dev Browser desta sessão'}</strong>
-      <span>{browser.url ? browser.url : 'Um Chromium controlável pelos agentes deste terminal, pela porta publicada na pasta.'}</span>
+      <strong>{failed ? (browser.error || translate('terminal.browser.stopped')) : 'Dev Browser'}</strong>
+      <span>{browser.url ? browser.url : translate('terminal.browser.controlDescription')}</span>
       <button type="button" className="btn btn-primary btn-sm" onClick={() => startBrowser(sessionId)}>
-        <Globe size={12} />{failed ? 'Reabrir browser' : 'Abrir browser'}
+        <Globe size={12} />{translate(failed ? 'terminal.browser.reopen' : 'terminal.browser.open')}
       </button>
     </div>
   );
 }
 
 function BrowserPane({ session }) {
+  useI18n();
   useRuntimeEvents(['browser'], session.id);
   const browser = session.browser;
   const canvasRef = useRef(null);
@@ -94,15 +96,15 @@ function BrowserPane({ session }) {
   return (
     <div className="terminais-browser">
       <div className="terminais-browser__bar">
-        <button type="button" className="terminais-pane__tool" onClick={() => goBack(session.id)} disabled={!ready || !browser.canGoBack} aria-label="Voltar" title={`Voltar, ${shortcutLabel('Mod+BracketLeft')}`}><ArrowLeft size={14} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={() => goForward(session.id)} disabled={!ready || !browser.canGoForward} aria-label="Avançar" title={`Avançar, ${shortcutLabel('Mod+BracketRight')}`}><ArrowRight size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => goBack(session.id)} disabled={!ready || !browser.canGoBack} aria-label={translate('terminal.browser.back')} title={`${translate('terminal.browser.back')}, ${shortcutLabel('Mod+BracketLeft')}`}><ArrowLeft size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => goForward(session.id)} disabled={!ready || !browser.canGoForward} aria-label={translate('terminal.browser.forward')} title={`${translate('terminal.browser.forward')}, ${shortcutLabel('Mod+BracketRight')}`}><ArrowRight size={14} strokeWidth={1.75} /></button>
         <button
           type="button"
           className="terminais-pane__tool"
           onClick={() => (browser.loading ? stopLoading(session.id) : reload(session.id))}
           disabled={!ready}
-          aria-label={browser.loading ? 'Parar' : 'Recarregar'}
-          title={browser.loading ? `Parar, ${shortcutLabel('Escape')}` : `Recarregar, ${shortcutLabel('Mod+R')}`}
+          aria-label={translate(browser.loading ? 'terminal.browser.stop' : 'terminal.common.reload')}
+          title={`${translate(browser.loading ? 'terminal.browser.stop' : 'terminal.common.reload')}, ${shortcutLabel(browser.loading ? 'Escape' : 'Mod+R')}`}
         >
           {browser.loading ? <X size={14} strokeWidth={1.75} /> : <RotateCcw size={14} strokeWidth={1.75} />}
         </button>
@@ -117,8 +119,8 @@ function BrowserPane({ session }) {
               event.stopPropagation();
               if (event.key === 'Escape') { event.preventDefault(); setDraft(browser.url || ''); canvasRef.current?.focus(); }
             }}
-            placeholder="Endereço ou busca"
-            aria-label="Endereço"
+            placeholder={translate('terminal.browser.addressOrSearch')}
+            aria-label={translate('terminal.browser.address')}
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
@@ -130,19 +132,19 @@ function BrowserPane({ session }) {
             className={`terminais-browser__port${info.portOwner === 'other' ? ' is-other' : ''}`}
             onClick={() => copyPort(session.id)}
             title={info.portOwner === 'other'
-              ? `Porta ${info.port} deste browser. O arquivo de porta da pasta é de outra sessão${info.portOwnerSession ? `, ${info.portOwnerSession}` : ''}. Clique para copiar.`
-              : `Porta ${info.port}, publicada em .dev-browser-panel/port na pasta da sessão. Clique para copiar.`}
+              ? translate(info.portOwnerSession ? 'terminal.browser.otherPortNamed' : 'terminal.browser.otherPort', { port: info.port, ...(info.portOwnerSession ? { session: info.portOwnerSession } : {}) })
+              : translate('terminal.browser.ownPort', { port: info.port })}
           >
-            <span>Porta</span>
+            <span>{translate('terminal.browser.port')}</span>
             <strong>{info.port}</strong>
             <Copy size={11} strokeWidth={2} aria-hidden="true" />
           </button>
         ) : null}
-        <button type="button" className="terminais-pane__tool" onClick={() => stopBrowser(session.id)} disabled={!ready && browser.status !== 'starting'} aria-label="Encerrar browser" title="Encerrar o browser desta sessão"><Power size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => stopBrowser(session.id)} disabled={!ready && browser.status !== 'starting'} aria-label={translate('terminal.browser.stopBrowser')} title={translate('terminal.browser.stopSessionBrowser')}><Power size={14} strokeWidth={1.75} /></button>
       </div>
       <div className={`terminais-browser__progress${browser.loading ? ' is-loading' : ''}`} aria-hidden="true" />
       <div className="terminais-browser__view">
-        <canvas ref={canvasRef} className="terminais-browser__canvas" tabIndex={0} aria-label={browser.title ? `Página ${browser.title}` : 'Página do browser'} />
+        <canvas ref={canvasRef} className="terminais-browser__canvas" tabIndex={0} aria-label={browser.title ? translate('terminal.browser.pageNamed', { title: browser.title }) : translate('terminal.browser.page')} />
         <Overlay browser={browser} sessionId={session.id} />
       </div>
     </div>

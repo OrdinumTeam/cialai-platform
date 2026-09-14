@@ -10,8 +10,9 @@
 // continuar dirigindo pela porta. Encerrar e explicito, ou vem junto com o
 // fim da sessao.
 
-import { invoke, isTauri, listen, NATIVE_ONLY_MESSAGE } from '../../lib/native.js';
+import { invoke, isTauri, listen } from '../../lib/native.js';
 import { copyToClipboard } from '../../lib/helpers.js';
+import { translate } from '../../shared/i18n.js';
 import {
   activateTab, addTab, announce, emitBrowserEvent, getSession, getState, registerBrowserHooks,
 } from '../runtime.js';
@@ -31,7 +32,7 @@ let listenersInstalled = false;
 let viewVisible = true;
 
 function messageOf(error) {
-  if (!error) return 'Erro desconhecido';
+  if (!error) return translate('terminal.common.unknownError');
   if (typeof error === 'string') return error;
   return error.message || String(error);
 }
@@ -79,7 +80,7 @@ export function openBrowserTab(sessionId, { start = true, url } = {}) {
       id: `browser-${session.id}`,
       kind: 'browser',
       path: null,
-      name: 'Browser',
+      name: translate('terminal.browser.tabName'),
       session: null,
       view: null,
       savedDoc: '',
@@ -132,8 +133,9 @@ function installListeners() {
   listen('browser://exit', (payload) => {
     const session = payload?.sessionId ? getSession(payload.sessionId) : null;
     if (!session || !controllers.has(session.id)) return;
-    const detail = payload.signal ? `sinal ${payload.signal}` : `código ${payload.code ?? '?'}`;
-    markStopped(session, `O Chromium terminou, ${detail}`);
+    markStopped(session, payload.signal
+      ? translate('terminal.browser.exitedSignal', { signal: payload.signal })
+      : translate('terminal.browser.exitedCode', { code: payload.code ?? '?' }));
   }).catch(() => {});
   // O Rust instala um Chromium so por vez, e enquanto isso toda sessao que
   // espera um browser abrir mostra o mesmo andamento.
@@ -165,7 +167,7 @@ function wire(session, controller) {
   controller.offs.push(bs.on('active-changed', () => { syncActive(session, controller).catch(() => {}); }));
   controller.offs.push(bs.on('target-crashed', ({ targetId }) => {
     if (targetId === bs.activeTargetId) {
-      session.browser.error = 'A aba travou';
+      session.browser.error = translate('terminal.browser.tabCrashed');
       emit(session);
     }
   }));
@@ -194,7 +196,7 @@ function wire(session, controller) {
     session.browser.url = event.params.url || '';
     syncActive(session, controller).catch(() => {});
   }));
-  cdp.onDisconnected = () => markStopped(session, 'Conexão com o Chromium perdida');
+  cdp.onDisconnected = () => markStopped(session, translate('terminal.browser.connectionLost'));
 }
 
 function canvasSize(session) {
@@ -213,7 +215,7 @@ export async function startBrowser(sessionId, { url } = {}) {
   if (browser.status === 'starting' || browser.status === 'ready') return browser.info;
   if (!isTauri()) {
     browser.status = 'error';
-    browser.error = NATIVE_ONLY_MESSAGE;
+    browser.error = translate('terminal.common.desktopOnly');
     emit(session);
     return null;
   }
@@ -315,7 +317,7 @@ export function attachCanvas(sessionId, canvas, handlers = {}) {
   controller.unbind = bindInput(canvas, {
     send: (method, params) => {
       const target = controller.session.activeSessionId();
-      if (!target) return Promise.reject(new Error('Sem aba ativa'));
+      if (!target) return Promise.reject(new Error(translate('terminal.browser.noActiveTab')));
       return controller.cdp.send(method, params, target);
     },
     toPageCoords: (event) => controller.cast.toPageCoords(event),
@@ -420,7 +422,7 @@ export async function copyPort(sessionId) {
   const info = getSession(sessionId)?.browser.info;
   if (!info) return false;
   const ok = await copyToClipboard(String(info.port));
-  announce(ok ? `Porta ${info.port} copiada` : 'Não foi possível copiar');
+  announce(ok ? translate('terminal.browser.portCopied', { port: info.port }) : translate('terminal.common.copyFailed'));
   return ok;
 }
 

@@ -3,6 +3,7 @@
 // reserva deterministica; no Tauri o Rust substitui tudo antes do React.
 
 import { invoke, isTauri } from './native.js';
+import { translate } from '../shared/i18n.js';
 
 function browserOs(agent = typeof navigator !== 'undefined' ? navigator.userAgent : '') {
   const value = String(agent).toLowerCase();
@@ -25,12 +26,12 @@ function developmentOverride() {
 function fallback() {
   const os = developmentOverride() || browserOs();
   const homes = { macos: '/Users/exemplo', linux: '/home/exemplo', windows: 'C:/Users/exemplo' };
-  const managers = { macos: 'Finder', linux: 'Arquivos', windows: 'Explorer' };
+  const managers = { macos: 'Finder', linux: translate('shared.fileManager.linux'), windows: 'Explorer' };
   return {
     os,
     isMac: os === 'macos',
     home: homes[os] || '',
-    fileManager: managers[os] || 'gerenciador de arquivos',
+    fileManager: managers[os] || translate('shared.fileManager.generic'),
     defaultShellFlavor: os === 'windows' ? 'powershell' : 'posix',
     sep: os === 'windows' ? '\\' : '/',
   };

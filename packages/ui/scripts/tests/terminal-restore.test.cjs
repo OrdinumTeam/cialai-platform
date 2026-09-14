@@ -5,10 +5,17 @@ const load = () => import('../../src/terminals/restore.js');
 
 test('o aviso diz quando foi a ultima gravacao', async () => {
   const { restoredNotice } = await load();
+  const { setLocale } = await import('../../src/shared/i18n.js');
+  setLocale('pt-BR');
   const now = new Date(2026, 8, 10, 18, 0).getTime();
   assert.equal(restoredNotice(new Date(2026, 8, 10, 16, 5).getTime(), now), '\x1b[2mHistórico restaurado. Última gravação hoje às 16:05.\x1b[0m\r\n');
   assert.equal(restoredNotice(new Date(2026, 8, 9, 21, 7).getTime(), now), '\x1b[2mHistórico restaurado. Última gravação em 09/09 às 21:07.\x1b[0m\r\n');
   assert.equal(restoredNotice(0, now), '\x1b[2mHistórico restaurado.\x1b[0m\r\n');
+  setLocale('en');
+  assert.equal(restoredNotice(new Date(2026, 8, 9, 21, 7).getTime(), now), '\x1b[2mHistory restored. Last saved on 09/09 at 09:07 PM.\x1b[0m\r\n');
+  setLocale('es');
+  assert.equal(restoredNotice(new Date(2026, 8, 9, 21, 7).getTime(), now), '\x1b[2mHistorial restaurado. Último guardado el 9/9 a las 21:07.\x1b[0m\r\n');
+  setLocale('pt-BR');
 });
 
 test('o tamanho gravado respeita os limites do PTY', async () => {

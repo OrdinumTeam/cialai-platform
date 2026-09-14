@@ -16,6 +16,7 @@ import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { platform } from '../../lib/platform.js';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 function AttentionIcon({ kind }) {
   if (kind === 'finished') return <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />;
@@ -43,31 +44,41 @@ function planTitle(usage, activity, model) {
   const lines = [];
   const profileName = activity?.profileName || usage.profileName;
   const dir = usage.configDir || activity?.configDir;
-  lines.push(`Perfil ${profileName || usage.profile}${dir ? `, ${shortPath(dir)}` : ''}`);
-  lines.push(usage.plan ? `Plano ${usage.plan} do ${usage.agent}` : `Uso do plano no ${usage.agent}`);
+  lines.push(translate(dir ? 'terminal.plan.profilePath' : 'terminal.plan.profile', {
+    profile: profileName || usage.profile,
+    path: shortPath(dir),
+  }));
+  lines.push(translate(usage.plan ? 'terminal.plan.named' : 'terminal.plan.usage', {
+    agent: usage.agent,
+    plan: usage.plan,
+  }));
   lines.push('');
   usage.windows.forEach((window) => {
     const reset = fmtResetAt(window.resetsAtMs);
-    lines.push(`${window.label} ${fmtPlan(window.usedPercent)}${reset ? `, renova ${reset}` : ''}`);
+    lines.push(translate(reset ? 'terminal.plan.renews' : 'terminal.plan.window', {
+      label: window.label,
+      usage: fmtPlan(window.usedPercent),
+      reset,
+    }));
   });
-  if (model) lines.push('', `Modelo ${model}`);
-  if (usage.updatedAtMs) lines.push(`Atualizado ${fmtAgo(usage.updatedAtMs)}`);
+  if (model) lines.push('', translate('terminal.plan.model', { model }));
+  if (usage.updatedAtMs) lines.push(translate('terminal.plan.updated', { time: fmtAgo(usage.updatedAtMs) }));
   return lines.join('\n');
 }
 
 function fmtAgo(ms) {
   const seconds = Math.max(0, Math.round((Date.now() - Number(ms)) / 1000));
-  if (seconds < 90) return `há ${seconds} s`;
+  if (seconds < 90) return translate('terminal.plan.secondsAgo', { count: seconds.toLocaleString(getLocale()) });
   const minutes = Math.round(seconds / 60);
-  if (minutes < 90) return `há ${minutes} min`;
-  return `há ${Math.round(minutes / 60)} h`;
+  if (minutes < 90) return translate('terminal.plan.minutesAgo', { count: minutes.toLocaleString(getLocale()) });
+  return translate('terminal.plan.hoursAgo', { count: Math.round(minutes / 60).toLocaleString(getLocale()) });
 }
 
 // Agente com perfil conhecido, mas sem numero publicado para ele.
 function missingTitle(activity) {
   const profile = activity.profileName || activity.profile;
   if (activity.agent === 'Claude Code') return claudeHookMissingTitle(profile, platform().os);
-  if (activity.agent === 'Codex') return `Sem sessão recente do Codex em ${shortPath(activity.configDir || '')}`;
+  if (activity.agent === 'Codex') return translate('terminal.plan.missingCodex', { path: shortPath(activity.configDir || '') });
   return undefined;
 }
 
@@ -90,6 +101,7 @@ function SessionCard({
   session, selected, dragging, dropBefore, dropAfter, dropInto = false, renaming, onSelect, onMenu, onRename, onRenameDone,
   onDragStart,
 }) {
+  useI18n();
   // Atividade da propria sessao e os eventos de lista, raros, que trazem
   // nome, subtitulo, cor e fixacao mudados no mesmo objeto.
   useRuntimeEvents(['activity', 'sessions'], session.id);
@@ -167,17 +179,17 @@ function SessionCard({
               if (event.key === 'Enter') { event.preventDefault(); commit(); }
               if (event.key === 'Escape') { event.preventDefault(); onRenameDone(null); }
             }}
-            aria-label="Nome da sessão"
+            aria-label={translate('terminal.session.name')}
             spellCheck={false}
           />
         ) : (
           <span className="terminais-card__name" onDoubleClick={touch ? undefined : (event) => { event.stopPropagation(); onRename(session); }}>{session.name}</span>
         )}
-        {session.pinned ? <Pin size={11} strokeWidth={2} className="terminais-card__pin" role="img" aria-label="Fixada" /> : null}
+        {session.pinned ? <Pin size={11} strokeWidth={2} className="terminais-card__pin" role="img" aria-label={translate('terminal.session.pinned')} /> : null}
         {!touch && <button
           type="button"
           className="terminais-card__menu"
-          aria-label={`Ações de ${session.name}`}
+          aria-label={translate('terminal.session.actionsFor', { name: session.name })}
           onClick={(event) => {
             event.stopPropagation();
             const rect = event.currentTarget.getBoundingClientRect();
@@ -196,14 +208,14 @@ function SessionCard({
               {fmtPlan(planWindow.usedPercent)}
             </span>
           ) : null}
-          {running.background ? <span className="terminais-card__running-note">em segundo plano</span> : null}
+          {running.background ? <span className="terminais-card__running-note">{translate('terminal.session.background')}</span> : null}
           {elapsed && !running.background ? <span className="terminais-card__elapsed">{elapsed}</span> : null}
         </div>
       ) : null}
       {running?.agent && (model || showProfile) ? (
         <div className="terminais-card__agent-row">
-          {model ? <span className="terminais-card__model" title={`Modelo ${model}`}>{model}</span> : null}
-          {showProfile ? <span className="terminais-card__profile" title={`Perfil ${activity.profileName}${usage.configDir ? `, ${shortPath(usage.configDir)}` : ''}`}>{activity.profileName}</span> : null}
+          {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
+          {showProfile ? <span className="terminais-card__profile" title={translate(usage.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage.configDir) })}>{activity.profileName}</span> : null}
         </div>
       ) : null}
       <div className="terminais-card__state">
@@ -217,10 +229,10 @@ function SessionCard({
       ) : null}
       {session.status === 'running' ? (
         <div className="terminais-card__metrics">
-          {cpu != null ? <span><em>CPU</em> {cpu}</span> : null}
-          {memory != null ? <span><em>Mem</em> {memory}</span> : null}
-          {metricsUnavailable ? <span className="terminais-card__metrics-off">Medição indisponível</span> : null}
-          {!activity ? <span className="terminais-card__metrics-off">Medindo…</span> : null}
+          {cpu != null ? <span><em>{translate('terminal.common.cpu')}</em> {cpu}</span> : null}
+          {memory != null ? <span><em>{translate('terminal.common.memory')}</em> {memory}</span> : null}
+          {metricsUnavailable ? <span className="terminais-card__metrics-off">{translate('terminal.session.metricsUnavailable')}</span> : null}
+          {!activity ? <span className="terminais-card__metrics-off">{translate('terminal.session.measuring')}</span> : null}
         </div>
       ) : null}
     </div>

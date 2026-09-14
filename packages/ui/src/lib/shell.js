@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Message contract shared with the Expo shell. Authorization stays in the shell.
+import { translate } from '../shared/i18n.js';
+
 let nextId = 1;
 const pending = new Map();
 const lockListeners = new Set();
@@ -27,13 +29,13 @@ export function receiveShellMessage(message) {
 if (typeof window !== 'undefined') window.__cialaiShellReceive = receiveShellMessage;
 
 function post(message) {
-  if (!window.ReactNativeWebView?.postMessage) throw new Error('A casca do iPhone está indisponível.');
+  if (!window.ReactNativeWebView?.postMessage) throw new Error(translate('shared.shell.unavailable'));
   window.ReactNativeWebView.postMessage(JSON.stringify(message));
 }
 
 export async function confirmSensitive(level, reason) {
   if (typeof window !== 'undefined' && window.__TAURI_INTERNALS__) return true;
-  if (!['session', 'action'].includes(level)) throw new Error('Nível de autorização inválido.');
+  if (!['session', 'action'].includes(level)) throw new Error(translate('shared.shell.invalidLevel'));
   if (!isMobileShell()) return typeof window !== 'undefined' && window.confirm(reason);
   const id = nextId++;
   return new Promise((resolve) => {
@@ -45,14 +47,14 @@ export async function confirmSensitive(level, reason) {
 }
 
 export async function requireSensitive(level, reason) {
-  if (!await confirmSensitive(level, reason)) throw new Error('Ação cancelada. Autorize no aparelho para continuar.');
+  if (!await confirmSensitive(level, reason)) throw new Error(translate('shared.shell.actionCanceled'));
 }
 
 export async function requestDownload(blob, name) {
   const dataUrl = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error('Não foi possível preparar o arquivo.'));
+    reader.onerror = () => reject(new Error(translate('shared.shell.filePrepareFailed')));
     reader.readAsDataURL(blob);
   });
   post({ type: 'download', name, mime: blob.type || 'application/octet-stream', dataUrl });

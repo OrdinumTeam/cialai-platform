@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
+import { translate } from '../shared/i18n.js';
 // Offsets count bytes, not decoded characters. ACK uses the full input size.
 export function beginReplay(cursor, { offset }) {
-  if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('Histórico do terminal inválido.');
+  if (!Number.isSafeInteger(offset) || offset < 0) throw new Error(translate('terminal.restore.invalidHistory'));
   cursor.outputOffset = offset;
 }
 

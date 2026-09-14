@@ -25,6 +25,7 @@ import { copyToClipboard } from '../../lib/helpers.js';
 import { onNativeDragDrop } from '../../lib/native.js';
 import { shortcutLabel } from '../../lib/keys.js';
 import { isExplorerDeleteShortcut } from '../shortcut-actions.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 // Linhas novas que entram escalonadas na arvore; acima disso nenhuma anima.
 const FRESH_ROWS_LIMIT = 60;
@@ -37,7 +38,7 @@ const GIT_REFRESH_MS = 15000;
 const GIT_DEBOUNCE_MS = 900;
 const DIR_RELOAD_DEBOUNCE_MS = 150;
 const STATUS_LETTER = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T', untracked: 'U', conflict: '!' };
-const STATUS_LABEL = { modified: 'Modificado', added: 'Adicionado', deleted: 'Apagado', renamed: 'Renomeado', copied: 'Copiado', typechange: 'Tipo alterado', untracked: 'Novo, fora do Git', conflict: 'Conflito' };
+const statusLabel = (status) => STATUS_LETTER[status] ? translate(`terminal.explorer.status.${status}`) : status;
 
 const CODE_EXT = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'rb', 'php', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'hpp', 'cs', 'sh', 'zsh', 'bash', 'css', 'scss', 'html', 'vue', 'svelte', 'sql', 'lua', 'toml', 'yaml', 'yml', 'xml']);
 
@@ -58,6 +59,7 @@ function isDirEntry(entry) {
 }
 
 export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, notify, revealRequest, onCollapse }) {
+  useI18n();
   const explorer = session.explorer;
   const root = explorer.root;
   const sessionId = session.id;
@@ -253,7 +255,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     if (!current) return;
     const name = String(value || '').trim();
     if (!name) return;
-    if (name.includes('/')) { notify('O nome não pode conter barra', 'warning'); return; }
+    if (name.includes('/')) { notify(translate('terminal.explorer.invalidName'), 'warning'); return; }
     try {
       if (current.kind === 'rename') {
         const target = joinPath(dirName(current.path), name);
@@ -284,7 +286,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       await loadDir(dir, { quiet: true });
       setFocused(joinPath(dir, nome));
       scheduleGit();
-      notify(`Duplicado como ${nome}`, 'success');
+      notify(translate('terminal.explorer.duplicatedAs', { name: nome }), 'success');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
     }
@@ -293,7 +295,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const copyPath = async (path, relative) => {
     const text = relative ? (relativePath(root, path) || path) : path;
     const ok = await copyToClipboard(text);
-    notify(ok ? 'Caminho copiado' : 'Não foi possível copiar', ok ? 'success' : 'warning');
+    notify(ok ? translate('terminal.common.pathCopied') : translate('terminal.common.copyFailed'), ok ? 'success' : 'warning');
   };
 
   const openEntry = (entry) => {
@@ -348,8 +350,8 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   // recusa nome ocupado; copiar procura um nome livre, como o Finder.
   const dropInto = useCallback(async (source, dir, { copy = false } = {}) => {
     if (!source || !dir) return;
-    if (source === root) { notify('A raiz do projeto não pode ser movida', 'warning'); return; }
-    if (isInside(source, dir)) { notify('Uma pasta não pode ir para dentro dela mesma', 'warning'); return; }
+    if (source === root) { notify(translate('terminal.explorer.rootCannotMove'), 'warning'); return; }
+    if (isInside(source, dir)) { notify(translate('terminal.explorer.folderCannotContainItself'), 'warning'); return; }
     const from = dirName(source);
     if (!copy && from === dir) return;
     const name = baseName(source);
@@ -374,7 +376,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       setFocused(target);
       markExplorerChanged(sessionId);
       scheduleGit();
-      if (copy && finalName !== name) notify(`Copiado como ${finalName}`, 'info');
+      if (copy && finalName !== name) notify(translate('terminal.explorer.copiedAs', { name: finalName }), 'info');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
     }
@@ -448,22 +450,22 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     const change = gitIndex.files.get(entry.path);
     const items = [
       dir
-        ? { id: 'toggle', label: explorer.expanded.has(entry.path) ? 'Recolher' : 'Expandir', run: () => toggleDir(entry.path) }
-        : { id: 'open', label: 'Abrir no editor', run: () => onOpenFile(entry.path) },
-      { id: 'default', label: 'Abrir no app padrão', run: () => fs.openDefault(entry.path).catch((error) => notify(error.message, 'warning')) },
-      { id: 'reveal', label: 'Revelar no Finder', run: () => fs.reveal(entry.path).catch((error) => notify(error.message, 'warning')) },
-      change && !dir ? { id: 'diff', label: 'Comparar alterações', run: () => onOpenDiff(gitIndex.status.root, entry.path) } : null,
+        ? { id: 'toggle', label: translate(explorer.expanded.has(entry.path) ? 'terminal.explorer.collapse' : 'terminal.explorer.expand'), run: () => toggleDir(entry.path) }
+        : { id: 'open', label: translate('terminal.explorer.openEditor'), run: () => onOpenFile(entry.path) },
+      { id: 'default', label: translate('terminal.common.openDefault'), run: () => fs.openDefault(entry.path).catch((error) => notify(error.message, 'warning')) },
+      { id: 'reveal', label: translate('terminal.common.reveal'), run: () => fs.reveal(entry.path).catch((error) => notify(error.message, 'warning')) },
+      change && !dir ? { id: 'diff', label: translate('terminal.explorer.compareChanges'), run: () => onOpenDiff(gitIndex.status.root, entry.path) } : null,
       { separator: true },
-      dir ? { id: 'session', label: 'Nova sessão nesta pasta', run: () => onNewSessionAt(entry.path) } : null,
-      { id: 'insert', label: 'Inserir caminho no terminal', run: () => onInsertPath(entry.path) },
-      { id: 'copy', label: 'Copiar caminho', run: () => copyPath(entry.path, false) },
-      { id: 'copy-rel', label: 'Copiar caminho relativo', run: () => copyPath(entry.path, true) },
+      dir ? { id: 'session', label: translate('terminal.explorer.newSessionHere'), run: () => onNewSessionAt(entry.path) } : null,
+      { id: 'insert', label: translate('terminal.explorer.insertPath'), run: () => onInsertPath(entry.path) },
+      { id: 'copy', label: translate('terminal.explorer.copyPath'), run: () => copyPath(entry.path, false) },
+      { id: 'copy-rel', label: translate('terminal.explorer.copyRelativePath'), run: () => copyPath(entry.path, true) },
       { separator: true },
-      { id: 'duplicate', label: 'Duplicar', run: () => duplicate(entry.path) },
-      dir ? { id: 'new-file', label: 'Novo arquivo', run: () => startCreate(entry.path, 'file') } : null,
-      dir ? { id: 'new-dir', label: 'Nova pasta', run: () => startCreate(entry.path, 'dir') } : null,
-      { id: 'rename', label: 'Renomear', run: () => setEditing({ kind: 'rename', path: entry.path, value: entry.name }) },
-      { id: 'delete', label: 'Mover para a Lixeira…', danger: true, run: () => onDeleteRequest({ path: entry.path, name: entry.name, kind: dir ? 'dir' : 'file', parent: dirName(entry.path) }) },
+      { id: 'duplicate', label: translate('terminal.explorer.duplicate'), run: () => duplicate(entry.path) },
+      dir ? { id: 'new-file', label: translate('terminal.explorer.newFile'), run: () => startCreate(entry.path, 'file') } : null,
+      dir ? { id: 'new-dir', label: translate('terminal.explorer.newFolder'), run: () => startCreate(entry.path, 'dir') } : null,
+      { id: 'rename', label: translate('terminal.explorer.rename'), run: () => setEditing({ kind: 'rename', path: entry.path, value: entry.name }) },
+      { id: 'delete', label: translate('terminal.explorer.moveTrash'), danger: true, run: () => onDeleteRequest({ path: entry.path, name: entry.name, kind: dir ? 'dir' : 'file', parent: dirName(entry.path) }) },
     ];
     setMenu({ anchor, items });
   };
@@ -551,32 +553,32 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const gitStatus = gitIndex.status;
 
   return (
-    <aside className="terminais-explorer" aria-label="Arquivos do projeto">
+    <aside className="terminais-explorer" aria-label={translate('terminal.explorer.projectFiles')}>
       <div className="terminais-pane__head">
-        <span className="terminais-pane__title">Arquivos</span>
+        <span className="terminais-pane__title">{translate('terminal.explorer.files')}</span>
         <span className="terminais-pane__count" title={shortPath(root)}>{baseName(root)}</span>
         <span className="terminais-pane__spacer" />
-        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'file')} aria-label="Novo arquivo" title="Novo arquivo"><FilePlus2 size={14} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'dir')} aria-label="Nova pasta" title="Nova pasta"><FolderPlus size={14} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label="Atualizar" title="Atualizar. A árvore também se atualiza sozinha"><RefreshCw size={13} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label="Recolher todas as pastas" title="Recolher todas as pastas"><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
-        <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label="Buscar arquivo por nome" aria-pressed={searching} title="Buscar por nome"><Search size={13} strokeWidth={2} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label="Recolher arquivos" title={`Recolher arquivos, ${shortcutLabel('Mod+Shift+E')}`}><PanelRightClose size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'file')} aria-label={translate('terminal.explorer.newFile')} title={translate('terminal.explorer.newFile')}><FilePlus2 size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={() => startCreate(root, 'dir')} aria-label={translate('terminal.explorer.newFolder')} title={translate('terminal.explorer.newFolder')}><FolderPlus size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label={translate('terminal.explorer.refresh')} title={translate('terminal.explorer.refreshTitle')}><RefreshCw size={13} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label={translate('terminal.explorer.collapseAll')} title={translate('terminal.explorer.collapseAll')}><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
+        <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label={translate('terminal.explorer.searchByName')} aria-pressed={searching} title={translate('terminal.explorer.searchName')}><Search size={13} strokeWidth={2} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.explorer.collapseFiles')} title={translate('terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><PanelRightClose size={14} strokeWidth={1.75} /></button>
       </div>
       {gitStatus?.isRepo ? (
-        <div className="terminais-explorer__git" title={gitStatus.upstream ? `Acompanha ${gitStatus.upstream}` : 'Sem remoto acompanhado'}>
-          <span className="terminais-explorer__branch">{gitStatus.detached ? 'HEAD solto' : gitStatus.branch}</span>
+        <div className="terminais-explorer__git" title={gitStatus.upstream ? translate('terminal.explorer.tracks', { upstream: gitStatus.upstream }) : translate('terminal.explorer.noRemote')}>
+          <span className="terminais-explorer__branch">{gitStatus.detached ? translate('terminal.explorer.detachedHead') : gitStatus.branch}</span>
           {gitStatus.ahead ? <span>↑{gitStatus.ahead}</span> : null}
           {gitStatus.behind ? <span>↓{gitStatus.behind}</span> : null}
-          <span className="terminais-explorer__changes">{gitStatus.changes.length === 0 ? 'Limpo' : `${gitStatus.changes.length} ${gitStatus.changes.length === 1 ? 'alteração' : 'alterações'}`}</span>
+          <span className="terminais-explorer__changes">{gitStatus.changes.length === 0 ? translate('terminal.explorer.clean') : translate(gitStatus.changes.length === 1 ? 'terminal.explorer.oneChange' : 'terminal.explorer.manyChanges', { count: gitStatus.changes.length.toLocaleString(getLocale()) })}</span>
         </div>
       ) : null}
       {cwdDiffers || explorer.followCwd ? (
         <div className={`terminais-explorer__cwd${explorer.followCwd ? ' is-following' : ''}`}>
-          <span className="terminais-explorer__cwd-label">Terminal em</span>
+          <span className="terminais-explorer__cwd-label">{translate('terminal.explorer.terminalAt')}</span>
           <span className="terminais-explorer__cwd-path" title={shellCwd || root}>{compactPath(shellCwd || root)}</span>
-          {cwdDiffers ? <button type="button" className="terminais-pane__tool" onClick={() => setExplorerRoot(sessionId, shellCwd)} title="Mostrar esta pasta na árvore" aria-label="Ir para o diretório atual"><Locate size={13} strokeWidth={1.75} /></button> : null}
-          <button type="button" className={`terminais-pane__tool${explorer.followCwd ? ' is-on' : ''}`} onClick={() => setFollowCwd(sessionId, !explorer.followCwd)} aria-pressed={explorer.followCwd} title={explorer.followCwd ? 'Parar de acompanhar o diretório do terminal' : 'Acompanhar o diretório do terminal'} aria-label="Acompanhar diretório atual"><Crosshair size={13} strokeWidth={1.75} /></button>
+          {cwdDiffers ? <button type="button" className="terminais-pane__tool" onClick={() => setExplorerRoot(sessionId, shellCwd)} title={translate('terminal.explorer.showInTree')} aria-label={translate('terminal.explorer.goCurrentDirectory')}><Locate size={13} strokeWidth={1.75} /></button> : null}
+          <button type="button" className={`terminais-pane__tool${explorer.followCwd ? ' is-on' : ''}`} onClick={() => setFollowCwd(sessionId, !explorer.followCwd)} aria-pressed={explorer.followCwd} title={translate(explorer.followCwd ? 'terminal.explorer.stopFollowing' : 'terminal.explorer.follow')} aria-label={translate('terminal.explorer.followCurrent')}><Crosshair size={13} strokeWidth={1.75} /></button>
         </div>
       ) : null}
       {searching ? (
@@ -586,8 +588,8 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Nome do arquivo"
-            aria-label="Buscar arquivo por nome"
+            placeholder={translate('terminal.explorer.fileName')}
+            aria-label={translate('terminal.explorer.searchByName')}
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
@@ -596,13 +598,13 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
               if (event.key === 'Enter' && results?.items?.[0]) { event.preventDefault(); const first = results.items[0]; if (first.kind === 'dir') { explorer.expanded.add(first.path); markExplorerChanged(sessionId); } else onOpenFile(first.path); }
             }}
           />
-          <button type="button" className="terminais-search__clear" onClick={() => setSearching(false)} aria-label="Fechar busca"><X size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-search__clear" onClick={() => setSearching(false)} aria-label={translate('terminal.explorer.closeSearch')}><X size={12} strokeWidth={2} /></button>
         </div>
       ) : null}
       <div
         className={`terminais-tree${drop && drop.dir === root ? ' is-drop-root' : ''}`}
         role="tree"
-        aria-label={`Arquivos de ${baseName(root)}`}
+        aria-label={translate('terminal.explorer.filesOf', { name: baseName(root) })}
         ref={treeRef}
         tabIndex={0}
         onKeyDown={onTreeKeyDown}
@@ -610,7 +612,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         {searching ? (
           <div className="terminais-results">
             {results?.error ? <div className="terminais-tree__note">{results.error}</div> : null}
-            {results && !results.error && results.items.length === 0 ? <div className="terminais-tree__note">{query ? 'Nada encontrado' : 'Digite para buscar'}</div> : null}
+            {results && !results.error && results.items.length === 0 ? <div className="terminais-tree__note">{translate(query ? 'terminal.explorer.nothingFound' : 'terminal.explorer.typeToSearch')}</div> : null}
             {(results?.items || []).map((item, index) => (
               <button
                 type="button"
@@ -624,25 +626,25 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
                   else onOpenFile(item.path);
                 }}
                 onContextMenu={(event) => { event.preventDefault(); menuFor({ name: baseName(item.path), path: item.path, kind: item.kind }, anchorFromEvent(event)); }}
-                title={`${item.path}\nArraste para mover, com Option para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão, ou fora do app para copiar`}
+                title={translate('terminal.explorer.dragTitle', { path: item.path })}
               >
                 <IconFor entry={{ name: baseName(item.path), kind: item.kind }} />
                 <span className="terminais-result__name">{baseName(item.path)}</span>
                 <span className="terminais-result__dir">{dirName(item.relative) === '/' || !item.relative.includes('/') ? '' : dirName(item.relative)}</span>
               </button>
             ))}
-            {results?.truncated ? <div className="terminais-tree__note">Projeto grande: a busca parou em 60 mil entradas.</div> : null}
+            {results?.truncated ? <div className="terminais-tree__note">{translate('terminal.explorer.largeProject')}</div> : null}
           </div>
         ) : rows.map((row) => {
-          if (row.type === 'loading') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Carregando…</div>;
-          if (row.type === 'empty') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Pasta vazia</div>;
+          if (row.type === 'loading') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>{translate('terminal.explorer.loading')}</div>;
+          if (row.type === 'empty') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>{translate('terminal.explorer.emptyFolder')}</div>;
           if (row.type === 'error') return <div key={row.path} className="terminais-tree__note is-error" style={{ '--depth': row.depth }}>{row.message}</div>;
-          if (row.type === 'truncated') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>Mostrando {row.shown.toLocaleString('pt-BR')} de {row.total.toLocaleString('pt-BR')} entradas</div>;
+          if (row.type === 'truncated') return <div key={row.path} className="terminais-tree__note" style={{ '--depth': row.depth }}>{translate('terminal.explorer.showingEntries', { shown: row.shown.toLocaleString(getLocale()), total: row.total.toLocaleString(getLocale()) })}</div>;
           if (row.type === 'edit') {
             return (
               <div key={row.path} className="terminais-row terminais-row--edit" style={{ '--depth': row.depth }}>
                 {editing.kind === 'new-dir' ? <Folder size={14} strokeWidth={1.75} aria-hidden="true" /> : <File size={14} strokeWidth={1.75} aria-hidden="true" />}
-                <InlineInput initial="" placeholder={editing.kind === 'new-dir' ? 'Nome da pasta' : 'Nome do arquivo'} onCommit={commitEditing} onCancel={() => setEditing(null)} />
+                <InlineInput initial="" placeholder={translate(editing.kind === 'new-dir' ? 'terminal.explorer.folderName' : 'terminal.explorer.fileName')} onCommit={commitEditing} onCancel={() => setEditing(null)} />
               </div>
             );
           }
@@ -666,7 +668,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
               onMouseDown={(event) => { if (!renaming) startDrag(event, entry.path, row.dir); }}
               onClick={() => { if (wasDragged()) return; setFocused(entry.path); openEntry(entry); }}
               onContextMenu={(event) => { event.preventDefault(); setFocused(entry.path); menuFor(entry, anchorFromEvent(event)); }}
-              title={`${change ? `${entry.name}: ${STATUS_LABEL[change.status] || change.status}` : entry.name}\nArraste para mover, com Option para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão, ou fora do app para copiar`}
+              title={translate('terminal.explorer.dragTitle', { path: change ? `${entry.name}: ${statusLabel(change.status)}` : entry.name })}
             >
               <span className={`terminais-row__chevron${row.dir ? '' : ' is-blank'}${row.expanded ? ' is-open' : ''}`} aria-hidden="true">
                 {row.dir ? <ChevronRight size={12} strokeWidth={2} /> : null}
@@ -677,13 +679,13 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
               ) : (
                 <span className="terminais-row__name">{entry.name}</span>
               )}
-              {change ? <span className="terminais-row__git" aria-label={STATUS_LABEL[change.status] || change.status}>{STATUS_LETTER[change.status] || '•'}</span> : null}
-              {!change && dirChanged ? <span className="terminais-row__git terminais-row__git--dir" aria-label="Contém alterações">•</span> : null}
+              {change ? <span className="terminais-row__git" aria-label={statusLabel(change.status)}>{STATUS_LETTER[change.status] || '•'}</span> : null}
+              {!change && dirChanged ? <span className="terminais-row__git terminais-row__git--dir" aria-label={translate('terminal.explorer.containsChanges')}>•</span> : null}
             </div>
           );
         })}
       </div>
-      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label="Ações do arquivo" /> : null}
+      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={translate('terminal.explorer.fileActions')} /> : null}
     </aside>
   );
 }
@@ -721,7 +723,7 @@ function InlineInput({ initial, placeholder, onCommit, onCancel }) {
       spellCheck={false}
       autoCorrect="off"
       autoCapitalize="off"
-      aria-label={placeholder || 'Nome'}
+      aria-label={placeholder || translate('terminal.common.name')}
     />
   );
 }

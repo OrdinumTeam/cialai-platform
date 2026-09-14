@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { translate } from '../../shared/i18n.js';
 // Cliente minimo do protocolo do DevTools sobre o WebSocket do navegador:
 // uma conexao com o Chromium, multiplexada por sessionId para as abas. Cada
 // pedido tem prazo; um evento chega aos ouvintes do metodo e aos gerais.
@@ -34,18 +35,18 @@ export class CDPClient {
         resolve();
       };
       ws.onerror = () => {
-        if (!this.connected) reject(new Error('Não foi possível conectar ao Chromium'));
+        if (!this.connected) reject(new Error(translate('terminal.browser.connectFailed')));
       };
       ws.onclose = () => {
         const was = this.connected;
         this.connected = false;
         this.pending.forEach((entry) => {
           if (entry.timer) clearTimeout(entry.timer);
-          entry.reject(new Error('Conexão com o Chromium encerrada'));
+          entry.reject(new Error(translate('terminal.browser.connectionClosed')));
         });
         this.pending.clear();
         if (!this.closedExplicitly && was) this.onDisconnected?.();
-        if (!was) reject(new Error('Conexão com o Chromium recusada'));
+        if (!was) reject(new Error(translate('terminal.browser.connectionRefused')));
       };
       ws.onmessage = (event) => {
         let message;
@@ -55,7 +56,7 @@ export class CDPClient {
           if (!entry) return;
           this.pending.delete(message.id);
           if (entry.timer) clearTimeout(entry.timer);
-          if (message.error) entry.reject(new Error(message.error.message || 'Erro do CDP'));
+          if (message.error) entry.reject(new Error(message.error.message || translate('terminal.browser.cdpError')));
           else entry.resolve(message.result);
           return;
         }
@@ -83,14 +84,14 @@ export class CDPClient {
   }
 
   send(method, params = {}, sessionId = undefined, timeoutMs = DEFAULT_TIMEOUT_MS) {
-    if (!this.ws || !this.connected) return Promise.reject(new Error('CDP desconectado'));
+    if (!this.ws || !this.connected) return Promise.reject(new Error(translate('terminal.browser.cdpDisconnected')));
     const id = this.nextId;
     this.nextId += 1;
     const message = { id, method, params };
     if (sessionId) message.sessionId = sessionId;
     return new Promise((resolve, reject) => {
       const timer = timeoutMs > 0 ? setTimeout(() => {
-        if (this.pending.delete(id)) reject(new Error(`CDP sem resposta em ${timeoutMs} ms: ${method}`));
+        if (this.pending.delete(id)) reject(new Error(translate('terminal.browser.cdpTimeout', { timeout: timeoutMs, method })));
       }, timeoutMs) : null;
       this.pending.set(id, { resolve, reject, timer });
       try {

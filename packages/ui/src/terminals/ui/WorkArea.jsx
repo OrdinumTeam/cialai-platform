@@ -26,12 +26,13 @@ import { copyToClipboard } from '../../lib/helpers.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { openBrowserTab } from '../browser/runtime.js';
 import { shortcutLabel } from '../../lib/keys.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 function exitLabel(session) {
   const base = session.signal
-    ? `Sessão encerrada por ${session.signal}`
-    : `Processo finalizado, código ${session.exitCode}`;
-  return session.early ? `${base}. O shell saiu logo após abrir. Confira o .zshrc` : base;
+    ? translate('terminal.work.exitSignal', { signal: session.signal })
+    : translate('terminal.work.exitCode', { code: session.exitCode });
+  return session.early ? translate('terminal.work.earlyExit', { message: base }) : base;
 }
 
 function FindBar({ session, onClose }) {
@@ -52,8 +53,8 @@ function FindBar({ session, onClose }) {
         ref={inputRef}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Buscar na saída"
-        aria-label="Buscar na saída do terminal"
+        placeholder={translate('terminal.work.findOutput')}
+        aria-label={translate('terminal.work.findOutputLabel')}
         spellCheck={false}
         autoCorrect="off"
         autoCapitalize="off"
@@ -62,9 +63,9 @@ function FindBar({ session, onClose }) {
           if (event.key === 'Escape') { event.preventDefault(); onClose(); }
         }}
       />
-      <button type="button" className="terminais-pane__tool" onClick={previous} aria-label="Anterior" title="Anterior, ⇧Enter"><ChevronUp size={13} strokeWidth={2} /></button>
-      <button type="button" className="terminais-pane__tool" onClick={next} aria-label="Próximo" title="Próximo, Enter"><ChevronDown size={13} strokeWidth={2} /></button>
-      <button type="button" className="terminais-pane__tool" onClick={onClose} aria-label="Fechar busca" title="Fechar, Esc"><X size={13} strokeWidth={2} /></button>
+      <button type="button" className="terminais-pane__tool" onClick={previous} aria-label={translate('terminal.work.previous')} title={translate('terminal.work.previousShortcut')}><ChevronUp size={13} strokeWidth={2} /></button>
+      <button type="button" className="terminais-pane__tool" onClick={next} aria-label={translate('terminal.work.next')} title={translate('terminal.work.nextShortcut')}><ChevronDown size={13} strokeWidth={2} /></button>
+      <button type="button" className="terminais-pane__tool" onClick={onClose} aria-label={translate('terminal.explorer.closeSearch')} title={translate('terminal.work.closeSearchShortcut')}><X size={13} strokeWidth={2} /></button>
     </div>
   );
 }
@@ -74,11 +75,11 @@ function FindBar({ session, onClose }) {
 // historico, ocupa o centro. Quando um agente rodava, Reabrir o retoma.
 function DisconnectedNotice({ session }) {
   const resume = session.saved?.resume || null;
-  const action = resume ? `Reabrir e retomar ${resume.agent}` : `Abrir shell em ${shortPath(session.cwd)}`;
+  const action = translate(resume ? 'terminal.work.reopenResume' : 'terminal.work.openShellAt', { agent: resume?.agent, path: shortPath(session.cwd) });
   if (session.saved?.historyBytes > 0) {
     return (
       <div className="terminais-terminal__end" role="status">
-        <span>{resume ? `Histórico restaurado. ${resume.agent} volta à mesma conversa.` : 'Histórico restaurado. O shell anterior foi encerrado quando o app fechou.'}</span>
+        <span>{translate(resume ? 'terminal.work.historyRestoredResume' : 'terminal.work.historyRestoredClosed', { agent: resume?.agent })}</span>
         <span className="terminais-terminal__end-actions">
           <button type="button" className="btn btn-primary btn-sm" onClick={() => reopen(session.id)}><RotateCcw size={12} />{action}</button>
         </span>
@@ -87,8 +88,8 @@ function DisconnectedNotice({ session }) {
   }
   return (
     <div className="terminais-terminal__disconnected">
-      <strong>Sessão desconectada</strong>
-      <span>{resume ? `O shell anterior foi encerrado quando o app fechou. ${resume.agent} volta à mesma conversa ao reabrir.` : 'O shell anterior não sobreviveu ao reinício do app. Nada foi executado de novo.'}</span>
+      <strong>{translate('terminal.session.disconnected')}</strong>
+      <span>{translate(resume ? 'terminal.work.disconnectedResume' : 'terminal.work.disconnectedDescription', { agent: resume?.agent })}</span>
       <button type="button" className="btn btn-primary btn-sm" onClick={() => reopen(session.id)}>{action}</button>
     </div>
   );
@@ -171,16 +172,16 @@ function TerminalPane({ session, onCloseSession, onChangeDir, findOpen, onFindCl
       {!atBottom && !disconnected ? (
         <button type="button" className="terminais-terminal__tobottom" onClick={() => { session.term.scrollToBottom(); session.term.focus(); }}>
           <ArrowDown size={12} strokeWidth={2} aria-hidden="true" />
-          Ir para o fim
+          {translate('terminal.work.goToEnd')}
         </button>
       ) : null}
-      {dropping ? <div className="terminais-terminal__drop">Soltar para inserir o caminho</div> : null}
+      {dropping ? <div className="terminais-terminal__drop">{translate('terminal.work.dropPath')}</div> : null}
       {ended ? (
         <div className="terminais-terminal__end" role="status">
           <span>{exitLabel(session)}</span>
           <span className="terminais-terminal__end-actions">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => reopen(session.id)}><RotateCcw size={12} />Reabrir</button>
-            <button type="button" className="btn btn-quiet btn-sm" onClick={() => onCloseSession(session)}>Encerrar sessão</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => reopen(session.id)}><RotateCcw size={12} />{translate('terminal.common.reopen')}</button>
+            <button type="button" className="btn btn-quiet btn-sm" onClick={() => onCloseSession(session)}>{translate('terminal.work.closeSession')}</button>
           </span>
         </div>
       ) : null}
@@ -188,8 +189,8 @@ function TerminalPane({ session, onCloseSession, onChangeDir, findOpen, onFindCl
         <div className="terminais-terminal__end" role="alert">
           <span>{session.error}</span>
           <span className="terminais-terminal__end-actions">
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeDir(session)}>Trocar pasta</button>
-            <button type="button" className="btn btn-quiet btn-sm" onClick={() => onCloseSession(session)}>Encerrar sessão</button>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeDir(session)}>{translate('terminal.work.changeFolder')}</button>
+            <button type="button" className="btn btn-quiet btn-sm" onClick={() => onCloseSession(session)}>{translate('terminal.work.closeSession')}</button>
           </span>
         </div>
       ) : null}
@@ -202,6 +203,7 @@ export default function WorkArea({
   session, layout, tabs, activeTab, editorActions, onCloseSession, onChangeDir, onToggleFocus, findOpen, onFindOpen, onFindClose,
   editorFocusKey, notify,
 }) {
+  useI18n();
   useRuntimeEvents(['activity', 'explorer', 'browser'], session.id);
   const bodyRef = useRef(null);
   const sectionRef = useRef(null);
@@ -229,9 +231,9 @@ export default function WorkArea({
 
   const copySelection = async () => {
     const text = session.term.getSelection();
-    if (!text) { notify('Nada selecionado no terminal', 'info'); return; }
+    if (!text) { notify(translate('terminal.common.nothingSelected'), 'info'); return; }
     const ok = await copyToClipboard(text);
-    notify(ok ? 'Seleção copiada' : 'Não foi possível copiar', ok ? 'success' : 'warning');
+    notify(translate(ok ? 'terminal.common.selectionCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning');
     session.term.focus();
   };
   const changeFont = (delta) => {
@@ -286,40 +288,40 @@ export default function WorkArea({
   const browserActive = activeTab?.kind === 'browser';
 
   return (
-    <section className="terminais-work" ref={sectionRef} aria-label={`Sessão ${session.name}`} style={accentStyle(session)}>
+    <section className="terminais-work" ref={sectionRef} aria-label={translate('terminal.work.sessionLabel', { name: session.name })} style={accentStyle(session)}>
       <header className="terminais-work__head">
         <span className={`dot terminais-work__dot terminais-work__dot--${status.tone}${working ? ' is-working' : ''}`} aria-hidden="true" />
         <span className="terminais-work__name">{session.name}</span>
         {session.subtitle ? <span className="terminais-work__subtitle">{session.subtitle}</span> : null}
         <span className="terminais-work__path" title={session.cwd}>{shortPath(session.activity?.shellCwd || session.cwd)}</span>
         {gitStatus?.isRepo ? (
-          <span className="terminais-work__branch" title={gitStatus.changes?.length ? `${gitStatus.changes.length} ${gitStatus.changes.length === 1 ? 'arquivo alterado' : 'arquivos alterados'}` : 'Sem alterações'}>
+          <span className="terminais-work__branch" title={gitStatus.changes?.length ? translate(gitStatus.changes.length === 1 ? 'terminal.work.changedFile' : 'terminal.work.changedFiles', { count: gitStatus.changes.length.toLocaleString(getLocale()) }) : translate('terminal.work.noChanges')}>
             <GitBranch size={12} strokeWidth={2} aria-hidden="true" />
-            {gitStatus.detached ? 'HEAD solto' : gitStatus.branch}
-            {gitStatus.changes?.length ? <em>{gitStatus.changes.length}</em> : null}
+            {gitStatus.detached ? translate('terminal.work.detachedHead') : gitStatus.branch}
+            {gitStatus.changes?.length ? <em>{gitStatus.changes.length.toLocaleString(getLocale())}</em> : null}
           </span>
         ) : null}
         {running ? <span className={`terminais-work__running${running.agent ? ' is-agent' : ''}`}>{running.text}</span> : null}
         <span className="terminais-pane__spacer" />
         <div className="terminais-work__actions">
-          <button type="button" className={`terminais-pane__tool${browserOn || browserActive ? ' is-on' : ''}`} onClick={() => openBrowserTab(session.id)} aria-pressed={browserActive} title={browserOn ? `Dev Browser desta sessão, aberto. ${shortcutLabel('Mod+Shift+B')}` : `Abrir o Dev Browser desta sessão, ${shortcutLabel('Mod+Shift+B')}`} aria-label="Dev Browser"><Globe size={14} strokeWidth={1.75} /></button>
+          <button type="button" className={`terminais-pane__tool${browserOn || browserActive ? ' is-on' : ''}`} onClick={() => openBrowserTab(session.id)} aria-pressed={browserActive} title={translate(browserOn ? 'terminal.browser.currentOpen' : 'terminal.browser.openSession', { shortcut: shortcutLabel('Mod+Shift+B') })} aria-label="Dev Browser"><Globe size={14} strokeWidth={1.75} /></button>
           {previewable ? (
-            <button type="button" className={`terminais-pane__tool${previewing ? ' is-on' : ''}`} onClick={() => editorActions.togglePreview(activeTab)} aria-pressed={previewing} title={previewing ? 'Voltar ao código' : (activeTab.kind === 'html' ? 'Visualizar o HTML' : activeTab.kind === 'csv' ? 'Visualizar como tabela' : 'Visualizar o Markdown')} aria-label="Visualizar">{previewing ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}</button>
+            <button type="button" className={`terminais-pane__tool${previewing ? ' is-on' : ''}`} onClick={() => editorActions.togglePreview(activeTab)} aria-pressed={previewing} title={translate(previewing ? 'terminal.editor.backToCode' : activeTab.kind === 'html' ? 'terminal.editor.previewHtml' : activeTab.kind === 'csv' ? 'terminal.editor.previewTable' : 'terminal.editor.previewMarkdown')} aria-label={translate('terminal.editor.preview')}>{previewing ? <EyeOff size={14} strokeWidth={1.75} /> : <Eye size={14} strokeWidth={1.75} />}</button>
           ) : null}
           {hasTabs ? (
             <>
-              <button type="button" className={`terminais-pane__tool${maximized === 'editor' ? ' is-on' : ''}`} onClick={() => setMaximized(session.id, 'editor')} aria-pressed={maximized === 'editor'} title={maximized === 'editor' ? 'Voltar à divisão' : 'Maximizar o editor'} aria-label="Maximizar o editor"><PanelBottomClose size={14} strokeWidth={1.75} /></button>
-              <button type="button" className={`terminais-pane__tool${maximized === 'terminal' ? ' is-on' : ''}`} onClick={() => setMaximized(session.id, 'terminal')} aria-pressed={maximized === 'terminal'} title={maximized === 'terminal' ? 'Voltar à divisão' : 'Maximizar o terminal'} aria-label="Maximizar o terminal"><PanelTopClose size={14} strokeWidth={1.75} /></button>
+              <button type="button" className={`terminais-pane__tool${maximized === 'editor' ? ' is-on' : ''}`} onClick={() => setMaximized(session.id, 'editor')} aria-pressed={maximized === 'editor'} title={translate(maximized === 'editor' ? 'terminal.editor.backToSplit' : 'terminal.editor.maximize')} aria-label={translate('terminal.editor.maximize')}><PanelBottomClose size={14} strokeWidth={1.75} /></button>
+              <button type="button" className={`terminais-pane__tool${maximized === 'terminal' ? ' is-on' : ''}`} onClick={() => setMaximized(session.id, 'terminal')} aria-pressed={maximized === 'terminal'} title={translate(maximized === 'terminal' ? 'terminal.editor.backToSplit' : 'terminal.work.maximizeTerminal')} aria-label={translate('terminal.work.maximizeTerminal')}><PanelTopClose size={14} strokeWidth={1.75} /></button>
               <span className="terminais-work__sep" aria-hidden="true" />
             </>
           ) : null}
-          <button type="button" className={`terminais-pane__tool${findOpen ? ' is-on' : ''}`} onClick={findOpen ? onFindClose : onFindOpen} aria-pressed={findOpen} title={`Buscar na saída, ${shortcutLabel('Mod+F')}`} aria-label="Buscar na saída"><Search size={14} strokeWidth={1.75} /></button>
-          <button type="button" className="terminais-pane__tool" onClick={copySelection} title="Copiar seleção do terminal" aria-label="Copiar seleção"><Copy size={14} strokeWidth={1.75} /></button>
-          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(-1)} title={`Diminuir fonte, ${shortcutLabel('Mod+Minus')}`} aria-label="Diminuir fonte"><Minus size={14} strokeWidth={1.75} /></button>
-          <span className="terminais-work__font" aria-live="polite">{layout.fontSize}</span>
-          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title={`Aumentar fonte, ${shortcutLabel('Mod+Equal')}`} aria-label="Aumentar fonte"><Plus size={14} strokeWidth={1.75} /></button>
+          <button type="button" className={`terminais-pane__tool${findOpen ? ' is-on' : ''}`} onClick={findOpen ? onFindClose : onFindOpen} aria-pressed={findOpen} title={translate('terminal.work.findOutputShortcut', { shortcut: shortcutLabel('Mod+F') })} aria-label={translate('terminal.work.findOutput')}><Search size={14} strokeWidth={1.75} /></button>
+          <button type="button" className="terminais-pane__tool" onClick={copySelection} title={translate('terminal.work.copySelectionTitle')} aria-label={translate('terminal.work.copySelection')}><Copy size={14} strokeWidth={1.75} /></button>
+          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(-1)} title={translate('terminal.work.decreaseFontShortcut', { shortcut: shortcutLabel('Mod+Minus') })} aria-label={translate('terminal.work.decreaseFont')}><Minus size={14} strokeWidth={1.75} /></button>
+          <span className="terminais-work__font" aria-live="polite">{layout.fontSize.toLocaleString(getLocale())}</span>
+          <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title={translate('terminal.work.increaseFontShortcut', { shortcut: shortcutLabel('Mod+Equal') })} aria-label={translate('terminal.work.increaseFont')}><Plus size={14} strokeWidth={1.75} /></button>
           <span className="terminais-work__sep" aria-hidden="true" />
-          <button type="button" className={`terminais-pane__tool${layout.focus ? ' is-on' : ''}`} onClick={onToggleFocus} aria-pressed={layout.focus} title={layout.focus ? 'Sair do modo foco' : 'Modo foco'} aria-label="Modo foco">{layout.focus ? <Minimize2 size={14} strokeWidth={1.75} /> : <Maximize2 size={14} strokeWidth={1.75} />}</button>
+          <button type="button" className={`terminais-pane__tool${layout.focus ? ' is-on' : ''}`} onClick={onToggleFocus} aria-pressed={layout.focus} title={translate(layout.focus ? 'terminal.work.exitFocus' : 'terminal.work.focusMode')} aria-label={translate('terminal.work.focusMode')}>{layout.focus ? <Minimize2 size={14} strokeWidth={1.75} /> : <Maximize2 size={14} strokeWidth={1.75} />}</button>
         </div>
       </header>
       <div
@@ -333,7 +335,7 @@ export default function WorkArea({
         {showEditor && showTerminal ? (
           <Splitter
             orientation="horizontal"
-            label="Altura do editor"
+            label={translate('terminal.editor.height')}
             onDrag={onDrag}
             onReset={() => { session.editor.ratio = LAYOUT_LIMITS.editorRatio.default; setEditorRatio(session.id, LAYOUT_LIMITS.editorRatio.default); }}
             onStep={(step) => { const next = Math.min(LAYOUT_LIMITS.editorRatio.max, Math.max(LAYOUT_LIMITS.editorRatio.min, ratio + step / 600)); setEditorRatio(session.id, next); }}

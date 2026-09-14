@@ -14,6 +14,7 @@ import {
   Drawer as MuiDrawer, IconButton, Snackbar, Alert, Button,
 } from '@mui/material';
 import { X, Inbox, AlertCircle } from 'lucide-react';
+import { translate } from '../shared/i18n.js';
 
 const isMacPlatform = () => typeof document !== 'undefined' && document.documentElement.dataset.platform === 'macos';
 
@@ -137,7 +138,7 @@ export function AppModal({ open, title, onClose, children, footer, maxWidth = 's
     <Dialog open={open} onClose={onClose} maxWidth={maxWidth} fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600 }}>
         {title}
-        <IconButton size="small" onClick={onClose} aria-label="Fechar"><X size={16} /></IconButton>
+        <IconButton size="small" onClick={onClose} aria-label={translate('shared.action.close')}><X size={16} /></IconButton>
       </DialogTitle>
       <DialogContent dividers>{children}</DialogContent>
       {footer ? <DialogActions>{footer}</DialogActions> : null}
@@ -151,7 +152,7 @@ export function AppDrawer({ open, title, onClose, children, width = 480 }) {
       <Box sx={{ width, maxWidth: '94vw', display: 'flex', flexDirection: 'column', height: '100%' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 2, borderBottom: 1, borderColor: 'divider' }}>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>{title}</Typography>
-          <IconButton size="small" onClick={onClose} aria-label="Fechar"><X size={16} /></IconButton>
+          <IconButton size="small" onClick={onClose} aria-label={translate('shared.action.close')}><X size={16} /></IconButton>
         </Box>
         <Box sx={{ p: 2.5, overflowY: 'auto', flex: 1 }}>{children}</Box>
       </Box>
@@ -255,13 +256,13 @@ export function TextField({
 
 /* ── utilitário de confirmação ────────────────────────────────────── */
 
-export function ConfirmDialog({ open, title = 'Confirmar', message, onCancel, onConfirm, confirmLabel = 'Confirmar', danger = false }) {
+export function ConfirmDialog({ open, title = translate('shared.action.confirm'), message, onCancel, onConfirm, confirmLabel = translate('shared.action.confirm'), danger = false }) {
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ fontWeight: 600 }}>{title}</DialogTitle>
       <DialogContent><Typography variant="body2">{message}</Typography></DialogContent>
       <DialogActions>
-        <Button onClick={onCancel}>Cancelar</Button>
+        <Button onClick={onCancel}>{translate('shared.action.cancel')}</Button>
         <Button variant="contained" color={danger ? 'error' : 'primary'} onClick={onConfirm}>{confirmLabel}</Button>
       </DialogActions>
     </Dialog>

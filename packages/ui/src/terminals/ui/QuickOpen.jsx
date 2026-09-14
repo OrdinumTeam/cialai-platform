@@ -5,8 +5,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { File, Folder, Search } from 'lucide-react';
 import { baseName, dirName, fs } from '../files.js';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 export default function QuickOpen({ root, onClose, onOpenFile, onRevealDir }) {
+  useI18n();
   const [query, setQuery] = useState('');
   const [items, setItems] = useState([]);
   const [index, setIndex] = useState(0);
@@ -46,7 +48,7 @@ export default function QuickOpen({ root, onClose, onOpenFile, onRevealDir }) {
 
   return (
     <div className="mac-palette-backdrop" onMouseDown={onClose}>
-      <div className="mac-palette terminais-quick" role="dialog" aria-label="Buscar arquivo" onMouseDown={(event) => event.stopPropagation()}>
+      <div className="mac-palette terminais-quick" role="dialog" aria-label={translate('terminal.quickOpen.title')} onMouseDown={(event) => event.stopPropagation()}>
         <div className="mac-palette__search">
           <Search size={17} strokeWidth={2} aria-hidden="true" />
           <input
@@ -54,16 +56,16 @@ export default function QuickOpen({ root, onClose, onOpenFile, onRevealDir }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={`Buscar arquivo em ${baseName(root)}`}
+            placeholder={translate('terminal.quickOpen.placeholder', { name: baseName(root) })}
             spellCheck={false}
             autoCorrect="off"
             autoCapitalize="off"
-            aria-label="Buscar arquivo"
+            aria-label={translate('terminal.quickOpen.title')}
           />
-          <kbd>esc</kbd>
+          <kbd>{translate('terminal.common.escape')}</kbd>
         </div>
         <ul className="mac-palette__list" role="listbox" ref={listRef}>
-          {items.length === 0 && <li className="mac-palette__empty">{query ? 'Nada encontrado' : 'Digite para buscar'}</li>}
+          {items.length === 0 && <li className="mac-palette__empty">{translate(query ? 'terminal.explorer.nothingFound' : 'terminal.explorer.typeToSearch')}</li>}
           {items.map((item, position) => {
             const active = position === index;
             const Icon = item.kind === 'dir' ? Folder : File;

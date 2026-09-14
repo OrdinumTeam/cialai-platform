@@ -48,6 +48,7 @@ import { buildTheme, terminalFont, watchTheme } from './theme.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
 import { getLayout, subscribeLayout } from './layout.js';
 import { platform } from '../lib/platform.js';
+import { translate } from '../shared/i18n.js';
 
 export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
@@ -282,7 +283,7 @@ function newId() {
 }
 
 function messageOf(error) {
-  if (!error) return 'Erro desconhecido';
+  if (!error) return translate('terminal.common.unknownError');
   if (typeof error === 'string') return error;
   return error.message || String(error);
 }
@@ -398,7 +399,7 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
   const session = {
     id: id || newId(),
     cwd,
-    name: name || baseName(cwd) || 'Sessão',
+    name: name || baseName(cwd) || translate('terminal.session.defaultName'),
     customName: Boolean(customName),
     subtitle: typeof subtitle === 'string' ? subtitle : '',
     color: validColor(color),
@@ -498,11 +499,11 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
   }));
   // Sino e notificacoes: o unico jeito honesto de saber que um programa no
   // terminal pediu atencao. Claude Code, WezTerm e iTerm usam estes canais.
-  session.disposables.push(term.onBell(() => { if (!session.replaying) signalAttention(session, 'bell', 'Pediu atenção'); }));
+  session.disposables.push(term.onBell(() => { if (!session.replaying) signalAttention(session, 'bell', translate('terminal.session.needsAttention')); }));
   const oscNotify = (data) => {
     if (session.replaying) return true;
     const text = String(data || '').split(';').filter(Boolean).slice(-1)[0] || '';
-    signalAttention(session, 'notify', text.trim() || 'Notificação do terminal');
+    signalAttention(session, 'notify', text.trim() || translate('terminal.session.notification'));
     return true;
   };
   session.disposables.push(term.parser.registerOscHandler(9, oscNotify));
@@ -603,7 +604,13 @@ function markExited(session, { code, signal, early }) {
   session.activity = null;
   session.jobStartedAt = null;
   const failed = session.exitCode !== 0;
-  session.attention = { kind: failed ? 'error' : 'exited', message: failed ? `Encerrado com código ${session.exitCode}` : 'Processo finalizado', at: Date.now() };
+  session.attention = {
+    kind: failed ? 'error' : 'exited',
+    message: failed
+      ? translate('terminal.session.endedCode', { code: session.exitCode })
+      : translate('terminal.session.processFinished'),
+    at: Date.now(),
+  };
   setStatus(session, 'exited');
 }
 
@@ -630,7 +637,7 @@ async function spawnSession(session) {
   try {
     const channel = await createChannel((message) => handleMessage(session, token, message));
     if (session.spawnToken !== token) { channel?.dispose?.(); return; }
-    if (!channel) throw new Error(NATIVE_ONLY_MESSAGE);
+    if (!channel) throw new Error(translate('terminal.common.desktopOnly'));
     session.outputChannel?.dispose?.();
     session.outputChannel = channel;
     session.channelId = channel.id;
@@ -765,7 +772,7 @@ async function resumeAgent(session, plan) {
   if (!same()) return;
   try {
     await invoke('pty_write', { id: ptyId, data: `${plan.command}\r` });
-    dispatch({ type: 'notify', sessionId: session.id, message: `Retomando ${plan.agent} em ${session.name}` });
+    dispatch({ type: 'notify', sessionId: session.id, message: translate('terminal.session.resuming', { agent: plan.agent, name: session.name }) });
   } catch (error) {
     dispatch({ type: 'error', message: messageOf(error) });
   }
@@ -952,21 +959,27 @@ export function isWorking(session) {
 
 // Estado em linguagem simples, derivado so do que foi observado.
 export function describe(session) {
-  if (session.status === 'starting') return { code: 'starting', label: 'Abrindo shell', tone: 'busy' };
-  if (session.status === 'error') return { code: 'error', label: 'Falha ao abrir', tone: 'bad' };
-  if (session.status === 'disconnected') return { code: 'disconnected', label: 'Sessão desconectada', tone: 'muted' };
+  if (session.status === 'starting') return { code: 'starting', label: translate('terminal.session.openingShell'), tone: 'busy' };
+  if (session.status === 'error') return { code: 'error', label: translate('terminal.session.openFailed'), tone: 'bad' };
+  if (session.status === 'disconnected') return { code: 'disconnected', label: translate('terminal.session.disconnected'), tone: 'muted' };
   if (session.status === 'exited') {
-    if (session.exitCode === 0) return { code: 'exited', label: 'Processo finalizado', tone: 'muted' };
-    return { code: 'failed', label: session.signal ? `Encerrado por ${session.signal}` : `Encerrado com código ${session.exitCode}`, tone: 'bad' };
+    if (session.exitCode === 0) return { code: 'exited', label: translate('terminal.session.processFinished'), tone: 'muted' };
+    return {
+      code: 'failed',
+      label: session.signal
+        ? translate('terminal.session.endedSignal', { signal: session.signal })
+        : translate('terminal.session.endedCode', { code: session.exitCode }),
+      tone: 'bad',
+    };
   }
   const foreground = session.activity?.foreground || null;
   if (foreground) {
-    if (foreground.stopped) return { code: 'stopped', label: 'Processo parado', tone: 'warn' };
-    if (isStreaming(session)) return { code: 'streaming', label: 'Recebendo saída', tone: 'busy' };
-    return { code: 'busy', label: 'Processo em execução', tone: 'busy' };
+    if (foreground.stopped) return { code: 'stopped', label: translate('terminal.session.processStopped'), tone: 'warn' };
+    if (isStreaming(session)) return { code: 'streaming', label: translate('terminal.session.receivingOutput'), tone: 'busy' };
+    return { code: 'busy', label: translate('terminal.session.processRunning'), tone: 'busy' };
   }
-  if (session.activity === null) return { code: 'running', label: 'Shell aberto', tone: 'ok' };
-  return { code: 'idle', label: 'Pronto para comando', tone: 'ok' };
+  if (session.activity === null) return { code: 'running', label: translate('terminal.session.shellOpen'), tone: 'ok' };
+  return { code: 'idle', label: translate('terminal.session.ready'), tone: 'ok' };
 }
 
 // Nome do que esta rodando: o agente, quando reconhecido pela linha de
@@ -1037,7 +1050,9 @@ function applyMetrics(list) {
       session.jobStartedAt = null;
       session.jobLabel = null;
       if (lasted >= FINISHED_MIN_MS && !isViewed(session)) {
-        signalAttention(session, 'finished', label ? `Terminou: ${label}` : 'Terminou um processo');
+        signalAttention(session, 'finished', label
+          ? translate('terminal.session.finishedNamed', { name: label })
+          : translate('terminal.session.finishedProcess'));
       }
     } else if (hasJob && before?.foreground && before.foreground.pid !== foreground.pid) {
       session.jobStartedAt = now;
@@ -1381,7 +1396,7 @@ export function hydrate() {
 // identificador ou null quando recusou.
 export function openSession(cwd, { name, subtitle, color, select = true } = {}) {
   if (!hasBridge() && !state.demo) {
-    dispatch({ type: 'error', message: NATIVE_ONLY_MESSAGE });
+    dispatch({ type: 'error', message: translate('terminal.common.desktopOnly') });
     return null;
   }
   if (!cwd) return null;
@@ -1393,7 +1408,7 @@ export function openSession(cwd, { name, subtitle, color, select = true } = {}) 
   if (state.demo) {
     session.status = 'running';
     session.activity = { available: false, cpu: null, memory: null, processes: 1, foreground: null, agent: null, shellCwd: cwd };
-    session.term.write(`\x1b[2mSessão de demonstração em ${cwd}\x1b[0m\r\n$ `);
+    session.term.write(`\x1b[2m${translate('terminal.session.demo', { path: cwd })}\x1b[0m\r\n$ `);
   } else {
     spawnSession(session);
   }
@@ -1401,7 +1416,7 @@ export function openSession(cwd, { name, subtitle, color, select = true } = {}) 
 }
 
 export async function pickAndOpen(defaultPath, options) {
-  const picked = await chooseDirectory({ title: 'Abrir sessão em', defaultPath: defaultPath || undefined });
+  const picked = await chooseDirectory({ title: translate('terminal.session.openAt'), defaultPath: defaultPath || undefined });
   return picked ? openSession(picked, options) : null;
 }
 
@@ -1485,7 +1500,7 @@ export async function reopen(id) {
     const disconnected = session.status === 'disconnected';
     const saved = disconnected ? await restoreSaved(session) : null;
     if (!state.sessions.has(id) || session.status === 'running' || session.spawning) return;
-    if (!disconnected) session.term.write('\r\n\x1b[2mSessão reaberta.\x1b[0m\r\n');
+    if (!disconnected) session.term.write(`\r\n\x1b[2m${translate('terminal.session.reopened')}\x1b[0m\r\n`);
     session.attention = null;
     await spawnSession(session);
     if (saved?.resume?.command && session.status === 'running') await resumeAgent(session, saved.resume);
@@ -1506,7 +1521,7 @@ export async function restart(id) {
     session.ptyId = null;
     session.activity = null;
   }
-  session.term.write('\r\n\x1b[2mTerminal reiniciado.\x1b[0m\r\n');
+  session.term.write(`\r\n\x1b[2m${translate('terminal.session.terminalRestarted')}\x1b[0m\r\n`);
   session.attention = null;
   spawnSession(session);
 }
@@ -1514,7 +1529,7 @@ export async function restart(id) {
 export async function changeDirectory(id, cwd) {
   const session = state.sessions.get(id);
   if (!session) return;
-  const picked = cwd || await chooseDirectory({ title: 'Trocar a pasta da sessão', defaultPath: session.cwd });
+  const picked = cwd || await chooseDirectory({ title: translate('terminal.session.changeFolderTitle'), defaultPath: session.cwd });
   if (!picked || picked === session.cwd) return;
   if (session.ptyId != null) {
     const old = session.ptyId;
@@ -1533,7 +1548,7 @@ export async function changeDirectory(id, cwd) {
   session.explorer.nodes = new Map();
   session.explorer.git = null;
   session.explorer.revision += 1;
-  session.term.write(`\r\n\x1b[2mPasta trocada para ${picked}\x1b[0m\r\n`);
+  session.term.write(`\r\n\x1b[2m${translate('terminal.session.folderChanged', { path: picked })}\x1b[0m\r\n`);
   persist();
   emitExplorer(session);
   spawnSession(session);
@@ -1996,7 +2011,7 @@ function seedDemo() {
     ['Claude Code|claude-main', {
       agent: 'Claude Code',
       profile: 'claude-main',
-      profileName: 'Principal',
+      profileName: translate('terminal.demo.profileMain'),
       configDir: '/Users/exemplo/.claude-main',
       model: 'Fable 5.1',
       sessions: [{ sessionId: 'demo', cwd: `${home}/cialai-platform`, model: 'Fable 5.1', updatedAtMs: Date.now() }],
@@ -2005,42 +2020,73 @@ function seedDemo() {
       stale: false,
       updatedAtMs: Date.now(),
       windows: [
-        { id: 'five_hour', label: 'Sessão', usedPercent: 41, windowMinutes: 300, resetsAtMs: Date.now() + 2 * 3600 * 1000 },
-        { id: 'seven_day', label: 'Semana', usedPercent: 63, windowMinutes: 10080, resetsAtMs: Date.now() + 3 * 86400 * 1000 },
+        { id: 'five_hour', label: translate('terminal.demo.sessionWindow'), usedPercent: 41, windowMinutes: 300, resetsAtMs: Date.now() + 2 * 3600 * 1000 },
+        { id: 'seven_day', label: translate('terminal.demo.weekWindow'), usedPercent: 63, windowMinutes: 10080, resetsAtMs: Date.now() + 3 * 86400 * 1000 },
       ],
     }],
   ]);
-  const first = createSession({ cwd: `${home}/cialai-platform`, name: 'cialai-platform', subtitle: 'Estúdio de terminais' });
+  const first = createSession({ cwd: `${home}/cialai-platform`, name: 'cialai-platform', subtitle: translate('terminal.demo.studioSubtitle') });
   first.status = 'running';
   first.activity = {
     available: true, cpu: 38.4, memory: 412 * 1024 * 1024, processes: 6, shellCwd: `${home}/cialai-platform/packages/ui`,
-    foreground: { pid: 4242, name: 'node', command: 'node', agent: 'Claude Code', stopped: false, cwd: `${home}/cialai-platform`, profile: 'claude-main', profileName: 'Principal', configDir: '/Users/exemplo/.claude-main' },
-    agent: 'Claude Code', profile: 'claude-main', profileName: 'Principal', configDir: '/Users/exemplo/.claude-main',
+    foreground: { pid: 4242, name: 'node', command: 'node', agent: 'Claude Code', stopped: false, cwd: `${home}/cialai-platform`, profile: 'claude-main', profileName: translate('terminal.demo.profileMain'), configDir: '/Users/exemplo/.claude-main' },
+    agent: 'Claude Code', profile: 'claude-main', profileName: translate('terminal.demo.profileMain'), configDir: '/Users/exemplo/.claude-main',
     usage: usageFor('Claude Code', 'claude-main'),
   };
   first.lastOutputAt = Date.now();
   first.jobStartedAt = Date.now() - 154000;
-  first.term.write('\x1b[2m$ claude --resume\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m Lendo packages/ui/src/terminals/runtime.js…\r\n\x1b[2m  ⎿  Read 612 lines\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m Vou ajustar o card para mostrar a prévia da saída recente.\r\n');
+  first.term.write(`\x1b[2m$ claude --resume\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.reading')}\r\n\x1b[2m  ⎿  Read 612 lines\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.adjustCard')}\r\n`);
   first.explorer.git = { isRepo: true, branch: 'main', ahead: 2, behind: 0, changes: [{ path: 'packages/ui/src/terminals/runtime.js', status: 'modified', staged: false, worktree: true }, { path: 'packages/ui/src/views/Terminais.css', status: 'modified', staged: false, worktree: true }, { path: 'docs/04-desktop.md', status: 'untracked', staged: false, worktree: true }] };
-  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'verde', subtitle: 'Servidor de desenvolvimento' });
+  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'verde', subtitle: translate('terminal.demo.devServer') });
   second.status = 'running';
   second.activity = { available: true, cpu: 0.6, memory: 96 * 1024 * 1024, processes: 2, foreground: { pid: 5100, name: 'node', command: 'npm', agent: null, stopped: false }, agent: null, shellCwd: `${home}/site-exemplo` };
   second.lastOutputAt = Date.now() - 20000;
   second.term.write('$ npm run dev\r\n\r\n  VITE v7.3.6  ready in 412 ms\r\n\r\n  ➜  Local:   http://127.0.0.1:5173/\r\n');
   second.jobStartedAt = Date.now() - 3600000;
-  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', subtitle: 'Testes do backend' });
+  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', subtitle: translate('terminal.demo.backendTests') });
   third.status = 'running';
   third.activity = { available: true, cpu: 0, memory: 14 * 1024 * 1024, processes: 1, foreground: null, agent: null, shellCwd: `${home}/api-exemplo` };
   third.lastOutputAt = Date.now() - 400000;
   third.term.write('$ git pull\r\nAlready up to date.\r\n$ ');
-  third.attention = { kind: 'finished', message: 'Terminou: pytest', at: Date.now() - 60000 };
+  third.attention = { kind: 'finished', message: translate('terminal.session.finishedNamed', { name: 'pytest' }), at: Date.now() - 60000 };
   const fourth = createSession({ cwd: `${home}/rascunho`, name: 'rascunho', color: 'laranja' });
   fourth.status = 'exited';
   fourth.exitCode = 1;
   fourth.term.write('$ npm test\r\n\x1b[31m✖ 3 tests failed\x1b[0m\r\n');
-  fourth.attention = { kind: 'error', message: 'Encerrado com código 1', at: Date.now() - 5000 };
+  fourth.attention = { kind: 'error', message: translate('terminal.session.endedCode', { code: 1 }), at: Date.now() - 5000 };
   const fifth = createSession({ cwd: `${home}/automacoes`, name: 'automações', customName: true });
   fifth.status = 'disconnected';
   state.order = [first.id, second.id, third.id, fourth.id, fifth.id];
   state.selectedId = first.id;
+}
+
+export function localizeDemo() {
+  if (!state.demo) return;
+  const usage = state.aiUsage.get('Claude Code|claude-main');
+  if (usage) {
+    usage.profileName = translate('terminal.demo.profileMain');
+    usage.windows = usage.windows.map((window) => ({
+      ...window,
+      label: translate(window.id === 'five_hour' ? 'terminal.demo.sessionWindow' : 'terminal.demo.weekWindow'),
+    }));
+  }
+  for (const session of state.sessions.values()) {
+    if (session.cwd.endsWith('/cialai-platform')) {
+      session.subtitle = translate('terminal.demo.studioSubtitle');
+      if (session.activity) {
+        session.activity.profileName = translate('terminal.demo.profileMain');
+        session.activity.usage = usage || null;
+        if (session.activity.foreground) session.activity.foreground.profileName = translate('terminal.demo.profileMain');
+      }
+    } else if (session.cwd.endsWith('/site-exemplo')) {
+      session.subtitle = translate('terminal.demo.devServer');
+    } else if (session.cwd.endsWith('/api-exemplo')) {
+      session.subtitle = translate('terminal.demo.backendTests');
+      session.attention = { ...session.attention, message: translate('terminal.session.finishedNamed', { name: 'pytest' }) };
+    } else if (session.cwd.endsWith('/rascunho')) {
+      session.attention = { ...session.attention, message: translate('terminal.session.endedCode', { code: 1 }) };
+    }
+    emitActivity(session);
+  }
+  emitSessions();
 }

@@ -11,6 +11,7 @@ import { invoke, isTauri, hasBridge } from '../../lib/native.js';
 import { isPhone } from '../../lib/shell.js';
 import { getRecent, isDemo } from '../runtime.js';
 import { baseName, shortPath } from '../files.js';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -22,6 +23,7 @@ function parentName(path) {
 }
 
 export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse }) {
+  const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [name, setName] = useState('');
   const [repos, setRepos] = useState(null);
@@ -54,14 +56,14 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse })
     const matches = (item) => !needle || normalize(item.name).includes(needle) || normalize(item.path).includes(needle);
     const result = [];
     const recent = getRecent().map((path) => ({ path, name: baseName(path) || path })).filter(matches);
-    if (recent.length) result.push({ label: 'Recentes', items: recent, showParent: true });
+    if (recent.length) result.push({ label: translate('terminal.session.recent'), items: recent, showParent: true });
     const roots = repos?.roots || [];
     roots.forEach((root) => {
       const items = (repos?.repos || []).filter((repo) => repo.root === root.label).filter(matches);
       if (items.length) result.push({ label: root.label, items, showParent: false });
     });
     return result;
-  }, [repos, query]);
+  }, [repos, query, locale]);
 
   const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   useEffect(() => { setIndex(0); }, [query]);
@@ -85,7 +87,7 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse })
 
   let running = -1;
   return createPortal(
-    <div className="terminais-pop" ref={boxRef} role="dialog" aria-label="Nova sessão" style={style}>
+    <div className="terminais-pop" ref={boxRef} role="dialog" aria-label={translate('terminal.session.new')} style={style}>
       <div className="terminais-pop__search">
         <Search size={14} strokeWidth={2} aria-hidden="true" />
         <input
@@ -93,11 +95,11 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse })
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Buscar pasta"
+          placeholder={translate('terminal.session.searchFolder')}
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
-          aria-label="Buscar pasta"
+          aria-label={translate('terminal.session.searchFolder')}
         />
       </div>
       <div className="terminais-pop__list" role="listbox">
@@ -127,7 +129,7 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse })
           </div>
         ))}
         {groups.length === 0 && (
-          <div className="terminais-pop__empty">{repos ? 'Nenhuma pasta encontrada' : 'Carregando pastas…'}</div>
+          <div className="terminais-pop__empty">{translate(repos ? 'terminal.session.noFolder' : 'terminal.session.loadingFolders')}</div>
         )}
       </div>
       <div className="terminais-pop__namefield">
@@ -135,14 +137,14 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse })
           value={name}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="Nome da sessão, opcional"
+          placeholder={translate('terminal.session.optionalName')}
           spellCheck={false}
           autoCorrect="off"
-          aria-label="Nome da sessão"
+          aria-label={translate('terminal.session.name')}
         />
       </div>
       {isTauri() && <div className="terminais-pop__foot">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onBrowse(name.trim())}><FolderSearch size={13} />Escolher outra pasta…</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => onBrowse(name.trim())}><FolderSearch size={13} />{translate('terminal.session.chooseFolder')}</button>
       </div>}
     </div>,
     document.body,

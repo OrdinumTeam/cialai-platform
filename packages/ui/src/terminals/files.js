@@ -4,8 +4,9 @@
 // e classificar por extensao. Nada aqui guarda estado; o runtime e os
 // componentes chamam e decidem.
 
-import { invoke, isTauri, NATIVE_ONLY_MESSAGE } from '../lib/native.js';
+import { invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
+import { getLocale, translate } from '../shared/i18n.js';
 import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind } from './kinds.js';
 
 export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
@@ -13,7 +14,7 @@ export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
 /* ── invokes ──────────────────────────────────────────────────────── */
 
 function messageOf(error) {
-  if (!error) return 'Erro desconhecido';
+  if (!error) return translate('terminal.common.unknownError');
   if (typeof error === 'string') return error;
   if (error.message) return error.message;
   return String(error);
@@ -34,7 +35,7 @@ function demoMode() {
 
 async function call(command, args) {
   if (demoMode()) return demoCall(command, args);
-  if (!isTauri()) throw new FsError('unavailable', NATIVE_ONLY_MESSAGE);
+  if (!isTauri()) throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   try {
     return await invoke(command, args);
   } catch (error) {
@@ -77,7 +78,7 @@ function demoCall(command, args) {
   // Uma planilha pequena em CSV: o SheetJS le como planilha e a captura
   // mostra a tabela.
   if (command === 'fs_read_bytes') return new TextEncoder().encode('Item,Etapa,Valor\nExemplo A,Planejamento,1250\nExemplo B,Execução,980\nExemplo C,Revisão,2100\n').buffer;
-  if (command === 'office_convert') throw new FsError('unavailable', NATIVE_ONLY_MESSAGE);
+  if (command === 'office_convert') throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   if (command === 'fs_find') return { root, items: [], truncated: false };
   if (command === 'fs_watch') return 1;
   if (command === 'fs_rename' || command === 'fs_copy') return { path: args.to, exists: true, kind: 'file', size: 32, modifiedMs: Date.now() };
@@ -223,7 +224,7 @@ export function fmtCpu(percent) {
   if (percent == null || !Number.isFinite(percent)) return null;
   const value = Math.max(0, percent);
   if (value < 0.5) return '0%';
-  if (value < 10) return `${value.toFixed(1).replace('.', ',')}%`;
+  if (value < 10) return `${value.toLocaleString(getLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`;
   return `${Math.round(value)}%`;
 }
 
@@ -231,7 +232,7 @@ export function fmtCpu(percent) {
 // nao piscar entre 3% e 4% a cada leitura.
 export function fmtPlan(percent) {
   const value = Math.max(0, Number(percent) || 0);
-  if (value > 0 && value < 10) return `${value.toFixed(1).replace('.', ',').replace(',0', '')}%`;
+  if (value > 0 && value < 10) return `${value.toLocaleString(getLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 1 })}%`;
   return `${Math.round(value)}%`;
 }
 
@@ -243,9 +244,11 @@ export function fmtResetAt(ms) {
   if (Number.isNaN(date.getTime())) return null;
   const today = new Date();
   const sameDay = date.toDateString() === today.toDateString();
-  const time = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  if (sameDay) return `hoje às ${time}`;
-  return `${date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })} às ${time}`;
+  const locale = getLocale();
+  const time = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+  if (sameDay) return translate('terminal.plan.todayAt', { time });
+  const formattedDate = date.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' });
+  return translate('terminal.plan.dateAt', { date: formattedDate, time });
 }
 
 export function fmtElapsed(ms) {

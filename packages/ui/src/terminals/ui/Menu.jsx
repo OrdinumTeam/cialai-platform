@@ -8,6 +8,7 @@
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { translate, useI18n } from '../../shared/i18n.js';
 
 const SWATCH_COLUMNS = 6;
 
@@ -21,7 +22,8 @@ function flatten(items) {
   return flat;
 }
 
-export default function Menu({ anchor, items, onClose, label = 'Ações' }) {
+export default function Menu({ anchor, items, onClose, label }) {
+  useI18n();
   const boxRef = useRef(null);
   const [position, setPosition] = useState({ top: anchor?.y ?? 0, left: anchor?.x ?? 0, ready: false });
   const [index, setIndex] = useState(-1);
@@ -82,7 +84,7 @@ export default function Menu({ anchor, items, onClose, label = 'Ações' }) {
       ref={boxRef}
       className="terminais-menu"
       role="menu"
-      aria-label={label}
+      aria-label={label || translate('terminal.common.actions')}
       tabIndex={-1}
       style={{ top: position.top, left: position.left, visibility: position.ready ? 'visible' : 'hidden' }}
     >
@@ -91,7 +93,7 @@ export default function Menu({ anchor, items, onClose, label = 'Ações' }) {
         if (item.separator) return <div key={`sep-${order}`} className="terminais-menu__sep" role="separator" />;
         if (item.swatches) {
           return (
-            <div key={item.id || `swatches-${order}`} className="terminais-menu__swatches" role="group" aria-label={item.label || 'Cores'}>
+            <div key={item.id || `swatches-${order}`} className="terminais-menu__swatches" role="group" aria-label={item.label || translate('terminal.common.colors')}>
               {item.swatches.map((option) => {
                 runningIndex += 1;
                 const active = runningIndex === index;
@@ -102,7 +104,7 @@ export default function Menu({ anchor, items, onClose, label = 'Ações' }) {
                     role="menuitemradio"
                     aria-checked={Boolean(option.current)}
                     aria-label={option.label}
-                    title={option.current ? `${option.label}, atual` : option.label}
+                    title={option.current ? `${option.label}, ${translate('terminal.common.current')}` : option.label}
                     className={`terminais-menu__swatchbtn${active ? ' is-active' : ''}${option.current ? ' is-current' : ''}`}
                     style={{ '--swatch': option.color }}
                     onMouseEnter={() => setIndex(enabled.indexOf(option))}

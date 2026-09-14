@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+import { getLocale, translate } from '../shared/i18n.js';
 // Restauracao de uma sessao que o app perdeu ao fechar. O Rust devolve o
 // historico gravado ja com a volta ao estado padrao do terminal no fim; aqui
 // ficam o aviso que separa o historico do shell novo, o tamanho em que o
@@ -11,20 +12,18 @@ export const PROMPT_QUIET_POLLS = 4;
 // Teto da espera, em leituras: oito segundos.
 export const PROMPT_MAX_POLLS = 80;
 
-function two(value) {
-  return String(value).padStart(2, '0');
-}
-
 // Linha esmaecida escrita no fim do historico restaurado.
 export function restoredNotice(updatedAtMs, now = Date.now()) {
-  let text = 'Histórico restaurado.';
+  let text = translate('terminal.restore.restored');
   const at = Number(updatedAtMs);
   if (Number.isFinite(at) && at > 0) {
     const date = new Date(at);
-    const time = `${two(date.getHours())}:${two(date.getMinutes())}`;
+    const locale = getLocale();
+    const time = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' }).format(date);
+    const savedDate = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit' }).format(date);
     text += date.toDateString() === new Date(now).toDateString()
-      ? ` Última gravação hoje às ${time}.`
-      : ` Última gravação em ${two(date.getDate())}/${two(date.getMonth() + 1)} às ${time}.`;
+      ? ` ${translate('terminal.restore.savedToday', { time })}`
+      : ` ${translate('terminal.restore.savedDate', { date: savedDate, time })}`;
   }
   return `\x1b[2m${text}\x1b[0m\r\n`;
 }

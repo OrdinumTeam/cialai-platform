@@ -26,7 +26,8 @@ import { tags } from '@lezer/highlight';
 import { Marked } from 'marked';
 import { baseName, dirName, fileKind, fs, git, isViewerKind, joinPath, office, FsError } from './files.js';
 import { addTab, allTabs, findTab, getSession, removeTab, setTabPath, subscribeChanges, touchTab } from './runtime.js';
-import { chooseSavePath, previewUrl, NATIVE_ONLY_MESSAGE } from '../lib/native.js';
+import { chooseSavePath, previewUrl } from '../lib/native.js';
+import { translate } from '../shared/i18n.js';
 
 // Limites das previas de planilha: linhas lidas do arquivo e colunas
 // mostradas, para uma planilha grande nao montar centenas de milhares de
@@ -235,7 +236,7 @@ export function newUntitled(sessionId) {
   if (!session) return null;
   untitledCount += 1;
   const tab = makeTab(null, 'text');
-  tab.name = `Sem título ${untitledCount}`;
+  tab.name = translate('terminal.editor.untitled', { count: untitledCount });
   tab.untitled = true;
   tab.watchPath = null;
   tab.loading = false;
@@ -326,7 +327,7 @@ async function statTab(tab) {
 async function loadPdf(tab) {
   const stat = await statTab(tab);
   const url = await previewUrl(dirName(tab.path), tab.name);
-  if (!url) throw new FsError('unavailable', NATIVE_ONLY_MESSAGE);
+  if (!url) throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   tab.viewer = { kind: 'pdf', url: `${url}?v=${stat.modifiedMs || 0}` };
 }
 
@@ -445,7 +446,7 @@ export function contentOf(tab) {
 // usuario fecha o painel de salvar sem escolher.
 async function saveUntitled(tab) {
   const root = tab.session?.explorer?.root || tab.session?.cwd || null;
-  const path = await chooseSavePath({ title: 'Salvar arquivo', defaultPath: root ? joinPath(root, tab.name) : tab.name });
+  const path = await chooseSavePath({ title: translate('terminal.editor.saveFile'), defaultPath: root ? joinPath(root, tab.name) : tab.name });
   if (!path) return false;
   const content = contentOf(tab);
   const result = await fs.writeText(path, content, null);
@@ -618,7 +619,7 @@ export async function openDiff(sessionId, root, path) {
     return existing;
   }
   const tab = makeTab(path, 'diff');
-  tab.name = `${baseName(path)}: alterações`;
+  tab.name = translate('terminal.editor.diffTab', { name: baseName(path) });
   addTab(sessionId, tab);
   try {
     const result = await git.diff(root, path);

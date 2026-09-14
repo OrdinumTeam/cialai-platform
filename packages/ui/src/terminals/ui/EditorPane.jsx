@@ -20,6 +20,9 @@ import { previewUrl } from '../../lib/native.js';
 import { renderMarkdown, contentOf } from '../editor.js';
 import { canConvertToPdf, dirName, isInside, isPreviewable, isViewerKind, relativePath, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+
+const tabName = (tab) => tab.kind === 'browser' ? translate('terminal.browser.tabName') : tab.name;
 
 // Linhas mostradas por vez numa planilha; "Mostrar mais" acrescenta outra
 // leva, para uma aba grande nao montar milhares de celulas de uma vez.
@@ -76,9 +79,9 @@ function HtmlPreview({ tab, root }) {
   return (
     <div className="terminais-html">
       {url ? (
-        <iframe key={`${url}#${nonce}`} src={url} title={`Visualização de ${tab.name}`} sandbox="allow-same-origin allow-scripts allow-forms allow-popups" />
+        <iframe key={`${url}#${nonce}`} src={url} title={translate('terminal.editor.previewOf', { name: tab.name })} sandbox="allow-same-origin allow-scripts allow-forms allow-popups" />
       ) : (
-        <iframe key={`srcdoc#${nonce}`} srcDoc={contentOf(tab)} title={`Visualização de ${tab.name}`} sandbox="allow-same-origin allow-scripts allow-forms" />
+        <iframe key={`srcdoc#${nonce}`} srcDoc={contentOf(tab)} title={translate('terminal.editor.previewOf', { name: tab.name })} sandbox="allow-same-origin allow-scripts allow-forms" />
       )}
     </div>
   );
@@ -91,7 +94,7 @@ function HtmlPreview({ tab, root }) {
 function PdfView({ tab }) {
   return (
     <div className="terminais-pdf">
-      <iframe key={tab.viewer.url} src={tab.viewer.url} title={`Visualização de ${tab.name}`} />
+      <iframe key={tab.viewer.url} src={tab.viewer.url} title={translate('terminal.editor.previewOf', { name: tab.name })} />
     </div>
   );
 }
@@ -108,14 +111,14 @@ function SheetView({ tab }) {
   const [shown, setShown] = useState(SHEET_PAGE);
   useEffect(() => { setIndex(0); setShown(SHEET_PAGE); }, [tab.viewer]);
   const sheet = sheets[Math.min(index, sheets.length - 1)];
-  if (!sheet) return <DataState type="empty" message="A planilha não tem folhas." />;
+  if (!sheet) return <DataState type="empty" message={translate('terminal.editor.noSheets')} />;
   const rows = sheet.rows.slice(0, shown);
   const more = sheet.rows.length - rows.length;
   return (
     <div className="terminais-sheet">
       {sheets.length > 1 ? (
         <div className="terminais-sheet__tabs">
-          <div className="segmented" role="tablist" aria-label="Folhas da planilha">
+          <div className="segmented" role="tablist" aria-label={translate('terminal.editor.sheets')}>
             {sheets.map((item, position) => (
               <button
                 key={`${item.name}-${position}`}
@@ -135,7 +138,7 @@ function SheetView({ tab }) {
         <table>
           <thead>
             <tr>
-              <th aria-label="Linha" />
+              <th aria-label={translate('terminal.editor.row')} />
               {sheet.columns.map((column) => <th key={column}>{column}</th>)}
             </tr>
           </thead>
@@ -151,11 +154,18 @@ function SheetView({ tab }) {
       </div>
       {more > 0 || sheet.truncatedRows || sheet.truncatedCols ? (
         <div className="terminais-sheet__note">
-          {more > 0 ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShown((value) => value + SHEET_PAGE)}>Mostrar mais {Math.min(more, SHEET_PAGE)} linhas</button> : null}
+          {more > 0 ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShown((value) => value + SHEET_PAGE)}>{translate('terminal.editor.showMoreRows', { count: Math.min(more, SHEET_PAGE).toLocaleString(getLocale()) })}</button> : null}
           <span>
-            {`Mostrando ${rows.length.toLocaleString('pt-BR')} de ${sheet.rows.length.toLocaleString('pt-BR')} linhas`}
-            {sheet.truncatedRows ? ', a folha tem mais' : ''}
-            {sheet.truncatedCols ? `, só as primeiras ${sheet.columns.length} colunas` : ''}
+            {translate(
+              sheet.truncatedRows
+                ? (sheet.truncatedCols ? 'terminal.editor.showingRowsMoreColumns' : 'terminal.editor.showingRowsMore')
+                : (sheet.truncatedCols ? 'terminal.editor.showingRowsColumns' : 'terminal.editor.showingRows'),
+              {
+                shown: rows.length.toLocaleString(getLocale()),
+                total: sheet.rows.length.toLocaleString(getLocale()),
+                ...(sheet.truncatedCols ? { columns: sheet.columns.length.toLocaleString(getLocale()) } : {}),
+              },
+            )}
           </span>
         </div>
       ) : null}
@@ -179,14 +189,14 @@ function ViewerBar({ tab, actions }) {
       <div className="terminais-viewer__meta">
         <strong title={shortPath(tab.path)}>{tab.name}</strong>
         {tab.size != null ? <em>{fmtBytes(tab.size)}</em> : null}
-        {converted ? <em>{viewer.cached ? 'PDF do cache' : 'Convertido agora pelo LibreOffice'}</em> : null}
-        {viewer?.kind === 'docx' && viewer.messages ? <em title="Partes do documento que o conversor não entendeu">{viewer.messages === 1 ? '1 aviso' : `${viewer.messages} avisos`}</em> : null}
+        {converted ? <em>{translate(viewer.cached ? 'terminal.editor.cachedPdf' : 'terminal.editor.convertedPdf')}</em> : null}
+        {viewer?.kind === 'docx' && viewer.messages ? <em title={translate('terminal.editor.converterWarningsTitle')}>{translate(viewer.messages === 1 ? 'terminal.editor.oneWarning' : 'terminal.editor.manyWarnings', { count: viewer.messages })}</em> : null}
       </div>
       <div className="terminais-viewer__actions">
-        {converted ? <button type="button" className="terminais-pane__tool" onClick={() => actions.reconvert(tab)} title="Converter de novo, ignorando o cache" aria-label="Reconverter"><RefreshCw size={13} strokeWidth={1.75} /></button> : null}
-        {!converted && canConvertToPdf(tab.name) ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.viewAsPdf(tab)} title="Converter pelo LibreOffice, com o layout do documento"><FileText size={12} />Ver como PDF</button> : null}
-        <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.openDefault(tab)}><ExternalLink size={12} />Abrir no app padrão</button>
-        <button type="button" className="terminais-pane__tool" onClick={() => actions.reveal(tab)} title="Revelar no Finder" aria-label="Revelar no Finder"><FolderOpen size={13} strokeWidth={1.75} /></button>
+        {converted ? <button type="button" className="terminais-pane__tool" onClick={() => actions.reconvert(tab)} title={translate('terminal.editor.reconvertTitle')} aria-label={translate('terminal.editor.reconvert')}><RefreshCw size={13} strokeWidth={1.75} /></button> : null}
+        {!converted && canConvertToPdf(tab.name) ? <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.viewAsPdf(tab)} title={translate('terminal.editor.convertPdfTitle')}><FileText size={12} />{translate('terminal.editor.viewPdf')}</button> : null}
+        <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.openDefault(tab)}><ExternalLink size={12} />{translate('terminal.common.openDefault')}</button>
+        <button type="button" className="terminais-pane__tool" onClick={() => actions.reveal(tab)} title={translate('terminal.common.reveal')} aria-label={translate('terminal.common.reveal')}><FolderOpen size={13} strokeWidth={1.75} /></button>
       </div>
     </div>
   );
@@ -194,7 +204,7 @@ function ViewerBar({ tab, actions }) {
 
 function ViewerBody({ tab }) {
   const viewer = tab.viewer;
-  if (!viewer) return <DataState type="loading" message="Abrindo arquivo…" />;
+  if (!viewer) return <DataState type="loading" message={translate('terminal.editor.openingFile')} />;
   if (viewer.kind === 'pdf') return <PdfView tab={tab} />;
   if (viewer.kind === 'sheet') return <SheetView tab={tab} />;
   if (viewer.kind === 'docx') return <DocxView tab={tab} />;
@@ -205,11 +215,11 @@ function ViewerBody({ tab }) {
 function DiffView({ tab }) {
   if (tab.error) return <DataState type="error" message={tab.error} />;
   const text = tab.diff?.text || '';
-  if (!text.trim()) return <DataState type="empty" message="Sem diferenças em relação ao último commit." />;
+  if (!text.trim()) return <DataState type="empty" message={translate('terminal.editor.noDiff')} />;
   const lines = text.split('\n');
   return (
-    <div className="terminais-diff" role="document" aria-label={`Alterações de ${tab.name}`}>
-      {tab.diff?.untracked ? <div className="terminais-diff__note">Arquivo novo, ainda fora do Git. Comparado com vazio.</div> : null}
+    <div className="terminais-diff" role="document" aria-label={translate('terminal.editor.changesOf', { name: tab.name })}>
+      {tab.diff?.untracked ? <div className="terminais-diff__note">{translate('terminal.editor.untrackedDiff')}</div> : null}
       <pre>
         {lines.map((line, index) => {
           let kind = '';
@@ -221,7 +231,7 @@ function DiffView({ tab }) {
           return <span key={index} className={kind ? `is-${kind}` : undefined}>{line}{'\n'}</span>;
         })}
       </pre>
-      {tab.diff?.truncated ? <div className="terminais-diff__note">Diff cortado em 1 MB.</div> : null}
+      {tab.diff?.truncated ? <div className="terminais-diff__note">{translate('terminal.editor.diffTruncated')}</div> : null}
     </div>
   );
 }
@@ -232,10 +242,10 @@ function ConflictBanner({ tab, actions }) {
     return (
       <div className="terminais-banner terminais-banner--warn" role="alert">
         <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-        <span>Este arquivo foi removido do disco.</span>
+        <span>{translate('terminal.editor.removedFromDisk')}</span>
         <span className="terminais-banner__actions">
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.saveAgain(tab)}>Salvar de novo</button>
-          <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.close(tab, { force: true })}>Fechar aba</button>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.saveAgain(tab)}>{translate('terminal.editor.saveAgain')}</button>
+          <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.close(tab, { force: true })}>{translate('terminal.editor.closeTab')}</button>
         </span>
       </div>
     );
@@ -243,23 +253,24 @@ function ConflictBanner({ tab, actions }) {
   return (
     <div className="terminais-banner terminais-banner--warn" role="alert">
       <AlertTriangle size={14} strokeWidth={2} aria-hidden="true" />
-      <span>Este arquivo mudou no disco enquanto era editado.</span>
+      <span>{translate('terminal.editor.changedOnDisk')}</span>
       <span className="terminais-banner__actions">
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.reload(tab)}>Recarregar do disco</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.saveAgain(tab)}>Sobrescrever</button>
-        <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.keepConflict(tab)}>Manter o meu</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.reload(tab)}>{translate('terminal.editor.reloadDisk')}</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.saveAgain(tab)}>{translate('terminal.editor.overwrite')}</button>
+        <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.keepConflict(tab)}>{translate('terminal.editor.keepMine')}</button>
       </span>
     </div>
   );
 }
 
 function previewLabel(kind) {
-  if (kind === 'html') return 'Modo do HTML';
-  if (kind === 'csv') return 'Modo do CSV';
-  return 'Modo do Markdown';
+  if (kind === 'html') return translate('terminal.editor.htmlMode');
+  if (kind === 'csv') return translate('terminal.editor.csvMode');
+  return translate('terminal.editor.markdownMode');
 }
 
 function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = false }) {
+  useI18n();
   useRuntimeEvents(['editor'], session.id);
   const stripRef = useRef(null);
   useEffect(() => {
@@ -272,7 +283,7 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
   const viewer = activeTab && !activeTab.loading && isViewerKind(activeTab.kind);
 
   return (
-    <section className={`terminais-editor${dropping ? ' is-drop' : ''}`} aria-label="Editor">
+    <section className={`terminais-editor${dropping ? ' is-drop' : ''}`} aria-label={translate('terminal.editor.label')}>
       <div className="terminais-tabs" role="tablist" ref={stripRef}>
         {tabs.map((tab) => {
           const active = tab.id === activeTab?.id;
@@ -289,11 +300,11 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
               title={shortPath(tab.path)}
             >
               {tab.kind === 'browser' ? <Globe size={12} strokeWidth={1.75} aria-hidden="true" className="terminais-tab__icon" /> : null}
-              <span className="terminais-tab__name">{tab.name}</span>
+              <span className="terminais-tab__name">{tabName(tab)}</span>
               <button
                 type="button"
                 className="terminais-tab__close"
-                aria-label={tab.dirty ? `Fechar ${tab.name}, com alterações não salvas` : `Fechar ${tab.name}`}
+                aria-label={translate(tab.dirty ? 'terminal.editor.closeNamedDirty' : 'terminal.editor.closeNamed', { name: tabName(tab) })}
                 onClick={(event) => { event.stopPropagation(); actions.close(tab); }}
               >
                 <span className="terminais-tab__dot" aria-hidden="true" />
@@ -308,13 +319,13 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           {previewable ? (
             <div className="terminais-editor__bar">
               <div className="segmented" role="tablist" aria-label={previewLabel(activeTab.kind)}>
-                <button type="button" role="tab" aria-selected={!previewing} className={`segmented__option${!previewing ? ' is-selected' : ''}`} onClick={() => actions.setMode(activeTab, 'edit')}>{activeTab.kind === 'html' ? 'Código' : 'Editar'}</button>
-                <button type="button" role="tab" aria-selected={previewing} className={`segmented__option${previewing ? ' is-selected' : ''}`} onClick={() => actions.setMode(activeTab, 'preview')}>{activeTab.kind === 'csv' ? 'Tabela' : 'Visualizar'}</button>
+                <button type="button" role="tab" aria-selected={!previewing} className={`segmented__option${!previewing ? ' is-selected' : ''}`} onClick={() => actions.setMode(activeTab, 'edit')}>{translate(activeTab.kind === 'html' ? 'terminal.editor.code' : 'terminal.editor.edit')}</button>
+                <button type="button" role="tab" aria-selected={previewing} className={`segmented__option${previewing ? ' is-selected' : ''}`} onClick={() => actions.setMode(activeTab, 'preview')}>{translate(activeTab.kind === 'csv' ? 'terminal.editor.table' : 'terminal.editor.preview')}</button>
               </div>
               {previewing && activeTab.kind === 'html' ? (
                 <>
-                  <button type="button" className="terminais-pane__tool" onClick={() => actions.refreshPreview(activeTab)} title="Recarregar a visualização" aria-label="Recarregar a visualização"><RefreshCw size={13} strokeWidth={1.75} /></button>
-                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.openDefault(activeTab)}><ExternalLink size={12} />Abrir no navegador</button>
+                  <button type="button" className="terminais-pane__tool" onClick={() => actions.refreshPreview(activeTab)} title={translate('terminal.editor.reloadPreview')} aria-label={translate('terminal.editor.reloadPreview')}><RefreshCw size={13} strokeWidth={1.75} /></button>
+                  <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.openDefault(activeTab)}><ExternalLink size={12} />{translate('terminal.editor.openBrowser')}</button>
                 </>
               ) : null}
             </div>
@@ -323,10 +334,10 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           {activeTab.kind === 'browser' ? <BrowserPane session={session} /> : null}
           <ConflictBanner tab={activeTab} actions={actions} />
           {activeTab.loading ? (
-            <DataState type="loading" message={activeTab.kind === 'office' ? 'Convertendo com o LibreOffice. A primeira vez pode levar até um minuto.' : 'Abrindo arquivo…'} />
+            <DataState type="loading" message={translate(activeTab.kind === 'office' ? 'terminal.editor.convertingOffice' : 'terminal.editor.openingFile')} />
           ) : null}
           {!activeTab.loading && activeTab.kind === 'error' ? (
-            <DataState type="error" message={activeTab.error || 'Não foi possível abrir o arquivo.'} action={<button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.openDefault(activeTab)}>Abrir no app padrão</button>} />
+            <DataState type="error" message={activeTab.error || translate('terminal.editor.openFailed')} action={<button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.openDefault(activeTab)}>{translate('terminal.common.openDefault')}</button>} />
           ) : null}
           {!activeTab.loading && activeTab.view && !previewing ? (
             <TextHost tab={activeTab} focusKey={focusKey} />
@@ -344,18 +355,18 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           {!activeTab.loading && activeTab.kind === 'binary' ? (
             <div className="terminais-unsupported">
               <strong>{activeTab.name}</strong>
-              <span>{activeTab.error || 'Este formato não tem editor aqui.'}{activeTab.size ? ` ${fmtBytes(activeTab.size)}.` : ''}</span>
+              <span>{activeTab.error || translate('terminal.editor.unsupported')}{activeTab.size ? ` ${fmtBytes(activeTab.size)}.` : ''}</span>
               <span className="terminais-unsupported__actions">
-                {activeTab.viewerKind ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.reconvert(activeTab)}><RefreshCw size={13} />Tentar de novo</button> : null}
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.openDefault(activeTab)}><ExternalLink size={13} />Abrir no app padrão</button>
-                <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.reveal(activeTab)}><FolderOpen size={13} />Revelar no Finder</button>
+                {activeTab.viewerKind ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.reconvert(activeTab)}><RefreshCw size={13} />{translate('terminal.common.tryAgain')}</button> : null}
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.openDefault(activeTab)}><ExternalLink size={13} />{translate('terminal.common.openDefault')}</button>
+                <button type="button" className="btn btn-quiet btn-sm" onClick={() => actions.reveal(activeTab)}><FolderOpen size={13} />{translate('terminal.common.revealAction')}</button>
               </span>
             </div>
           ) : null}
           {!activeTab.loading && activeTab.kind === 'diff' ? <DiffView tab={activeTab} /> : null}
         </div>
       ) : null}
-      {session && !activeTab ? <div className="terminais-editor__none">Nenhum arquivo aberto</div> : null}
+      {session && !activeTab ? <div className="terminais-editor__none">{translate('terminal.editor.noneOpen')}</div> : null}
     </section>
   );
 }
