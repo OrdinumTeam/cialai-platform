@@ -26,6 +26,7 @@ import {
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
 import { copyPort, openBrowserTab, reconcileBrowsers, stopBrowser } from '../browser/runtime.js';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
+import { INITIAL_PANELS, choosePanel, panelCollapsed, resizePanels } from '../panels.js';
 import { baseName, fs, isPreviewable, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import SessionsPane from './SessionsPane.jsx';
@@ -39,11 +40,6 @@ import { CloseSessionDialog, ConflictDialog, DeleteDialog, NameDialog, UnsavedDi
 import { isTerminalFocused, shortcutLabel } from '../../lib/keys.js';
 import { isTerminalAppShortcut, terminalEditAction, workbenchShortcutAction } from '../shortcut-actions.js';
 import { translate, useI18n } from '../../shared/i18n.js';
-
-// Abaixo destas larguras os paineis laterais recolhem sozinhos, sem mexer
-// na preferencia do usuario, e voltam quando a janela cresce.
-const AUTO_COLLAPSE_EXPLORER = 980;
-const AUTO_COLLAPSE_SESSIONS = 720;
 
 function isDark() {
   return document.documentElement.getAttribute('data-theme') === 'dark';
@@ -73,10 +69,18 @@ export default function Workbench() {
   const [findOpen, setFindOpen] = useState(false);
   const [revealRequest, setRevealRequest] = useState(null);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
-  const [auto, setAuto] = useState({ sessions: false, explorer: false });
+  const [auto, setAuto] = useState(INITIAL_PANELS);
   const rootRef = useRef(null);
   const newButtonRef = useRef(null);
   const focusRestore = useRef(null);
+  const sessionsCollapsed = panelCollapsed(auto, 'sessions', { preferred: layout.sessionsCollapsed, focus: layout.focus });
+  const explorerCollapsed = panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
+  // Mostrar ou esconder uma coluna grava a preferencia e, em janela estreita,
+  // vence o recolhimento automatico.
+  const showPanel = (panel, visible, patch = {}) => {
+    setLayout({ [`${panel}Collapsed`]: !visible, ...patch });
+    setAuto((current) => choosePanel(current, panel, visible));
+  };
   const native = hasBridge() || isDemo();
 
   const { selected, hydrated } = getState();
@@ -158,10 +162,7 @@ export default function Workbench() {
     if (!root) return undefined;
     const observer = new ResizeObserver((entries) => {
       const width = entries[0]?.contentRect?.width || root.clientWidth;
-      setAuto((current) => {
-        const next = { explorer: width < AUTO_COLLAPSE_EXPLORER, sessions: width < AUTO_COLLAPSE_SESSIONS };
-        return next.explorer === current.explorer && next.sessions === current.sessions ? current : next;
-      });
+      setAuto((current) => resizePanels(current, width));
     });
     observer.observe(root);
     return () => observer.disconnect();
@@ -376,8 +377,8 @@ export default function Workbench() {
       if (!inTerminal && ['find', 'font-increase', 'font-decrease', 'font-reset'].includes(action)) return;
       if (action === 'open-browser' && !selected) return;
       event.preventDefault();
-      if (action === 'toggle-explorer') setLayout({ explorerCollapsed: !layout.explorerCollapsed });
-      else if (action === 'toggle-sessions') setLayout({ sessionsCollapsed: !layout.sessionsCollapsed });
+      if (action === 'toggle-explorer') showPanel('explorer', explorerCollapsed);
+      else if (action === 'toggle-sessions') showPanel('sessions', sessionsCollapsed);
       else if (action === 'open-browser') openBrowserTab(selected.id);
       else if (action === 'next-session') selectNext(1);
       else if (action === 'previous-session') selectNext(-1);
@@ -389,7 +390,7 @@ export default function Workbench() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [layout, selected]);
+  }, [layout, selected, explorerCollapsed, sessionsCollapsed]);
 
   /* ── paleta de comandos ──────────────────────────────────────────── */
 
@@ -412,8 +413,8 @@ export default function Workbench() {
     if (current && current.status !== 'disconnected') {
       items.push({ id: 'terminais:file', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.findProjectFile'), shortcut: shortcutLabel('Mod+P'), icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
     }
-    items.push({ id: 'terminais:explorer', kind: translate('terminal.palette.studio'), label: translate(layout.explorerCollapsed ? 'terminal.palette.showExplorer' : 'terminal.palette.hideExplorer'), shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => setLayout({ explorerCollapsed: !layout.explorerCollapsed }) });
-    items.push({ id: 'terminais:sessions', kind: translate('terminal.palette.studio'), label: translate(layout.sessionsCollapsed ? 'terminal.palette.showSessions' : 'terminal.palette.hideSessions'), shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => setLayout({ sessionsCollapsed: !layout.sessionsCollapsed }) });
+    items.push({ id: 'terminais:explorer', kind: translate('terminal.palette.studio'), label: translate(explorerCollapsed ? 'terminal.palette.showExplorer' : 'terminal.palette.hideExplorer'), shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => showPanel('explorer', explorerCollapsed) });
+    items.push({ id: 'terminais:sessions', kind: translate('terminal.palette.studio'), label: translate(sessionsCollapsed ? 'terminal.palette.showSessions' : 'terminal.palette.hideSessions'), shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => showPanel('sessions', sessionsCollapsed) });
     items.push({ id: 'terminais:focus', kind: translate('terminal.palette.studio'), label: translate(layout.focus ? 'terminal.work.exitFocus' : 'terminal.work.focusMode'), icon: Maximize2, run: toggleFocus });
     if (current) items.push({ id: 'terminais:restart', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.restartNamed', { name: current.name }), icon: RotateCcw, run: () => restart(current.id) });
     if (current && current.status !== 'disconnected') {
@@ -424,12 +425,9 @@ export default function Workbench() {
       }
     }
     return items;
-  }), [layout.explorerCollapsed, layout.sessionsCollapsed, layout.focus, toggleFocus, locale]);
+  }), [explorerCollapsed, sessionsCollapsed, layout.focus, toggleFocus, locale]);
 
   /* ── layout ──────────────────────────────────────────────────────── */
-
-  const sessionsCollapsed = layout.sessionsCollapsed || layout.focus || auto.sessions;
-  const explorerCollapsed = layout.explorerCollapsed || layout.focus || auto.explorer;
 
   const dragSessions = useCallback((delta) => {
     const root = rootRef.current;
@@ -560,13 +558,13 @@ export default function Workbench() {
             onJumpAttention={selectNextAttention}
             disconnectedCount={disconnected}
             onReopenAll={reopenAll}
-            onCollapse={() => setLayout({ sessionsCollapsed: true })}
+            onCollapse={() => showPanel('sessions', false)}
           />
           <Splitter orientation="vertical" label={translate('terminal.work.sessionsWidth')} onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
         </>
       ) : (
         <div className="terminais-edge terminais-edge--left">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ sessionsCollapsed: false, focus: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showSessions')} title={translate('terminal.work.showSessionsShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}><ChevronRight size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { showPanel('sessions', true, { focus: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showSessions')} title={translate('terminal.work.showSessionsShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}><ChevronRight size={12} strokeWidth={2} /></button>
         </div>
       )}
       {selected ? (
@@ -600,12 +598,12 @@ export default function Workbench() {
             onDeleteRequest={setDeleteRequest}
             notify={notify}
             revealRequest={revealRequest}
-            onCollapse={() => setLayout({ explorerCollapsed: true })}
+            onCollapse={() => showPanel('explorer', false)}
           />
         </>
       ) : (
         <div className="terminais-edge terminais-edge--right">
-          <button type="button" className="terminais-edge__btn" onClick={() => { setLayout({ explorerCollapsed: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showFiles')} title={translate('terminal.work.showFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><ChevronLeft size={12} strokeWidth={2} /></button>
+          <button type="button" className="terminais-edge__btn" onClick={() => { showPanel('explorer', true); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showFiles')} title={translate('terminal.work.showFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><ChevronLeft size={12} strokeWidth={2} /></button>
         </div>
       )}
       {pickerNode}
@@ -615,7 +613,7 @@ export default function Workbench() {
           root={selected.explorer.root}
           onClose={() => { setQuickOpen(false); setTimeout(focusSelected, 30); }}
           onOpenFile={openInEditor}
-          onRevealDir={(path) => { setLayout({ explorerCollapsed: false }); setRevealRequest({ sessionId: selected.id, path, at: Date.now() }); }}
+          onRevealDir={(path) => { showPanel('explorer', true); setRevealRequest({ sessionId: selected.id, path, at: Date.now() }); }}
         />
       ) : null}
       <CloseSessionDialog

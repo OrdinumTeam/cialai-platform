@@ -125,7 +125,13 @@ async function run() {
   runtime.selectSession(sessionId);
   const session = runtime.getSession(sessionId);
   shellFlavor = session.shellFlavor || null;
-  await until(() => row('destino'), 'a árvore listar a pasta destino');
+  // Na tela de 1024 px dos runners do Windows a coluna de arquivos recolhe
+  // sozinha; o autoteste abre pelo mesmo botão que a pessoa usa.
+  await until(() => {
+    const found = row('destino');
+    if (!found) document.querySelector('.terminais-edge--right .terminais-edge__btn')?.click();
+    return found;
+  }, 'a árvore listar a pasta destino');
   // Na primeira abertura, WebKitGTK e WebView2 ainda criam caches de fonte e de
   // renderização; os itens do terminal só começam com o xterm montado na tela.
   await until(() => document.querySelector('.terminais-terminal__host .xterm-screen'), 'o terminal montar', TERMINAL_READY_MS);

@@ -152,7 +152,7 @@ Tema do xterm em `terminals/theme.js`: fundo em `--mac-surface-2`, texto em `--m
 
 ### Layout
 
-Três regiões: Sessões com 240 px iniciais entre 200 e 360; área de trabalho com o restante; Arquivos com 260 px entre 220 e 440. Divisores redimensionam; botões, ⇧⌘J e ⇧⌘E e a paleta recolhem. Abaixo de 980 px de conteúdo o explorador recolhe sozinho; abaixo de 720 as sessões também, sem gravar a preferência. Terminal adotado pela área central e demais estacionados em `.terminais-parking` fora da tela; addon WebGL só no terminal exibido. A divisão entre editor e terminal nunca sobrepõe; mínimos cedem proporcionalmente. Modo foco recolhe as duas colunas e a barra lateral. Movimento de 140 a 240 ms só com opacidade e deslocamento; largura e altura nunca animam; acima de 60 linhas novas na árvore nada anima; tudo desliga com a preferência de menos movimento.
+Três regiões: Sessões com 240 px iniciais entre 200 e 360; área de trabalho com o restante; Arquivos com 260 px entre 220 e 440. Divisores redimensionam; botões, ⇧⌘J e ⇧⌘E e a paleta recolhem. Abaixo de 980 px de conteúdo o explorador recolhe sozinho; abaixo de 720 as sessões também, sem gravar a preferência. Botão, atalho e paleta mostram a coluna recolhida mesmo assim, até a largura cruzar o limite outra vez. Terminal adotado pela área central e demais estacionados em `.terminais-parking` fora da tela; addon WebGL só no terminal exibido. A divisão entre editor e terminal nunca sobrepõe; mínimos cedem proporcionalmente. Modo foco recolhe as duas colunas e a barra lateral. Movimento de 140 a 240 ms só com opacidade e deslocamento; largura e altura nunca animam; acima de 60 linhas novas na árvore nada anima; tudo desliga com a preferência de menos movimento.
 
 ### Persistência
 

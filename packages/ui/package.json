@@ -10,7 +10,7 @@
   },
   "scripts": {
     "check:i18n": "node scripts/check-mobile-i18n.mjs",
-    "test": "node ../../tools/check/ui-extraction.mjs && npm run check:i18n && node scripts/check-terminal-sync.mjs && node scripts/check-network.mjs && node --test scripts/check-brand.mjs scripts/check-file-kinds.mjs scripts/check-mobile-shell.mjs scripts/check-platform.mjs scripts/check-preferences.mjs scripts/check-phone-terminal.mjs scripts/check-phone-workbench.mjs scripts/tests/*.test.cjs",
+    "test": "node ../../tools/check/ui-extraction.mjs && npm run check:i18n && node scripts/check-terminal-sync.mjs && node scripts/check-network.mjs && node --test scripts/check-brand.mjs scripts/check-file-kinds.mjs scripts/check-panels.mjs scripts/check-mobile-shell.mjs scripts/check-platform.mjs scripts/check-preferences.mjs scripts/check-phone-terminal.mjs scripts/check-phone-workbench.mjs scripts/tests/*.test.cjs",
     "test:visual:phone": "node scripts/check-phone-terminal-visual.mjs"
   },
   "dependencies": {
