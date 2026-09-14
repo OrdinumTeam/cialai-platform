@@ -2293,12 +2293,19 @@ mod tests {
             "memoria da arvore muito baixa"
         );
 
-        manager.write(info.id, &[0x03]).expect("ctrl-c");
         // O exit só vai depois de o job sair do primeiro plano: no Windows a linha digitada
-        // junto do Ctrl C se perde enquanto o console entrega o sinal ao processo.
+        // junto do Ctrl C se perde enquanto o console entrega o sinal ao processo. Na CI do
+        // Windows o PowerShell às vezes ignorou o primeiro Ctrl C, então ele se repete a
+        // cada 3 s, como faria quem está no teclado.
         let deadline = Instant::now() + Duration::from_secs(15);
+        let mut next_interrupt = Instant::now();
         let mut interrupted = false;
         while Instant::now() < deadline {
+            if Instant::now() >= next_interrupt {
+                manager.write(info.id, &[0x03]).expect("ctrl-c");
+                next_interrupt = Instant::now() + Duration::from_secs(3);
+            }
+            thread::sleep(Duration::from_millis(100));
             if manager
                 .metrics()
                 .first()
@@ -2307,7 +2314,6 @@ mod tests {
                 interrupted = true;
                 break;
             }
-            thread::sleep(Duration::from_millis(100));
         }
         assert!(
             interrupted,
