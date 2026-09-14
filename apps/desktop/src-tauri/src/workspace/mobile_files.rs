@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: Apache-2.0
-#![cfg(unix)]
 //! Read-only file access rooted in a subscribed terminal's project directory.
 
 use serde::Serialize;

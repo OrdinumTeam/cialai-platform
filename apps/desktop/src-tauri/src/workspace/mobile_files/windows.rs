@@ -141,7 +141,7 @@ fn open(
 }
 
 pub fn read(home: &Path, project_roots: &[String], cwd: &Path, path: &str) -> Result<Text, String> {
-    let mut opened = open(home, project_roots, cwd, path, false)?;
+    let opened = open(home, project_roots, cwd, path, false)?;
     let size = (u64::from(opened.info.nFileSizeHigh) << 32) | u64::from(opened.info.nFileSizeLow);
     if opened.info.nNumberOfLinks != 1 || size > MAX_TEXT {
         return Err(denied());
@@ -229,4 +229,116 @@ pub fn list(
         entries,
         truncated,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    struct Fixture {
+        home: PathBuf,
+        cwd: PathBuf,
+        roots: Vec<String>,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            static NEXT: AtomicU64 = AtomicU64::new(1);
+            let home = std::env::temp_dir().join(format!(
+                "cialai-mobile-files-{}-{}",
+                std::process::id(),
+                NEXT.fetch_add(1, Ordering::Relaxed)
+            ));
+            let cwd = home.join("Projects").join("project");
+            fs::create_dir_all(cwd.join("src")).unwrap();
+            fs::write(cwd.join("src").join("main.rs"), "fn main() {}\n").unwrap();
+            Self {
+                home,
+                cwd,
+                roots: vec!["~/Projects".into()],
+            }
+        }
+
+        fn list(&self, path: &str) -> Result<Listing, String> {
+            list(&self.home, &self.roots, &self.cwd, path)
+        }
+
+        fn read(&self, path: &str) -> Result<Text, String> {
+            read(&self.home, &self.roots, &self.cwd, path)
+        }
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.home);
+        }
+    }
+
+    fn names(listing: &Listing) -> Vec<(&str, &str)> {
+        listing
+            .entries
+            .iter()
+            .map(|entry| (entry.name.as_str(), entry.kind.as_str()))
+            .collect()
+    }
+
+    #[test]
+    fn lists_and_reads_text_inside_the_project() {
+        let f = Fixture::new();
+        assert_eq!(names(&f.list("").unwrap()), vec![("src", "dir")]);
+        let src = f.list("src").unwrap();
+        assert_eq!(names(&src), vec![("main.rs", "file")]);
+        assert_eq!(src.entries[0].path, "src/main.rs");
+        assert_eq!(src.entries[0].size, 13);
+        let text = f.read("src/main.rs").unwrap();
+        assert_eq!((text.content.as_str(), text.size), ("fn main() {}\n", 13));
+        fs::write(f.cwd.join("data.bin"), [0_u8, 1, 2]).unwrap();
+        assert!(f.read("data.bin").is_err());
+    }
+
+    #[test]
+    fn hides_secrets_and_refuses_escapes_and_foreign_roots() {
+        let f = Fixture::new();
+        fs::write(f.cwd.join(".env"), "TOKEN=x\n").unwrap();
+        fs::write(f.cwd.join("id_rsa"), "key\n").unwrap();
+        fs::write(f.home.join("outside.txt"), "outside\n").unwrap();
+        assert_eq!(names(&f.list("").unwrap()), vec![("src", "dir")]);
+        for path in [
+            ".env",
+            "id_rsa",
+            "../outside.txt",
+            "src\\main.rs",
+            "",
+            "C:/Windows/win.ini",
+        ] {
+            assert!(f.read(path).is_err(), "{path} should be denied");
+        }
+        assert!(list(&f.home, &["~/elsewhere".into()], &f.cwd, "").is_err());
+        assert!(list(&f.home, &f.roots, &f.home.join("Projects"), "").is_ok());
+    }
+
+    #[test]
+    fn refuses_hard_links_and_links_that_leave_the_project() {
+        let f = Fixture::new();
+        let outside = f.home.join("outside.txt");
+        fs::write(&outside, "outside\n").unwrap();
+        fs::hard_link(&outside, f.cwd.join("linked.txt")).unwrap();
+        assert!(f.read("linked.txt").is_err());
+        assert_eq!(names(&f.list("").unwrap()), vec![("src", "dir")]);
+
+        // Criar links simbolicos exige privilegio; o runner da CI tem, uma
+        // maquina comum pode nao ter, e ai so os hard links sao conferidos.
+        if std::os::windows::fs::symlink_file(&outside, f.cwd.join("alias.txt")).is_ok() {
+            assert!(f.read("alias.txt").is_err());
+        }
+        let door = f.home.join("outside-dir");
+        fs::create_dir_all(&door).unwrap();
+        fs::write(door.join("inside.txt"), "outside\n").unwrap();
+        if std::os::windows::fs::symlink_dir(&door, f.cwd.join("door")).is_ok() {
+            assert!(f.list("door").is_err());
+            assert!(f.read("door/inside.txt").is_err());
+        }
+        assert_eq!(names(&f.list("").unwrap()), vec![("src", "dir")]);
+    }
 }

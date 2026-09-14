@@ -59,7 +59,6 @@ export default Object.freeze({
   'native.error.libreOfficeTimeout': 'O LibreOffice não terminou a conversão em 2 minutos',
   'native.error.listFolder': 'Não foi possível listar a pasta',
   'native.error.mobileFileDenied': 'Arquivo indisponível para acesso móvel.',
-  'native.error.mobileFilesUnsupported': 'Arquivos móveis indisponíveis neste sistema.',
   'native.error.mobileTextOnly': 'Somente arquivos de texto de até 128 KiB são suportados.',
   'native.error.move': 'Não foi possível mover',
   'native.error.moveInsideItself': 'Não dá para mover {name} para dentro dela mesma',

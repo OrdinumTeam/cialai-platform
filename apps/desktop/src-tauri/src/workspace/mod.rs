@@ -50,34 +50,7 @@ pub mod dragout;
 pub mod files;
 pub mod git;
 pub mod journal;
-#[cfg(unix)]
 pub mod mobile_files;
-#[cfg(target_os = "windows")]
-pub mod mobile_files {
-    use std::path::Path;
-
-    fn unavailable() -> String {
-        crate::i18n::t("native.error.mobileFilesUnsupported")
-    }
-
-    pub fn list(
-        _home: &Path,
-        _project_roots: &[String],
-        _cwd: &Path,
-        _path: &str,
-    ) -> Result<serde_json::Value, String> {
-        Err(unavailable())
-    }
-
-    pub fn read(
-        _home: &Path,
-        _project_roots: &[String],
-        _cwd: &Path,
-        _path: &str,
-    ) -> Result<serde_json::Value, String> {
-        Err(unavailable())
-    }
-}
 pub mod office;
 pub mod preview;
 pub mod procs;
