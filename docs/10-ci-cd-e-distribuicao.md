@@ -2,6 +2,22 @@
 
 A distribuição foi desenhada com GitHub Actions para desktop, núcleo do túnel e interface, e Codemagic para os celulares. Nenhum valor de credencial aparece aqui; a seção de credenciais registra somente nomes, destinos e responsabilidades.
 
+## Repositórios
+
+| Repositório | Visibilidade | Uso |
+| --- | --- | --- |
+| `OrdinumTeam/cialai-platform` | Privado | Desenvolvimento, histórico completo, CI e Codemagic enquanto o projeto não for aberto |
+| Organização `Cialai`, em https://github.com/Cialai | Pública | Destino do projeto open source quando todo o trabalho estiver concluído: código, releases dos binários de macOS, Linux e Windows, issues e contribuições. Nome do repositório a definir |
+
+A exportação para a organização `Cialai` só acontece depois da conclusão. Antes dela:
+
+1. Decidir se o público recebe o histórico completo ou um ponto de partida limpo. O histórico e os documentos internos citam caminhos locais, o Ordinum Control e o diário de execução.
+2. Revisar `docs/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
+3. Trocar o caminho do repositório em `packages/tunnel-core/go.mod` e nos imports Go do módulo, no endpoint do updater em `apps/desktop/src-tauri/tauri.conf.json` e `tools/release/check-updater.mjs`, em `apps/mobile/modules/cialai-tunnel/ios/CialaiTunnel.podspec` e nos links dos documentos.
+4. Publicar a primeira release já com o endpoint do updater apontando para a organização `Cialai`. Apps instalados só procuram atualização na URL compilada neles.
+5. Definir onde ficam o app do Codemagic e os secrets de assinatura. Workflows disparados por PR de fork nunca recebem secrets.
+6. Confirmar o contato de segurança de `SECURITY.md` e o `CODE_OF_CONDUCT.md` antes de abrir.
+
 ## Estado em 13/09/2026
 
 | Item | Estado | Situação atual |
@@ -58,10 +74,10 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Bundle e `applicationId` | `br.com.ordinum.cialai`; testes `br.com.ordinum.cialai.RunnerTests` |
 | Identificador do desktop | `br.com.ordinum.cialai` no `tauri.conf.json` |
 | Esquema de URL | `cialai`, reservado para deep links futuros |
-| App no App Store Connect | A criar com o bundle acima; o número resultante vira `APP_STORE_APP_ID` |
-| App no Codemagic | A criar apontando para `OrdinumTeam/cialai-platform`; o id vai em `CODEMAGIC_APP_ID` |
-| App no Google Play | A criar na conta Ordinum; a referência `7730543760992383205` precisa ser confirmada pelo usuário antes de qualquer publicação |
-| Projeto no Google Cloud para a conta de serviço do Play | Planejado como `cialai-platform`, com conta `cialai-play-publisher@cialai-platform.iam.gserviceaccount.com`; criação, API e papéis não foram verificados nesta linha |
+| App no App Store Connect | Criado em 13/09/2026, `APP_STORE_APP_ID` igual a `6811702125` |
+| App no Codemagic | A criar apontando para o repositório privado `OrdinumTeam/cialai-platform`; o id vai em `CODEMAGIC_APP_ID` |
+| App no Google Play | Criado em 13/09/2026 na conta `7730543760992383205`, Play App ID `4975087090602407034` |
+| Conta de serviço do Play | `ordinum-play-publisher@ordinum.iam.gserviceaccount.com`, do projeto `ordinum`, compartilhada pelos apps da Ordinum e validada pela API em 13/09/2026 |
 | Nome de exibição | Cialai |
 | Referências existentes | Control: app `6809897505` e Codemagic `6aa03dae642175d18c41fe72`; Advoris: app `6783436909`, Codemagic `6a3acb9e11b238d7837dbe12`, Play `4971975462970394779` |
 
