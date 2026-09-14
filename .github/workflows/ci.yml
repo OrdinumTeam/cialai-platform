@@ -3,6 +3,8 @@ name: CI
 
 on:
   push:
+    # Tags de release já passaram pela CI no commit da main e rodam o release.yml.
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
 

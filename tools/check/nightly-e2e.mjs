@@ -12,6 +12,7 @@ const workflow = read('.github/workflows/nightly-e2e.yml');
 assert.match(workflow, /^on:\n {2}schedule:\n {4}- cron: '\d{1,2} \d{1,2} \* \* \*'\n {2}workflow_dispatch:\n/m, 'nightly precisa de cron diário e disparo manual');
 assert.doesNotMatch(workflow, /^\s+(push|pull_request|pull_request_target):/m, 'nightly não roda em push ou PR');
 assert.match(workflow, /^permissions:\n {2}contents: read$/m);
+assert.match(workflow, /if: github\.event_name != 'schedule' \|\| github\.repository == 'Cialai\/cialai'/, 'a agenda do nightly roda só no repositório público');
 assert.ok(!workflow.includes('secrets.'), 'o nightly não pode consumir segredos');
 
 // Linux e Windows; o macOS roda o self test por tauri dev.

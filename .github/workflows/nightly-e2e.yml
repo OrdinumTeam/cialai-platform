@@ -16,6 +16,8 @@ concurrency:
 jobs:
   selftest:
     name: Self test / ${{ matrix.os }}
+    # A agenda diária roda só no repositório público; no privado o nightly fica manual.
+    if: github.event_name != 'schedule' || github.repository == 'Cialai/cialai'
     strategy:
       fail-fast: false
       matrix:

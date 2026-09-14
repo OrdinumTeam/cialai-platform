@@ -58,6 +58,9 @@ assert.ok(
   'o bundle só pode ser criado depois da suíte',
 );
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
+assert.match(workflow, /^on:\n {2}push:\n(?: {4}#.*\n)? {4}branches: \["\*\*"\]\n/m, 'tags de release não disparam a CI de novo');
+const integration = readFileSync(`${root}/.github/workflows/headscale-integration.yml`, 'utf8');
+assert.match(integration, /if: github\.event_name != 'schedule' \|\| github\.repository == 'Cialai\/cialai'/, 'a agenda da integração roda só no repositório público');
 assert.ok(
   workflow.indexOf('npm test') < workflow.indexOf('npm run test:browser'),
   'os checks de navegador rodam depois da suíte',

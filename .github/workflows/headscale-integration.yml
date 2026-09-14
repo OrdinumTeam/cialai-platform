@@ -24,6 +24,8 @@ concurrency:
 jobs:
   desktop-phone-flow:
     name: Desktop and phone through Headscale 0.29.3
+    # A agenda diária roda só no repositório público; push, PR e disparo manual valem nos dois.
+    if: github.event_name != 'schedule' || github.repository == 'Cialai/cialai'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:
