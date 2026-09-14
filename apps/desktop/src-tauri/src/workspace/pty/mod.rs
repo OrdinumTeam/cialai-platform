@@ -14,10 +14,14 @@ pub use crate::platform::ShellFlavor;
 #[cfg(test)]
 use crate::platform::ShellSpec;
 
+mod cursor;
 #[cfg(unix)]
 mod unix;
 #[cfg(target_os = "windows")]
 mod windows;
+
+pub use cursor::CursorPosition;
+pub(crate) use cursor::StartupCursorQuery;
 
 #[cfg(unix)]
 use unix as backend;

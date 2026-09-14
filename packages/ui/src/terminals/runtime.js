@@ -620,6 +620,16 @@ function spawnSize(session) {
   return { cols, rows };
 }
 
+// Onde o cursor do xterm esta quando o shell abre, contado a partir de 1. O
+// ConPTY do Windows pergunta isso ao nascer e o Rust responde por quem abriu a
+// sessao, mesmo com o historico de um reinicio acima do cursor.
+function spawnCursor(term) {
+  const buffer = term?.buffer?.active;
+  const row = Number.isInteger(buffer?.cursorY) ? buffer.cursorY + 1 : 1;
+  const col = Number.isInteger(buffer?.cursorX) ? buffer.cursorX + 1 : 1;
+  return { cursorRow: row, cursorCol: col };
+}
+
 async function spawnSession(session) {
   if (session.spawning) return;
   invalidateTerminalIdentity(session);
@@ -642,7 +652,7 @@ async function spawnSession(session) {
     session.outputChannel = channel;
     session.channelId = channel.id;
     const { cols, rows } = spawnSize(session);
-    const info = await invoke('pty_spawn', { cwd: session.cwd, cols, rows, tag: session.id, onOutput: channel });
+    const info = await invoke('pty_spawn', { cwd: session.cwd, cols, rows, ...spawnCursor(session.term), tag: session.id, onOutput: channel });
     if (session.spawnToken !== token) return;
     applyTerminalInfo(session, info);
     setStatus(session, 'running');

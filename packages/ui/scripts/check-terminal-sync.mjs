@@ -279,6 +279,19 @@ test('desktop restores saved history and resumes the agent once the new shell is
   assert.equal(JSON.stringify(s.fixture.calls.filter(call => call.cmd === 'pty_write').map(call => call.args)), JSON.stringify([{ id: session.ptyId, data: `claude --resume ${conversation}\r` }]));
 });
 
+test('the shell learns where the xterm cursor stands, below the history kept by a restart', async () => {
+  const s = scenario();
+  await s.runtime.hydrate();
+  const id = s.runtime.openSession('/fixture/mac');
+  await settle();
+  const spawns = () => s.fixture.calls.filter(call => call.cmd === 'pty_spawn');
+  assert.deepEqual([spawns().at(-1).args.cursorRow, spawns().at(-1).args.cursorCol], [1, 1]);
+  s.runtime.getSession(id).term.buffer.active = { cursorY: 6, cursorX: 3 };
+  await s.runtime.restart(id); await settle();
+  assert.equal(spawns().length, 2);
+  assert.deepEqual([spawns().at(-1).args.cursorRow, spawns().at(-1).args.cursorCol], [7, 4]);
+});
+
 test('closing a desktop session forgets its saved history', async () => {
   const s = scenario({ alive: [mac], saved: [{ id: 'mac-session', cwd: '/fixture/mac' }] });
   await s.runtime.hydrate(); await settle();

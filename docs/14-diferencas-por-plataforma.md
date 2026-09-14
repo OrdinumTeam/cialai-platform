@@ -54,6 +54,11 @@ redimensionamento e PowerShell 5.1 não oferece todos os modos de colagem do
 PowerShell 7. A preferência Terminal guarda shell, argumentos, `LANG` e prefixos
 de `PATH`; a escolha padrão muda por sistema.
 
+O ConPTY nasce perguntando a posição do cursor e só inicia o shell depois da
+resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e
+tira a pergunta da saída, então nenhum xterm responde de novo e a sessão abre
+mesmo fora da tela ou antes de o app ter a concessão de largura.
+
 ## Atalhos
 
 No macOS, Mod significa Command e mantém os glifos nativos. Linux e Windows

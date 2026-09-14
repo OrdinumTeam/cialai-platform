@@ -28,6 +28,7 @@ use crate::workspace::git::{self, GitDiff, GitStatus};
 use crate::workspace::journal::SavedTerminal;
 use crate::workspace::office::{self, ConvertResult, OfficeQueue};
 use crate::workspace::preview::PreviewRoots;
+use crate::workspace::pty::CursorPosition;
 use crate::workspace::repos::{self, RepoListing, RepoRoot};
 use crate::workspace::terminal::{
     SessionMetrics, SubscriberKey, TerminalInfo, TerminalManager, TerminalPresentation,
@@ -205,15 +206,25 @@ pub fn window_grow(window: WebviewWindow) -> bool {
 /// pode levar segundos sob pressao de memoria, e reabrir varias sessoes de
 /// uma vez somava essa espera com a janela parada.
 #[tauri::command(async)]
+#[allow(clippy::too_many_arguments)]
 pub fn pty_spawn(
     terminals: State<'_, TerminalManager>,
     cwd: String,
     cols: u16,
     rows: u16,
+    cursor_row: Option<u16>,
+    cursor_col: Option<u16>,
     tag: Option<String>,
     on_output: Channel,
 ) -> Result<TerminalInfo, String> {
-    terminals.spawn(&cwd, cols, rows, tag.as_deref().unwrap_or(""), on_output)
+    terminals.spawn(
+        &cwd,
+        cols,
+        rows,
+        CursorPosition::from_client(cursor_row, cursor_col),
+        tag.as_deref().unwrap_or(""),
+        on_output,
+    )
 }
 
 /// Medicoes reais de cada sessao viva: CPU e memoria da arvore de processos,

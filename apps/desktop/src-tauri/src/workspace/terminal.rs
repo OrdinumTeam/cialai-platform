@@ -43,7 +43,7 @@ use crate::prefs::{Preferences, PrefsState};
 use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, ProcSource, ProcState, SystemProcs};
-use super::pty::{self, ShellFlavor};
+use super::pty::{self, CursorPosition, ShellFlavor};
 use super::resume;
 
 const READ_BUFFER: usize = 16 * 1024;
@@ -652,10 +652,19 @@ impl TerminalManager {
         cwd: &str,
         cols: u16,
         rows: u16,
+        cursor: CursorPosition,
         tag: &str,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
-        self.spawn_configured(cwd, cols, rows, tag, SubscriberKey::Webview, channel)
+        self.spawn_configured(
+            cwd,
+            cols,
+            rows,
+            cursor,
+            tag,
+            SubscriberKey::Webview,
+            channel,
+        )
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -664,11 +673,12 @@ impl TerminalManager {
         cwd: &str,
         cols: u16,
         rows: u16,
+        cursor: CursorPosition,
         tag: &str,
         key: SubscriberKey,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
-        self.spawn_configured(cwd, cols, rows, tag, key, channel)
+        self.spawn_configured(cwd, cols, rows, cursor, tag, key, channel)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -677,13 +687,14 @@ impl TerminalManager {
         cwd: &str,
         cols: u16,
         rows: u16,
+        cursor: CursorPosition,
         tag: &str,
         key: SubscriberKey,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
         let prefs = self.prefs.get();
         let shell = platform::default_shell(&prefs);
-        self.spawn_for_with_spec(cwd, cols, rows, tag, key, channel, &shell, &prefs)
+        self.spawn_for_with_spec(cwd, cols, rows, cursor, tag, key, channel, &shell, &prefs)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -692,6 +703,7 @@ impl TerminalManager {
         cwd: &str,
         cols: u16,
         rows: u16,
+        cursor: CursorPosition,
         tag: &str,
         key: SubscriberKey,
         channel: Channel,
@@ -792,17 +804,31 @@ impl TerminalManager {
 
         let (tx, rx) = mpsc::sync_channel::<Message>(QUEUE_DEPTH);
         let tx_exit = tx.clone();
+        let (write_tx, write_rx) = mpsc::sync_channel::<Vec<u8>>(QUEUE_DEPTH);
+        let mut startup = pty::StartupCursorQuery::for_platform(cursor);
+        let mut answer = startup.active().then(|| write_tx.clone());
         thread::spawn(move || {
             let mut buffer = [0u8; READ_BUFFER];
             loop {
                 match reader.read(&mut buffer) {
                     Ok(0) | Err(_) => break,
                     Ok(read) => {
-                        if tx.send(Message::Data(buffer[..read].to_vec())).is_err() {
+                        let (output, reply) = startup.filter(&buffer[..read]);
+                        if let (Some(reply), Some(writer)) = (reply, answer.as_ref()) {
+                            let _ = writer.try_send(reply);
+                        }
+                        if !startup.active() {
+                            answer = None;
+                        }
+                        if !output.is_empty() && tx.send(Message::Data(output)).is_err() {
                             break;
                         }
                     }
                 }
+            }
+            let held = startup.finish();
+            if !held.is_empty() {
+                let _ = tx.send(Message::Data(held));
             }
         });
         thread::spawn(move || {
@@ -810,7 +836,6 @@ impl TerminalManager {
             let _ = tx_exit.send(Message::Exit(status));
         });
 
-        let (write_tx, write_rx) = mpsc::sync_channel::<Vec<u8>>(QUEUE_DEPTH);
         thread::spawn(move || {
             for bytes in write_rx {
                 if writer.write_all(&bytes).is_err() {
@@ -1534,7 +1559,17 @@ mod tests {
     ) -> TerminalInfo {
         let prefs = manager.prefs.get();
         manager
-            .spawn_for_with_spec(shell.cwd(), 80, 24, tag, key, channel, shell.spec(), &prefs)
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                CursorPosition::default(),
+                tag,
+                key,
+                channel,
+                shell.spec(),
+                &prefs,
+            )
             .expect("spawn")
     }
 
@@ -1929,35 +1964,13 @@ mod tests {
         );
     }
 
-    /// O ConPTY do Windows pergunta a posição do cursor com ESC[6n e só segue depois da
-    /// resposta, que no app vem do xterm.js. Nos testes quem responde é o próprio leitor.
-    fn answer_cursor_queries(
-        manager: &TerminalManager,
-        id: u32,
-        output: &[u8],
-        answered: &mut usize,
-    ) {
-        let asked = output
-            .windows(CURSOR_QUERY.len())
-            .filter(|window| *window == CURSOR_QUERY)
-            .count();
-        while *answered < asked {
-            let _ = manager.write(id, b"\x1b[1;1R");
-            *answered += 1;
-        }
-    }
-
-    const CURSOR_QUERY: &[u8] = b"\x1b[6n";
-
-    /// Espera o texto aparecer duas vezes, no eco do comando e na saída, respondendo ao
-    /// cursor. No Windows a saída de um comando seguido de exit na mesma linha pode se
-    /// perder quando o ConPTY fecha, então o teste só sai depois de ver o texto.
-    fn collect_answering_until_printed(
+    /// Espera o texto aparecer duas vezes, no eco do comando e na saída. No Windows a
+    /// saída de um comando seguido de exit na mesma linha pode se perder quando o ConPTY
+    /// fecha, então o teste só sai depois de ver o texto. A pergunta de cursor do ConPTY
+    /// é respondida pelo próprio gerenciador e nunca chega ao canal.
+    fn collect_until_printed(
         rx: &Receiver<InvokeResponseBody>,
-        manager: &TerminalManager,
-        id: u32,
         output: &mut Vec<u8>,
-        answered: &mut usize,
         text: &str,
     ) -> bool {
         let deadline = Instant::now() + Duration::from_secs(20);
@@ -1967,10 +1980,7 @@ mod tests {
                 return true;
             }
             match rx.recv_timeout(Duration::from_millis(200)) {
-                Ok(InvokeResponseBody::Raw(bytes)) => {
-                    output.extend_from_slice(&bytes);
-                    answer_cursor_queries(manager, id, output, answered);
-                }
+                Ok(InvokeResponseBody::Raw(bytes)) => output.extend_from_slice(&bytes),
                 Ok(InvokeResponseBody::Json(_)) | Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -1978,57 +1988,21 @@ mod tests {
         false
     }
 
-    fn collect_answering_until_exit(
-        rx: &Receiver<InvokeResponseBody>,
-        manager: &TerminalManager,
-        id: u32,
-    ) -> (Vec<u8>, Option<serde_json::Value>) {
-        let mut output = Vec::new();
-        let mut answered = 0;
-        let deadline = Instant::now() + Duration::from_secs(20);
-        while Instant::now() < deadline {
-            match rx.recv_timeout(Duration::from_millis(200)) {
-                Ok(InvokeResponseBody::Raw(bytes)) => {
-                    output.extend_from_slice(&bytes);
-                    answer_cursor_queries(manager, id, &output, &mut answered);
-                }
-                Ok(InvokeResponseBody::Json(json)) => {
-                    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
-                    if value["type"] == "exit" {
-                        return (output, Some(value));
-                    }
-                }
-                Err(RecvTimeoutError::Timeout) => continue,
-                Err(RecvTimeoutError::Disconnected) => break,
-            }
-        }
-        (output, None)
-    }
-
-    /// Esvazia o canal em segundo plano respondendo às perguntas de cursor do ConPTY e
-    /// devolve a mensagem de fim quando ela chega.
-    fn answer_cursor_queries_in_background(
+    /// Esvazia o canal em segundo plano e devolve a mensagem de fim quando ela chega.
+    fn drain_until_exit_in_background(
         rx: Receiver<InvokeResponseBody>,
-        manager: TerminalManager,
-        id: u32,
     ) -> thread::JoinHandle<Option<serde_json::Value>> {
         thread::spawn(move || {
-            let mut output = Vec::new();
-            let mut answered = 0;
             let deadline = Instant::now() + Duration::from_secs(60);
             while Instant::now() < deadline {
                 match rx.recv_timeout(Duration::from_millis(200)) {
-                    Ok(InvokeResponseBody::Raw(bytes)) => {
-                        output.extend_from_slice(&bytes);
-                        answer_cursor_queries(&manager, id, &output, &mut answered);
-                    }
+                    Ok(InvokeResponseBody::Raw(_)) | Err(RecvTimeoutError::Timeout) => {}
                     Ok(InvokeResponseBody::Json(json)) => {
                         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
                         if value["type"] == "exit" {
                             return Some(value);
                         }
                     }
-                    Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
@@ -2073,6 +2047,7 @@ mod tests {
                 shell.cwd(),
                 80,
                 24,
+                CursorPosition::default(),
                 "t1",
                 SubscriberKey::Webview,
                 sink,
@@ -2092,19 +2067,15 @@ mod tests {
             .write(info.id, &shell.print("pty-ok-42"))
             .expect("write");
         let mut printed = Vec::new();
-        let mut answered = 0;
-        let seen = collect_answering_until_printed(
-            &rx,
-            &manager,
-            info.id,
-            &mut printed,
-            &mut answered,
-            "pty-ok-42",
-        );
+        let seen = collect_until_printed(&rx, &mut printed, "pty-ok-42");
         assert!(seen, "saida: {}", String::from_utf8_lossy(&printed));
+        assert!(
+            !printed.windows(4).any(|window| window == b"\x1b[6n"),
+            "a pergunta de cursor do ConPTY nao pode chegar ao app"
+        );
         manager.write(info.id, &shell.exit_with(3)).expect("write");
 
-        let (_, exit) = collect_answering_until_exit(&rx, &manager, info.id);
+        let (_, exit) = collect_until_exit(&rx);
         let exit = exit.expect("mensagem de fim");
         assert_eq!(exit["type"], "exit");
         assert_eq!(exit["code"], 3);
@@ -2135,17 +2106,9 @@ mod tests {
             .write(info.id, &shell.print("historico-42"))
             .expect("write");
         let mut printed = Vec::new();
-        let mut answered = 0;
-        assert!(collect_answering_until_printed(
-            &rx,
-            &manager,
-            info.id,
-            &mut printed,
-            &mut answered,
-            "historico-42",
-        ));
+        assert!(collect_until_printed(&rx, &mut printed, "historico-42"));
         manager.write(info.id, &shell.exit_with(0)).expect("write");
-        let (_, exit) = collect_answering_until_exit(&rx, &manager, info.id);
+        let (_, exit) = collect_until_exit(&rx);
         assert!(exit.is_some());
         let history = manager.saved_history("s_journal");
         assert!(String::from_utf8_lossy(&history).contains("historico-42"));
@@ -2167,7 +2130,14 @@ mod tests {
         ));
         let _ = std::fs::remove_dir_all(&missing);
         let error = manager
-            .spawn(&missing.to_string_lossy(), 80, 24, "t2", sink)
+            .spawn(
+                &missing.to_string_lossy(),
+                80,
+                24,
+                CursorPosition::default(),
+                "t2",
+                sink,
+            )
             .unwrap_err();
         assert!(error.contains("Pasta não encontrada"));
     }
@@ -2187,6 +2157,7 @@ mod tests {
                 shell.cwd(),
                 80,
                 24,
+                CursorPosition::default(),
                 "t1",
                 SubscriberKey::Webview,
                 sink,
@@ -2210,7 +2181,7 @@ mod tests {
             Ok(())
         });
         let info = spawn_test_shell(&manager, &shell, "m1", SubscriberKey::Webview, sink);
-        let reader = answer_cursor_queries_in_background(rx, manager.clone(), info.id);
+        let reader = drain_until_exit_in_background(rx);
         // Espera o prompt: o shell em primeiro plano e sem job.
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut idle = false;

@@ -11,6 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use super::{Connection, lock, protocol};
 use crate::commands;
 use crate::i18n::{t, tf};
+use crate::workspace::pty::CursorPosition;
 use crate::workspace::terminal::TerminalManager;
 
 fn arg<T: DeserializeOwned>(args: &Value, name: &str) -> Result<T, String> {
@@ -113,6 +114,7 @@ pub(super) fn dispatch(
                     &cwd,
                     arg(&args, "cols")?,
                     arg(&args, "rows")?,
+                    CursorPosition::from_client(arg(&args, "cursorRow")?, arg(&args, "cursorCol")?),
                     tag.as_deref().unwrap_or(""),
                     conn.key(),
                     channel,
