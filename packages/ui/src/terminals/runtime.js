@@ -788,11 +788,11 @@ async function resumeAgent(session, plan) {
   }
 }
 
-// WebGL sem aceleracao, como o SwiftShader do WebView2 numa maquina sem GPU
-// ou o driver basico do Windows em maquinas virtuais e acesso remoto, deixa o
-// xterm mais lento que o renderizador DOM e chegou a travar a pagina no runner
-// do Windows. A GPU e conferida no primeiro contexto do xterm e, se for por
-// software, todos os terminais seguem no DOM.
+// GPU que desenha o WebGL do xterm, lida do proprio contexto do terminal e
+// guardada para diagnostico. O runner do Windows sem GPU usa SwiftShader, e ali
+// a pagina ficou lenta com WebGL e deixou de responder ao WebDriver tambem ao
+// trocar para o DOM; ate existir evidencia num WebView2 real, o renderizador
+// nao muda e so a GPU fica registrada.
 const SOFTWARE_GL = /swiftshader|llvmpipe|softpipe|software|basic render/i;
 const renderer = { gpu: '', software: false };
 
@@ -816,7 +816,7 @@ function webglGpu(addon) {
 }
 
 function loadWebgl(session) {
-  if (session.webgl || renderer.software) return;
+  if (session.webgl) return;
   try {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
@@ -824,14 +824,11 @@ function loadWebgl(session) {
       session.webgl = null;
     });
     session.term.loadAddon(addon);
-    renderer.gpu = webglGpu(addon) || renderer.gpu;
-    if (isSoftwareRenderer(renderer.gpu)) {
-      renderer.software = true;
-      addon.dispose();
-      session.webgl = null;
-      return;
-    }
     session.webgl = addon;
+    if (!renderer.gpu) {
+      renderer.gpu = webglGpu(addon);
+      renderer.software = isSoftwareRenderer(renderer.gpu);
+    }
   } catch (_error) {
     // Sem WebGL o xterm segue no renderizador DOM.
     session.webgl = null;

@@ -292,22 +292,19 @@ test('the shell learns where the xterm cursor stands, below the history kept by 
   assert.deepEqual([spawns().at(-1).args.cursorRow, spawns().at(-1).args.cursorCol], [7, 4]);
 });
 
-test('software WebGL keeps every terminal on the DOM renderer', async () => {
+test('the terminal records a software WebGL GPU without changing the renderer', async () => {
   const s = scenario();
   const names = ['Google SwiftShader', 'ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)), SwiftShader driver)', 'ANGLE (Microsoft, Microsoft Basic Render Driver Direct3D11 vs_5_0 ps_5_0, D3D11)', 'llvmpipe (LLVM 15.0.7, 256 bits)'];
   for (const name of names) assert.equal(s.runtime.isSoftwareRenderer(name), true, name);
   for (const name of ['Apple M2', 'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)', 'Mali-G78', 'Adreno (TM) 730', '']) assert.equal(s.runtime.isSoftwareRenderer(name), false, name);
   s.fixture.glRenderer = names[1];
   await s.runtime.hydrate();
-  const first = s.runtime.openSession('/fixture/one');
-  const second = s.runtime.openSession('/fixture/two');
+  const id = s.runtime.openSession('/fixture/one');
   await settle();
-  s.runtime.hostTerminal(first, host()); await settle();
-  assert.equal(s.runtime.getSession(first).webgl, null);
-  assert.equal(s.fixture.webglDisposed, 1);
-  s.runtime.hostTerminal(second, host()); await settle();
-  assert.equal(s.fixture.webglDisposed, 1, 'the second terminal does not try WebGL again');
-  assert.deepEqual({ ...s.runtime.terminalRenderer() }, { webgl: false, gpu: names[1], software: true });
+  s.runtime.hostTerminal(id, host()); await settle();
+  assert.ok(s.runtime.getSession(id).webgl, 'WebGL stays loaded until a real WebView2 confirms the DOM renderer helps');
+  assert.equal(s.fixture.webglDisposed, undefined);
+  assert.deepEqual({ ...s.runtime.terminalRenderer() }, { webgl: true, gpu: names[1], software: true });
 });
 
 test('hardware WebGL stays on for the hosted terminal', async () => {

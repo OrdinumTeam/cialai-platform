@@ -59,6 +59,11 @@ resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e
 tira a pergunta da saída, então nenhum xterm responde de novo e a sessão abre
 mesmo fora da tela ou antes de o app ter a concessão de largura.
 
+O terminal exibido usa WebGL. Num runner do Windows sem GPU o WebView2 desenha
+esse WebGL por SwiftShader e a página ficou lenta a ponto de não responder ao
+WebDriver; o app registra a GPU do contexto do xterm para diagnóstico, e a
+troca para o renderizador DOM nesses casos aguarda teste num WebView2 real.
+
 ## Atalhos
 
 No macOS, Mod significa Command e mantém os glifos nativos. Linux e Windows
