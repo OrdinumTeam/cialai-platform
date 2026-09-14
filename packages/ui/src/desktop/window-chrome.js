@@ -22,6 +22,10 @@ export function windowControlLabels(t = translate) {
   return Object.freeze({ minimize: t('desktop.window.minimize'), maximize: t('desktop.window.maximize'), restore: t('desktop.window.restore'), close: t('desktop.window.close') });
 }
 
+// Contrato legado dos checks e consumidores sem reatividade. A interface usa
+// windowControlLabels para acompanhar mudanças de idioma em tempo de execução.
+export const WINDOW_CONTROL_LABELS = windowControlLabels();
+
 // Itens do botão de menu, na ordem da menubar do macOS. `label` recebe uma
 // combinação como 'Mod+T' e devolve o rótulo do sistema.
 export function appMenuItems(actions, views = [], { label = () => '', t = translate } = {}) {
@@ -36,7 +40,7 @@ export function appMenuItems(actions, views = [], { label = () => '', t = transl
     item('command-palette', t('desktop.palette.title'), 'Mod+K', 'openPalette'),
     item('toggle-sidebar', t('desktop.action.toggleSidebar'), '', 'toggleSidebar'),
     { separator: true },
-    item('appearance-system', t('desktop.appearance.system'), '', 'setAppearance', 'system'),
+    item('appearance-system', t('desktop.appearance.systemMenu'), '', 'setAppearance', 'system'),
     item('appearance-light', t('desktop.appearance.light'), '', 'setAppearance', 'light'),
     item('appearance-dark', t('desktop.appearance.dark'), '', 'setAppearance', 'dark'),
     { separator: true },

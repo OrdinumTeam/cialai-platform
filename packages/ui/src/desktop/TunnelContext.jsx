@@ -20,11 +20,11 @@ import { translate, useI18n } from './i18n.js';
 const DESKTOP_ID_KEY = 'cialai_desktop_id';
 const TunnelContext = createContext(null);
 
-const demoNetwork = Object.freeze({
+const demoNetwork = () => ({
   controlUrl: 'https://headscale.cialai.local',
   userId: '42',
   userName: 'alice',
-  desktopName: 'Mac do estúdio',
+  desktopName: translate('desktop.demo.computerName'),
   requireApproval: false,
   keepAwakeWhilePaired: true,
 });
@@ -42,10 +42,10 @@ const demoNode = Object.freeze({
   peers: [],
 });
 
-const demoDeviceList = Object.freeze([
-  { id: 'dev_iphone', name: 'iPhone de Ana', model: 'iPhone 16 Pro', platform: 'ios', app: '0.1.0', ip4: '100.64.0.21', lastSeenAt: new Date(Date.now() - 24_000).toISOString(), pairedAt: '2026-09-10T15:20:00Z', online: true, revoked: false },
-  { id: 'dev_ipad', name: 'iPad do estúdio', model: 'iPad Air', platform: 'ios', app: '0.1.0', ip4: '100.64.0.22', lastSeenAt: new Date(Date.now() - 4_200_000).toISOString(), pairedAt: '2026-09-08T11:00:00Z', online: false, revoked: false },
-]);
+const demoDeviceList = () => [
+  { id: 'dev_iphone', name: translate('desktop.demo.iphoneName'), model: 'iPhone 16 Pro', platform: 'ios', app: '0.1.0', ip4: '100.64.0.21', lastSeenAt: new Date(Date.now() - 24_000).toISOString(), pairedAt: '2026-09-10T15:20:00Z', online: true, revoked: false },
+  { id: 'dev_ipad', name: translate('desktop.demo.ipadName'), model: 'iPad Air', platform: 'ios', app: '0.1.0', ip4: '100.64.0.22', lastSeenAt: new Date(Date.now() - 4_200_000).toISOString(), pairedAt: '2026-09-08T11:00:00Z', online: false, revoked: false },
+];
 
 function previewMode() {
   try { return new URLSearchParams(window.location.search).get('tunnel') === 'demo'; } catch (_error) { return false; }
@@ -72,7 +72,7 @@ function getOrCreateDesktopId() {
 }
 
 function demoResponse(command, args, devices) {
-  if (command === 'control.users.list') return { users: [{ id: '42', name: 'alice', displayName: 'Ana' }, { id: '51', name: 'equipe', displayName: 'Equipe Cialai' }] };
+  if (command === 'control.users.list') return { users: [{ id: '42', name: 'alice', displayName: 'Ana' }, { id: '51', name: 'equipe', displayName: translate('desktop.demo.teamName') }] };
   if (command === 'control.users.create') return { user: { id: '73', name: args.name, displayName: args.displayName } };
   if (command === 'node.status' || command === 'node.up') return demoNode;
   if (command === 'node.down') return { state: 'stopped', peers: [] };
@@ -83,7 +83,10 @@ function demoResponse(command, args, devices) {
     return { pairId: `p_demo_${now}`, payload: `CIALAI1.demo-${now}`, expiresAt: new Date(now + PAIR_TTL_SECONDS * 1000).toISOString(), preAuthKeyId: 7 };
   }
   if (command === 'devices.list') return { devices };
-  if (command === 'logs.tail') return { lines: ['{"level":"info","message":"rede pronta"}', '{"level":"info","message":"borda acessível"}'] };
+  if (command === 'logs.tail') return { lines: [
+    JSON.stringify({ level: 'info', message: translate('desktop.demo.networkReady') }),
+    JSON.stringify({ level: 'info', message: translate('desktop.demo.edgeReachable') }),
+  ] };
   return {};
 }
 
@@ -91,12 +94,12 @@ export function TunnelProvider({ children }) {
   const { locale } = useI18n();
   const demo = previewMode();
   const native = isTauri();
-  const [network, setNetwork] = useState(demo ? demoNetwork : null);
+  const [network, setNetwork] = useState(() => demo ? demoNetwork() : null);
   const [snapshot, setSnapshot] = useState(() => {
     if (!demo) return initialTunnelSnapshot(false);
     return { ...initialTunnelSnapshot(true), supervisor: 'running', node: demoNode, edge: { state: 'running', port: EDGE_PORT } };
   });
-  const [devices, setDevices] = useState(demo ? [...demoDeviceList] : []);
+  const [devices, setDevices] = useState(() => demo ? demoDeviceList() : []);
   const devicesRef = useRef(devices);
   devicesRef.current = devices;
   const [pairEvent, setPairEvent] = useState(null);
@@ -104,6 +107,15 @@ export function TunnelProvider({ children }) {
   const [secretStatus, setSecretStatus] = useState(demo ? { present: true, fallback: false, prefix: 'hskey-api-demo', expiresAt: demoKeyExpiry } : null);
   const [lastError, setLastError] = useState('');
   const restoringRef = useRef(false);
+
+  useEffect(() => {
+    if (!demo) return;
+    setNetwork((current) => current ? { ...current, desktopName: translate('desktop.demo.computerName') } : current);
+    setDevices((current) => current.map((device) => ({
+      ...device,
+      name: translate(device.id === 'dev_iphone' ? 'desktop.demo.iphoneName' : 'desktop.demo.ipadName'),
+    })));
+  }, [demo, locale]);
 
   const call = useCallback(async (command, args = {}) => {
     if (demo) return demoResponse(command, args, devicesRef.current);
@@ -225,7 +237,7 @@ export function TunnelProvider({ children }) {
     setPairEvent(null);
     const pair = await call('pair.begin', { ttlSeconds: PAIR_TTL_SECONDS });
     if (demo && new URLSearchParams(window.location.search).get('approval') === '1') {
-      setTimeout(() => setPairEvent({ event: 'pair.requested', data: { pairId: pair.pairId, code: '4827', device: { name: 'iPhone de Ana', model: 'iPhone 16 Pro' } } }), 500);
+      setTimeout(() => setPairEvent({ event: 'pair.requested', data: { pairId: pair.pairId, code: '4827', device: { name: translate('desktop.demo.iphoneName'), model: 'iPhone 16 Pro' } } }), 500);
     }
     return pair;
   }, [call, demo]);
@@ -280,6 +292,6 @@ export function TunnelProvider({ children }) {
 
 export function useTunnel() {
   const value = useContext(TunnelContext);
-  if (!value) throw new Error('TunnelProvider is missing');
+  if (!value) throw new Error('tunnel_provider_missing');
   return value;
 }
