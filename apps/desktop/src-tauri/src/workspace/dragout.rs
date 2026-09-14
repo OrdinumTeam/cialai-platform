@@ -55,7 +55,7 @@ pub fn existing_paths(paths: &[String]) -> FsResult<Vec<PathBuf>> {
     if valid.is_empty() {
         return Err(FsError {
             code: "not_found".into(),
-            message: "Nada para arrastar: o item não existe mais.".into(),
+            message: crate::i18n::t("native.error.dragMissing"),
         });
     }
     Ok(valid)
@@ -97,12 +97,12 @@ pub fn start(window: &WebviewWindow, paths: Vec<String>) -> FsResult<()> {
         })
         .map_err(|error| FsError {
             code: "io".into(),
-            message: format!("Não deu para chegar à thread principal: {error}"),
+            message: crate::i18n::tf("native.error.dragMainThread", &[("error", &error)]),
         })?;
     receiver.recv_timeout(START_TIMEOUT).unwrap_or_else(|_| {
         Err(FsError {
             code: "timeout".into(),
-            message: "A thread principal não respondeu ao arraste.".into(),
+            message: crate::i18n::t("native.error.dragNoResponse"),
         })
     })
 }
@@ -202,7 +202,7 @@ mod platform {
     fn gesture_error() -> FsError {
         FsError {
             code: "gesture".into(),
-            message: "O botão do mouse já foi solto.".into(),
+            message: crate::i18n::t("native.error.dragReleased"),
         }
     }
 
@@ -236,7 +236,7 @@ mod platform {
     pub fn begin(window: &WebviewWindow, paths: &[PathBuf]) -> FsResult<()> {
         let mtm = MainThreadMarker::new().ok_or_else(|| FsError {
             code: "io".into(),
-            message: "O arraste precisa começar na thread principal.".into(),
+            message: crate::i18n::t("native.error.dragThread"),
         })?;
         if NSEvent::pressedMouseButtons() & 1 == 0 {
             return Err(gesture_error());
@@ -300,7 +300,7 @@ mod platform {
     pub fn begin(_window: &WebviewWindow, _paths: &[PathBuf]) -> FsResult<()> {
         Err(FsError {
             code: "unsupported".into(),
-            message: "Arraste nativo só existe no macOS.".into(),
+            message: crate::i18n::t("native.error.dragUnsupported"),
         })
     }
 }

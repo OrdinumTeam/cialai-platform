@@ -13,6 +13,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::i18n::{t, tf};
 use crate::platform::{self, PlatformInfo, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 use crate::tunnel::{RpcProblem, SecretStatus, Supervisor};
@@ -344,6 +345,22 @@ pub fn pty_prune(terminals: State<'_, TerminalManager>, keep: Vec<String>) {
     terminals.prune(&keep);
 }
 
+/// Idioma escolhido na interface para menu, dialogos e mensagens nativas.
+/// Fica gravado para o menu e a confirmacao de saida da proxima abertura.
+#[tauri::command]
+pub fn app_set_locale(app: AppHandle, locale: String) -> String {
+    let locale = crate::i18n::set_locale(&locale);
+    match app.path().app_config_dir() {
+        Ok(dir) => {
+            if let Err(error) = crate::i18n::persist(&dir, locale) {
+                crate::diagnostics::note(&format!("idioma nao gravado: {error}"));
+            }
+        }
+        Err(error) => crate::diagnostics::note(&format!("idioma nao gravado: {error}")),
+    }
+    locale.to_string()
+}
+
 /// Sair pelo menu: pede confirmacao quando ha terminais abertos.
 #[tauri::command]
 pub fn app_request_quit(app: AppHandle) {
@@ -503,14 +520,17 @@ pub fn shell_probe(
 ) -> Result<ShellProbe, String> {
     let cwd = Path::new(cwd.trim());
     if !cwd.is_dir() {
-        return Err(format!("Pasta não encontrada: {}", cwd.display()));
+        return Err(tf(
+            "native.error.folderNotFoundPath",
+            &[("path", &cwd.display())],
+        ));
     }
     let mut preferences = prefs.get();
     preferences.terminal.shell = Some(shell.trim().into());
     preferences.terminal.args.clear();
     let shell = platform::default_shell(&preferences);
     if shell.path.trim().is_empty() {
-        return Err("Informe o caminho do shell.".into());
+        return Err(t("native.error.shellPathRequired"));
     }
     let home = app.path().home_dir().map_err(|error| error.to_string())?;
     let pair = native_pty_system()
@@ -520,7 +540,7 @@ pub fn shell_probe(
             pixel_width: 0,
             pixel_height: 0,
         })
-        .map_err(|error| format!("Não foi possível abrir o PTY: {error}"))?;
+        .map_err(|error| tf("native.error.ptyOpen", &[("error", &error)]))?;
     let mut command = CommandBuilder::new(&shell.path);
     for arg in &shell.args {
         command.arg(arg);
@@ -537,7 +557,7 @@ pub fn shell_probe(
     let mut child = pair
         .slave
         .spawn_command(command)
-        .map_err(|error| format!("Não foi possível iniciar o shell: {error}"))?;
+        .map_err(|error| tf("native.error.shellStart", &[("error", &error)]))?;
     drop(pair.slave);
     let mut reader = pair
         .master
@@ -555,11 +575,8 @@ pub fn shell_probe(
         .unwrap_or_default();
     let _ = child.kill();
     let _ = child.wait();
-    let output = if bytes.is_empty() {
-        "PTY aberto; o shell não escreveu texto inicial.".into()
-    } else {
-        String::from_utf8_lossy(&bytes).into_owned()
-    };
+    // Sem texto inicial a interface mostra o aviso no idioma dela.
+    let output = String::from_utf8_lossy(&bytes).into_owned();
     Ok(ShellProbe { shell, output })
 }
 

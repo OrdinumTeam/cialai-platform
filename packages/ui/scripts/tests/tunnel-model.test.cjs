@@ -83,3 +83,21 @@ test('a lista de dispositivos reage a renomeacao e revogacao', async () => {
   assert.deepEqual(updateDevicesFromEvent(devices, { deviceId: 'dev_1', name: 'Celular de Ana' })[0].name, 'Celular de Ana');
   assert.deepEqual(updateDevicesFromEvent(devices, { deviceId: 'dev_2', revoked: true }).map((device) => device.id), ['dev_1']);
 });
+
+test('erros do tunel com codigo conhecido seguem o idioma ativo', async () => {
+  const { TUNNEL_ERROR_KEYS, tunnelErrorMessage } = await load();
+  const { setLocale, translate } = await import('../../src/shared/i18n.js');
+  setLocale('es');
+  assert.equal(tunnelErrorMessage({ code: 'control_unreachable', message: 'Não foi possível alcançar o servidor Headscale.' }), 'No se pudo acceder al servidor Headscale.');
+  assert.equal(tunnelErrorMessage({ error: { code: 'node_offline', message: 'O computador não está acessível na rede.' } }), 'La computadora no está accesible en la red.');
+  assert.equal(tunnelErrorMessage({ code: 'codigo_novo', message: 'Texto do sidecar' }), 'Texto do sidecar');
+  assert.equal(tunnelErrorMessage(null), 'El túnel no respondió.');
+  setLocale('en');
+  assert.equal(tunnelErrorMessage({ code: 'tunnel_start', message: 'Não foi possível iniciar o núcleo do túnel: ENOENT' }), 'Could not start the tunnel core.');
+  for (const locale of ['pt-BR', 'en', 'es']) {
+    setLocale(locale);
+    for (const key of Object.values(TUNNEL_ERROR_KEYS)) assert.ok(translate(key).length > 0, `${locale} ${key}`);
+  }
+  assert.ok(Object.keys(TUNNEL_ERROR_KEYS).length >= 40);
+  setLocale('pt-BR');
+});

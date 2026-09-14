@@ -38,6 +38,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter};
 
+use crate::i18n::{t, tf};
 use crate::platform;
 
 use super::procs;
@@ -378,7 +379,7 @@ fn install_progress(line: &str, current: &mut String) -> Option<String> {
         } else {
             name.to_string()
         };
-        return Some(format!("Baixando {current}"));
+        return Some(tf("native.browser.downloading", &[("name", &*current)]));
     }
     // `|■■■■■■        |  40% of 162.4 MiB`
     let (_, tail) = line.strip_prefix('|')?.rsplit_once('|')?;
@@ -389,7 +390,14 @@ fn install_progress(line: &str, current: &mut String) -> Option<String> {
     } else {
         current.as_str()
     };
-    Some(format!("Baixando {name}, {percent:.0}% de {}", size.trim()))
+    Some(tf(
+        "native.browser.downloadingProgress",
+        &[
+            ("name", &name),
+            ("percent", &format!("{percent:.0}")),
+            ("size", &size.trim()),
+        ],
+    ))
 }
 
 /// Roda o instalador no shell do sistema e repassa o andamento a `progress`.
@@ -436,18 +444,18 @@ fn run_install(
     platform::configure_background_command(&mut command);
     let mut child = command
         .spawn()
-        .map_err(|error| format!("Não foi possível iniciar a instalação do Chromium: {error}"))?;
+        .map_err(|error| tf("native.error.chromiumInstallStart", &[("error", &error)]))?;
     let pid = child.id();
     #[cfg(target_os = "windows")]
     let install_job = crate::platform::win_job::assign(pid).map_err(|error| {
         let _ = child.kill();
         let _ = child.wait();
-        format!("Não foi possível isolar a instalação do Chromium: {error}")
+        tf("native.error.chromiumInstallIsolate", &[("error", &error)])
     })?;
     let stdout = child
         .stdout
         .take()
-        .ok_or_else(|| "Sem saída do instalador do Chromium".to_string())?;
+        .ok_or_else(|| t("native.error.chromiumInstallNoOutput"))?;
     let (tx, rx) = std::sync::mpsc::channel::<String>();
     thread::Builder::new()
         .name("browser-install".to_string())
@@ -501,8 +509,9 @@ fn run_install(
             } else {
                 format!("{seconds} s")
             };
-            return Err(format!(
-                "A instalação do Chromium passou de {limit} e foi interrompida"
+            return Err(tf(
+                "native.error.chromiumInstallLimit",
+                &[("limit", &limit)],
             ));
         }
     };
@@ -514,17 +523,21 @@ fn run_install(
         return Ok(());
     }
     if status.code() == Some(127) {
-        return Err("O npx não foi encontrado para instalar o Chromium. Instale o Node, ou aponte o binário em Preferências".to_string());
+        return Err(t("native.error.npxMissing"));
     }
     let joined = tail.join(" ");
     let detail = joined.trim().trim_end_matches('.');
     let detail = if detail.is_empty() {
-        format!("código {}", status.code().unwrap_or(-1))
+        tf(
+            "native.error.exitCode",
+            &[("code", &status.code().unwrap_or(-1))],
+        )
     } else {
         detail.to_string()
     };
-    Err(format!(
-        "A instalação do Chromium falhou: {detail}. Rode npx playwright install chromium no terminal, ou aponte o binário em Preferências"
+    Err(tf(
+        "native.error.chromiumInstallFailed",
+        &[("detail", &detail)],
     ))
 }
 
@@ -741,14 +754,13 @@ impl BrowserManager {
             return Ok(binary);
         }
         let cache = platform::playwright_cache(&self.home);
-        fs::create_dir_all(&self.root).map_err(|error| {
-            format!("Não foi possível preparar a instalação do Chromium: {error}")
-        })?;
+        fs::create_dir_all(&self.root)
+            .map_err(|error| tf("native.error.chromiumInstallPrepare", &[("error", &error)]))?;
         let app = self.app.clone();
         let notify = move |running: bool, message: String| {
             let _ = app.emit(EVENT_BROWSER_INSTALL, BrowserInstall { running, message });
         };
-        notify(true, "Preparando o download do Chromium".to_string());
+        notify(true, t("native.browser.preparingDownload"));
         let result = run_install(
             INSTALL_SCRIPT,
             &self.home,
@@ -760,9 +772,9 @@ impl BrowserManager {
         notify(false, String::new());
         result?;
         find_binary(&self.home, preferred).ok_or_else(|| {
-            format!(
-                "A instalação terminou, mas nenhum Chromium apareceu em {}",
-                cache.to_string_lossy()
+            tf(
+                "native.error.chromiumMissingAfterInstall",
+                &[("path", &cache.to_string_lossy())],
             )
         })
     }
@@ -779,14 +791,14 @@ impl BrowserManager {
         start_url: &str,
     ) -> Result<BrowserInfo, String> {
         if session_id.is_empty() || session_id.contains('/') || session_id.contains("..") {
-            return Err("Identificador de sessão inválido".to_string());
+            return Err(t("native.error.sessionIdInvalid"));
         }
         if !allowed_origin(origin) {
-            return Err("Origem recusada".to_string());
+            return Err(t("native.error.originRefused"));
         }
         let cwd_path = Path::new(cwd);
         if !cwd_path.is_absolute() || !cwd_path.is_dir() {
-            return Err(format!("Pasta não encontrada: {cwd}"));
+            return Err(tf("native.error.folderNotFoundPath", &[("path", &cwd)]));
         }
         if let Some(existing) = self.status(session_id) {
             return Ok(existing);
@@ -805,7 +817,7 @@ impl BrowserManager {
         };
         let profile = self.profile_dir(session_id);
         fs::create_dir_all(&profile)
-            .map_err(|error| format!("Não foi possível criar o perfil: {error}"))?;
+            .map_err(|error| tf("native.error.profileCreate", &[("error", &error)]))?;
         // Um lancamento anterior pode ter deixado o lock do perfil.
         let _ = fs::remove_file(profile.join("SingletonLock"));
         let _ = fs::remove_file(profile.join("SingletonSocket"));
@@ -833,13 +845,13 @@ impl BrowserManager {
         platform::configure_background_command(&mut command);
         let mut child = command
             .spawn()
-            .map_err(|error| format!("Não foi possível iniciar o Chromium: {error}"))?;
+            .map_err(|error| tf("native.error.chromiumStart", &[("error", &error)]))?;
         let pid = child.id();
         #[cfg(target_os = "windows")]
         let job = crate::platform::win_job::assign(pid).map_err(|error| {
             let _ = child.kill();
             let _ = child.wait();
-            format!("Não foi possível isolar o Chromium: {error}")
+            tf("native.error.chromiumIsolate", &[("error", &error)])
         })?;
         let stderr = child
             .stderr
@@ -902,9 +914,9 @@ impl BrowserManager {
             let _ = job.terminate();
             let _ = child.wait();
             let detail = tail.lock().map(|guard| guard.clone()).unwrap_or_default();
-            return Err(format!(
-                "O Chromium não respondeu em 20 s. {}",
-                detail.trim()
+            return Err(tf(
+                "native.error.chromiumTimeout",
+                &[("detail", &detail.trim())],
             ));
         };
         let owner = Owner {

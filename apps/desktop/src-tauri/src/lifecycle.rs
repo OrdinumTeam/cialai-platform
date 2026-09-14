@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
 
+use crate::i18n::{locale, t, translate};
 use crate::workspace::terminal::TerminalManager;
 
 /// Um alerta por vez, mesmo com varios pedidos seguidos.
@@ -33,12 +34,12 @@ pub fn request_exit(app: &AppHandle) {
     }
     let handle = app.clone();
     app.dialog()
-        .message(exit_message(live))
-        .title("Sair do Cialai?")
+        .message(exit_message(locale(), live))
+        .title(t("native.quit.title"))
         .kind(MessageDialogKind::Warning)
         .buttons(MessageDialogButtons::OkCancelCustom(
-            "Sair".into(),
-            "Cancelar".into(),
+            t("native.quit.confirm"),
+            t("native.quit.cancel"),
         ))
         .show(move |confirmed| {
             ASKING.store(false, Ordering::SeqCst);
@@ -48,15 +49,13 @@ pub fn request_exit(app: &AppHandle) {
         });
 }
 
-fn exit_message(live: usize) -> String {
+fn exit_message(locale: &str, live: usize) -> String {
     let count = if live == 1 {
-        "Há 1 terminal aberto.".to_string()
+        translate(locale, "native.quit.openOne", &[])
     } else {
-        format!("Há {live} terminais abertos.")
+        translate(locale, "native.quit.openMany", &[("count", &live)])
     };
-    format!(
-        "{count} Sair encerra os shells e os agentes que rodam neles. O histórico e as conversas de Claude Code e Codex ficam salvos e voltam quando você reabrir as sessões."
-    )
+    format!("{count} {}", translate(locale, "native.quit.detail", &[]))
 }
 
 #[cfg(test)]
@@ -65,7 +64,9 @@ mod tests {
 
     #[test]
     fn exit_message_counts_the_terminals() {
-        assert!(exit_message(1).starts_with("Há 1 terminal aberto. "));
-        assert!(exit_message(4).starts_with("Há 4 terminais abertos. "));
+        assert!(exit_message("pt-BR", 1).starts_with("Há 1 terminal aberto. "));
+        assert!(exit_message("pt-BR", 4).starts_with("Há 4 terminais abertos. "));
+        assert!(exit_message("en", 4).starts_with("There are 4 open terminals. Quitting ends"));
+        assert!(exit_message("es", 1).starts_with("Hay 1 terminal abierto. Salir finaliza"));
     }
 }

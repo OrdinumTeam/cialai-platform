@@ -7,7 +7,7 @@ import CssBaseline from '@mui/material/CssBaseline';
 import { ThemeProvider } from '@mui/material/styles';
 import { ToastProvider } from '../components/ui.jsx';
 import ContentArea from '../components/ContentArea.jsx';
-import { closeCurrentWindow, invoke, watchFullscreen } from '../lib/native.js';
+import { closeCurrentWindow, invoke, isTauri, watchFullscreen } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
 import CommandPalette from './CommandPalette.jsx';
@@ -148,6 +148,10 @@ function DesktopShell() {
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
+  // Menu, diálogos e mensagens do núcleo seguem o idioma da interface.
+  useEffect(() => {
+    if (isTauri()) invoke('app_set_locale', { locale }).catch((error) => console.error('[locale]', error));
+  }, [locale]);
   useEffect(() => {
     installNativeMenu(actionsRef, views, locale).catch((error) => console.error('[menu]', error));
     return installDomShortcuts(actionsRef, views);

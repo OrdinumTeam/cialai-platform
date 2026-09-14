@@ -8,7 +8,10 @@
 pub mod bridge;
 mod commands;
 mod diagnostics;
+mod i18n;
 mod lifecycle;
+#[cfg(target_os = "macos")]
+mod menu;
 pub mod platform;
 mod prefs;
 pub mod tunnel;
@@ -24,6 +27,8 @@ static APP_STOPPED: AtomicBool = AtomicBool::new(false);
 
 pub fn run() {
     let app = tauri::Builder::default()
+        // O menu localizado entra no setup, quando o idioma gravado ja foi lido.
+        .enable_macos_default_menu(false)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
@@ -77,6 +82,7 @@ pub fn run() {
             commands::pty_forget,
             commands::pty_prune,
             commands::app_request_quit,
+            commands::app_set_locale,
             commands::app_selftest_paths,
             commands::list_repo_dirs,
             commands::detect_project_roots,
@@ -109,6 +115,11 @@ pub fn run() {
         ])
         .setup(|app| {
             diagnostics::install(app.handle());
+            if let Ok(config) = app.path().app_config_dir() {
+                i18n::restore(&config);
+            }
+            #[cfg(target_os = "macos")]
+            menu::install(app.handle())?;
             let mobile_site =
                 tunnel::MobileSite::resolve(app.handle()).map_err(std::io::Error::other)?;
             app.manage(mobile_site.clone());

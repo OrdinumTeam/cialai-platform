@@ -17,6 +17,8 @@ use std::sync::Mutex;
 
 use tauri::http::{Request, Response, StatusCode};
 
+use crate::i18n::t;
+
 pub const SCHEME: &str = "preview";
 
 #[derive(Default)]
@@ -29,7 +31,7 @@ impl PreviewRoots {
     pub fn register(&self, root: &str) -> Result<String, String> {
         let path = PathBuf::from(root);
         if !path.is_absolute() || !path.is_dir() {
-            return Err("Pasta do projeto não encontrada".to_string());
+            return Err(t("native.error.projectFolderNotFound"));
         }
         let canonical = dunce::canonicalize(&path).map_err(|error| error.to_string())?;
         let token = token_for(&canonical);

@@ -12,7 +12,9 @@ import {
   networkIsConfigured,
   normalizeNetworkConfig,
   reduceTunnelEvent,
+  tunnelErrorMessage,
   tunnelPresentation,
+  tunnelProblemCode,
   updateDevicesFromEvent,
 } from './tunnel-model.js';
 import { translate, useI18n } from './i18n.js';
@@ -51,15 +53,8 @@ function previewMode() {
   try { return new URLSearchParams(window.location.search).get('tunnel') === 'demo'; } catch (_error) { return false; }
 }
 
-function problemCode(error) {
-  if (error && typeof error === 'object') return error.code || error.error?.code || '';
-  return '';
-}
-
-export function tunnelErrorMessage(error) {
-  if (error && typeof error === 'object') return error.message || error.error?.message || String(error);
-  return String(error || translate('desktop.tunnel.noResponse'));
-}
+const problemCode = tunnelProblemCode;
+export { tunnelErrorMessage };
 
 function getOrCreateDesktopId() {
   try {

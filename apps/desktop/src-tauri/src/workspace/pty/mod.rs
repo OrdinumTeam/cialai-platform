@@ -9,6 +9,7 @@ use portable_pty::{
 };
 
 use super::procs::ProcSource;
+use crate::i18n::tf;
 pub use crate::platform::ShellFlavor;
 #[cfg(test)]
 use crate::platform::ShellSpec;
@@ -35,19 +36,17 @@ pub(crate) struct SpawnedShell {
 pub(crate) fn spawn_shell(command: CommandBuilder, size: PtySize) -> Result<SpawnedShell, String> {
     let pair = native_pty_system()
         .openpty(size)
-        .map_err(|error| format!("Não foi possível abrir o PTY: {error}"))?;
+        .map_err(|error| tf("native.error.ptyOpen", &[("error", &error)]))?;
     let mut child = pair
         .slave
         .spawn_command(command)
-        .map_err(|error| format!("Não foi possível iniciar o shell: {error}"))?;
+        .map_err(|error| tf("native.error.shellStart", &[("error", &error)]))?;
     let tree = match backend::assign_tree(child.process_id()) {
         Ok(tree) => tree.map(ProcessTree),
         Err(error) => {
             let _ = child.kill();
             let _ = child.wait();
-            return Err(format!(
-                "Não foi possível isolar a árvore do terminal: {error}"
-            ));
+            return Err(tf("native.error.ptyIsolate", &[("error", &error)]));
         }
     };
     Ok(SpawnedShell { pair, child, tree })

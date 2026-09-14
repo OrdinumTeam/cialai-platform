@@ -99,5 +99,7 @@ test('i18n gate checks placeholders at call sites and reports unused keys', asyn
   assert.deepEqual(gate.inspectSource("notify(t(ok ? 'terminal.session.saved' : 'terminal.common.copyFailed', { name }))", 'fixture.js'), []);
 
   const usage = gate.collectKeyUsage("t('demo.used'); const KEYS = { a: 'demo.mapped' }; t(`demo.family.${id}`);");
+  assert.ok(gate.USAGE_ROOTS.some((root) => root.replaceAll('\\', '/').endsWith('/apps/desktop/src-tauri/src')));
+  assert.deepEqual([...gate.collectRustKeyUsage('let title = t("native.quit.title"); // "comentario livre"').literals], ['native.quit.title', 'comentario livre']);
   assert.deepEqual(gate.unusedKeys(['demo.used', 'demo.mapped', 'demo.family.one', 'demo.dead'], [usage]), ['demo.dead']);
 });

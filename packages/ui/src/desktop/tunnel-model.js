@@ -6,6 +6,64 @@ export const PAIR_ROTATION_SECONDS = 90;
 export const PAIR_TTL_SECONDS = 600;
 export const EDGE_PORT = 4740;
 
+// O sidecar e o supervisor mandam código estável com texto em português. A
+// interface mostra o texto do idioma ativo e mantém o original para códigos
+// ainda sem tradução.
+export const TUNNEL_ERROR_KEYS = Object.freeze({
+  args_invalid: 'desktop.tunnel.error.argsInvalid',
+  command_sensitive: 'desktop.tunnel.error.commandSensitive',
+  command_unknown: 'desktop.tunnel.error.commandUnknown',
+  control_conflict: 'desktop.tunnel.error.controlConflict',
+  control_not_found: 'desktop.tunnel.error.controlNotFound',
+  control_protocol: 'desktop.tunnel.error.controlProtocol',
+  control_server_error: 'desktop.tunnel.error.controlServerError',
+  control_tls: 'desktop.tunnel.error.controlTls',
+  control_unauthorized: 'desktop.tunnel.error.controlUnauthorized',
+  control_unconfigured: 'desktop.tunnel.error.controlUnconfigured',
+  control_unreachable: 'desktop.tunnel.error.controlUnreachable',
+  control_unsupported_version: 'desktop.tunnel.error.controlUnsupportedVersion',
+  device_invalid: 'desktop.tunnel.error.deviceInvalid',
+  device_not_found: 'desktop.tunnel.error.deviceNotFound',
+  doctor_invalid: 'desktop.tunnel.error.doctorInvalid',
+  doctor_unavailable: 'desktop.tunnel.error.doctorUnavailable',
+  edge_running: 'desktop.tunnel.error.edgeRunning',
+  edge_stopped: 'desktop.tunnel.error.edgeStopped',
+  internal: 'desktop.tunnel.error.internal',
+  keyring_unavailable: 'desktop.tunnel.error.keyringUnavailable',
+  node_identity: 'desktop.tunnel.error.nodeIdentity',
+  node_offline: 'desktop.tunnel.error.nodeOffline',
+  pair_consumed: 'desktop.tunnel.error.pairConsumed',
+  pair_denied: 'desktop.tunnel.error.pairDenied',
+  pair_expired: 'desktop.tunnel.error.pairExpired',
+  pair_internal: 'desktop.tunnel.error.pairInternal',
+  pair_secret_mismatch: 'desktop.tunnel.error.pairSecretMismatch',
+  pair_timeout: 'desktop.tunnel.error.pairTimeout',
+  pair_unknown: 'desktop.tunnel.error.pairUnknown',
+  payload_invalid: 'desktop.tunnel.error.payloadInvalid',
+  rpc_invalid: 'desktop.tunnel.error.rpcInvalid',
+  tunnel_disconnected: 'desktop.tunnel.error.tunnelDisconnected',
+  tunnel_handshake: 'desktop.tunnel.error.tunnelHandshake',
+  tunnel_internal: 'desktop.tunnel.error.tunnelInternal',
+  tunnel_start: 'desktop.tunnel.error.tunnelStart',
+  tunnel_state: 'desktop.tunnel.error.tunnelState',
+  tunnel_stopped: 'desktop.tunnel.error.tunnelStopped',
+  tunnel_stopping: 'desktop.tunnel.error.tunnelStopping',
+  tunnel_timeout: 'desktop.tunnel.error.tunnelTimeout',
+  tunnel_unavailable: 'desktop.tunnel.error.tunnelUnavailable',
+});
+
+export function tunnelProblemCode(error) {
+  if (error && typeof error === 'object') return error.code || error.error?.code || '';
+  return '';
+}
+
+export function tunnelErrorMessage(error) {
+  const key = TUNNEL_ERROR_KEYS[tunnelProblemCode(error)];
+  if (key) return translate(key);
+  if (error && typeof error === 'object') return error.message || error.error?.message || String(error);
+  return String(error || translate('desktop.tunnel.noResponse'));
+}
+
 const text = (value) => String(value ?? '').trim();
 
 export function normalizeNetworkConfig(value = {}) {

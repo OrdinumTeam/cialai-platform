@@ -157,7 +157,7 @@ pub fn read(home: &Path, project_roots: &[String], cwd: &Path, path: &str) -> Re
             .iter()
             .any(|&byte| byte == 0 || (byte < 32 && !matches!(byte, b'\t' | b'\n' | b'\r')))
     {
-        return Err("Somente arquivos de texto de até 128 KiB são suportados.".into());
+        return Err(crate::i18n::t("native.error.mobileTextOnly"));
     }
     let content = String::from_utf8(bytes).map_err(|_| denied())?;
     if content.contains("PRIVATE KEY-----") || content.contains("PuTTY-User-Key-File:") {

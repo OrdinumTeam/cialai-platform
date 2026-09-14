@@ -10,6 +10,8 @@ use std::process::{Command, Stdio};
 
 use serde::Serialize;
 
+use crate::i18n::{t, tf};
+
 /// Teto de entradas alteradas devolvidas; acima disso a lista vem cortada.
 const CHANGES_LIMIT: usize = 3_000;
 /// Teto do diff devolvido ao webview.
@@ -78,7 +80,7 @@ fn run(args: &[&str], dir: &Path) -> Result<(Vec<u8>, i32), String> {
         .args(args)
         .current_dir(dir)
         .output()
-        .map_err(|error| format!("git indisponível: {error}"))?;
+        .map_err(|error| tf("native.error.gitUnavailable", &[("error", &error)]))?;
     Ok((output.stdout, output.status.code().unwrap_or(-1)))
 }
 
@@ -95,7 +97,7 @@ pub fn root_of(dir: &Path) -> Option<String> {
 pub fn status(dir: &str) -> Result<GitStatus, String> {
     let path = Path::new(dir);
     if !path.is_dir() {
-        return Err("Pasta não encontrada".to_string());
+        return Err(t("native.error.folderNotFound"));
     }
     let Some(root) = root_of(path) else {
         return Ok(GitStatus::default());
@@ -234,7 +236,7 @@ pub fn parse_status(raw: &[u8]) -> GitStatus {
 pub fn diff(root: &str, path: &str) -> Result<GitDiff, String> {
     let base = Path::new(root);
     if !base.is_dir() {
-        return Err("Pasta não encontrada".to_string());
+        return Err(t("native.error.folderNotFound"));
     }
     let relative = Path::new(path)
         .strip_prefix(base)

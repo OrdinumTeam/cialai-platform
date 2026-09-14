@@ -17,6 +17,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
+use crate::i18n::{t, tf};
 use crate::platform;
 
 use super::files::{FsError, FsResult};
@@ -144,13 +145,13 @@ fn io_error(error: std::io::Error, what: &str) -> FsError {
     }
 }
 
-fn missing_soffice_message() -> &'static str {
+fn missing_soffice_message() -> String {
     #[cfg(target_os = "macos")]
-    return "LibreOffice não encontrado. Instale pelo site oficial ou pelo Homebrew";
+    return t("native.error.libreOfficeMissingMacos");
     #[cfg(target_os = "windows")]
-    return "LibreOffice não encontrado. Instale pelo site oficial";
+    return t("native.error.libreOfficeMissingWindows");
     #[cfg(all(unix, not(target_os = "macos")))]
-    return "LibreOffice não encontrado. Instale pelo gerenciador do sistema";
+    return t("native.error.libreOfficeMissingLinux");
 }
 
 /// `file://` com espacos e caracteres fora do ASCII codificados, para o
@@ -278,34 +279,34 @@ pub fn convert(
     if !source.is_absolute() {
         return Err(FsError {
             code: "invalid".to_string(),
-            message: "Caminho relativo".to_string(),
+            message: t("native.error.pathRelative"),
         });
     }
     if !supported(source) {
         return Err(FsError {
             code: "unsupported".to_string(),
-            message: "Este formato não tem conversão para PDF".to_string(),
+            message: t("native.error.officeUnsupported"),
         });
     }
     let canonical = source
         .canonicalize()
-        .map_err(|error| io_error(error, "Arquivo não encontrado"))?;
-    let meta = fs::metadata(&canonical)
-        .map_err(|error| io_error(error, "Não foi possível abrir o arquivo"))?;
+        .map_err(|error| io_error(error, &t("native.error.fileNotFound")))?;
+    let meta =
+        fs::metadata(&canonical).map_err(|error| io_error(error, &t("native.error.openFile")))?;
     if meta.is_dir() {
         return Err(FsError {
             code: "unsupported".to_string(),
-            message: "Documento salvo como pacote, sem conversão".to_string(),
+            message: t("native.error.officePackage"),
         });
     }
     if meta.len() > INPUT_MAX {
         return Err(FsError {
             code: "too_large".to_string(),
-            message: "Documento acima de 200 MB. Abra no app padrão.".to_string(),
+            message: t("native.error.officeTooLarge"),
         });
     }
     fs::create_dir_all(cache_dir)
-        .map_err(|error| io_error(error, "Não foi possível criar o cache"))?;
+        .map_err(|error| io_error(error, &t("native.error.createCache")))?;
     let key = cache_key(&canonical, mtime_ms(&meta), meta.len());
     let target = cache_dir.join(format!("{key}.pdf"));
     if !force && target.is_file() {
@@ -314,7 +315,7 @@ pub fn convert(
     }
     let soffice = find_soffice(home).ok_or_else(|| FsError {
         code: "missing_tool".to_string(),
-        message: missing_soffice_message().to_string(),
+        message: missing_soffice_message(),
     })?;
 
     let _guard = queue
@@ -332,7 +333,7 @@ pub fn convert(
         .unwrap_or(0);
     let out_dir = cache_dir.join(format!("tmp-{}-{nonce}", std::process::id()));
     fs::create_dir_all(&out_dir)
-        .map_err(|error| io_error(error, "Não foi possível criar a pasta temporária"))?;
+        .map_err(|error| io_error(error, &t("native.error.createTemporaryFolder")))?;
     let profile = cache_dir.join("soffice-profile");
     let _ = fs::create_dir_all(&profile);
     let started = Instant::now();
@@ -360,7 +361,7 @@ pub fn convert(
         Ok(child) => child,
         Err(error) => {
             let _ = fs::remove_dir_all(&out_dir);
-            return Err(io_error(error, "Não foi possível iniciar o LibreOffice"));
+            return Err(io_error(error, &t("native.error.libreOfficeStart")));
         }
     };
     let status = loop {
@@ -385,19 +386,19 @@ pub fn convert(
     let outcome = match (status, produced) {
         (None, _) => Err(FsError {
             code: "timeout".to_string(),
-            message: "O LibreOffice não terminou a conversão em 2 minutos".to_string(),
+            message: t("native.error.libreOfficeTimeout"),
         }),
         (Some(_), Some(pdf)) => {
             let _ = fs::remove_file(&target);
             fs::rename(&pdf, &target)
                 .or_else(|_| fs::copy(&pdf, &target).map(|_| ()))
-                .map_err(|error| io_error(error, "Não foi possível guardar o PDF"))
+                .map_err(|error| io_error(error, &t("native.error.savePdf")))
         }
         (Some(status), None) => Err(FsError {
             code: "io".to_string(),
-            message: format!(
-                "O LibreOffice não gerou o PDF, saída {}",
-                status.code().unwrap_or(-1)
+            message: tf(
+                "native.error.libreOfficeNoPdf",
+                &[("code", &status.code().unwrap_or(-1))],
             ),
         }),
     };

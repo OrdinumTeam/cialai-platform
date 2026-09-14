@@ -57,7 +57,7 @@ pub mod mobile_files {
     use std::path::Path;
 
     fn unavailable() -> String {
-        "Arquivos móveis indisponíveis neste sistema.".into()
+        crate::i18n::t("native.error.mobileFilesUnsupported")
     }
 
     pub fn list(

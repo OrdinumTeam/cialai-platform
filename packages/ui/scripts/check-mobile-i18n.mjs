@@ -18,17 +18,22 @@ export const SOURCE_ROOTS = Object.freeze([
   path.join(repositoryRoot, 'packages/ui/src/lib'),
   path.join(repositoryRoot, 'apps/mobile'),
 ]);
+// O núcleo nativo não tem texto literal verificado aqui, mas usa chaves do
+// catálogo gerado; tools/check/native-i18n.mjs confere essas chamadas.
+export const USAGE_ROOTS = Object.freeze([
+  path.join(repositoryRoot, 'apps/desktop/src-tauri/src'),
+]);
 const sourceExtensions = new Set(['.js', '.jsx', '.ts', '.tsx']);
 const ignoredDirectories = new Set(['android', 'coverage', 'ios', 'node_modules']);
 
-async function sourceFiles(root) {
+async function sourceFiles(root, extensions = sourceExtensions) {
   const entries = await readdir(root, { withFileTypes: true });
   const files = [];
   for (const entry of entries) {
     if (ignoredDirectories.has(entry.name) || entry.name === '__tests__' || /\.test\.[cm]?[jt]sx?$/.test(entry.name)) continue;
     const fullPath = path.join(root, entry.name);
-    if (entry.isDirectory()) files.push(...await sourceFiles(fullPath));
-    else if (sourceExtensions.has(path.extname(entry.name))) files.push(fullPath);
+    if (entry.isDirectory()) files.push(...await sourceFiles(fullPath, extensions));
+    else if (extensions.has(path.extname(entry.name))) files.push(fullPath);
   }
   return files;
 }
@@ -97,6 +102,10 @@ export function collectKeyUsage(source) {
   };
   walk(ast);
   return { literals, families };
+}
+
+export function collectRustKeyUsage(source) {
+  return { literals: new Set([...source.matchAll(/"((?:[^"\\]|\\.)*)"/gu)].map((match) => match[1])), families: new Set() };
 }
 
 export function unusedKeys(keys, usages) {
@@ -293,6 +302,9 @@ export async function checkI18n() {
       errors.push(...inspectSource(source, path.relative(repositoryRoot, file)));
       usages.push(collectKeyUsage(source));
     }
+  }
+  for (const root of USAGE_ROOTS) {
+    for (const file of await sourceFiles(root, new Set(['.rs']))) usages.push(collectRustKeyUsage(await readFile(file, 'utf8')));
   }
   for (const key of unusedKeys(dictionaryKeys, usages)) errors.push(`chave sem uso: ${key}`);
   return errors;

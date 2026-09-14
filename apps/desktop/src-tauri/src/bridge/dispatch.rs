@@ -10,15 +10,16 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::{Connection, lock, protocol};
 use crate::commands;
+use crate::i18n::{t, tf};
 use crate::workspace::terminal::TerminalManager;
 
 fn arg<T: DeserializeOwned>(args: &Value, name: &str) -> Result<T, String> {
     serde_json::from_value(args.get(name).cloned().unwrap_or(Value::Null))
-        .map_err(|_| format!("Argumento inválido: {name}."))
+        .map_err(|_| tf("native.error.argumentInvalid", &[("name", &name)]))
 }
 
 fn value<T: Serialize>(result: T) -> Result<Value, String> {
-    serde_json::to_value(result).map_err(|_| "Não foi possível codificar a resposta.".into())
+    serde_json::to_value(result).map_err(|_| t("native.error.responseEncoding"))
 }
 
 #[derive(Deserialize)]
@@ -48,9 +49,9 @@ fn channel(conn: &Connection, args: &Value) -> Result<(u32, Channel), String> {
         {
             closed.store(true, std::sync::atomic::Ordering::SeqCst);
             stop.notify_one();
-            return Err(tauri::Error::Io(std::io::Error::other(
-                "Canal remoto indisponível.",
-            )));
+            return Err(tauri::Error::Io(std::io::Error::other(t(
+                "native.error.channelUnavailable",
+            ))));
         }
         Ok(())
     });
@@ -70,10 +71,10 @@ fn prepare_binding(
         .iter()
         .any(|(&session, &bound)| bound == channel_id && Some(session) != attaching)
     {
-        return Err("Canal já pertence a outra sessão.".into());
+        return Err(t("native.error.channelOwned"));
     }
     if bindings.len() >= 128 && !attaching.is_some_and(|id| bindings.contains_key(&id)) {
-        return Err("Limite de canais atingido.".into());
+        return Err(t("native.error.channelLimit"));
     }
     Ok(())
 }
@@ -85,14 +86,14 @@ pub(super) fn dispatch(
     args: Value,
 ) -> Result<Value, String> {
     if !protocol::allowed_command(cmd) {
-        return Err("Disponível só no Mac.".into());
+        return Err(t("native.error.desktopOnly"));
     }
     match cmd {
         "pty_spawn" | "pty_attach" => {
             let terminals = app.state::<TerminalManager>();
             let mut bindings = lock(&conn.bindings);
             if conn.closed.load(std::sync::atomic::Ordering::SeqCst) {
-                return Err("Ponte com o Mac desconectada.".into());
+                return Err(t("native.error.bridgeDisconnected"));
             }
             let (channel_id, channel) = channel(conn, &args)?;
             let attaching: Option<u32> = if cmd == "pty_attach" {
@@ -166,7 +167,7 @@ pub(super) fn dispatch(
             let home = app
                 .path()
                 .home_dir()
-                .map_err(|_| "Pasta de projetos indisponível.".to_string())?;
+                .map_err(|_| t("native.error.projectsUnavailable"))?;
             let project_roots = app.state::<crate::prefs::PrefsState>().get().project_roots;
             let path: String = if cmd == "pty_files_list" {
                 arg::<Option<String>>(&args, "path")?.unwrap_or_default()
@@ -207,7 +208,7 @@ pub(super) fn dispatch(
             Ok(Value::Null)
         }
         "list_repo_dirs" => value(commands::list_repo_dirs(app.clone(), app.state())?),
-        _ => Err("Disponível só no computador.".into()),
+        _ => Err(t("native.error.desktopOnly")),
     }
 }
 

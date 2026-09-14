@@ -3,6 +3,7 @@ import common from './common.js';
 import shared from './shared.js';
 import desktop from './desktop.js';
 import mobile from './mobile.js';
+import desktopNative from './desktop-native.js';
 import terminal from './terminal.js';
 
-export default Object.freeze({ ...common, ...shared, ...desktop, ...mobile, ...terminal });
+export default Object.freeze({ ...common, ...shared, ...desktop, ...mobile, ...desktopNative, ...terminal });

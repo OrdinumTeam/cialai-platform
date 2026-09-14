@@ -29,6 +29,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
+use crate::i18n::{t, tf};
 use crate::platform::ShellFlavor;
 
 use super::resume::{self, AgentSession};
@@ -160,7 +161,14 @@ impl JournalStore {
         }
         let mut writer = JournalWriter::open(self.path(tag, "log"))?;
         if writer.size > 0 {
-            let label = chrono::Local::now().format("Shell reaberto em %d/%m às %H:%M");
+            let now = chrono::Local::now();
+            let label = tf(
+                "native.terminal.reopenedAt",
+                &[
+                    ("date", &now.format(&t("native.format.dayMonth"))),
+                    ("time", &now.format(&t("native.format.time"))),
+                ],
+            );
             let mut marker = TERMINAL_RESET.to_vec();
             marker.extend_from_slice(format!("\x1b[2m{label}\x1b[0m\r\n").as_bytes());
             writer.append(&marker);

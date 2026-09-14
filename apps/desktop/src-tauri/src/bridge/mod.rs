@@ -22,6 +22,7 @@ use tokio_tungstenite::tungstenite::{
 };
 use tokio_tungstenite::{WebSocketStream, accept_hdr_async_with_config};
 
+use crate::i18n::t;
 use crate::workspace::terminal::{SubscriberKey, TerminalManager};
 
 const MAX_CONNECTIONS: usize = 8;
@@ -92,11 +93,11 @@ pub(super) struct Connection {
 impl Connection {
     fn send(&self, message: Message) -> Result<(), String> {
         if self.closed.load(Ordering::SeqCst) {
-            return Err("Ponte com o Mac desconectada.".into());
+            return Err(t("native.error.bridgeDisconnected"));
         }
         if message.len() > protocol::MAX_FRAME || self.tx.try_send(message).is_err() {
             self.close();
-            return Err("Conexão encerrada por atraso.".into());
+            return Err(t("native.error.bridgeLagging"));
         }
         Ok(())
     }
@@ -525,13 +526,13 @@ async fn serve(
                     }
                     Message::Text(text) => {
                         let Ok(protocol::Incoming::Call { id, cmd, args }) = serde_json::from_str(&text) else { break; };
-                        if !args.is_object() { conn.result(id, Err("Argumentos inválidos.".into())); continue; }
-                        if !protocol::allowed_command(&cmd) { conn.result(id, Err("Disponível só no Mac.".into())); continue; }
+                        if !args.is_object() { conn.result(id, Err(t("native.error.argumentsInvalid"))); continue; }
+                        if !protocol::allowed_command(&cmd) { conn.result(id, Err(t("native.error.desktopOnly"))); continue; }
                         if !lock(&conn.pending).insert(id) { break; }
                         let permits = (calls.clone().try_acquire_owned(), context.global_calls.clone().try_acquire_owned());
                         let (Ok(local_permit), Ok(global_permit)) = permits else {
                             lock(&conn.pending).remove(&id);
-                            conn.result(id, Err("Muitas chamadas simultâneas. Tente novamente.".into()));
+                            conn.result(id, Err(t("native.error.tooManyCalls")));
                             continue;
                         };
                         let ordered = matches!(cmd.as_str(), "pty_spawn" | "pty_attach" | "pty_ack" | "pty_write" | "pty_kill" | "pty_view_claim" | "pty_view_renew" | "pty_view_release");

@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::{AppHandle, Emitter, Manager};
 
+use crate::i18n::{t, tf};
 use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
@@ -445,7 +446,7 @@ impl Session {
                 pixel_width: 0,
                 pixel_height: 0,
             })
-            .map_err(|_| "Falha ao redimensionar o terminal.".to_string())?;
+            .map_err(|_| t("native.error.terminalResize"))?;
         let previous = self.info.view.as_ref();
         let view = TerminalView {
             id: self.info.id,
@@ -699,7 +700,7 @@ impl TerminalManager {
     ) -> Result<TerminalInfo, String> {
         let dir = Path::new(cwd);
         if !dir.is_dir() {
-            return Err(format!("Pasta não encontrada: {cwd}"));
+            return Err(tf("native.error.folderNotFoundPath", &[("path", &cwd)]));
         }
         let cols = cols.max(2);
         let rows = rows.max(1);
@@ -853,10 +854,8 @@ impl TerminalManager {
         writer
             .try_send(bytes.to_vec())
             .map_err(|error| match error {
-                mpsc::TrySendError::Full(_) => {
-                    "Terminal ocupado. Aguarde antes de enviar mais texto.".to_string()
-                }
-                mpsc::TrySendError::Disconnected(_) => "Sessão encerrada".to_string(),
+                mpsc::TrySendError::Full(_) => t("native.error.terminalBusy"),
+                mpsc::TrySendError::Disconnected(_) => t("native.error.sessionEnded"),
             })
     }
 
@@ -889,7 +888,7 @@ impl TerminalManager {
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         if !session.subscribed(key) {
-            return Err("Assine a sessão antes de assumir o controle.".into());
+            return Err(t("native.error.subscribeBeforeControl"));
         }
         let view = session.apply_view(key, cols, rows, true)?;
         if key == SubscriberKey::Webview {
@@ -912,7 +911,7 @@ impl TerminalManager {
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         if !session.lease_matches(key, lease) {
-            return Err("Controle do terminal expirou ou mudou.".into());
+            return Err(t("native.error.controlExpired"));
         }
         let view = session.apply_view(key, cols, rows, false)?;
         if key == SubscriberKey::Webview {
@@ -932,7 +931,7 @@ impl TerminalManager {
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         if !session.lease_matches(key, lease) {
-            return Err("Controle do terminal expirou ou mudou.".into());
+            return Err(t("native.error.controlExpired"));
         }
         let view = session.restore_local()?;
         drop(guard);
@@ -959,7 +958,7 @@ impl TerminalManager {
                     .all(|c| c.is_ascii_alphanumeric() || c == '#' || c == '-')
             })
         {
-            return Err("Apresentação do terminal inválida.".into());
+            return Err(t("native.error.presentationInvalid"));
         }
         self.lock()
             .sessions
@@ -974,7 +973,7 @@ impl TerminalManager {
         let guard = self.lock();
         let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
         if !session.subscribed(key) {
-            return Err("Assine a sessão para consultar seus arquivos.".into());
+            return Err(t("native.error.subscribeBeforeFiles"));
         }
         Ok(session.info.cwd.clone())
     }
@@ -1453,7 +1452,7 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 fn closed_error() -> String {
-    "Sessão encerrada".to_string()
+    t("native.error.sessionEnded")
 }
 
 /// Descreve o lider do grupo em primeiro plano. Se o lider ja saiu, vale o
@@ -1517,7 +1516,7 @@ fn needs_lang() -> bool {
 
 fn validate_view_size(cols: u16, rows: u16) -> Result<(), String> {
     if !(2..=500).contains(&cols) || !(1..=300).contains(&rows) {
-        return Err("Dimensões do terminal fora do limite.".into());
+        return Err(t("native.error.terminalSize"));
     }
     Ok(())
 }

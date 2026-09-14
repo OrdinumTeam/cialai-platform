@@ -21,6 +21,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use base64::Engine;
 use serde::Serialize;
 
+use crate::i18n::{t, tf};
 use crate::platform::to_portable;
 
 /// Teto de entradas devolvidas por diretorio. Pastas maiores vem cortadas e
@@ -225,13 +226,13 @@ pub struct Found {
 fn absolute(path: &str) -> FsResult<PathBuf> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
-        return Err(FsError::new("invalid", "Caminho vazio"));
+        return Err(FsError::new("invalid", t("native.error.pathEmpty")));
     }
     let candidate = PathBuf::from(trimmed);
     if !candidate.is_absolute() {
         return Err(FsError::new(
             "invalid",
-            format!("Caminho precisa ser absoluto: {trimmed}"),
+            tf("native.error.pathNotAbsolute", &[("path", &trimmed)]),
         ));
     }
     Ok(candidate)
@@ -268,8 +269,8 @@ fn name_of(path: &Path) -> String {
 pub fn list_dir(path: &str, limit: Option<usize>) -> FsResult<Listing> {
     let dir = absolute(path)?;
     let limit = limit.unwrap_or(LIST_LIMIT).clamp(50, 20_000);
-    let read = fs::read_dir(&dir)
-        .map_err(|error| FsError::io(error, "Não foi possível listar a pasta"))?;
+    let read =
+        fs::read_dir(&dir).map_err(|error| FsError::io(error, &t("native.error.listFolder")))?;
     let mut entries: Vec<Entry> = Vec::new();
     let mut total = 0usize;
     for item in read.flatten() {
@@ -344,7 +345,7 @@ pub fn stat(path: &str) -> FsResult<FileStat> {
             size: 0,
             modified_ms: None,
         }),
-        Err(error) => Err(FsError::io(error, "Não foi possível ler o arquivo")),
+        Err(error) => Err(FsError::io(error, &t("native.error.readFile"))),
     }
 }
 
@@ -363,28 +364,28 @@ fn looks_binary(sample: &[u8]) -> bool {
 /// Le um arquivo de texto UTF-8. Recusa binarios e arquivos acima do teto.
 pub fn read_text(path: &str) -> FsResult<TextFile> {
     let target = absolute(path)?;
-    let meta = fs::metadata(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível abrir o arquivo"))?;
+    let meta =
+        fs::metadata(&target).map_err(|error| FsError::io(error, &t("native.error.openFile")))?;
     if meta.is_dir() {
-        return Err(FsError::new("is_dir", "É uma pasta"));
+        return Err(FsError::new("is_dir", t("native.error.isFolder")));
     }
     if meta.len() > TEXT_LIMIT {
         return Err(FsError::new(
             "too_large",
-            format!(
-                "Arquivo com {} MB, acima do limite de 2 MB do editor",
-                meta.len() / (1024 * 1024)
+            tf(
+                "native.error.editorTooLarge",
+                &[("size", &(meta.len() / (1024 * 1024)))],
             ),
         ));
     }
-    let mut file = fs::File::open(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível abrir o arquivo"))?;
+    let mut file =
+        fs::File::open(&target).map_err(|error| FsError::io(error, &t("native.error.openFile")))?;
     let mut bytes = Vec::with_capacity(meta.len() as usize);
     file.read_to_end(&mut bytes)
-        .map_err(|error| FsError::io(error, "Não foi possível ler o arquivo"))?;
+        .map_err(|error| FsError::io(error, &t("native.error.readFile")))?;
     let sample_len = bytes.len().min(8192);
     if looks_binary(&bytes[..sample_len]) {
-        return Err(FsError::new("binary", "Arquivo binário"));
+        return Err(FsError::new("binary", t("native.error.binaryFile")));
     }
     let content = match String::from_utf8(bytes) {
         Ok(text) => text,
@@ -416,17 +417,14 @@ pub fn write_text(
         if let Ok(meta) = fs::metadata(&target) {
             let current = modified_ms(&meta);
             if current != Some(expected) {
-                return Err(FsError::new(
-                    "conflict",
-                    "O arquivo mudou no disco desde que foi aberto",
-                ));
+                return Err(FsError::new("conflict", t("native.error.changedOnDisk")));
             }
         }
     }
     fs::write(&target, content.as_bytes())
-        .map_err(|error| FsError::io(error, "Não foi possível salvar"))?;
+        .map_err(|error| FsError::io(error, &t("native.error.save")))?;
     let meta = fs::metadata(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível conferir o arquivo salvo"))?;
+        .map_err(|error| FsError::io(error, &t("native.error.verifySaved")))?;
     Ok(WriteResult {
         path: to_portable(&target),
         size: meta.len(),
@@ -454,17 +452,14 @@ fn mime_of(path: &Path) -> Option<&'static str> {
 pub fn read_image(path: &str) -> FsResult<ImageFile> {
     let target = absolute(path)?;
     let mime = mime_of(&target)
-        .ok_or_else(|| FsError::new("unsupported", "Formato de imagem sem prévia"))?;
-    let meta = fs::metadata(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível abrir a imagem"))?;
+        .ok_or_else(|| FsError::new("unsupported", t("native.error.imageUnsupported")))?;
+    let meta =
+        fs::metadata(&target).map_err(|error| FsError::io(error, &t("native.error.openImage")))?;
     if meta.len() > IMAGE_LIMIT {
-        return Err(FsError::new(
-            "too_large",
-            "Imagem acima de 15 MB. Abra no app padrão.",
-        ));
+        return Err(FsError::new("too_large", t("native.error.imageTooLarge")));
     }
     let bytes =
-        fs::read(&target).map_err(|error| FsError::io(error, "Não foi possível ler a imagem"))?;
+        fs::read(&target).map_err(|error| FsError::io(error, &t("native.error.readImage")))?;
     let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
     Ok(ImageFile {
         path: to_portable(&target),
@@ -478,28 +473,28 @@ pub fn read_image(path: &str) -> FsResult<ImageFile> {
 /// Sem base64: o comando devolve o corpo binario.
 pub fn read_bytes(path: &str) -> FsResult<Vec<u8>> {
     let target = absolute(path)?;
-    let meta = fs::metadata(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível abrir o arquivo"))?;
+    let meta =
+        fs::metadata(&target).map_err(|error| FsError::io(error, &t("native.error.openFile")))?;
     if meta.is_dir() {
-        return Err(FsError::new("is_dir", "É uma pasta"));
+        return Err(FsError::new("is_dir", t("native.error.isFolder")));
     }
     if meta.len() > BYTES_LIMIT {
         return Err(FsError::new(
             "too_large",
-            format!(
-                "Arquivo com {} MB, acima do limite de 40 MB da prévia. Abra no app padrão.",
-                meta.len() / (1024 * 1024)
+            tf(
+                "native.error.previewTooLarge",
+                &[("size", &(meta.len() / (1024 * 1024)))],
             ),
         ));
     }
-    fs::read(&target).map_err(|error| FsError::io(error, "Não foi possível ler o arquivo"))
+    fs::read(&target).map_err(|error| FsError::io(error, &t("native.error.readFile")))
 }
 
 fn ensure_missing(target: &Path) -> FsResult<()> {
     if target.exists() || fs::symlink_metadata(target).is_ok() {
         return Err(FsError::new(
             "exists",
-            format!("Já existe: {}", name_of(target)),
+            tf("native.error.exists", &[("name", &name_of(target))]),
         ));
     }
     Ok(())
@@ -510,10 +505,9 @@ pub fn create_file(path: &str) -> FsResult<FileStat> {
     ensure_missing(&target)?;
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent)
-            .map_err(|error| FsError::io(error, "Não foi possível criar a pasta"))?;
+            .map_err(|error| FsError::io(error, &t("native.error.createFolder")))?;
     }
-    fs::write(&target, b"")
-        .map_err(|error| FsError::io(error, "Não foi possível criar o arquivo"))?;
+    fs::write(&target, b"").map_err(|error| FsError::io(error, &t("native.error.createFile")))?;
     stat(&to_portable(&target))
 }
 
@@ -521,7 +515,7 @@ pub fn create_dir(path: &str) -> FsResult<FileStat> {
     let target = absolute(path)?;
     ensure_missing(&target)?;
     fs::create_dir_all(&target)
-        .map_err(|error| FsError::io(error, "Não foi possível criar a pasta"))?;
+        .map_err(|error| FsError::io(error, &t("native.error.createFolder")))?;
     stat(&to_portable(&target))
 }
 
@@ -531,7 +525,7 @@ pub fn rename(from: &str, to: &str) -> FsResult<FileStat> {
     if source == target {
         return stat(&to_portable(&target));
     }
-    ensure_not_inside(&source, &target, "mover")?;
+    ensure_not_inside(&source, &target, "native.error.moveInsideItself")?;
     // Trocar so a caixa do nome e valido num sistema de arquivos que nao
     // distingue maiusculas; qualquer outro alvo existente e recusado.
     let same_ignoring_case =
@@ -539,22 +533,19 @@ pub fn rename(from: &str, to: &str) -> FsResult<FileStat> {
     if !same_ignoring_case {
         ensure_missing(&target)?;
     }
-    fs::rename(&source, &target).map_err(|error| FsError::io(error, "Não foi possível mover"))?;
+    fs::rename(&source, &target).map_err(|error| FsError::io(error, &t("native.error.move")))?;
     stat(&to_portable(&target))
 }
 
 /// Uma pasta nunca pode ir para dentro dela mesma. O `rename` do sistema ja
 /// recusaria com EINVAL, mas a mensagem sairia crua.
-fn ensure_not_inside(source: &Path, target: &Path, verb: &str) -> FsResult<()> {
+fn ensure_not_inside(source: &Path, target: &Path, key: &str) -> FsResult<()> {
     if !source.is_dir() || !target.starts_with(source) {
         return Ok(());
     }
     Err(FsError::new(
         "invalid",
-        format!(
-            "Não dá para {verb} {} para dentro dela mesma",
-            name_of(source)
-        ),
+        tf(key, &[("name", &name_of(source))]),
     ))
 }
 
@@ -569,14 +560,11 @@ pub fn copy(from: &str, to: &str) -> FsResult<FileStat> {
     let source = absolute(from)?;
     let target = absolute(to)?;
     if source == target {
-        return Err(FsError::new(
-            "invalid",
-            "Origem e destino são o mesmo caminho",
-        ));
+        return Err(FsError::new("invalid", t("native.error.sameSourceTarget")));
     }
     let metadata = fs::symlink_metadata(&source)
-        .map_err(|error| FsError::io(error, "Não foi possível ler a origem"))?;
-    ensure_not_inside(&source, &target, "copiar")?;
+        .map_err(|error| FsError::io(error, &t("native.error.readSource")))?;
+    ensure_not_inside(&source, &target, "native.error.copyInsideItself")?;
     ensure_missing(&target)?;
     copy_entry(&source, &target, metadata.file_type(), 0)?;
     stat(&to_portable(&target))
@@ -584,37 +572,37 @@ pub fn copy(from: &str, to: &str) -> FsResult<FileStat> {
 
 fn copy_entry(source: &Path, target: &Path, file_type: fs::FileType, depth: usize) -> FsResult<()> {
     if depth > COPY_DEPTH_LIMIT {
-        return Err(FsError::new("io", "Pasta funda demais para copiar"));
+        return Err(FsError::new("io", t("native.error.copyTooDeep")));
     }
     if file_type.is_symlink() {
         let link = fs::read_link(source)
-            .map_err(|error| FsError::io(error, "Não foi possível ler o link"))?;
+            .map_err(|error| FsError::io(error, &t("native.error.readLink")))?;
         #[cfg(unix)]
         {
             return std::os::unix::fs::symlink(link, target)
-                .map_err(|error| FsError::io(error, "Não foi possível recriar o link"));
+                .map_err(|error| FsError::io(error, &t("native.error.recreateLink")));
         }
         #[cfg(not(unix))]
         {
             let _ = link;
             return Err(FsError::new(
                 "unsupported",
-                "Cópia de links simbólicos indisponível neste sistema",
+                t("native.error.symlinkCopyUnsupported"),
             ));
         }
     }
     if !file_type.is_dir() {
         fs::copy(source, target)
-            .map_err(|error| FsError::io(error, "Não foi possível copiar o arquivo"))?;
+            .map_err(|error| FsError::io(error, &t("native.error.copyFile")))?;
         return Ok(());
     }
-    fs::create_dir(target).map_err(|error| FsError::io(error, "Não foi possível criar a pasta"))?;
-    let read = fs::read_dir(source)
-        .map_err(|error| FsError::io(error, "Não foi possível listar a pasta"))?;
+    fs::create_dir(target).map_err(|error| FsError::io(error, &t("native.error.createFolder")))?;
+    let read =
+        fs::read_dir(source).map_err(|error| FsError::io(error, &t("native.error.listFolder")))?;
     for item in read.flatten() {
         let kind = item
             .file_type()
-            .map_err(|error| FsError::io(error, "Não foi possível ler a entrada"))?;
+            .map_err(|error| FsError::io(error, &t("native.error.readEntry")))?;
         copy_entry(
             &item.path(),
             &target.join(item.file_name()),
@@ -630,7 +618,7 @@ fn copy_entry(source: &Path, target: &Path, file_type: fs::FileType, depth: usiz
 pub fn trash(path: &str) -> FsResult<()> {
     let target = absolute(path)?;
     if fs::symlink_metadata(&target).is_err() {
-        return Err(FsError::new("not_found", "O item já não existe"));
+        return Err(FsError::new("not_found", t("native.error.itemMissing")));
     }
     trash_native(&target)
 }
@@ -794,7 +782,10 @@ pub fn find(
 ) -> FsResult<FindResult> {
     let root = absolute(root)?;
     if !root.is_dir() {
-        return Err(FsError::new("not_found", "Pasta do projeto não encontrada"));
+        return Err(FsError::new(
+            "not_found",
+            t("native.error.projectFolderNotFound"),
+        ));
     }
     let limit = limit.unwrap_or(60).clamp(1, 500);
     let needle = query.trim().to_lowercase();
