@@ -59,6 +59,13 @@ export function appBinary(platform, targetDir) {
 
 // O binário abre a interface empacotada; o roteiro só carrega com o
 // parâmetro, então o runner navega para a mesma origem com ele.
+// Endereço da página do app para o self test. O WebView2 pode responder ao
+// WebDriver ainda em about:blank, que não carrega o app; aí vale a origem padrão.
+export function appPage(current, platform) {
+  if (typeof current === 'string' && /^(https?|tauri):/.test(current)) return current;
+  return platform === 'win32' ? 'http://tauri.localhost/' : 'tauri://localhost/';
+}
+
 export function selftestUrl(current) {
   const url = new URL(current);
   url.searchParams.set('cialai_selftest', '1');

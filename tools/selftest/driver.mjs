@@ -14,6 +14,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  appPage,
   bridgeEnv,
   driverCapabilities,
   freePort,
@@ -93,8 +94,15 @@ try {
 
   const session = await webdriver('POST', '/session', driverCapabilities(options.app));
   sessionId = session.sessionId;
-  const current = await webdriver('GET', `/session/${sessionId}/url`)
-    .catch(() => (process.platform === 'win32' ? 'http://tauri.localhost/' : 'tauri://localhost/'));
+  // Espera a página do app sair de about:blank antes de montar o endereço do roteiro.
+  let current = null;
+  const loaded = Date.now() + 60000;
+  while (Date.now() < loaded) {
+    current = await webdriver('GET', `/session/${sessionId}/url`).catch(() => null);
+    if (appPage(current, process.platform) === current) break;
+    await pause(500);
+  }
+  current = appPage(current, process.platform);
   const target = selftestUrl(current);
   console.log(`[selftest] ${options.app} em ${current}; navegando para ${target}`);
   await webdriver('POST', `/session/${sessionId}/url`, { url: target })

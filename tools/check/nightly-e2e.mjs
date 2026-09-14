@@ -100,6 +100,10 @@ assert.equal(common.MAX_SCREENSHOTS, 8);
 assert.equal(common.appBinary('linux', '/target').replaceAll('\\', '/'), '/target/debug/cialai-desktop');
 assert.equal(common.appBinary('win32', '/target').replaceAll('\\', '/'), '/target/debug/cialai-desktop.exe');
 assert.equal(common.selftestUrl('tauri://localhost/'), 'tauri://localhost/?cialai_selftest=1&onboarding=skip&motion=0#terminais');
+assert.equal(common.appPage('about:blank', 'win32'), 'http://tauri.localhost/');
+assert.equal(common.appPage(null, 'linux'), 'tauri://localhost/');
+assert.equal(common.appPage('http://tauri.localhost/index.html', 'win32'), 'http://tauri.localhost/index.html');
+assert.equal(common.appPage('tauri://localhost/', 'linux'), 'tauri://localhost/');
 assert.equal(common.selftestUrl('http://tauri.localhost/index.html?x=1#dispositivos'), 'http://tauri.localhost/index.html?x=1&cialai_selftest=1&onboarding=skip&motion=0#terminais');
 assert.deepEqual(common.driverCapabilities('/app/cialai-desktop'), {
   capabilities: { alwaysMatch: { browserName: 'wry', 'tauri:options': { application: '/app/cialai-desktop' } } },
