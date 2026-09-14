@@ -32,6 +32,8 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 
+pub(crate) const DEFAULT_BRIDGE_PORT: u16 = 3720;
+
 #[derive(Clone)]
 pub struct BridgeConfig {
     pub port: Option<u16>,
@@ -39,23 +41,44 @@ pub struct BridgeConfig {
     pub proxy_secret: Option<String>,
     /// Excecao explicita para desenvolvimento local sem o sidecar.
     pub dev_open: bool,
+    /// A porta padrao pode estar com outro Cialai ou com o Control; so a porta
+    /// pedida por CIALAI_BRIDGE_PORT falha em vez de cair numa porta livre.
+    pub fallback_to_free_port: bool,
 }
 
 impl BridgeConfig {
-    pub(crate) fn requested_port() -> u16 {
+    fn explicit_port() -> Option<u16> {
         std::env::var("CIALAI_BRIDGE_PORT")
             .ok()
             .and_then(|value| value.parse().ok())
             .filter(|port| *port > 0)
-            .unwrap_or(3720)
     }
 
     pub(crate) fn from_process(proxy_secret: String) -> Self {
+        let explicit = Self::explicit_port();
         Self {
-            port: Some(Self::requested_port()),
+            port: Some(explicit.unwrap_or(DEFAULT_BRIDGE_PORT)),
             proxy_secret: Some(proxy_secret),
             dev_open: std::env::args().any(|arg| arg == "--dev-open-bridge"),
+            fallback_to_free_port: explicit.is_none(),
         }
+    }
+}
+
+/// Abre a ponte na porta pedida. Com a porta padrao ocupada, usa uma porta livre
+/// do loopback; o sidecar recebe a porta real pelo supervisor.
+pub(crate) fn bind_listener(
+    port: u16,
+    fallback_to_free_port: bool,
+) -> std::io::Result<std::net::TcpListener> {
+    match std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port)) {
+        Err(error) if fallback_to_free_port && error.kind() == std::io::ErrorKind::AddrInUse => {
+            crate::diagnostics::note(&format!(
+                "porta {port} da ponte ocupada; usando uma porta livre do loopback"
+            ));
+            std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
+        }
+        result => result,
     }
 }
 
@@ -271,8 +294,8 @@ fn value_identity(value: &Value) -> Option<protocol::WelcomeIdentity> {
 }
 
 pub fn start(app: AppHandle, config: BridgeConfig) -> Result<BridgeControl, String> {
-    let port = config.port.unwrap_or(3720);
-    let listener = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, port))
+    let port = config.port.unwrap_or(DEFAULT_BRIDGE_PORT);
+    let listener = bind_listener(port, config.fallback_to_free_port)
         .map_err(|error| format!("Não foi possível abrir a ponte do Cialai: {error}"))?;
     listener
         .set_nonblocking(true)
@@ -591,6 +614,7 @@ mod tests {
                 port: None,
                 dev_open: token.is_none(),
                 proxy_secret: token,
+                fallback_to_free_port: false,
             };
             if let Ok((socket, device_id)) = handshake(stream, &config, &identities).await {
                 serve(
@@ -608,6 +632,20 @@ mod tests {
             }
         });
         (address, task, control)
+    }
+
+    #[test]
+    fn busy_default_port_falls_back_to_a_free_loopback_port() {
+        let busy = std::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0)).unwrap();
+        let port = busy.local_addr().unwrap().port();
+
+        let fallback = bind_listener(port, true).unwrap();
+        let address = fallback.local_addr().unwrap();
+        assert!(address.ip().is_loopback());
+        assert_ne!(address.port(), port);
+
+        let error = bind_listener(port, false).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::AddrInUse);
     }
 
     #[tokio::test]

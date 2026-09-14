@@ -152,13 +152,17 @@ pub fn run() {
                 chromium,
             ));
 
-            let bridge_session =
-                tunnel::BridgeSession::generate(bridge::BridgeConfig::requested_port())
-                    .map_err(std::io::Error::other)?;
-            let bridge_config = bridge::BridgeConfig::from_process(bridge_session.secret().into());
+            let bridge_config = bridge::BridgeConfig::from_process(
+                tunnel::BridgeSession::generate(bridge::DEFAULT_BRIDGE_PORT)
+                    .map_err(std::io::Error::other)?
+                    .secret()
+                    .into(),
+            );
+            let bridge_secret = bridge_config.proxy_secret.clone().unwrap_or_default();
             let bridge_control = bridge::start(app.handle().clone(), bridge_config)
                 .map_err(std::io::Error::other)?;
-            debug_assert_eq!(bridge_control.port(), bridge_session.port());
+            // O sidecar recebe a porta em que a ponte realmente abriu.
+            let bridge_session = tunnel::BridgeSession::new(bridge_control.port(), bridge_secret);
             let supervisor = tunnel::Supervisor::for_app(
                 app.handle(),
                 &mobile_site,

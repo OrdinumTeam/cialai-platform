@@ -55,7 +55,7 @@ O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda 
 
 | Processo | Onde escuta | Quem conecta | Observação |
 | --- | --- | --- | --- |
-| Ponte Rust | `127.0.0.1:3720`, configurável por `CIALAI_BRIDGE_PORT` | Só a borda do sidecar, que apresenta `X-Cialai-Proxy-Secret` | Sem o segredo, 403. `--dev-open-bridge` libera para `websocat` em desenvolvimento |
+| Ponte Rust | `127.0.0.1:3720`, configurável por `CIALAI_BRIDGE_PORT`; sem a variável e com a porta ocupada por outro Cialai ou pelo Control, abre numa porta livre do loopback e o supervisor informa essa porta ao sidecar | Só a borda do sidecar, que apresenta `X-Cialai-Proxy-Secret` | Sem o segredo, 403. `--dev-open-bridge` libera para `websocat` em desenvolvimento |
 | Borda do sidecar | `:4740` no IP da tailnet, nunca em loopback | Celulares do mesmo usuário do Headscale | Serve a página do celular, `/api/health`, `/pair` e o upgrade de `/pty` |
 | Proxy do celular | `127.0.0.1:47400`, reserva de `47401` a `47409` | Só o WebView do próprio app, provado pelo cookie de nonce | Injeta o Bearer do dispositivo; porta fixa para a origem da página não mudar |
 | Vite em desenvolvimento | `127.0.0.1:1420` | WebView do Tauri | `devUrl` do `tauri.conf.json`, como no protótipo |

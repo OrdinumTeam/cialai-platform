@@ -64,6 +64,10 @@ impl BridgeSession {
         })
     }
 
+    pub fn new(port: u16, secret: String) -> Self {
+        Self { port, secret }
+    }
+
     pub fn port(&self) -> u16 {
         self.port
     }

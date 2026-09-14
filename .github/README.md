@@ -122,7 +122,7 @@ flowchart TB
 
 | Process | Listens on | Accepts |
 | --- | --- | --- |
-| Rust bridge | `127.0.0.1:3720`, configurable with `CIALAI_BRIDGE_PORT` | Only the tunnel edge presenting `X-Cialai-Proxy-Secret`; anything else gets 403 |
+| Rust bridge | `127.0.0.1:3720`, configurable with `CIALAI_BRIDGE_PORT`; when the default port is taken it opens on a free loopback port and hands that port to the sidecar | Only the tunnel edge presenting `X-Cialai-Proxy-Secret`; anything else gets 403 |
 | Tunnel edge | `:4740` on the tailnet IP, never on loopback | Phones of the same Headscale user; serves the phone page, `/api/health`, `/pair` and the `/pty` upgrade |
 | Phone proxy | `127.0.0.1:47400`, fallback `47401` to `47409` | Only the app's own WebView, proven by a nonce cookie; injects the device Bearer token |
 | Dev Browser | `127.0.0.1` on a random port per session | The desktop WebView over CDP; refused from the phone |
