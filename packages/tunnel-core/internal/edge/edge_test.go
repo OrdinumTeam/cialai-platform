@@ -89,6 +89,19 @@ func baseConfig(t *testing.T, bridgeURL string) Config {
 	}
 }
 
+func TestStaticContentTypesDoNotDependOnTheSystemRegistry(t *testing.T) {
+	for name, want := range map[string]string{
+		"assets/app.js":    "text/javascript; charset=utf-8",
+		"assets/APP.CSS":   "text/css; charset=utf-8",
+		"mobile.html":      "text/html; charset=utf-8",
+		"fonts/mono.woff2": "font/woff2",
+	} {
+		if got := staticContentType(name); got != want {
+			t.Fatalf("content type for %s: got %q, want %q", name, got, want)
+		}
+	}
+}
+
 func TestStaticSiteAndHealthAreConfinedAndHardened(t *testing.T) {
 	config := baseConfig(t, "http://127.0.0.1:3720")
 	server, err := New(config)

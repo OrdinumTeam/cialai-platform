@@ -225,10 +225,40 @@ func (server *Server) serveStatic(response http.ResponseWriter, request *http.Re
 	} else {
 		response.Header().Set("Cache-Control", "no-store")
 	}
-	if contentType := mime.TypeByExtension(filepath.Ext(resolved)); contentType != "" {
+	if contentType := staticContentType(resolved); contentType != "" {
 		response.Header().Set("Content-Type", contentType)
 	}
 	http.ServeContent(response, request, info.Name(), info.ModTime(), file)
+}
+
+// staticTypes pins the types of the mobile site files. On Windows the mime
+// package reads the registry, where .js may map to text/plain and the WebView
+// would then refuse the module scripts because of nosniff.
+var staticTypes = map[string]string{
+	".css":   "text/css; charset=utf-8",
+	".html":  "text/html; charset=utf-8",
+	".ico":   "image/x-icon",
+	".jpg":   "image/jpeg",
+	".js":    "text/javascript; charset=utf-8",
+	".json":  "application/json",
+	".map":   "application/json",
+	".mjs":   "text/javascript; charset=utf-8",
+	".png":   "image/png",
+	".svg":   "image/svg+xml",
+	".ttf":   "font/ttf",
+	".txt":   "text/plain; charset=utf-8",
+	".wasm":  "application/wasm",
+	".webp":  "image/webp",
+	".woff":  "font/woff",
+	".woff2": "font/woff2",
+}
+
+func staticContentType(name string) string {
+	extension := strings.ToLower(filepath.Ext(name))
+	if contentType, ok := staticTypes[extension]; ok {
+		return contentType
+	}
+	return mime.TypeByExtension(extension)
 }
 
 func safeRequestPath(request *http.Request) (string, bool) {
