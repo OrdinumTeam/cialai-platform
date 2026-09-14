@@ -74,13 +74,13 @@ for (const hints of [mac, linux, windows]) {
 const preferences = read('packages/ui/src/desktop/Preferences.jsx');
 for (const contract of [
   /platformPreferenceHints\(platform\(\)\.os, /,
-  /hints\.showLang \? <Row title="Idioma"/,
-  /hints\.windowSection \? <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Janela<\/h3>/,
+  /hints\.showLang \? <Row title=\{translate\('language\.label'\)\}/,
+  /hints\.windowSection \? <section className="mac-prefs__section"><h3 className="mac-prefs__heading">\{translate\('desktop\.preferences\.window'\)\}<\/h3>/,
   /className="mac-switch"/,
   /backdrop: event\.target\.checked \? 'auto' : 'solid'/,
   /filters: hints\.chromiumFilters/,
   /invoke\('app_paths'\)/,
-  />Arquivos do aplicativo</,
+  /\{translate\('desktop\.preferences\.appFiles'\)\}<\/h3>/,
   /invoke\('fs_reveal', \{ path \}\)/,
 ]) assert.match(preferences, contract, `contrato ausente em Preferences.jsx: ${contract}`);
 
