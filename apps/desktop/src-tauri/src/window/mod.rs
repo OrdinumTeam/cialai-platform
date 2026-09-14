@@ -163,8 +163,12 @@ pub fn grow(window: &WebviewWindow) -> bool {
     }
 
     let plan = on_main_thread(window, |handle| {
-        let current = current_frame(handle)?;
+        let Some(current) = current_frame(handle) else {
+            eprintln!("[window] quadro atual indisponivel; a janela nao cresce");
+            return None;
+        };
         if !is_splash_sized(current) {
+            eprintln!("[window] a janela ja saiu do tamanho de abertura: {current:?}");
             return None;
         }
         let visible = visible_area(handle);
@@ -272,9 +276,17 @@ fn on_main_thread<T: Send + 'static>(
         let _ = sender.send(task(&handle));
     });
     if queued.is_err() {
+        eprintln!("[window] nao foi possivel agendar tarefa na thread principal");
         return None;
     }
-    receiver.recv_timeout(MAIN_THREAD_TIMEOUT).ok()
+    let result = receiver.recv_timeout(MAIN_THREAD_TIMEOUT).ok();
+    if result.is_none() {
+        eprintln!(
+            "[window] a thread principal nao respondeu em {} ms",
+            MAIN_THREAD_TIMEOUT.as_millis()
+        );
+    }
+    result
 }
 
 fn is_splash_sized(frame: Rect) -> bool {
