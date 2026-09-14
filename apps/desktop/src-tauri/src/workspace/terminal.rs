@@ -2258,6 +2258,25 @@ mod tests {
         );
 
         manager.write(info.id, &[0x03]).expect("ctrl-c");
+        // O exit só vai depois de o job sair do primeiro plano: no Windows a linha digitada
+        // junto do Ctrl C se perde enquanto o console entrega o sinal ao processo.
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let mut interrupted = false;
+        while Instant::now() < deadline {
+            if manager
+                .metrics()
+                .first()
+                .is_some_and(|sample| sample.foreground.is_none())
+            {
+                interrupted = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        assert!(
+            interrupted,
+            "o Ctrl C deveria encerrar o job em primeiro plano"
+        );
         manager.write(info.id, &shell.exit()).expect("exit");
         let exit = reader.join().expect("leitor do terminal");
         assert!(exit.is_some());
