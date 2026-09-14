@@ -1055,6 +1055,63 @@ O desktop agora detecta o idioma do sistema, usa português como fallback e guar
 
 `npm run test:i18n` aprovou a paridade dos três dicionários e as normalizações. `npm run test:ui` aprovou 17 cenários de sincronização e 59 checks restantes, incluindo detecção, persistência e renderização em espanhol. `npm run build:ui` do workspace desktop concluiu e validou 130 assets do recurso móvel. A menubar criada em `packages/ui` acompanha o idioma, sem mudanças em `apps/desktop/src-tauri`. Os menus definidos diretamente no código nativo permanecem pendentes até o registro de Parte A pronta.
 
+### 13/09/2026, parte final da tradução em três idiomas e validação integrada
+
+Ao iniciar, a pasta tinha outras duas sessões de agente: a sessão Claude da distribuição e o Codex da frente de tradução, com o turno interrompido às 20:57. O usuário autorizou assumir todo o trabalho. Durante a execução, a sessão da distribuição ainda publicou `96c21c5`, que altera somente `docs/10` e entrou na validação final sem sobreposição com esta entrega.
+
+Tarefa 1, revisão do trabalho sem commit. O gate falhava por seis chaves `desktop.demo.*` ausentes e quatro testes Jest ainda esperavam as mensagens anteriores às invariantes com código estável. O espanhol foi padronizado com el terminal e computadora, o inglês passou a usar Pair phone em todo o produto e as frases de argumentos do shell em português deixaram de soletrar as flags. As guardas `onboarding.mjs` e `platform-preferences.mjs` quebravam o `npm test` desde `161c079`, porque procuravam textos que a tradução moveu para as chaves. Commits `4eecdf3` pacote i18n, `96286d0` terminais, editor e componentes compartilhados, `c2c51d3` desktop, `89cba2a` app mobile e `f3f57cb` guardas.
+
+Tarefa 2, commit `b74a36b`. Uma varredura por AST de `packages/ui`, `apps/mobile` e `packages/protocol` mostrou os textos restantes. Os erros do protocolo passaram a carregar `bridge_disconnected`, `bridge_failed`, `bridge_timeout`, `bridge_url_invalid` e `session_locked`, traduzidos por `lib/errors.js` na fronteira do `invoke`. Os motivos de autorização viajam como código, a página mostra o texto do idioma ativo no `confirm` e no prompt do celular, e o app ainda reconhece os textos em português de computadores anteriores. O diálogo de salvar e os arquivos da demonstração também usam chaves.
+
+Tarefa 3, commit `94808d9`. `check:i18n` percorre mobile, desktop, terminais, shared, componentes, views, lib e `apps/mobile`, exige exatamente pt-BR, en e es com as mesmas chaves, valores não vazios e os mesmos placeholders, confere os valores passados em cada chamada de `t`, rejeita texto em JSX, propriedades visíveis e acessíveis, alertas, `confirm` e erros literais e recusa chaves sem uso, contando também as chaves usadas pelo Rust. Catorze chaves do cabeçalho antigo foram removidas. O gate roda no test de `packages/ui`.
+
+Tarefa 4, commit `730cbd7`. `tools/i18n/native-catalog.mjs` gera `apps/desktop/src-tauri/i18n/native.json` com as chaves `native.*`, e o Rust o embute em `src/i18n.rs`. A interface chama `app_set_locale` ao abrir e ao trocar de idioma; o valor fica gravado em `language` no diretório de configuração. No macOS o menu padrão em inglês do Tauri foi desligado e `src/menu.rs` instala no setup o menu de início no idioma gravado, com Sair pela confirmação; a menubar da interface usa as mesmas chaves `native.menu.*` e é refeita ao trocar de idioma, sem reiniciar. A confirmação de saída, o aviso de shell reaberto com data e hora por idioma, o progresso do Chromium e cerca de cem mensagens de arquivos, Office, navegador, terminal, ponte e arraste usam o catálogo. Erros do sidecar Go e do supervisor com código estável ganharam tradução na interface desktop, com o texto original para códigos novos. O app não tem bandeja. Continuam em português falhas de inicialização, corpos HTTP internos da ponte e da prévia, erros do observador descartados pela interface e os textos detalhados do sidecar; mensagens criadas pelo computador seguem o idioma escolhido no computador, inclusive no celular. `check:native-i18n` confere o catálogo, as chaves e os placeholders das chamadas no Rust.
+
+Tarefa 5, commit `2fc0447`. `app.config.ts` lê `@cialai/i18n`: `CFBundleLocalizations` segue os três idiomas e os textos de câmera, rede local e Face ID saem das chaves `mobile.permission.*` pelo campo `locales` do Expo, que gera `InfoPlist.strings` por idioma. No Android, o plugin local `with-android-locales.cjs` grava `locales_config.xml` e `android:localeConfig`, sem dependência nativa nova. A introspecção do Expo mostrou os três idiomas, as permissões em espanhol e o atributo no manifesto.
+
+Tarefa 6, commit `8a5494f`. A decisão 035 cobre interfaces, núcleo nativo e metadados móveis. Roadmap, esta tabela e os guias 05, 08 e 14 foram atualizados.
+
+Conferência visual. Pelo horário de criação no armazenamento do Control e pelo início dos shells, esta sessão é `s_mtz0wu4tdufqpa` e não tinha Dev Browser aberto. As portas 64552 e 64556 pertencem às sessões `s_mtz0wkewn82cit` e `s_mtyiphb14y6s7r` e não foram usadas. A conferência rodou num Chromium 149 headless isolado, com perfil no scratchpad, dirigido pelo `dev-browser` 0.2.7 contra um Vite próprio na porta 1433. Em pt-BR, en e es, macOS, `?platform=windows` e `?platform=linux`, o estúdio, as Preferências, o menu da toolbar e Dispositivos mostraram `lang` e `data-platform` corretos e nenhum parêntese ou traço como separador. Os únicos alertas de idioma foram Português no seletor e São Paulo na demonstração. A página do celular foi conferida nos três idiomas em 393 por 852. As 40 capturas estão em `~/.dev-browser/tmp/cialai-i18n-*.png`. Essa conferência não substitui o painel desta sessão, WebKitGTK ou WebView2.
+
+Comandos concluídos com código 0 sobre `8a5494f`:
+
+```sh
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run sidecar --workspace @cialai/desktop
+CARGO_TARGET_DIR=~/.cache/cialai-target CARGO_BUILD_JOBS=2 npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm test
+cd packages/tunnel-core && go test -race -mod=readonly ./...
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run test --workspace @cialai/mobile
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run typecheck --workspace @cialai/mobile
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run lint --workspace @cialai/mobile
+cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml --check
+npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run build:ui --workspace @cialai/desktop
+git diff --check
+CIALAI_SKIP_WINDOWS_RESOURCES=1 CARGO_TARGET_DIR=~/.cache/cialai-target cargo-xwin clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --target x86_64-pc-windows-msvc --all-targets --locked -j 2 -- -D warnings
+CARGO_TARGET_DIR=~/.cache/cialai-target/target CARGO_BUILD_JOBS=2 CARGO_PROFILE_DEV_DEBUG=0 npm exec --yes --package=node@22.23.2 --package=npm@10.9.8 -- npm run test:selftest
+APP_ENV=production npx expo config --type introspect --json
+```
+
+Resultados: o `npm test` da raiz passou todas as guardas, inclusive `check:native-i18n` com 128 chaves e 127 usadas pelo Rust em 46 arquivos; i18n aprovou 4 casos; o gate aprovou 999 chaves em 3 idiomas e 8 superfícies; a sincronização aprovou 17 casos, a interface 67 e o protocolo 11; o Clippy com `-D warnings` passou e a suíte Rust do macOS aprovou 167 testes, com os 2 ensaios externos ignorados; `check:css-cascade` passou; 13 pacotes Go passaram e 2 não têm testes; Jest aprovou 109 casos em 17 suítes. `go test -race` passou nos mesmos 13 pacotes. Typecheck, lint, `cargo fmt --check`, o build Vite com 130 assets validados no recurso móvel e `git diff --check` passaram. O Clippy do alvo `x86_64-pc-windows-msvc` passou com as mudanças nos arquivos Windows. O self test real do macOS por `tauri dev` passou os 8 itens em 4,2 s depois de um build novo de 2 min 24 s, e o app gravou o idioma escolhido pela interface, o que exercita o setup com o menu de início e o comando `app_set_locale`. O alvo extra `~/.cache/cialai-target/target`, com 1,8 GiB, ficou no disco; restavam 16 GiB livres.
+
+Dependem de execução externa ou manual: CI remota e `nightly-e2e.yml`; Windows nativo com menu da toolbar, WebView2, mensagens do núcleo e Mica; Linux visível com WebKitGTK e Wayland; conferência visual do menu nativo e da confirmação de saída no app macOS em pt-BR, en e es; builds do Codemagic com `InfoPlist.strings` e `localeConfig`, a escolha de idioma por aplicativo no iOS e no Android e os aparelhos; textos de lojas e políticas em espanhol.
+
+Percentual estimado pelo peso das tarefas, com os aplicativos compilados e testados em aparelho só no Codemagic:
+
+| Fase | Situação na main | Percentual |
+| --- | --- | --- |
+| 0 Fundação e spikes | Base, CI local e spike 3; demais spikes absorvidos pelas Fases 3 e 4 ou pendentes de assinatura e soak | 47% |
+| 1 Desktop macOS | Implementação e evidência local completas; aceite humano pendente | 97% |
+| 2 Túnel e pareamento | Implementação e evidência local completas; CI remota e Headscale real pendentes | 96% |
+| 3 iOS | Código de 3.1 a 3.8, roteiro 3.9 e metadados por idioma prontos; builds nativos, iPhone e revisão pendentes | 74% |
+| 4 Android | Código de 4.1 a 4.6, roteiro 4.7 e idiomas declarados prontos; build, aparelho e relatório do Play pendentes | 63% |
+| 5 Linux e Windows | 5 tarefas implementadas e 13 preparadas; 5.17 pendente e Windows sem execução nativa | 72% |
+| 6 Todas as plataformas | 6.6 e 6.8 implementadas; 6.1, 6.2 e 6.4 preparadas; 6.3, 6.5 e 6.7 pendentes | 53% |
+| 7 Lançamento | 7.2 implementada; 7.1, 7.3, 7.4 e 7.5 preparadas; chave, contas, lojas e 7.6 pendentes | 50% |
+| Total | Soma ponderada | cerca de 70% |
+
+Nenhum push, tag, release, workflow remoto ou build do Codemagic foi disparado. `.github/README.md` e `.github/assets` continuam fora dos commits.
+
+Parte final pronta
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -1135,3 +1192,4 @@ npm run check:source
 5. Executar spikes 1 e 2, depois 4 e 5, com as medições do documento 06. Preparar revisão externa e assinatura com as contas e certificados corretos. O soak de 24 horas continua obrigatório.
 6. Conferir o ícone aprovado no Dock, na barra de tarefas e nos lançadores quando os builds de cada plataforma forem executados.
 7. Fase 2 com implementação e evidência local completas. Pendências reais: executar `headscale-integration.yml` e `release.yml` no GitHub, cumprir o aceite manual no macOS com um Headscale real. A validade da chave já é devolvida por `control.configure` desde o commit `842491a`.
+8. Tradução em três idiomas integrada na main. Pendências reais: conferir menu nativo e confirmação de saída no app macOS nos três idiomas, WebView2 e WebKitGTK nos sistemas reais, builds do Codemagic com metadados por idioma e textos de loja em espanhol.
