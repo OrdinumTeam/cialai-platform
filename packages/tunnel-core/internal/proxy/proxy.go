@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
 )
 
 const (

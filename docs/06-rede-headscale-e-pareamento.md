@@ -139,7 +139,7 @@ Recarga por `SIGHUP` ou `systemctl reload headscale`. Desktops compartilhados en
 
 ```
 packages/tunnel-core/
-  go.mod                     módulo github.com/OrdinumTeam/cialai-platform/packages/tunnel-core, go 1.26.5, tailscale.com 1.102.0 fixado
+  go.mod                     módulo github.com/Cialai/cialai/packages/tunnel-core, go 1.26.5, tailscale.com 1.102.0 fixado
   cmd/cialai-tunnel/main.go  sidecar do desktop, sem cgo
   internal/node/             ciclo de vida do tsnet, peers por chave de nó, ganchos de rede
   internal/edge/             estáticos, /api/health, /pair, autenticação, proxy reverso para a ponte

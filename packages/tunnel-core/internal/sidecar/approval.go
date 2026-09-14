@@ -8,8 +8,8 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/edge"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 )
 
 type approvalQueue struct {

@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/logx"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/sidecar"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	ps "github.com/mitchellh/go-ps"
 )
 

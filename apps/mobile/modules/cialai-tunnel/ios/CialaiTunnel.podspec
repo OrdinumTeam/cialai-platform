@@ -9,9 +9,9 @@ Pod::Spec.new do |spec|
   spec.description = 'Wraps the gomobile Tunnelcore framework without implementing network logic in Swift.'
   spec.license = 'Apache-2.0'
   spec.author = 'Ordinum'
-  spec.homepage = 'https://github.com/OrdinumTeam/cialai-platform'
+  spec.homepage = 'https://github.com/Cialai/cialai'
   spec.platforms = { :ios => '16.4' }
-  spec.source = { :git => 'https://github.com/OrdinumTeam/cialai-platform.git' }
+  spec.source = { :git => 'https://github.com/Cialai/cialai.git' }
   spec.static_framework = true
   spec.source_files = '**/*.{h,m,mm,swift}'
   spec.swift_version = '5.9'

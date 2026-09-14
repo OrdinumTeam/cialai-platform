@@ -22,7 +22,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/spikes/mobileprobe"
+	"github.com/Cialai/cialai/packages/tunnel-core/spikes/mobileprobe"
 	"tailscale.com/derp/derpserver"
 	"tailscale.com/tsnet"
 	"tailscale.com/types/key"

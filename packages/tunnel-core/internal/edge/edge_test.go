@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 type fakeWhoIs struct {

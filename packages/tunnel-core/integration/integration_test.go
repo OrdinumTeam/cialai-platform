@@ -26,14 +26,14 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/control"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/logx"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/proxy"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/sidecar"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/testutil"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/testutil"
 )
 
 const proxySecret = "integration-proxy-secret-7f3c9a1e5b"

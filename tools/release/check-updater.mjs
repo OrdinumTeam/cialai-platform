@@ -15,7 +15,7 @@ const placeholder = 'REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY';
 
 assert.equal(config.bundle.createUpdaterArtifacts, true);
 assert.deepEqual(config.plugins?.updater?.endpoints, [
-  'https://github.com/OrdinumTeam/cialai-platform/releases/latest/download/latest.json',
+  'https://github.com/Cialai/cialai/releases/latest/download/latest.json',
 ]);
 assert.equal(typeof config.plugins?.updater?.pubkey, 'string');
 assert.match(cargo, /^tauri-plugin-updater = /m);

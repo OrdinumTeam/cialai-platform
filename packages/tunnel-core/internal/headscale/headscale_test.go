@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/control"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
 )
 
 const testAPIKey = "hskey-api-test-secret"

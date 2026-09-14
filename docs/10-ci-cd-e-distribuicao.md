@@ -13,8 +13,8 @@ A exportação para a organização `Cialai` só acontece depois da conclusão. 
 
 1. Decidir se o público recebe o histórico completo ou um ponto de partida limpo. O histórico e os documentos internos citam caminhos locais, o Ordinum Control e o diário de execução.
 2. Revisar `docs/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
-3. Trocar o caminho do repositório em `packages/tunnel-core/go.mod` e nos imports Go do módulo, no endpoint do updater em `apps/desktop/src-tauri/tauri.conf.json` e `tools/release/check-updater.mjs`, em `apps/mobile/modules/cialai-tunnel/ios/CialaiTunnel.podspec` e nos links dos documentos.
-4. Publicar a primeira release já com o endpoint do updater apontando para a organização `Cialai`. Apps instalados só procuram atualização na URL compilada neles.
+3. Feito em 13/09/2026: o módulo Go, os imports, o endpoint do updater, o podspec e os links dos documentos já usam `github.com/Cialai/cialai`.
+4. Publicar a primeira release pelo repositório público `Cialai/cialai`. Apps instalados só procuram atualização na URL compilada neles.
 5. Definir onde ficam o app do Codemagic e os secrets de assinatura. Workflows disparados por PR de fork nunca recebem secrets.
 6. Confirmar o contato de segurança de `SECURITY.md` e o `CODE_OF_CONDUCT.md` antes de abrir.
 

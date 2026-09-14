@@ -10,14 +10,14 @@ import (
 	"net"
 	"sync"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/control"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/edge"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/headscale"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/logx"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/node"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/pairing"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/rpc"
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/headscale"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/rpc"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 type runtimeState struct {

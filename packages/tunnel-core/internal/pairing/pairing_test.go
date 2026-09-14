@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/OrdinumTeam/cialai-platform/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 func validPayload(now time.Time) Payload {

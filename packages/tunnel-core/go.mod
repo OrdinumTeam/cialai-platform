@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-module github.com/OrdinumTeam/cialai-platform/packages/tunnel-core
+module github.com/Cialai/cialai/packages/tunnel-core
 
 go 1.26.5
 
