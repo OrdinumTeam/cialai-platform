@@ -2,6 +2,7 @@
 // Cria, confere, soma e publica a release do GitHub pelo gh, sem expor tokens.
 // Uso:
 //   node tools/release/release-assets.mjs draft <tag> <preview|stable>
+//   node tools/release/release-assets.mjs updater-json <tag>
 //   node tools/release/release-assets.mjs verify <tag>
 //   node tools/release/release-assets.mjs checksums <tag>
 //   node tools/release/release-assets.mjs publish <tag>
@@ -34,6 +35,33 @@ export const REQUIRED_ASSETS = [
 
 export function missingAssets(names) {
   return REQUIRED_ASSETS.filter(([, pattern]) => !names.some((name) => pattern.test(name))).map(([label]) => label);
+}
+
+// O latest.json é montado uma vez, depois da matriz, para que jobs paralelos não sobrescrevam as
+// entradas uns dos outros. Cada chave aponta para o pacote do atualizador e a assinatura minisign dele.
+export const UPDATER_PLATFORMS = [
+  { keys: ['darwin-aarch64', 'darwin-aarch64-app'], bundle: /aarch64.*\.app\.tar\.gz$/, required: true },
+  { keys: ['darwin-x86_64', 'darwin-x86_64-app'], bundle: /(x64|x86_64).*\.app\.tar\.gz$/, required: true },
+  { keys: ['linux-x86_64', 'linux-x86_64-appimage'], bundle: /\.AppImage$/, required: true },
+  { keys: ['linux-x86_64-deb'], bundle: /\.deb$/, required: false },
+  { keys: ['linux-x86_64-rpm'], bundle: /\.rpm$/, required: false },
+  { keys: ['windows-x86_64', 'windows-x86_64-nsis'], bundle: /-setup\.exe$/, required: true },
+  { keys: ['windows-x86_64-msi'], bundle: /\.msi$/, required: false },
+];
+
+export function updaterManifest({ tag, repo, names, signatures, notes, date }) {
+  const platforms = {};
+  for (const { keys, bundle, required } of UPDATER_PLATFORMS) {
+    const name = names.find((candidate) => bundle.test(candidate));
+    const signature = name ? signatures[`${name}.sig`]?.trim() : undefined;
+    if (!name || !signature) {
+      if (required) throw new Error(`Updater bundle or signature missing for ${keys[0]}`);
+      continue;
+    }
+    const url = `https://github.com/${repo}/releases/download/${encodeURIComponent(tag)}/${encodeURIComponent(name)}`;
+    for (const key of keys) platforms[key] = { signature, url };
+  }
+  return { version: tag.replace(/^v/, ''), notes, pub_date: date.toISOString().replace(/\.\d{3}Z$/, 'Z'), platforms };
 }
 
 export function formatChecksums(entries) {
@@ -96,6 +124,33 @@ function draft(tag, channel) {
   console.log(`release_id=${created.id}`);
 }
 
+function updaterJson(tag) {
+  const release = requireRelease(tag);
+  const names = release.assets.map((asset) => asset.name);
+  const directory = mkdtempSync(join(tmpdir(), 'cialai-updater-'));
+  try {
+    const signatures = {};
+    for (const name of names.filter((candidate) => candidate.endsWith('.sig'))) {
+      gh(['release', 'download', tag, '--repo', repository(), '--pattern', name, '--dir', directory, '--clobber']);
+      signatures[name] = readFileSync(join(directory, name), 'utf8');
+    }
+    const manifest = updaterManifest({
+      tag,
+      repo: repository(),
+      names: names.filter((name) => !name.endsWith('.sig')),
+      signatures,
+      notes: `Cialai ${tag}. See https://github.com/${repository()}/releases/tag/${tag}`,
+      date: new Date(),
+    });
+    const output = join(directory, 'latest.json');
+    writeFileSync(output, `${JSON.stringify(manifest, null, 2)}\n`);
+    gh(['release', 'upload', tag, output, '--repo', repository(), '--clobber']);
+    console.log(`PASS latest.json lists ${Object.keys(manifest.platforms).length} updater targets for ${tag}`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 function verify(tag) {
   const names = requireRelease(tag).assets.map((asset) => asset.name);
   const missing = missingAssets(names);
@@ -133,9 +188,15 @@ function publish(tag) {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, tag, channel] = process.argv.slice(2);
-  const commands = { draft: () => draft(tag, channel), verify: () => verify(tag), checksums: () => checksums(tag), publish: () => publish(tag) };
+  const commands = {
+    draft: () => draft(tag, channel),
+    'updater-json': () => updaterJson(tag),
+    verify: () => verify(tag),
+    checksums: () => checksums(tag),
+    publish: () => publish(tag),
+  };
   if (!commands[command] || !tag) {
-    console.error('Usage: release-assets.mjs draft|verify|checksums|publish <tag> [channel]');
+    console.error('Usage: release-assets.mjs draft|updater-json|verify|checksums|publish <tag> [channel]');
     process.exit(64);
   }
   commands[command]();

@@ -208,7 +208,7 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseDraft: true
           releaseAssetNamePattern: "[name]_[arch][setup][ext]"
-          updaterJsonPreferNsis: true
+          uploadUpdaterJson: false
           retryAttempts: 1
       - name: Build and upload
         if: steps.signing.outputs.macos != 'developer-id'
@@ -228,7 +228,7 @@ jobs:
           tagName: ${{ env.RELEASE_TAG }}
           releaseDraft: true
           releaseAssetNamePattern: "[name]_[arch][setup][ext]"
-          updaterJsonPreferNsis: true
+          uploadUpdaterJson: false
           retryAttempts: 1
 
   publish:
@@ -245,6 +245,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
+      - name: Write latest.json from the signed updater bundles
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: node tools/release/release-assets.mjs updater-json "$RELEASE_TAG"
       - name: Verify installers and updater files
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

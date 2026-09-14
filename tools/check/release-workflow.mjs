@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { appVersions, releaseChannel } from '../release/release-channel.mjs';
 import { signingPlan } from '../release/signing-mode.mjs';
-import { CHECKSUM_FILE, formatChecksums, missingAssets, releaseNotes } from '../release/release-assets.mjs';
+import { CHECKSUM_FILE, formatChecksums, missingAssets, releaseNotes, updaterManifest } from '../release/release-assets.mjs';
 
 const rootUrl = new URL('../../', import.meta.url);
 const root = fileURLToPath(rootUrl);
@@ -62,6 +62,26 @@ assert.equal(
 );
 assert.throws(() => formatChecksums([{ name: 'a', sha256: 'zz' }]), /Invalid SHA 256/);
 
+// latest.json montado depois da matriz com URLs da tag, chaves por sistema e por instalador.
+const signatures = Object.fromEntries(stable.filter((name) => /\.(app\.tar\.gz|AppImage|exe|msi)$/.test(name)).map((name) => [`${name}.sig`, `sig-${name}\n`]));
+const manifest = updaterManifest({
+  tag: 'v0.1.0', repo: 'Cialai/cialai', names: stable, signatures, notes: 'Cialai v0.1.0', date: new Date('2026-09-14T04:05:06.789Z'),
+});
+assert.equal(manifest.version, '0.1.0');
+assert.equal(manifest.pub_date, '2026-09-14T04:05:06Z');
+assert.deepEqual(Object.keys(manifest.platforms).sort(), [
+  'darwin-aarch64', 'darwin-aarch64-app', 'darwin-x86_64', 'darwin-x86_64-app', 'linux-x86_64', 'linux-x86_64-appimage',
+  'windows-x86_64', 'windows-x86_64-msi', 'windows-x86_64-nsis',
+]);
+assert.deepEqual(manifest.platforms['darwin-aarch64'], {
+  signature: 'sig-Cialai_aarch64.app.tar.gz', url: 'https://github.com/Cialai/cialai/releases/download/v0.1.0/Cialai_aarch64.app.tar.gz',
+});
+assert.equal(manifest.platforms['windows-x86_64'].url, 'https://github.com/Cialai/cialai/releases/download/v0.1.0/Cialai_x64-setup.exe');
+assert.equal(manifest.platforms['linux-x86_64'].url, 'https://github.com/Cialai/cialai/releases/download/v0.1.0/Cialai_amd64.AppImage');
+const withoutMacSignature = { ...signatures };
+delete withoutMacSignature['Cialai_x64.app.tar.gz.sig'];
+assert.throws(() => updaterManifest({ tag: 'v0.1.0', repo: 'Cialai/cialai', names: stable, signatures: withoutMacSignature, notes: '', date: new Date() }), /darwin-x86_64/);
+
 // Notas da prévia: aviso de binários sem assinatura de plataforma e passos do macOS e do Windows.
 const preview = releaseNotes(read('tools/release/notes/preview.md'), 'v0.1.0');
 for (const required of ['not signed with an Apple Developer ID', 'Privacy & Security', 'Open Anyway', 'More info', 'Run anyway', 'SHA256SUMS', 'TestFlight']) {
@@ -85,6 +105,7 @@ assert.equal((workflow.match(/uses: tauri-apps\/tauri-action@v1/g) ?? []).length
 assert.equal((workflow.match(/releaseId: \$\{\{ needs\.draft\.outputs\.release_id \}\}/g) ?? []).length, 2);
 assert.equal((workflow.match(/releaseAssetNamePattern: "\[name\]_\[arch\]\[setup\]\[ext\]"/g) ?? []).length, 2);
 assert.equal((workflow.match(/--config src-tauri\/tauri\.release\.conf\.json/g) ?? []).length, 2);
+assert.equal((workflow.match(/uploadUpdaterJson: false/g) ?? []).length, 2, 'parallel jobs must not race on latest.json');
 assert.match(workflow, /node tools\/release\/signing-mode\.mjs\n\s+--target \$\{\{ matrix\.target \}\}\n\s+--config-out apps\/desktop\/src-tauri\/tauri\.release\.conf\.json/);
 assert.match(workflow, /- os: macos-14\n\s+target: aarch64-apple-darwin\n\s+- os: macos-14\n\s+target: x86_64-apple-darwin/);
 assert.doesNotMatch(workflow, /macos-13/, 'macos-13 runners are retired');
@@ -96,7 +117,7 @@ assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id'/
 assert.doesNotMatch(defaultStep, /APPLE_/, 'the ad hoc build must not receive Apple credentials');
 const publish = workflow.slice(workflow.indexOf('\n  publish:'));
 assert.match(publish, /needs: \[guard, desktop\]/);
-const order = ['release-assets.mjs verify', 'release-assets.mjs checksums', 'release-assets.mjs publish'];
+const order = ['release-assets.mjs updater-json', 'release-assets.mjs verify', 'release-assets.mjs checksums', 'release-assets.mjs publish'];
 for (let index = 1; index < order.length; index += 1) {
   assert.ok(publish.indexOf(order[index - 1]) < publish.indexOf(order[index]), `${order[index - 1]} must run before ${order[index]}`);
 }
