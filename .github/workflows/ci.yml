@@ -67,6 +67,20 @@ jobs:
       - name: Executar suítes
         run: npm test
 
+      - name: Conferir texto visível
+        if: runner.os == 'Linux'
+        run: npm run check:text
+
+      - name: Preparar Playwright e Chromium
+        if: runner.os == 'Linux'
+        run: |
+          npm ci --prefix tools/browser
+          node tools/browser/node_modules/playwright/cli.js install --with-deps chromium
+
+      - name: Checks de navegador
+        if: runner.os == 'Linux'
+        run: npm run test:browser
+
       # A CI não recebe a chave do atualizador; o bundle sai sem os arquivos assinados do updater.
       - name: Criar bundle sem assinatura
         run: npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json

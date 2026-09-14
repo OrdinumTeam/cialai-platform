@@ -32,6 +32,10 @@ for (const required of [
   'npm ci',
   'npm run sidecar --workspace @cialai/desktop',
   'npm test',
+  'npm run check:text',
+  'npm ci --prefix tools/browser',
+  'playwright/cli.js install --with-deps chromium',
+  'npm run test:browser',
   'npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json',
   'actions/upload-artifact@v4',
   'if-no-files-found: error',
@@ -54,6 +58,19 @@ assert.ok(
   'o bundle só pode ser criado depois da suíte',
 );
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
+assert.ok(
+  workflow.indexOf('npm test') < workflow.indexOf('npm run test:browser'),
+  'os checks de navegador rodam depois da suíte',
+);
+const browserPackage = JSON.parse(readFileSync(`${root}/tools/browser/package.json`, 'utf8'));
+assert.match(browserPackage.dependencies.playwright, /^\d+\.\d+\.\d+$/, 'o Playwright precisa de versão exata');
+const { SCENARIOS, verdict, viteFsPath } = await import(new URL('../browser/run-browser-checks.mjs', import.meta.url));
+assert.deepEqual(SCENARIOS.map(({ name }) => name), ['desktop studio', 'desktop network', 'phone terminal']);
+assert.equal(verdict('PASS: ok'), 'pass');
+assert.equal(verdict('FAIL: erro'), 'fail');
+assert.equal(verdict('CHECK: Cialai'), 'pending');
+assert.equal(viteFsPath('/repo/', 'packages/ui/scripts/check-studio-browser.js'), '/@fs/repo/packages/ui/scripts/check-studio-browser.js');
+assert.equal(viteFsPath('D:\\a\\cialai\\', 'packages/ui/x.js'), '/@fs/D:/a/cialai/packages/ui/x.js');
 
 const ciConfig = JSON.parse(readFileSync(`${root}/apps/desktop/src-tauri/tauri.ci.conf.json`, 'utf8'));
 assert.equal(ciConfig.bundle.createUpdaterArtifacts, false, 'o bundle da CI não pode exigir a chave privada do updater');

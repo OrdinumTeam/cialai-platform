@@ -74,7 +74,7 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | Xcode | 16.1 ou mais novo | iOS e macOS |
 | Android SDK e NDK | `compileSdk` e `targetSdk` 36, NDK fixado pelo Expo | Android |
 | Expo | SDK 57, `expo-dev-client` | Celular |
-| Playwright | fixado em `tools/browser` | Checks de navegador e Chromium do Dev Browser |
+| Playwright | 1.63.0 fixado em `tools/browser/package.json` com lockfile próprio | Checks de navegador por `tools/browser/run-browser-checks.mjs`; o Dev Browser do app instala o Chromium por `npx playwright` |
 | Docker | qualquer recente | Headscale de integração |
 | LibreOffice, `whisper` não | LibreOffice opcional para prévias; nada de Whisper, que era das reuniões | |
 
@@ -101,8 +101,11 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | `npm run check:manual-mobile` | Confere as folhas imprimíveis iOS e Android sem aprovar seus resultados |
 | `npm run check:release` | Confere a preparação da versão 1; `--release` exige os seis gates verificados |
 | `npm run check:living-docs` | Confere estado datado nos documentos 01 a 12 e cobertura das tarefas e decisões |
+| `npm run check:release-workflow` | Confere canal de prévia, assinatura opcional, nomes estáveis, `latest.json`, `SHA256SUMS` e publicação do `release.yml` |
+| `npm run check:text` | Recusa parênteses e hífen, meia-risca ou travessão como separador no texto visível dos três idiomas, das lojas, das políticas e das notas de release |
+| `npm run test:browser` | Sobe o Vite do desktop e roda por Playwright os roteiros do estúdio, da rede e do celular; exige `npm ci --prefix tools/browser` e o Chromium do Playwright |
 
-O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`, sem atalho na raiz. Desenvolvimento Expo e prebuild são executados no workspace `@cialai/mobile`. Os scripts `test:browser`, `check:text` e `icons` descritos no planejamento original ainda não existem na raiz.
+O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`, sem atalho na raiz. Desenvolvimento Expo e prebuild são executados no workspace `@cialai/mobile`. `test:browser` e `check:text` existem desde 14/09/2026; o atalho `icons` do planejamento original continua como `npm run icon --workspace @cialai/desktop`.
 
 ## Como rodar
 

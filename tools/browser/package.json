@@ -1,0 +1,11 @@
+{
+  "name": "cialai-browser-checks",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Playwright fixado para os checks de navegador da interface do Cialai",
+  "dependencies": {
+    "playwright": "1.63.0"
+  }
+}

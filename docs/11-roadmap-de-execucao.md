@@ -103,7 +103,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.13 | Implementado | Na main desde `d64207d` e `bfccb08`: casca, fontes, `.mac-switch` e JetBrains Mono conferidos em Chromium nos três sistemas, com a cascata de produção protegida; WebKitGTK e WebView2 reais não exercitados |
 | 5.14 | Implementado | Na main desde `b1a4efe`: Terminal, Dev Browser, Janela e caminhos por sistema em testes Rust nos três alvos e conferidos em Chromium nos três idiomas; troca do Mica ao salvar sem execução Windows |
 | 5.15 | Preparado | Suíte Rust passou no macOS e Linux; Windows apenas compilado |
-| 5.16 | Preparado | Matriz do `ci.yml` versionada sem execução remota; release, Playwright e check de texto pendentes |
+| 5.16 | Implementado | Matriz do `ci.yml` com `check:text` e checks de navegador por Playwright no Ubuntu desde 14/09/2026; `release.yml` publicou a prévia `v0.1.0`; o verde remoto nos três sistemas é registrado no documento 13 |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |
 | 5.18 | Preparado | Na main desde `745d7ad`: `nightly-e2e.yml`, runner por `tauri-driver` e roteiro portátil; self test passou no macOS por `tauri dev` e no Ubuntu 22.04 em contêiner com Xvfb; execução remota e Windows pendentes |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
