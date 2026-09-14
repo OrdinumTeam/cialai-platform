@@ -24,15 +24,15 @@ Checklist original da exportação:
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
-| `ci.yml` | Preparado | Matriz Ubuntu 22.04, Windows 2022 e macOS 14 com sidecar local, `npm test`, bundle sem assinatura e artefatos por sistema está versionada; nenhuma execução remota foi observada |
+| `ci.yml` | Implementado | Matriz Ubuntu 22.04, Windows 2022 e macOS 14 com sidecar local, `npm test`, bundle sem assinatura e artefatos por sistema. A execução de 14/09/2026 falhou no Windows por CRLF nos checks e no macOS e no Linux porque o bundle pedia a chave privada do updater; `.gitattributes` com LF e `tauri.ci.conf.json` sem artefatos do updater corrigem as duas causas |
 | `spike-headscale.yml` | Preparado | Contrato existe e o spike passou localmente; execução no GitHub não foi observada |
 | `headscale-integration.yml` | Preparado | Workflow e integração Docker existem; o gate remoto no SHA da candidata está pendente |
-| `release.yml` | Preparado | Matriz desktop, cinco sidecars, updater e rascunho existem; assinaturas de plataforma, publicação dos sidecars brutos e execução por tag continuam pendentes |
+| `release.yml` | Implementado | Guarda com canal de prévia, cinco sidecars, rascunho único, matriz macOS arm64 e Intel, Linux e Windows, assinatura de plataforma opcional, nomes estáveis, `SHA256SUMS` e publicação. Sem Developer ID o macOS sai com assinatura ad hoc e sem Azure Trusted Signing o Windows sai sem Authenticode |
 | `nightly-e2e.yml` | Preparado | Self test diário no Ubuntu 22.04 e no Windows 2022 por `tauri-driver` 2.0.6, com WebKitWebDriver e Xvfb no Linux e Edge WebDriver da versão do WebView2 no Windows; nenhuma execução remota foi observada |
 | `mobile-artifacts.yml` | Pendente | O workflow dedicado ao XCFramework e ao AAR ainda não existe; Codemagic pode compilar os bindings no runner |
 | `ios-testflight`, `ios-archive` e `android-play` | Preparado | Configuração e checks locais existem; apps, integrações, credenciais, builds e uploads não foram executados |
 | Scripts em `tools/release` | Implementado | Contratos locais, modo de ensaio e guardas estão versionados e testados sem credenciais reais |
-| Atualizador do desktop | Preparado | Plugin, artefatos, endpoint e secrets estão configurados; a chave pública provisória bloqueia a release |
+| Atualizador do desktop | Implementado | Par gerado em 14/09/2026; chave pública em `tauri.conf.json`, validada por `check-updater.mjs`, e chave privada com senha apenas fora do repositório e nos secrets do repositório público |
 | Identificadores públicos | Preparado | Bundle, Team ID e nomes estão documentados; os registros dos apps e ids resultantes dependem do usuário |
 | Credenciais | Pendente | Somente nomes e locais esperados estão versionados; nenhum valor foi criado ou copiado para o repositório |
 | Materiais das lojas | Preparado | Políticas, respostas, textos, capturas planejadas e notas de revisão existem; URLs publicadas e formulários estão pendentes |
@@ -44,14 +44,14 @@ Go está fixado em 1.26.5 pela decisão 022 e Rust em 1.98.1. As tabelas seguint
 
 | Workflow | Gatilho | Passos |
 | --- | --- | --- |
-| `ci.yml` | push, PR e manual | Matriz `ubuntu-22.04`, `windows-2022` e `macos-14`; Node, npm, Rust 1.98.1 e Go pelo `go.mod`; no Linux instala WebKitGTK 4.1, GTK, AppIndicator, SVG, `patchelf`, XDo, OpenSSL e zsh; `npm ci`; build do sidecar local; `npm test`; `tauri build` sem assinatura; dmg, AppImage, deb, rpm, nsis e msi anexados ao run. `CARGO_BUILD_JOBS=2` limita Rust. Playwright e `check:text` ainda aguardam seus scripts, e o workflow não substitui os testes físicos |
-| `release.yml` | tag `v*` e manual | Bloqueia a chave pública provisória e secrets vazios; testa e compila cinco sidecars; entrega o artefato à matriz `macos-14`, `macos-13`, `ubuntu-22.04` e `windows-2022`; `tauri-action` compila os bundles e mantém a release em rascunho. Assinatura de plataforma, sidecars brutos, hashes, notas do changelog e artefatos móveis ainda não estão completos no workflow |
+| `ci.yml` | push, PR e manual | Matriz `ubuntu-22.04`, `windows-2022` e `macos-14`; Node, npm, Rust 1.98.1 e Go pelo `go.mod`; no Linux instala WebKitGTK 4.1, GTK, AppIndicator, SVG, `patchelf`, XDo, OpenSSL e zsh; `npm ci`; build do sidecar local; `npm test`; `tauri build` sem assinatura e com `tauri.ci.conf.json`, que desliga os artefatos do updater porque a CI não recebe a chave privada; dmg, AppImage, deb, rpm, nsis e msi anexados ao run. `CARGO_BUILD_JOBS=2` limita Rust. Playwright e `check:text` ainda aguardam seus scripts, e o workflow não substitui os testes físicos |
+| `release.yml` | tag `v*` e manual com a tag | Exige a chave pública e os secrets do updater e confere a tag com as versões do desktop; prévias abaixo de `v1.0.0` dispensam os gates da versão 1 e tags estáveis exigem `check-release.mjs --release`; testa e compila cinco sidecars; cria um único rascunho com as notas de `tools/release/notes`; a matriz `macos-14` arm64 e Intel, `ubuntu-22.04` e `windows-2022` roda `signing-mode.mjs` e `tauri-action@v1` com nomes sem versão; o último job confere os arquivos, grava `SHA256SUMS` e publica como release mais recente. Sidecars brutos e artefatos móveis ainda não entram no workflow; o APK do Codemagic é anexado depois |
 | `headscale-integration.yml` | mudanças no túnel, diário e manual | `ubuntu-22.04` com Docker; vet e integração contra `headscale/headscale:0.29.3` com prazo de doze minutos |
 | `spike-headscale.yml` | PR no túnel e manual | Executa o spike de política e expiração com Headscale 0.29.3 no Linux |
 | `nightly-e2e.yml` | Diário às 05:17 UTC e manual | Matriz `ubuntu-22.04` e `windows-2022`; instala dependências, `tauri-driver` 2.0.6 e, no Windows, o Edge WebDriver da versão do WebView2; compila sidecar e app de depuração sem bundle; roda `tools/selftest/driver.mjs`, sob Xvfb no Linux, e anexa `selftest.json`, `app.log` e o log do driver mesmo em falha. Não consome secrets |
 | `mobile-artifacts.yml` | Planejado para tag e manual | Ainda ausente; deve publicar `Tunnelcore.xcframework.zip`, `tunnelcore.aar` e hashes para a release |
 
-O workflow atual referencia somente `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Os nomes planejados para Developer ID, notarização e Azure Trusted Signing ainda precisam ser ligados ao workflow sem expor valores. Builds de PR nunca devem receber secrets.
+O workflow exige `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Developer ID e notarização entram quando existirem os secrets `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` e `APPLE_TEAM_ID`. Azure Trusted Signing entra com os secrets `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` e `AZURE_TENANT_ID` e as variáveis `WINDOWS_SIGNING_ENDPOINT`, `WINDOWS_SIGNING_ACCOUNT` e `WINDOWS_SIGNING_PROFILE`. O passo sem Developer ID não recebe nenhuma credencial Apple. Builds de PR nunca recebem secrets.
 
 ## Codemagic
 

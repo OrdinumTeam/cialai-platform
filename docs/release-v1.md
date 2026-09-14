@@ -23,7 +23,7 @@ Ela deve falhar enquanto houver uma linha `PENDENTE`, versões diferentes de `1.
 
 | Dependência | Ação necessária |
 | --- | --- |
-| Chave do atualizador | Gerar o par fora do repositório, inserir somente a chave pública na configuração e guardar a chave privada e a senha nos secrets do GitHub |
+| Chave do atualizador | Feito em 14/09/2026: par gerado fora do repositório, chave pública na configuração e chave privada com senha nos secrets do GitHub. Guardar a cópia offline |
 | Assinatura Apple | Disponibilizar Developer ID, notarização, App Store Connect e perfis do aplicativo |
 | Assinatura Windows | Disponibilizar a conta e os parâmetros do Azure Trusted Signing |
 | Assinatura Android | Disponibilizar o keystore de upload e a conta de serviço do Google Play fora do repositório |
@@ -52,9 +52,9 @@ O comando para gerar o par do atualizador está em `tools/release/README.md`. A 
 
 ## Etapa 3, configurar assinatura
 
-1. Gerar a chave do atualizador fora da árvore conforme `tools/release/README.md`.
-2. Trocar `REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY` somente pela chave pública.
-3. Configurar `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` nos secrets do GitHub.
+1. Conferir que a chave pública do atualizador em `tauri.conf.json` continua a gerada em 14/09/2026, com `check-updater.mjs`.
+2. Não trocar o par sem plano de migração dos clientes que já instalaram a prévia.
+3. Conferir `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` nos secrets do GitHub.
 4. Configurar Developer ID e notarização para macOS e Azure Trusted Signing para Windows.
 5. Conferir as credenciais móveis por nomes e permissões, sem imprimir valores.
 6. Rodar a guarda final. Não criar a tag enquanto ela estiver vermelha.

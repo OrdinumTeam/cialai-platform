@@ -15,6 +15,7 @@ Preparado em 13/09/2026.
 | Senhas e alias do keystore | `secrets/cialai/key.properties` | `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` do grupo `android_credentials` |
 | Token e identificadores da conta | `secrets/ordinum/ordinum.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time e conta do Play, compartilhados por todos os apps |
 | Identificadores do app | `secrets/cialai/cialai.env` | Bundle, pacote, identificadores do app na Apple, no Play e no Codemagic em `CODEMAGIC_APP_ID`, e caminhos do keystore |
+| Chave do atualizador do desktop | `secrets/cialai/tauri-updater.key` e `secrets/cialai/tauri-updater.password` | Não se aplica ao Codemagic. Vai para os secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` do repositório público pelo `gh secret set` lendo do arquivo |
 
 O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e seu identificador `6811702125` já está em `APP_STORE_APP_ID` no `cialai.env`.
 
@@ -45,7 +46,8 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | App do Cialai no Codemagic com as integrações e grupos acima | App `6aa75e1e235d9cae411b55df` criado pelo painel com a integração GitHub. As sete variáveis dos três grupos foram cadastradas pela API em 14/09/2026, lidas dos arquivos sem exibir valores; só `APP_STORE_APP_ID` não é secreta |
 | Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
 | Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
-| Chave do updater e certificados de assinatura do desktop | Pendente, fora desta pasta |
+| Chave do updater do desktop | Gerada em 14/09/2026 em `secrets/cialai/tauri-updater.key`, com a pública em `tauri-updater.key.pub` e a senha em `tauri-updater.password`, todos com permissão 600. Cadastrada nos secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` de `Cialai/cialai` |
+| Developer ID da Apple e certificado Windows | Pendente do usuário. Sem eles o `release.yml` publica macOS com assinatura ad hoc e Windows sem Authenticode |
 
 ## Proteção e rotação
 
