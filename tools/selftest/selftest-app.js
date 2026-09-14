@@ -12,6 +12,10 @@ import { EXECUTED_PATH, noiseFixtures, PTY_ATTEMPTS, PTY_MARKER, PTY_OUTPUT_MS, 
 
 const pause = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
+// Andamento lido pelo driver quando o roteiro não termina: etapa atual, resultados e
+// diagnósticos, para uma parada no runner mostrar onde e por que parou.
+const progress = { step: null, stepStartedAt: null, results, diagnostics: {} };
+window.__CIALAI_SELFTEST_PROGRESS__ = progress;
 let sessionId = null;
 let shellFlavor = null;
 let paths = null;
@@ -36,11 +40,14 @@ async function untilAsync(test, what, limit = 8000) {
 }
 
 async function check(name, run) {
+  const started = Date.now();
+  progress.step = name;
+  progress.stepStartedAt = new Date(started).toISOString();
   try {
     const detail = await run();
-    results.push({ name, ok: true, detail: detail || '' });
+    results.push({ name, ok: true, detail: detail || '', ms: Date.now() - started });
   } catch (error) {
-    results.push({ name, ok: false, detail: error?.message || String(error) });
+    results.push({ name, ok: false, detail: error?.message || String(error), ms: Date.now() - started });
   }
 }
 
@@ -125,8 +132,21 @@ async function run() {
   runtime.selectSession(sessionId);
   const session = runtime.getSession(sessionId);
   shellFlavor = session.shellFlavor || null;
+  // O ConPTY pergunta a posição do cursor ao nascer e o Rust responde essa primeira
+  // pergunta; aqui contam as que chegam ao xterm e as respostas que ele gera.
+  const cursor = { queries: 0, replies: 0 };
+  progress.diagnostics.cursor = cursor;
+  session.term.parser.registerCsiHandler({ final: 'n' }, (params) => {
+    if (params[0] === 6) cursor.queries += 1;
+    return false;
+  });
+  session.term.onData((data) => {
+    if (/^\x1b\[\d+;\d+R$/.test(data)) cursor.replies += 1;
+  });
   // Na tela de 1024 px dos runners do Windows a coluna de arquivos recolhe
   // sozinha; o autoteste abre pelo mesmo botão que a pessoa usa.
+  progress.step = 'abertura';
+  progress.stepStartedAt = new Date().toISOString();
   await until(() => {
     const found = row('destino');
     if (!found) document.querySelector('.terminais-edge--right .terminais-edge__btn')?.click();
@@ -135,6 +155,24 @@ async function run() {
   // Na primeira abertura, WebKitGTK e WebView2 ainda criam caches de fonte e de
   // renderização; os itens do terminal só começam com o xterm montado na tela.
   await until(() => document.querySelector('.terminais-terminal__host .xterm-screen'), 'o terminal montar', TERMINAL_READY_MS);
+  // Renderizador do terminal, GPU vista pelo WebGL e atraso da fila de eventos: num
+  // runner sem GPU o WebGL por software pode explicar um terminal lento.
+  progress.diagnostics.renderer = session.webgl ? 'webgl' : 'dom';
+  try {
+    const gl = document.createElement('canvas').getContext('webgl2');
+    const info = gl?.getExtension('WEBGL_debug_renderer_info');
+    progress.diagnostics.gpu = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl ? 'webgl2' : 'sem webgl2';
+  } catch (_error) {
+    progress.diagnostics.gpu = 'erro ao consultar';
+  }
+  const lag = { maxMs: 0 };
+  progress.diagnostics.eventLoopLag = lag;
+  let tick = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    lag.maxMs = Math.max(lag.maxMs, now - tick - 250);
+    tick = now;
+  }, 250);
 
   await check('PTY real', async () => {
     await until(() => bufferText(session).trim(), 'o prompt do shell', TERMINAL_READY_MS);
@@ -254,6 +292,7 @@ if (!window.__CIALAI_SELFTEST_RUNNING__) {
     startedAt,
     finishedAt: new Date().toISOString(),
     results,
+    diagnostics: progress.diagnostics,
   };
   window.__CIALAI_SELFTEST_RESULT__ = report;
   if (paths?.output) await fs.writeText(paths.output, `${JSON.stringify(report, null, 2)}\n`, null).catch(() => {});

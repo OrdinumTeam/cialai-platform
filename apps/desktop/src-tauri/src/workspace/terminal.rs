@@ -1964,12 +1964,57 @@ mod tests {
         );
     }
 
+    /// Perguntas de cursor que chegam ao canal depois da abertura, quando o gerenciador
+    /// já respondeu a primeira. No app quem responde a essas é o xterm à vista; aqui o
+    /// leitor responde como ele e escreve no log da CI quantas vieram em cada teste.
+    struct LaterCursorQueries {
+        name: &'static str,
+        manager: TerminalManager,
+        id: u32,
+        answered: usize,
+        tail: Vec<u8>,
+    }
+
+    impl LaterCursorQueries {
+        fn new(name: &'static str, manager: &TerminalManager, id: u32) -> Self {
+            Self {
+                name,
+                manager: manager.clone(),
+                id,
+                answered: 0,
+                tail: Vec::new(),
+            }
+        }
+
+        fn observe(&mut self, bytes: &[u8]) {
+            let mut window = std::mem::take(&mut self.tail);
+            window.extend_from_slice(bytes);
+            let asked = window
+                .windows(4)
+                .filter(|candidate| *candidate == b"\x1b[6n")
+                .count();
+            for _ in 0..asked {
+                let _ = self.manager.write(self.id, b"\x1b[1;1R");
+                self.answered += 1;
+                // Fora da captura do libtest, para aparecer no log mesmo com o teste verde.
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "[cialai-test] {}: pergunta de cursor {} depois da abertura",
+                    self.name,
+                    self.answered
+                );
+            }
+            let keep = window.len().min(3);
+            self.tail = window[window.len() - keep..].to_vec();
+        }
+    }
+
     /// Espera o texto aparecer duas vezes, no eco do comando e na saída. No Windows a
     /// saída de um comando seguido de exit na mesma linha pode se perder quando o ConPTY
-    /// fecha, então o teste só sai depois de ver o texto. A pergunta de cursor do ConPTY
-    /// é respondida pelo próprio gerenciador e nunca chega ao canal.
+    /// fecha, então o teste só sai depois de ver o texto.
     fn collect_until_printed(
         rx: &Receiver<InvokeResponseBody>,
+        queries: &mut LaterCursorQueries,
         output: &mut Vec<u8>,
         text: &str,
     ) -> bool {
@@ -1980,7 +2025,10 @@ mod tests {
                 return true;
             }
             match rx.recv_timeout(Duration::from_millis(200)) {
-                Ok(InvokeResponseBody::Raw(bytes)) => output.extend_from_slice(&bytes),
+                Ok(InvokeResponseBody::Raw(bytes)) => {
+                    queries.observe(&bytes);
+                    output.extend_from_slice(&bytes);
+                }
                 Ok(InvokeResponseBody::Json(_)) | Err(RecvTimeoutError::Timeout) => {}
                 Err(RecvTimeoutError::Disconnected) => break,
             }
@@ -1991,12 +2039,14 @@ mod tests {
     /// Esvazia o canal em segundo plano e devolve a mensagem de fim quando ela chega.
     fn drain_until_exit_in_background(
         rx: Receiver<InvokeResponseBody>,
+        mut queries: LaterCursorQueries,
     ) -> thread::JoinHandle<Option<serde_json::Value>> {
         thread::spawn(move || {
             let deadline = Instant::now() + Duration::from_secs(60);
             while Instant::now() < deadline {
                 match rx.recv_timeout(Duration::from_millis(200)) {
-                    Ok(InvokeResponseBody::Raw(_)) | Err(RecvTimeoutError::Timeout) => {}
+                    Ok(InvokeResponseBody::Raw(bytes)) => queries.observe(&bytes),
+                    Err(RecvTimeoutError::Timeout) => {}
                     Ok(InvokeResponseBody::Json(json)) => {
                         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
                         if value["type"] == "exit" {
@@ -2012,12 +2062,16 @@ mod tests {
 
     fn collect_until_exit(
         rx: &Receiver<InvokeResponseBody>,
+        queries: &mut LaterCursorQueries,
     ) -> (Vec<u8>, Option<serde_json::Value>) {
         let mut output = Vec::new();
         let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
             match rx.recv_timeout(Duration::from_millis(200)) {
-                Ok(InvokeResponseBody::Raw(bytes)) => output.extend_from_slice(&bytes),
+                Ok(InvokeResponseBody::Raw(bytes)) => {
+                    queries.observe(&bytes);
+                    output.extend_from_slice(&bytes);
+                }
                 Ok(InvokeResponseBody::Json(json)) => {
                     let value: serde_json::Value = serde_json::from_str(&json).unwrap();
                     if value["type"] == "exit" {
@@ -2066,16 +2120,17 @@ mod tests {
         manager
             .write(info.id, &shell.print("pty-ok-42"))
             .expect("write");
+        let mut queries = LaterCursorQueries::new("spawns_a_shell", &manager, info.id);
         let mut printed = Vec::new();
-        let seen = collect_until_printed(&rx, &mut printed, "pty-ok-42");
+        let seen = collect_until_printed(&rx, &mut queries, &mut printed, "pty-ok-42");
         assert!(seen, "saida: {}", String::from_utf8_lossy(&printed));
-        assert!(
-            !printed.windows(4).any(|window| window == b"\x1b[6n"),
-            "a pergunta de cursor do ConPTY nao pode chegar ao app"
+        assert_eq!(
+            queries.answered, 0,
+            "a pergunta de cursor da abertura do ConPTY nao pode chegar ao app"
         );
         manager.write(info.id, &shell.exit_with(3)).expect("write");
 
-        let (_, exit) = collect_until_exit(&rx);
+        let (_, exit) = collect_until_exit(&rx, &mut queries);
         let exit = exit.expect("mensagem de fim");
         assert_eq!(exit["type"], "exit");
         assert_eq!(exit["code"], 3);
@@ -2105,10 +2160,16 @@ mod tests {
         manager
             .write(info.id, &shell.print("historico-42"))
             .expect("write");
+        let mut queries = LaterCursorQueries::new("history", &manager, info.id);
         let mut printed = Vec::new();
-        assert!(collect_until_printed(&rx, &mut printed, "historico-42"));
+        assert!(collect_until_printed(
+            &rx,
+            &mut queries,
+            &mut printed,
+            "historico-42"
+        ));
         manager.write(info.id, &shell.exit_with(0)).expect("write");
-        let (_, exit) = collect_until_exit(&rx);
+        let (_, exit) = collect_until_exit(&rx, &mut queries);
         assert!(exit.is_some());
         let history = manager.saved_history("s_journal");
         assert!(String::from_utf8_lossy(&history).contains("historico-42"));
@@ -2166,7 +2227,8 @@ mod tests {
             )
             .expect("spawn");
         manager.kill(info.id).expect("kill");
-        let (_, exit) = collect_until_exit(&rx);
+        let mut queries = LaterCursorQueries::new("kill", &manager, info.id);
+        let (_, exit) = collect_until_exit(&rx, &mut queries);
         assert!(exit.is_some(), "o fim da sessao deve chegar pelo canal");
         assert!(manager.list().is_empty());
     }
@@ -2181,7 +2243,10 @@ mod tests {
             Ok(())
         });
         let info = spawn_test_shell(&manager, &shell, "m1", SubscriberKey::Webview, sink);
-        let reader = drain_until_exit_in_background(rx);
+        let reader = drain_until_exit_in_background(
+            rx,
+            LaterCursorQueries::new("metrics", &manager, info.id),
+        );
         // Espera o prompt: o shell em primeiro plano e sem job.
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut idle = false;

@@ -121,7 +121,13 @@ try {
     }
     if (!report) await pause(250);
   }
-  if (!report) throw new Error(`o self test excedeu ${Math.round(options.timeoutMs / 1000)} s sem gravar ${output}`);
+  if (!report) {
+    const progress = await webdriver('POST', `/session/${sessionId}/execute/sync`, { script: 'return window.__CIALAI_SELFTEST_PROGRESS__ || null;', args: [] })
+      .catch(() => null);
+    if (progress) writeFileSync(join(options.artifacts, 'selftest-progress.json'), `${JSON.stringify(progress, null, 2)}\n`);
+    const step = progress?.step ? ` na etapa ${progress.step}` : '';
+    throw new Error(`o self test excedeu ${Math.round(options.timeoutMs / 1000)} s${step} sem gravar ${output}`);
+  }
 } catch (error) {
   failure = error;
 } finally {
