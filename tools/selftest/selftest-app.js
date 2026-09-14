@@ -63,20 +63,26 @@ function center(node) {
 
 // Arrasta pelo gesto do estúdio e confere o destaque do próprio alvo: pasta
 // com is-drop e terminal com is-dropping. O destaque de outro elemento no
-// caminho do mouse não conta.
+// caminho do mouse não conta. O alvo pode ser uma função: a árvore se refaz
+// quando o observador de arquivos avisa, e a linha antiga sai do documento.
 async function drag(source, target, highlight) {
+  const resolve = typeof target === 'function' ? target : () => target;
   const from = center(source);
   mouse(source, 'mousedown', from.x, from.y);
   await pause(30);
   mouse(document.body, 'mousemove', from.x + 12, from.y + 7);
   await pause(30);
-  const to = center(target);
-  mouse(document.body, 'mousemove', to.x, to.y);
-  const deadline = Date.now() + 1500;
+  const deadline = Date.now() + 3000;
   let highlighted = false;
+  let to = center(resolve());
   while (Date.now() < deadline) {
-    highlighted = target.matches(highlight);
-    if (highlighted) break;
+    const current = resolve();
+    if (current) {
+      to = center(current);
+      mouse(document.body, 'mousemove', to.x, to.y);
+      highlighted = current.matches(highlight);
+      if (highlighted) break;
+    }
     await pause(40);
   }
   const ghost = Boolean(document.querySelector('.terminais-ghost'));
@@ -151,7 +157,7 @@ async function run() {
 
   await check('arraste entre pastas', async () => {
     const source = await until(() => row('origem.txt'), 'a linha origem.txt');
-    const target = row('destino');
+    const target = () => row('destino');
     const gesture = await drag(source, target, '.is-drop');
     if (!gesture.ghost) throw new Error('o gesto não mostrou a marca de arraste');
     if (!gesture.highlighted) throw new Error('a pasta não mostrou o destaque de destino');

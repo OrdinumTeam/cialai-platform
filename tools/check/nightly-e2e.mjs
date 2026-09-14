@@ -146,6 +146,7 @@ for (const contract of ["document.querySelector('.terminais-terminal__host .xter
 assert.doesNotMatch(app, /printf 'CIALAI_SELFTEST_PTY/);
 // O destaque conferido é o do próprio alvo: pasta com is-drop e terminal com is-dropping.
 assert.ok(app.includes("drag(source, target, '.is-drop')"), 'arraste entre pastas precisa conferir o destaque da pasta');
+assert.ok(app.includes("const target = () => row('destino');"), 'a pasta de destino é buscada de novo a cada quadro do arraste');
 assert.ok(app.includes("drag(source, target, '.is-dropping')"), 'arraste para o terminal precisa conferir is-dropping');
 assert.ok(app.includes("session.term.element?.closest('.terminais-terminal')"), 'o alvo é o terminal da sessão do teste');
 assert.doesNotMatch(app, /\.terminais-terminal\.is-drop'/);
