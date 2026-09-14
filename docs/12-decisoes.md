@@ -21,7 +21,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 011 | Implementado | Política foi exercitada localmente com dois usuários |
 | 012 | Implementado | Payload textual e leitor QR adotados |
 | 013 | Preparado | Subprotocolo existe; plano B não foi ativado |
-| 014 | Preparado | Configuração verdadeira aplicada; confirmação jurídica e loja pendentes |
+| 014 | Preparado | Desde 14/09/2026 o Info.plist declara criptografia isenta de documentação, sem distribuição na França; declaração francesa e confirmação jurídica pendentes |
 | 015 | Implementado | Marca, acento, sessões e ANSI aplicados |
 | 016 | Preparado | Workflows existem; execução remota e publicação permanecem pendentes |
 | 017 | Implementado | Entrada pública em inglês e interface em três idiomas estão integradas |
@@ -99,6 +99,8 @@ Contexto: TailscaleKit é o mesmo código Go do `tsnet` atrás de Swift e carreg
 ## 014 Conformidade de exportação verdadeira
 
 Contexto: o protótipo declara `usesNonExemptEncryption: false`; embutir WireGuard torna isso falso. Decisão: verdadeiro, com algoritmos padrão, isenção de mercado de massa e relatório anual, confirmado com o jurídico. Consequência: o `ITSAppUsesNonExemptEncryption` fixo do Advoris não se aplica.
+
+Atualização em 14/09/2026, tomada na execução noturna e pendente de confirmação do usuário e do jurídico. O primeiro envio ao App Store Connect foi recusado com o erro 90592: com `ITSAppUsesNonExemptEncryption` verdadeiro a Apple exige `ITSEncryptionExportComplianceCode`, que só nasce de uma declaração aprovada. A API recusou criar a declaração com a mensagem de que ela só existe para criptografia proprietária ou para criptografia de terceiros com distribuição na França. Pela tabela da Apple, algoritmos padrão fora da App Store da França não exigem documento, e a orientação para esse caso é declarar `ITSAppUsesNonExemptEncryption` falso, que no vocabulário da Apple significa isento de documentação. O app passou a declarar falso. Continuam valendo o enquadramento em mercado de massa e o relatório anual de autoclassificação, que não dependem do Info.plist. Antes de distribuir na França, a conta precisa enviar a declaração francesa de criptografia, criar a declaração no App Store Connect com `availableOnFrenchStore` verdadeiro, voltar o Info.plist para verdadeiro e incluir o código aprovado.
 
 ## 015 Marca Cialai no acento, sidebar e ícones; paleta das sessões e ANSI preservados
 

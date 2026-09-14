@@ -35,7 +35,7 @@ Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CON
 | `config/url.ts` | Exige `https` em `.ts.net` fora do desenvolvimento | Aceita `http://127.0.0.1:<porta>/?k=<nonce>` em produção, e só isso |
 | `network/health.ts` | `{"status":"ok","service":"workplace"}` com prazo de 5 s | Serviço `cialai` |
 | `config/storage.ts` | Chave `ordinum.control.mac-url` no Keychain com `WHEN_UNLOCKED_THIS_DEVICE_ONLY` | Tokens por desktop e perfis, abaixo |
-| `app.config.ts` | `br.com.ordinum.control`, `platforms: ['ios']`, `supportsTablet false`, Face ID, `usesNonExemptEncryption false`, `CFBundleDevelopmentRegion pt-BR` | `br.com.ordinum.cialai`, iOS e Android, câmera, rede local, `usesNonExemptEncryption true` |
+| `app.config.ts` | `br.com.ordinum.control`, `platforms: ['ios']`, `supportsTablet false`, Face ID, `usesNonExemptEncryption false`, `CFBundleDevelopmentRegion pt-BR` | `br.com.ordinum.cialai`, iOS e Android, câmera, rede local, `usesNonExemptEncryption false`, pela atualização de 14/09/2026 da decisão 014 |
 
 Toolchain herdada: Expo 57, React Native 0.86, React 19.2, `react-native-webview` 13.16, `expo-local-authentication`, `expo-secure-store`, `expo-file-system`, `expo-sharing`, Jest com `jest-expo`, ESLint com `eslint-config-expo`, TypeScript 6. Acréscimos: `expo-camera` para o QR, `@react-native-community/netinfo` para mudanças de rede, `expo-dev-client` porque um módulo nativo tira o app do Expo Go, `expo-build-properties` para o `targetSdk` e o `network_security_config`.
 
@@ -127,7 +127,7 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 | Tema | Decisão |
 | --- | --- |
 | Textos de permissão | `NSCameraUsageDescription` para ler o QR; `NSLocalNetworkUsageDescription` para o caminho direto na mesma rede, cuja recusa só força o DERP; `NSFaceIDUsageDescription` já existente; nada de VPN e nenhum NetworkExtension |
-| Conformidade de exportação | `usesNonExemptEncryption: true`; no App Store Connect, algoritmos padrão com isenção de mercado de massa e relatório anual; confirmar com o jurídico; o `ITSAppUsesNonExemptEncryption` fixo do Advoris não se aplica |
+| Conformidade de exportação | `usesNonExemptEncryption: false` desde 14/09/2026: algoritmos padrão fora da App Store da França dispensam documentação na Apple. Mercado de massa e relatório anual continuam valendo; distribuir na França exige a declaração francesa, o código aprovado e o Info.plist verdadeiro. Confirmar com o jurídico |
 | Proteção de dados | Estado do `tsnet` sob `NSFileProtectionCompleteUntilFirstUserAuthentication` e `isExcludedFromBackup` |
 | Mínimo | iOS 16.4, como o protótipo |
 | Segundo plano | Sem modos de segundo plano; 30 s depois de sair o iOS congela as threads do Go; ao voltar, `rebind` e `restun` e o proxy derruba upstreams mortos para a página religar |

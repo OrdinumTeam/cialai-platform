@@ -30,9 +30,9 @@ describe('Expo app config', () => {
     expect(config.ios?.infoPlist).not.toHaveProperty('NSAppTransportSecurity');
   });
 
-  test('declares encryption, data protection, no backup and SDK plugin', () => {
+  test('declares the documentation exempt encryption, data protection, no backup and SDK plugin', () => {
     const config = buildConfig(context);
-    expect(config.ios?.config?.usesNonExemptEncryption).toBe(true);
+    expect(config.ios?.config?.usesNonExemptEncryption).toBe(false);
     expect(config.ios?.entitlements?.['com.apple.developer.default-data-protection'])
       .toBe('NSFileProtectionCompleteUntilFirstUserAuthentication');
     expect(config.android?.allowBackup).toBe(false);

@@ -48,7 +48,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       bundleIdentifier: 'br.com.ordinum.cialai',
       buildNumber: '1',
       supportsTablet: false,
-      config: { usesNonExemptEncryption: true },
+      // Algoritmos padrão fora da App Store da França dispensam documentação na Apple; ver a decisão 014.
+      config: { usesNonExemptEncryption: false },
       entitlements: {
         'com.apple.developer.default-data-protection':
           'NSFileProtectionCompleteUntilFirstUserAuthentication'

@@ -206,7 +206,7 @@ Objetivo: o app iOS pareia pelo QR, abre a página pelo proxy e passa nos roteir
 | 3.2 Módulo Expo `cialai-tunnel` em Swift com a API do documento 05 e o podspec com `vendored_frameworks` | M | 3.1 | 05 |
 | 3.3 Scaffold de `apps/mobile` a partir de `ios/app`: máquina de estados nova, `Pair`, confirmação, `Desktops`, `Shell`, `Offline`, `Ajustes`, loja de perfis, tokens no Secure Store | G | 3.2 | 05 |
 | 3.4 `config/url.ts` aceitando a URL do proxy, `health.ts` com serviço `cialai`, `__CIALAI_SHELL__`, NetInfo e `AppState` chamando o módulo | P | 3.3 | 05 |
-| 3.5 `app.config.ts`: bundle, câmera, rede local, Face ID, `usesNonExemptEncryption` verdadeiro, proteção de dados, exclusão de backup | P | 3.3 | 05 |
+| 3.5 `app.config.ts`: bundle, câmera, rede local, Face ID, `usesNonExemptEncryption` conforme a decisão 014, proteção de dados, exclusão de backup | P | 3.3 | 05 |
 | 3.6 Página do celular em `packages/ui/src/mobile` com só Terminais e o cabeçalho com nome do desktop e estado | P | 1.3 | 05 |
 | 3.7 Jest: os 65 casos herdados mais QR, perfis, URL, saúde, transições | M | 3.3 | 05 |
 | 3.8 `codemagic.yaml` com `ios-testflight` e `ios-archive`; app no App Store Connect e no Codemagic; integração `Cialai ASC API Key`; grupo `appstore_credentials` | M | 3.5 | 10 |
