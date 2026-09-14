@@ -34,7 +34,12 @@ public final class CialaiTunnelModule: Module {
         let stateDirectory = try Self.prepareStateDirectory()
         let listener = TunnelListener(module: self)
         self.listener = listener
-        self.tunnel = try MobileNewTunnel(stateDirectory.path, listener)
+        // O gomobile exporta funções Go como funções C; o erro volta pelo ponteiro, não como throws.
+        var creationError: NSError?
+        guard let tunnel = MobileNewTunnel(stateDirectory.path, listener, &creationError) else {
+          throw creationError ?? TunnelModuleError.unavailable
+        }
+        self.tunnel = tunnel
       } catch {
         self.tunnel = nil
       }
@@ -54,7 +59,8 @@ public final class CialaiTunnelModule: Module {
 
     AsyncFunction("inspectPairPayload") { (payload: String) -> [String: Any] in
       try self.onQueue {
-        try Self.decodeObject(self.requireTunnel().inspectPairPayload(payload))
+        let tunnel = try self.requireTunnel()
+        return try Self.decodeObject(Self.text { tunnel.inspectPairPayload(payload, error: $0) })
       }
     }
 
@@ -64,9 +70,10 @@ public final class CialaiTunnelModule: Module {
               let platform = device["platform"], let app = device["app"] else {
           throw TunnelModuleError.invalidDevice
         }
-        return try Self.decodeObject(
-          self.requireTunnel().pair(payload, deviceName: name, deviceModel: model, platform: platform, appVersion: app)
-        )
+        let tunnel = try self.requireTunnel()
+        return try Self.decodeObject(Self.text {
+          tunnel.pair(payload, deviceName: name, deviceModel: model, platform: platform, appVersion: app, error: $0)
+        })
       }
     }
 
@@ -79,14 +86,18 @@ public final class CialaiTunnelModule: Module {
     }
 
     AsyncFunction("status") { () -> [String: Any] in
-      try self.onQueue { try Self.decodeObject(self.requireTunnel().statusJSON()) }
+      try self.onQueue {
+        let tunnel = try self.requireTunnel()
+        return try Self.decodeObject(Self.text { tunnel.statusJSON($0) })
+      }
     }
 
     AsyncFunction("openDesktop") { (desktopId: String, deviceToken: String, preferredPort: Int) -> [String: Any] in
       try self.onQueue {
-        try Self.decodeObject(
-          self.requireTunnel().openDesktop(desktopId, deviceToken: deviceToken, preferredPort: preferredPort)
-        )
+        let tunnel = try self.requireTunnel()
+        return try Self.decodeObject(Self.text {
+          tunnel.openDesktop(desktopId, deviceToken: deviceToken, preferredPort: preferredPort, error: $0)
+        })
       }
     }
 
@@ -118,6 +129,14 @@ public final class CialaiTunnelModule: Module {
 
   private func onQueue<T>(_ operation: () throws -> T) throws -> T {
     try queue.sync(execute: operation)
+  }
+
+  // Métodos Go que devolvem texto e erro chegam ao Swift com o erro por ponteiro, sem throws.
+  private static func text(_ operation: (NSErrorPointer) -> String) throws -> String {
+    var error: NSError?
+    let value = operation(&error)
+    if let error { throw error }
+    return value
   }
 
   private static func decodeObject(_ raw: String) throws -> [String: Any] {
