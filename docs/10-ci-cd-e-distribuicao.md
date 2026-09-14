@@ -103,7 +103,7 @@ O repositório privado `ordinum-credentials` guarda referências, donos e proced
 
 | Etapa | Regras |
 | --- | --- |
-| TestFlight interno | Em uso desde 14/09/2026: build 1 da 0.1.0 no grupo interno `OrdinumTeam`, com acesso a todos os builds |
+| TestFlight interno | Em uso desde 14/09/2026: build 1 da 0.1.0 no grupo interno da equipe, com acesso a todos os builds |
 | TestFlight externo | Pendente. Exige informações de teste, conta de demonstração e Beta App Review; será o ensaio antes da submissão |
 | App Store | Materiais preparados. Submissão, política publicada, auditoria do archive e respostas finais continuam pendentes |
 | Play interno | AAB 0.1.0 com `versionCode` 2 em rascunho na faixa interna desde 14/09/2026; liberar para testadores e o relatório de pré lançamento dependem do Play Console |
