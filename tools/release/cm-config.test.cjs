@@ -48,6 +48,14 @@ test('builds the iOS binding on the runner before Expo prebuild', () => {
   assert.match(binder, /go tool gomobile bind/);
 });
 
+test('keeps the gomobile headers inside the vendored framework instead of the pod sources', () => {
+  const podspec = fs.readFileSync(path.join(root, 'apps/mobile/modules/cialai-tunnel/ios/CialaiTunnel.podspec'), 'utf8');
+  assert.match(podspec, /spec\.vendored_frameworks = 'Tunnelcore\.xcframework'/);
+  assert.match(podspec, /spec\.exclude_files = 'Tunnelcore\.xcframework\/\*\*\/\*'/);
+  assert.ok(podspec.indexOf('spec.source_files') < podspec.indexOf('spec.exclude_files'));
+  assert.match(podspec, /spec\.frameworks = 'Security', 'CoreFoundation'/);
+});
+
 test('looks for the NDK toolchain under the host tag published by Google and used by gomobile', () => {
   const binder = fs.readFileSync(path.join(root, 'tools/build-tunnel-mobile.sh'), 'utf8');
   assert.match(binder, /Darwin\) ndk_host="darwin-x86_64"/);

@@ -14,7 +14,11 @@ Pod::Spec.new do |spec|
   spec.source = { :git => 'https://github.com/Cialai/cialai.git' }
   spec.static_framework = true
   spec.source_files = '**/*.{h,m,mm,swift}'
+  # Os cabeçalhos do gomobile ficam dentro do framework; como fonte, entrariam no umbrella header do pod.
+  spec.exclude_files = 'Tunnelcore.xcframework/**/*'
   spec.swift_version = '5.9'
   spec.dependency 'ExpoModulesCore'
   spec.vendored_frameworks = 'Tunnelcore.xcframework'
+  # A biblioteca estática do Go chama SecTrust e CFString; o pod declara o que ela precisa no link.
+  spec.frameworks = 'Security', 'CoreFoundation'
 end
