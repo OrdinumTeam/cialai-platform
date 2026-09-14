@@ -48,6 +48,13 @@ test('builds the iOS binding on the runner before Expo prebuild', () => {
   assert.match(binder, /go tool gomobile bind/);
 });
 
+test('looks for the NDK toolchain under the host tag published by Google and used by gomobile', () => {
+  const binder = fs.readFileSync(path.join(root, 'tools/build-tunnel-mobile.sh'), 'utf8');
+  assert.match(binder, /Darwin\) ndk_host="darwin-x86_64"/);
+  assert.match(binder, /toolchains\/llvm\/prebuilt\/\$ndk_host\/bin\/clang/);
+  assert.doesNotMatch(binder, /prebuilt\/\$\(uname/);
+});
+
 test('uploads internally without requesting review and keeps archive local', () => {
   const workflows = config().workflows;
   const publisher = workflows['ios-testflight'].publishing.app_store_connect;
@@ -76,8 +83,24 @@ test('builds and signs the Android binding before publishing to the internal tra
   assert.ok(scripts.indexOf('build-tunnel-mobile.sh android') < scripts.indexOf('expo prebuild --platform android'));
   assert.match(scripts, /CM_KEYSTORE_BASE64/);
   assert.match(scripts, /android\/key\.properties/);
-  assert.match(scripts, /gradlew bundleRelease/);
+  assert.match(scripts, /gradlew :app:bundleRelease :app:assembleRelease/);
   assert.equal(workflow.publishing.google_play.credentials, '$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS');
   assert.equal(workflow.publishing.google_play.track, 'internal');
   assert.equal(workflow.publishing.google_play.submit_as_draft, true);
+});
+
+test('keeps a universal APK signed with the upload key next to the AAB', () => {
+  const workflow = config().workflows['android-play'];
+  const scripts = workflow.scripts.map(step => step.script).join('\n');
+  assert.match(scripts, /verify-android-signature\.test\.sh/);
+  assert.ok(scripts.indexOf('assembleRelease') < scripts.indexOf('verify-android-signature.sh "$CM_BUILD_DIR/secrets/upload-keystore.jks"'));
+  assert.match(scripts, /outputs\/apk\/release\/app-release\.apk/);
+  assert.match(scripts, /cialai-android-\$\{version_name\}-\$\{PROJECT_BUILD_NUMBER\}-universal\.apk/);
+  assert.ok(workflow.artifacts.includes('build/android/cialai-android-*-universal.apk'));
+  assert.ok(workflow.artifacts.includes('build/android/cialai-android-*-universal.apk.sha256'));
+  assert.ok(workflow.artifacts.includes('apps/mobile/android/app/build/outputs/bundle/**/*.aab'));
+  assert.ok(workflow.artifacts.includes('build_android.log'));
+  const verifier = fs.readFileSync(path.join(root, 'tools/release/verify-android-signature.sh'), 'utf8');
+  assert.match(verifier, /-storepass:env CM_KEYSTORE_PASSWORD/);
+  assert.doesNotMatch(verifier, /-storepass "\$CM_KEYSTORE_PASSWORD"/);
 });

@@ -14,7 +14,7 @@ Preparado em 13/09/2026.
 | Upload keystore Android | `secrets/cialai/upload-keystore.jks` | `CM_KEYSTORE_BASE64` do grupo `android_credentials`. Exclusivo do Cialai, alias `upload` |
 | Senhas e alias do keystore | `secrets/cialai/key.properties` | `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` do grupo `android_credentials` |
 | Token e identificadores da conta | `secrets/ordinum/ordinum.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time e conta do Play, compartilhados por todos os apps |
-| Identificadores do app | `secrets/cialai/cialai.env` | Bundle, pacote, identificadores do app na Apple e no Play e caminhos do keystore |
+| Identificadores do app | `secrets/cialai/cialai.env` | Bundle, pacote, identificadores do app na Apple, no Play e no Codemagic em `CODEMAGIC_APP_ID`, e caminhos do keystore |
 
 O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e seu identificador `6811702125` já está em `APP_STORE_APP_ID` no `cialai.env`.
 
@@ -42,7 +42,7 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | --- | --- |
 | App `br.com.ordinum.cialai` no App Store Connect | Criado em 13/09/2026 |
 | App `br.com.ordinum.cialai` no Google Play | Criado em 13/09/2026 |
-| App do Cialai no Codemagic com as integrações e grupos acima | Pendente: adicionar pelo painel com a integração GitHub; os grupos são recadastrados pela API em seguida |
+| App do Cialai no Codemagic com as integrações e grupos acima | App `6aa75e1e235d9cae411b55df` criado pelo painel com a integração GitHub. As sete variáveis dos três grupos foram cadastradas pela API em 14/09/2026, lidas dos arquivos sem exibir valores; só `APP_STORE_APP_ID` não é secreta |
 | Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
 | Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
 | Chave do updater e certificados de assinatura do desktop | Pendente, fora desta pasta |

@@ -240,6 +240,7 @@ workflows:
           npm run test --workspace @cialai/mobile
           bash tools/release/cm-build-number.test.sh
           bash tools/release/cm-download.test.sh
+          bash tools/release/verify-android-signature.test.sh
           node --test tools/release/cm-config.test.cjs
       - name: Gerar projeto Android
         script: |
@@ -260,18 +261,39 @@ workflows:
             printf 'keyAlias=%s\n' "$CM_KEY_ALIAS"
             printf 'storeFile=%s\n' "$keystore_path"
           } > "$key_properties"
-      - name: Compilar AAB
+      - name: Compilar AAB e APK universal
         script: |
           set -euo pipefail
           set -o pipefail
           cd apps/mobile/android
-          ./gradlew bundleRelease 2>&1 | tee "$CM_BUILD_DIR/build_aab.log"
+          ./gradlew :app:bundleRelease :app:assembleRelease 2>&1 | tee "$CM_BUILD_DIR/build_android.log"
+      - name: Conferir assinatura e nomear o APK
+        script: |
+          set -euo pipefail
+          outputs="$CM_BUILD_DIR/apps/mobile/android/app/build/outputs"
+          apk="$outputs/apk/release/app-release.apk"
+          aab="$outputs/bundle/release/app-release.aab"
+          bash tools/release/verify-android-signature.sh "$CM_BUILD_DIR/secrets/upload-keystore.jks" "$apk" "$aab"
+          version_name="$(node -e '
+            const metadata = require(process.argv[1]);
+            const element = metadata.elements.find(item => item.outputFile === "app-release.apk");
+            if (!element || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(element.versionName)) process.exit(1);
+            console.log(element.versionName);
+          ' "$outputs/apk/release/output-metadata.json")"
+          apk_dir="$CM_BUILD_DIR/build/android"
+          apk_name="cialai-android-${version_name}-${PROJECT_BUILD_NUMBER}-universal.apk"
+          mkdir -p "$apk_dir"
+          cp "$apk" "$apk_dir/$apk_name"
+          cd "$apk_dir"
+          shasum -a 256 "$apk_name" > "$apk_name.sha256"
     artifacts:
       - apps/mobile/android/app/build/outputs/bundle/**/*.aab
       - apps/mobile/android/app/build/outputs/**/mapping.txt
+      - build/android/cialai-android-*-universal.apk
+      - build/android/cialai-android-*-universal.apk.sha256
       - build/mobile/android/tunnelcore.aar
       - build/mobile/android/tunnelcore.aar.sha256
-      - build_aab.log
+      - build_android.log
     publishing:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
