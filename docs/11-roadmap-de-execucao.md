@@ -105,7 +105,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.15 | Implementado | Suíte Rust nativa verde no macOS, no Ubuntu e no `windows-2022` da CI em 14/09/2026; checks de navegador por Playwright no Ubuntu |
 | 5.16 | Implementado | `ci.yml` verde nos três sistemas no run `34813846975` de 14/09/2026, com `check:text` e Playwright no Ubuntu; `release.yml` publicou as prévias `v0.1.0` e `v0.1.1` |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |
-| 5.18 | Preparado | `nightly-e2e.yml` roda no público desde 14/09/2026 e passou 8 de 8 no Ubuntu; no Windows a janela cresce, o explorador abre e o PowerShell responde, mas a página do WebView2 sem GPU fica lenta e deixa de responder ao WebDriver antes do fim do roteiro |
+| 5.18 | Preparado | `nightly-e2e.yml` rodou no público em 14/09/2026, passou 8 de 8 no Ubuntu e foi desligado às 04:40 para conter minutos; no Windows a janela cresce, o explorador abre e o PowerShell responde, mas a página do WebView2 sem GPU fica lenta e deixa de responder ao WebDriver antes do fim do roteiro |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
 
 ### Fase 6
