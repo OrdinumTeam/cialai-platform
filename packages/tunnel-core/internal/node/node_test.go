@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"path/filepath"
 	"testing"
 )
 
@@ -45,13 +46,14 @@ func TestManagerOwnsLifecycleAndIndexesPeersByNodeKey(t *testing.T) {
 		State: Running,
 		Peers: []Peer{{NodeKey: "nodekey:z", Name: "z"}, {NodeKey: "nodekey:a", Name: "a", IP4: "100.64.0.2"}},
 	}, identity: Identity{NodeKey: "nodekey:a", NodeID: "5", UserID: "42", IP: "100.64.0.2"}}
+	stateDir := testStateDir(t)
 	manager := NewManager(func(config Config) (Engine, error) {
-		if config.StateDir != "/tmp/state" || config.Hostname != "desktop" {
+		if config.StateDir != stateDir || config.Hostname != "desktop" {
 			t.Fatalf("unexpected config: %#v", config)
 		}
 		return engine, nil
 	})
-	status, err := manager.Up(context.Background(), Config{StateDir: "/tmp/state", ControlURL: "https://hs.example.com", Hostname: "desktop"})
+	status, err := manager.Up(context.Background(), Config{StateDir: stateDir, ControlURL: "https://hs.example.com", Hostname: "desktop"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +76,7 @@ func TestManagerOwnsLifecycleAndIndexesPeersByNodeKey(t *testing.T) {
 func TestNetworkChangeMarksOfflineThenRebindsAndRestuns(t *testing.T) {
 	engine := &fakeEngine{status: Status{State: Running}}
 	manager := NewManager(func(Config) (Engine, error) { return engine, nil })
-	if _, err := manager.Up(context.Background(), Config{StateDir: "/tmp/state", ControlURL: "https://hs.example.com", Hostname: "desktop"}); err != nil {
+	if _, err := manager.Up(context.Background(), Config{StateDir: testStateDir(t), ControlURL: "https://hs.example.com", Hostname: "desktop"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := manager.NotifyNetworkChange(context.Background(), false); err != nil || manager.Snapshot().State != Offline {
@@ -93,7 +95,7 @@ func TestManagerRejectsInvalidOrDuplicateStarts(t *testing.T) {
 	if _, err := manager.Up(context.Background(), Config{}); err == nil {
 		t.Fatal("accepted incomplete node config")
 	}
-	config := Config{StateDir: "/tmp/state", ControlURL: "https://hs.example.com", Hostname: "desktop"}
+	config := Config{StateDir: testStateDir(t), ControlURL: "https://hs.example.com", Hostname: "desktop"}
 	if _, err := manager.Up(context.Background(), config); err != nil {
 		t.Fatal(err)
 	}
@@ -103,17 +105,24 @@ func TestManagerRejectsInvalidOrDuplicateStarts(t *testing.T) {
 }
 
 func TestConfigRequiresHTTPSOutsideLoopback(t *testing.T) {
+	stateDir := testStateDir(t)
 	manager := NewManager(func(Config) (Engine, error) { return &fakeEngine{status: Status{State: Running}}, nil })
 	for _, controlURL := range []string{"http://hs.example.com", "ftp://127.0.0.1", "https://user@hs.example.com", "https://hs.example.com?key=value"} {
-		if _, err := manager.Up(context.Background(), Config{StateDir: "/tmp/state", ControlURL: controlURL, Hostname: "desktop"}); err == nil {
+		if _, err := manager.Up(context.Background(), Config{StateDir: stateDir, ControlURL: controlURL, Hostname: "desktop"}); err == nil {
 			t.Fatalf("accepted unsafe control URL %q", controlURL)
 		}
 	}
 	for _, controlURL := range []string{"https://hs.example.com", "http://127.0.0.1:8080", "http://[::1]:8080"} {
 		manager := NewManager(func(Config) (Engine, error) { return &fakeEngine{status: Status{State: Running}}, nil })
-		if _, err := manager.Up(context.Background(), Config{StateDir: "/tmp/state", ControlURL: controlURL, Hostname: "desktop"}); err != nil {
+		if _, err := manager.Up(context.Background(), Config{StateDir: stateDir, ControlURL: controlURL, Hostname: "desktop"}); err != nil {
 			t.Fatalf("rejected safe control URL %q: %v", controlURL, err)
 		}
 		_ = manager.Down()
 	}
+}
+
+// testStateDir is absolute on every system; a POSIX literal is relative on Windows.
+func testStateDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "state")
 }
