@@ -43,7 +43,7 @@ function mobileTranslation(shellLocale, storedLocale) {
     __CIALAI_SHELL__: { locale: shellLocale },
   });
   vm.runInContext(i18nBundle.outputFiles[0].text, context);
-  return context.module.exports.translate('navigation.more');
+  return context.module.exports.translate('view.terminais.label');
 }
 
 test('o cabecalho mostra computador e estado em todos os momentos', () => {
@@ -54,7 +54,7 @@ test('o cabecalho mostra computador e estado em todos os momentos', () => {
 });
 
 test('o idioma enviado pelo aplicativo prevalece na pagina do celular', () => {
-  assert.equal(mobileTranslation('es-MX', 'pt-BR'), 'Más');
+  assert.equal(mobileTranslation('es-MX', 'pt-BR'), 'Terminales');
 });
 
 test('a composicao do celular contem somente Terminais', async () => {

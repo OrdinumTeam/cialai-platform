@@ -35,7 +35,7 @@ test('desktop detects Spanish and persists a normalized selection', async () => 
   vm.runInContext(source, browser.context);
 
   assert.equal(browser.context.module.exports.getLocale(), 'es');
-  assert.equal(browser.context.module.exports.translate('navigation.more'), 'Más');
+  assert.equal(browser.context.module.exports.translate('view.terminais.label'), 'Terminales');
   assert.equal(browser.documentElement.lang, 'es');
   assert.equal(browser.context.module.exports.setLocale('en-US'), 'en');
   assert.equal(browser.values.get('cialai_language'), 'en');

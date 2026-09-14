@@ -38,11 +38,11 @@ test('language changes notify subscribers and translations fail closed', () => {
   const i18n = createI18n('pt-BR');
   let changes = 0;
   const unsubscribe = i18n.subscribe(() => { changes += 1; });
-  assert.equal(i18n.t('navigation.more'), 'Mais');
+  assert.equal(i18n.t('view.terminais.label'), 'Terminais');
   i18n.setLocale('en');
-  assert.equal(i18n.t('navigation.more'), 'More');
+  assert.equal(i18n.t('view.terminais.label'), 'Terminals');
   i18n.setLocale('es-AR');
-  assert.equal(i18n.t('navigation.more'), 'Más');
+  assert.equal(i18n.t('view.terminais.label'), 'Terminales');
   assert.equal(changes, 2);
   assert.throws(() => translate('en', 'missing.key'), /Missing i18n key/);
   assert.equal(unsubscribe(), true);
