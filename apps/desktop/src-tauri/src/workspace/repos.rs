@@ -166,16 +166,22 @@ mod tests {
 
     #[test]
     fn roots_expand_home_reject_traversal_and_remove_duplicates() {
+        // Caminho absoluto exige letra de disco no Windows.
+        let (home, absolute) = if cfg!(windows) {
+            (r"C:\Users\ana", r"C:\Users\ana\Projects")
+        } else {
+            ("/Users/ana", "/Users/ana/Projects")
+        };
         let roots = project_roots(
-            Path::new("/Users/ana"),
+            Path::new(home),
             &[
                 "~/Projects".into(),
-                "/Users/ana/Projects".into(),
+                absolute.into(),
                 "../escape".into(),
                 "relative".into(),
             ],
         );
-        assert_eq!(roots, [PathBuf::from("/Users/ana/Projects")]);
+        assert_eq!(roots, [PathBuf::from(absolute)]);
     }
 
     #[test]

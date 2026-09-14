@@ -451,11 +451,15 @@ mod selftest_path_tests {
         let cache = base.join("cache");
         let logs = base.join("logs");
         let paths = prepare_selftest_paths(&cache, &logs, "fixture").unwrap();
+        // Os caminhos voltam em barras normais em todos os sistemas.
         assert_eq!(
             paths.root,
-            cache.join("selftest/run-fixture").to_string_lossy()
+            crate::platform::to_portable(cache.join("selftest").join("run-fixture"))
         );
-        assert_eq!(paths.output, logs.join("selftest.json").to_string_lossy());
+        assert_eq!(
+            paths.output,
+            crate::platform::to_portable(logs.join("selftest.json"))
+        );
         assert!(cache.join("selftest/run-fixture").is_dir());
         assert!(logs.is_dir());
         std::fs::remove_dir_all(base).unwrap();

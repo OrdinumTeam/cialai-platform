@@ -897,10 +897,16 @@ mod tests {
     #[test]
     fn hides_current_platform_noise() {
         let dir = sandbox("lixo");
-        fs::write(dir.join(".DS_Store"), "x").unwrap();
-        fs::write(dir.join("._nota.md"), "x").unwrap();
+        let (files, folder, query): (&[&str], &str, &str) = if cfg!(windows) {
+            (&["Thumbs.db", "desktop.ini"], "$RECYCLE.BIN", "thumbs")
+        } else {
+            (&[".DS_Store", "._nota.md"], ".Trashes", "ds_store")
+        };
+        for name in files {
+            fs::write(dir.join(name), "x").unwrap();
+        }
         fs::write(dir.join("nota.md"), "x").unwrap();
-        fs::create_dir(dir.join(".Trashes")).unwrap();
+        fs::create_dir(dir.join(folder)).unwrap();
         let listing = list_dir(&dir.to_string_lossy(), None).unwrap();
         let names: Vec<&str> = listing
             .entries
@@ -910,7 +916,7 @@ mod tests {
         assert_eq!(names, vec!["nota.md"]);
         assert_eq!(listing.total, 1);
         let cache = FindCache::default();
-        let achados = find(&cache, &dir.to_string_lossy(), "ds_store", None).unwrap();
+        let achados = find(&cache, &dir.to_string_lossy(), query, None).unwrap();
         assert!(achados.items.is_empty());
         fs::remove_dir_all(&dir).unwrap();
     }

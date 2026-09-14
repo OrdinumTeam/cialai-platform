@@ -260,7 +260,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "cialai-keyring-fallback-{}-{}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
+            std::thread::current()
+                .name()
+                .unwrap_or("test")
+                .replace("::", "-")
         ));
         let path = root.join("headscale-api-key");
         let _ = fs::remove_dir_all(&root);

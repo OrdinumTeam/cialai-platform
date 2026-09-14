@@ -1929,6 +1929,84 @@ mod tests {
         );
     }
 
+    /// O ConPTY do Windows pergunta a posição do cursor com ESC[6n e só segue depois da
+    /// resposta, que no app vem do xterm.js. Nos testes quem responde é o próprio leitor.
+    fn answer_cursor_queries(
+        manager: &TerminalManager,
+        id: u32,
+        output: &[u8],
+        answered: &mut usize,
+    ) {
+        let asked = output
+            .windows(CURSOR_QUERY.len())
+            .filter(|window| *window == CURSOR_QUERY)
+            .count();
+        while *answered < asked {
+            let _ = manager.write(id, b"\x1b[1;1R");
+            *answered += 1;
+        }
+    }
+
+    const CURSOR_QUERY: &[u8] = b"\x1b[6n";
+
+    fn collect_answering_until_exit(
+        rx: &Receiver<InvokeResponseBody>,
+        manager: &TerminalManager,
+        id: u32,
+    ) -> (Vec<u8>, Option<serde_json::Value>) {
+        let mut output = Vec::new();
+        let mut answered = 0;
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(InvokeResponseBody::Raw(bytes)) => {
+                    output.extend_from_slice(&bytes);
+                    answer_cursor_queries(manager, id, &output, &mut answered);
+                }
+                Ok(InvokeResponseBody::Json(json)) => {
+                    let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+                    if value["type"] == "exit" {
+                        return (output, Some(value));
+                    }
+                }
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        (output, None)
+    }
+
+    /// Esvazia o canal em segundo plano respondendo às perguntas de cursor do ConPTY e
+    /// devolve a mensagem de fim quando ela chega.
+    fn answer_cursor_queries_in_background(
+        rx: Receiver<InvokeResponseBody>,
+        manager: TerminalManager,
+        id: u32,
+    ) -> thread::JoinHandle<Option<serde_json::Value>> {
+        thread::spawn(move || {
+            let mut output = Vec::new();
+            let mut answered = 0;
+            let deadline = Instant::now() + Duration::from_secs(60);
+            while Instant::now() < deadline {
+                match rx.recv_timeout(Duration::from_millis(200)) {
+                    Ok(InvokeResponseBody::Raw(bytes)) => {
+                        output.extend_from_slice(&bytes);
+                        answer_cursor_queries(&manager, id, &output, &mut answered);
+                    }
+                    Ok(InvokeResponseBody::Json(json)) => {
+                        let value: serde_json::Value = serde_json::from_str(&json).unwrap();
+                        if value["type"] == "exit" {
+                            return Some(value);
+                        }
+                    }
+                    Err(RecvTimeoutError::Timeout) => {}
+                    Err(RecvTimeoutError::Disconnected) => break,
+                }
+            }
+            None
+        })
+    }
+
     fn collect_until_exit(
         rx: &Receiver<InvokeResponseBody>,
     ) -> (Vec<u8>, Option<serde_json::Value>) {
@@ -1985,7 +2063,7 @@ mod tests {
             .write(info.id, &shell.print_and_exit("pty-ok-42", 3))
             .expect("write");
 
-        let (output, exit) = collect_until_exit(&rx);
+        let (output, exit) = collect_answering_until_exit(&rx, &manager, info.id);
         let text = String::from_utf8_lossy(&output);
         assert!(text.contains("pty-ok-42"), "saida: {text}");
         let exit = exit.expect("mensagem de fim");
@@ -2017,7 +2095,7 @@ mod tests {
         manager
             .write(info.id, &shell.print_and_exit("historico-42", 0))
             .expect("write");
-        let (_, exit) = collect_until_exit(&rx);
+        let (_, exit) = collect_answering_until_exit(&rx, &manager, info.id);
         assert!(exit.is_some());
         let history = manager.saved_history("s_journal");
         assert!(String::from_utf8_lossy(&history).contains("historico-42"));
@@ -2082,6 +2160,7 @@ mod tests {
             Ok(())
         });
         let info = spawn_test_shell(&manager, &shell, "m1", SubscriberKey::Webview, sink);
+        let reader = answer_cursor_queries_in_background(rx, manager.clone(), info.id);
         // Espera o prompt: o shell em primeiro plano e sem job.
         let deadline = Instant::now() + Duration::from_secs(10);
         let mut idle = false;
@@ -2130,7 +2209,7 @@ mod tests {
 
         manager.write(info.id, &[0x03]).expect("ctrl-c");
         manager.write(info.id, &shell.exit()).expect("exit");
-        let (_, exit) = collect_until_exit(&rx);
+        let exit = reader.join().expect("leitor do terminal");
         assert!(exit.is_some());
         assert!(manager.metrics().is_empty());
     }

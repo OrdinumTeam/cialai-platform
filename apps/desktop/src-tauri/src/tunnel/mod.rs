@@ -63,7 +63,10 @@ mod tests {
         let root = std::env::temp_dir().join(format!(
             "cialai-mobile-resource-{}-{}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
+            std::thread::current()
+                .name()
+                .unwrap_or("test")
+                .replace("::", "-")
         ));
         let mobile = root.join(MOBILE_RESOURCE_DIR);
         fs::create_dir_all(&mobile).unwrap();

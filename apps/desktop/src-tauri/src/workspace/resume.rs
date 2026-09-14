@@ -900,6 +900,8 @@ mod tests {
         let _ = fs::remove_dir_all(home);
     }
 
+    // O Windows não lista os arquivos abertos do processo; a reserva por cwd tem teste próprio.
+    #[cfg(unix)]
     #[test]
     fn codex_session_comes_from_the_rollout_the_process_keeps_open() {
         let home = scratch("codex");

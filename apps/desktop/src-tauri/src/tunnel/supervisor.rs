@@ -1065,7 +1065,10 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
         let root = std::env::temp_dir().join(format!(
             "cialai-supervisor-{}-{}",
             std::process::id(),
-            std::thread::current().name().unwrap_or("test")
+            std::thread::current()
+                .name()
+                .unwrap_or("test")
+                .replace("::", "-")
         ));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join("mobile")).unwrap();
