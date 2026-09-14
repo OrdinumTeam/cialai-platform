@@ -1949,6 +1949,35 @@ mod tests {
 
     const CURSOR_QUERY: &[u8] = b"\x1b[6n";
 
+    /// Espera o texto aparecer duas vezes, no eco do comando e na saída, respondendo ao
+    /// cursor. No Windows a saída de um comando seguido de exit na mesma linha pode se
+    /// perder quando o ConPTY fecha, então o teste só sai depois de ver o texto.
+    fn collect_answering_until_printed(
+        rx: &Receiver<InvokeResponseBody>,
+        manager: &TerminalManager,
+        id: u32,
+        output: &mut Vec<u8>,
+        answered: &mut usize,
+        text: &str,
+    ) -> bool {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline {
+            let seen = String::from_utf8_lossy(output).matches(text).count();
+            if seen >= 2 {
+                return true;
+            }
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(InvokeResponseBody::Raw(bytes)) => {
+                    output.extend_from_slice(&bytes);
+                    answer_cursor_queries(manager, id, output, answered);
+                }
+                Ok(InvokeResponseBody::Json(_)) | Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        false
+    }
+
     fn collect_answering_until_exit(
         rx: &Receiver<InvokeResponseBody>,
         manager: &TerminalManager,
@@ -2060,12 +2089,22 @@ mod tests {
         assert_eq!(manager.list().len(), 1);
         manager.resize(info.id, 100, 30).expect("resize");
         manager
-            .write(info.id, &shell.print_and_exit("pty-ok-42", 3))
+            .write(info.id, &shell.print("pty-ok-42"))
             .expect("write");
+        let mut printed = Vec::new();
+        let mut answered = 0;
+        let seen = collect_answering_until_printed(
+            &rx,
+            &manager,
+            info.id,
+            &mut printed,
+            &mut answered,
+            "pty-ok-42",
+        );
+        assert!(seen, "saida: {}", String::from_utf8_lossy(&printed));
+        manager.write(info.id, &shell.exit_with(3)).expect("write");
 
-        let (output, exit) = collect_answering_until_exit(&rx, &manager, info.id);
-        let text = String::from_utf8_lossy(&output);
-        assert!(text.contains("pty-ok-42"), "saida: {text}");
+        let (_, exit) = collect_answering_until_exit(&rx, &manager, info.id);
         let exit = exit.expect("mensagem de fim");
         assert_eq!(exit["type"], "exit");
         assert_eq!(exit["code"], 3);
@@ -2093,8 +2132,19 @@ mod tests {
         assert!(saved.resume.is_none());
         assert_eq!(manager.live_count(), 1);
         manager
-            .write(info.id, &shell.print_and_exit("historico-42", 0))
+            .write(info.id, &shell.print("historico-42"))
             .expect("write");
+        let mut printed = Vec::new();
+        let mut answered = 0;
+        assert!(collect_answering_until_printed(
+            &rx,
+            &manager,
+            info.id,
+            &mut printed,
+            &mut answered,
+            "historico-42",
+        ));
+        manager.write(info.id, &shell.exit_with(0)).expect("write");
         let (_, exit) = collect_answering_until_exit(&rx, &manager, info.id);
         assert!(exit.is_some());
         let history = manager.saved_history("s_journal");

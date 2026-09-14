@@ -128,6 +128,14 @@ impl TestShell {
         }
     }
 
+    pub(crate) fn exit_with(&self, code: u8) -> Vec<u8> {
+        match self.spec.flavor {
+            ShellFlavor::Posix => format!("exit {code}\n").into_bytes(),
+            ShellFlavor::Powershell => format!("exit {code}\r\n").into_bytes(),
+            ShellFlavor::Cmd => format!("exit /b {code}\r\n").into_bytes(),
+        }
+    }
+
     pub(crate) fn exit(&self) -> Vec<u8> {
         match self.spec.flavor {
             ShellFlavor::Posix => b"exit\n".to_vec(),
