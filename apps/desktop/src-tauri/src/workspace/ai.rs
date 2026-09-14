@@ -168,7 +168,7 @@ fn claude_from_file(
     let config_dir = parsed
         .config_dir
         .filter(|value| !value.trim().is_empty())
-        .or_else(|| fallback_dir.map(|dir| dir.to_string_lossy().to_string()));
+        .or_else(|| fallback_dir.map(crate::platform::to_portable));
     let mut sessions = parsed.sessions;
     sessions.sort_by_key(|session| std::cmp::Reverse(session.updated_at_ms));
     let model = parsed
@@ -403,7 +403,7 @@ fn codex_at(path: &Path, home_dir: &Path) -> Option<AgentUsage> {
     Some(AgentUsage {
         agent: "Codex".to_string(),
         profile: profile_slug(home_dir),
-        config_dir: Some(home_dir.to_string_lossy().to_string()),
+        config_dir: Some(crate::platform::to_portable(home_dir)),
         profile_name: None,
         model: None,
         sessions: Vec::new(),

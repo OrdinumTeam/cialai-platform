@@ -270,7 +270,8 @@ pub fn agent_profile(command: &CommandLine, agent: &str, home: &Path) -> Option<
     let dir = configured.unwrap_or_else(|| home.join(default));
     let resolved = dir.canonicalize().unwrap_or(dir);
     Some(AgentProfile {
-        config_dir: resolved.to_string_lossy().to_string(),
+        // No Windows o canonicalize devolve \\?\C:\...; o caminho portátil serve ao shell e à interface.
+        config_dir: crate::platform::to_portable(&resolved),
         slug: profile_slug(&resolved),
         name: command
             .env
