@@ -1,6 +1,6 @@
 # Credenciais de build e publicação
 
-Nenhum segredo fica neste repositório. Os arquivos reais das builds iOS e Android no Codemagic ficam no repositório privado Ordinum Control, na pasta `secrets/cialai`, e as credenciais compartilhadas por todos os apps da Ordinum ficam em `secrets/ordinum`. Essas pastas são ignoradas pelo Git de lá e cada arquivo tem permissão 600. O modelo segue o mapa de credenciais do Advoris Mobile, em `docs/credentials.md` daquele repositório.
+Nenhum segredo fica neste repositório. Os arquivos reais das builds iOS e Android no Codemagic ficam no repositório privado Ordinum Control, na pasta `secrets/cialai`, e as credenciais compartilhadas por todos os apps da Ordinum ficam em `secrets/ordinum`. Essas pastas são ignoradas pelo Git de lá e cada arquivo tem permissão 600. O procedimento completo de publicação dos apps da Ordinum, com App Store Connect, Google Play e Codemagic, fica na seção `docs/apps` do Ordinum Control.
 
 Preparado em 13/09/2026.
 
@@ -8,12 +8,13 @@ Preparado em 13/09/2026.
 
 | Credencial | Arquivo no Ordinum Control | Uso no Codemagic |
 | --- | --- | --- |
-| Chave da API do App Store Connect | `secrets/cialai/app-store-connect-api-key.p8` | Integração `Cialai ASC API Key`, usada para assinatura, TestFlight e submissão. É a mesma chave da conta Apple da Ordinum usada pelo Advoris |
-| Chave RSA de assinatura iOS | `secrets/cialai/codemagic_cert_key.pem` | `CERTIFICATE_PRIVATE_KEY` do grupo `appstore_credentials`, em base64 |
+| Chave da API do App Store Connect | `secrets/ordinum/app-store-connect-api-key.p8` | Integração `Cialai ASC API Key`, usada para assinatura, TestFlight e submissão. É a mesma chave da conta Apple da Ordinum usada pelo Advoris |
+| Chave RSA de assinatura iOS | `secrets/ordinum/ios-distribution-cert-key.pem` | `CERTIFICATE_PRIVATE_KEY` do grupo `appstore_credentials`, em base64 |
 | Conta de serviço do Google Play | `secrets/ordinum/google-play-service-account.json` | `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` do grupo `google_play`. Conta `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` do projeto `ordinum`, compartilhada por todos os apps da Ordinum |
 | Upload keystore Android | `secrets/cialai/upload-keystore.jks` | `CM_KEYSTORE_BASE64` do grupo `android_credentials`. Exclusivo do Cialai, alias `upload` |
 | Senhas e alias do keystore | `secrets/cialai/key.properties` | `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` do grupo `android_credentials` |
-| Token e identificadores | `secrets/cialai/cialai.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time, bundle, pacote e conta do Play |
+| Token e identificadores da conta | `secrets/ordinum/ordinum.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time e conta do Play, compartilhados por todos os apps |
+| Identificadores do app | `secrets/cialai/cialai.env` | Bundle, pacote, identificadores do app na Apple e no Play e caminhos do keystore |
 
 O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e seu identificador `6811702125` já está em `APP_STORE_APP_ID` no `cialai.env`.
 
@@ -30,7 +31,7 @@ O Codemagic guarda cópia própria e não lê os arquivos do Ordinum Control. Co
 Na raiz do Ordinum Control, os valores vão para a área de transferência sem aparecer no terminal:
 
 ```sh
-base64 -i secrets/cialai/codemagic_cert_key.pem | pbcopy
+base64 -i secrets/ordinum/ios-distribution-cert-key.pem | pbcopy
 base64 -i secrets/cialai/upload-keystore.jks | pbcopy
 pbcopy < secrets/ordinum/google-play-service-account.json
 ```
