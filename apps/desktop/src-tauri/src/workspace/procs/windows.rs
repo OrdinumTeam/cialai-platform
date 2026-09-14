@@ -228,7 +228,10 @@ fn private_working_set(pid: u32) -> Option<u64> {
     unsafe {
         CloseHandle(process);
     }
-    (ok != 0).then_some(counters.PrivateWorkingSetSize as u64)
+    // `PrivateWorkingSetSize` so e preenchido a partir do Windows 11; nas versoes
+    // anteriores a chamada funciona e o campo fica zerado. Sem o valor, quem chama
+    // usa o working set do sysinfo em vez de somar zero.
+    (ok != 0 && counters.PrivateWorkingSetSize > 0).then_some(counters.PrivateWorkingSetSize as u64)
 }
 
 fn state_from_sysinfo(status: ProcessStatus) -> ProcState {
