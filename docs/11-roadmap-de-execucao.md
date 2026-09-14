@@ -12,7 +12,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | --- | --- | --- |
 | 0.1 | Implementado | Fundação e arquivos públicos existem |
 | 0.2 | Pendente | O commit solicitado no Control depende do usuário |
-| 0.3 | Preparado | CI existe sem execução remota observada |
+| 0.3 | Implementado | `ci.yml` roda nos dois repositórios desde 14/09/2026 e ficou verde nos três sistemas no run `34813846975` do público |
 | 0.4 | Preparado | Bindings e script existem sem aparelhos e medições |
 | 0.5 | Pendente | Transições físicas não foram repetidas nos aparelhos |
 | 0.6 | Implementado | Política e expiração passaram em Docker local |
@@ -53,21 +53,21 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 2.8 | Implementado | Ponte com segredo, dispositivo e revogação testada |
 | 2.9 | Implementado | Assistente, QR, dispositivos e estados integrados na interface |
 | 2.10 | Implementado | Receita Headscale e check local aprovados |
-| 2.11 | Preparado | Integração Docker passou localmente; workflow remoto está pendente |
-| 2.12 | Preparado | Cinco sidecars compilam localmente; release remota está pendente |
+| 2.11 | Implementado | Integração Docker verde localmente e em `headscale-integration.yml` no privado e no público em 14/09/2026 |
+| 2.12 | Implementado | Cinco sidecars compilados e verificados no `release.yml` da prévia `v0.1.0` em 14/09/2026 |
 
 ### Fase 3
 
 | Tarefa | Estado | Limite atual |
 | --- | --- | --- |
-| 3.1 | Preparado | Script e binding iOS existem; workflow dedicado e XCFramework de release estão pendentes |
-| 3.2 | Preparado | Wrapper Swift existe sem build nativo |
+| 3.1 | Implementado | XCFramework e AAR gerados no Codemagic e no `mobile-artifacts.yml`, run `34811514866`, em 14/09/2026; anexo a uma release e aparelhos pendentes |
+| 3.2 | Implementado | Wrapper Swift compilado e IPA assinado aceito pela Apple em 14/09/2026; iPhone pendente |
 | 3.3 | Implementado | Casca Expo e estados passam em Node |
 | 3.4 | Implementado | URL, saúde, shell e ganchos passam nos checks locais |
-| 3.5 | Preparado | Configuração estática validada sem archive assinado |
+| 3.5 | Implementado | Info.plist conferido no IPA do build 1; criptografia isenta de documentação pela atualização da decisão 014 |
 | 3.6 | Implementado | Página móvel reduzida e checks aprovados |
 | 3.7 | Implementado | Cento e um casos em quinze suítes aprovados na validação final desta frente |
-| 3.8 | Preparado | Codemagic e scripts existem sem contas, credenciais ou build remoto |
+| 3.8 | Implementado | Build 1 da 0.1.0 processado e em teste interno no TestFlight desde 14/09/2026; TestFlight externo pendente |
 | 3.9 | Preparado | Roteiro imprimível existe sem execução em iPhone |
 | 3.10 | Pendente | Ensaio externo do App Review não ocorreu |
 
@@ -75,12 +75,12 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 
 | Tarefa | Estado | Limite atual |
 | --- | --- | --- |
-| 4.1 | Preparado | Wrapper Kotlin e AAR de desenvolvimento existem sem build nativo final |
+| 4.1 | Implementado | Wrapper Kotlin compilado com o AAR no Codemagic em 14/09/2026; aparelho pendente |
 | 4.2 | Implementado | Configuração foi validada por prebuild e introspecção |
 | 4.3 | Implementado | Voltar foi validado pelos checks Node |
 | 4.4 | Preparado | Ciclo de vida existe sem suspensão em aparelho |
 | 4.5 | Preparado | Política e Secure Store existem sem biometria e Keystore reais |
-| 4.6 | Preparado | Workflow existe sem app, credenciais, AAB ou faixa interna |
+| 4.6 | Implementado | AAB e APK assinados pela chave de upload; AAB em rascunho na faixa interna desde 14/09/2026 |
 | 4.7 | Preparado | Roteiro imprimível existe sem execução em Android |
 | 4.8 | Pendente | Relatório do Play depende do AAB enviado |
 
@@ -88,13 +88,13 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 
 | Tarefa | Estado | Limite atual |
 | --- | --- | --- |
-| 5.1 | Preparado | Contrato e backends verificados no macOS e Linux; execução Windows pendente |
+| 5.1 | Implementado | Contrato e backends verificados no macOS, no Linux e na suíte Rust nativa do Windows na CI em 14/09/2026 |
 | 5.2 | Implementado | Backend Linux verificado no Ubuntu 22.04 arm64 em contêiner |
-| 5.3 | Preparado | Backend Windows compilado por `cargo-xwin` sem execução nativa |
-| 5.4 | Preparado | PTY verificado no macOS e Linux; ConPTY sem execução nativa |
-| 5.5 | Preparado | Retomada verificada no macOS e Linux; PowerShell e cmd sem execução nativa |
-| 5.6 | Preparado | Observador verificado no macOS e Linux; Windows sem execução nativa |
-| 5.7 | Preparado | Arquivos e lixeira verificados no macOS e Linux; Windows sem execução nativa |
+| 5.3 | Implementado | Backend Windows testado na suíte Rust nativa do `windows-2022` em 14/09/2026, com memória por working set antes do Windows 11; máquina Windows física pendente |
+| 5.4 | Implementado | PTY verificado no macOS, no Linux e no ConPTY do `windows-2022`; desde 14/09/2026 o Rust responde a pergunta de cursor com que o ConPTY nasce |
+| 5.5 | Preparado | Retomada verificada no macOS e Linux; sintaxe PowerShell e cmd testada no Windows da CI, sem retomada real de agente |
+| 5.6 | Implementado | Observador verificado no macOS, no Linux e na suíte nativa do Windows na CI em 14/09/2026 |
+| 5.7 | Implementado | Arquivos verificados no macOS, no Linux e na suíte nativa do Windows na CI em 14/09/2026; lixeira real do Windows sem teste manual |
 | 5.8 | Preparado | Prévia testada no macOS e Linux; WebView2 não exercitado |
 | 5.9 | Preparado | Descoberta testada no macOS e Linux; Chromium, WebView2 e LibreOffice reais pendentes fora do macOS |
 | 5.10 | Preparado | Diagnóstico e hook testados no macOS e Linux; instalador PowerShell sem execução nativa |
@@ -102,10 +102,10 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; sem execução nativa Linux ou Windows |
 | 5.13 | Implementado | Na main desde `d64207d` e `bfccb08`: casca, fontes, `.mac-switch` e JetBrains Mono conferidos em Chromium nos três sistemas, com a cascata de produção protegida; WebKitGTK e WebView2 reais não exercitados |
 | 5.14 | Implementado | Na main desde `b1a4efe`: Terminal, Dev Browser, Janela e caminhos por sistema em testes Rust nos três alvos e conferidos em Chromium nos três idiomas; troca do Mica ao salvar sem execução Windows |
-| 5.15 | Preparado | Suíte Rust passou no macOS e Linux; Windows apenas compilado |
-| 5.16 | Implementado | Matriz do `ci.yml` com `check:text` e checks de navegador por Playwright no Ubuntu desde 14/09/2026; `release.yml` publicou a prévia `v0.1.0`; o verde remoto nos três sistemas é registrado no documento 13 |
+| 5.15 | Implementado | Suíte Rust nativa verde no macOS, no Ubuntu e no `windows-2022` da CI em 14/09/2026; checks de navegador por Playwright no Ubuntu |
+| 5.16 | Implementado | `ci.yml` verde nos três sistemas no run `34813846975` de 14/09/2026, com `check:text` e Playwright no Ubuntu; `release.yml` publicou as prévias `v0.1.0` e `v0.1.1` |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |
-| 5.18 | Preparado | Na main desde `745d7ad`: `nightly-e2e.yml`, runner por `tauri-driver` e roteiro portátil; self test passou no macOS por `tauri dev` e no Ubuntu 22.04 em contêiner com Xvfb; execução remota e Windows pendentes |
+| 5.18 | Preparado | `nightly-e2e.yml` roda no público desde 14/09/2026 e passou 8 de 8 no Ubuntu; no Windows a janela cresce, o explorador abre e o PowerShell responde, mas a página do WebView2 sem GPU fica lenta e deixa de responder ao WebDriver antes do fim do roteiro |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
 
 ### Fase 6
@@ -115,7 +115,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 6.1 | Preparado | Runner e imagem Ubuntu existem; testes Linux e Windows não rodaram |
 | 6.2 | Preparado | Conversão real verificada no macOS; Linux e Windows pendentes |
 | 6.3 | Pendente | Uso de plano não foi validado nos três sistemas |
-| 6.4 | Preparado | Backend Win32 implementado sem compilação ou execução Windows |
+| 6.4 | Implementado | Backend Win32 ligado no Windows desde 14/09/2026 e testado na suíte Rust nativa da CI; leitura pelo celular num Windows real pendente |
 | 6.5 | Pendente | Arraste externo continua opcional e sem Linux ou Windows |
 | 6.6 | Implementado | Desktop, terminais, página e app do celular, menu, diálogos e mensagens nativas do desktop e metadados nativos do app usam português do Brasil, inglês e espanhol neutro a partir de `@cialai/i18n`; `check:i18n` e `check:native-i18n` rodam no `npm test`; menu nativo, WebView2, WebKitGTK, aparelhos e textos de loja em espanhol não exercitados |
 | 6.7 | Pendente | Tokens `--mac-*` permanecem por decisão |
@@ -125,11 +125,11 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 
 | Tarefa | Estado | Limite atual |
 | --- | --- | --- |
-| 7.1 | Preparado | Updater existe; chave, assinatura e instalação estão pendentes |
+| 7.1 | Implementado | Chave gerada e `latest.json` assinado nas prévias `v0.1.0` e `v0.1.1`; a `v0.1.1` é a primeira atualização oferecida a quem instalou a anterior, sem instalação real conferida |
 | 7.2 | Implementado | Documentação pública e modelos foram revistos |
 | 7.3 | Preparado | Políticas, formulários propostos, textos e capturas planejadas existem sem publicação |
 | 7.4 | Preparado | Notas e roteiros existem sem submissão às lojas |
-| 7.5 | Preparado | Changelog, procedimento e guarda existem com seis gates pendentes |
+| 7.5 | Preparado | Prévias `v0.1.0` e `v0.1.1` publicadas em 14/09/2026; seis gates da versão 1 pendentes |
 | 7.6 | Pendente | Anúncio e página do projeto não foram produzidos |
 
 As frentes paralelas alteram a ordem de autoria, mas não dispensam dependências de aceite. Em particular, a documentação e os materiais da Fase 7 podem estar preparados enquanto as Fases 5 e 6 e os testes externos continuam pendentes.

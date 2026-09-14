@@ -45,7 +45,7 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | App `br.com.ordinum.cialai` no Google Play | Criado em 13/09/2026 |
 | App do Cialai no Codemagic com as integrações e grupos acima | App `6aa75e1e235d9cae411b55df` criado pelo painel com a integração GitHub. As sete variáveis dos três grupos foram cadastradas pela API em 14/09/2026, lidas dos arquivos sem exibir valores; só `APP_STORE_APP_ID` não é secreta |
 | Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
-| Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
+| Primeiro AAB do app | Enviado pelo `android-play` do Codemagic em 14/09/2026 como rascunho na faixa interna, `versionCode` 2, sem envio manual. Liberar o rascunho para testadores é passo do Play Console |
 | Chave do updater do desktop | Gerada em 14/09/2026 em `secrets/cialai/tauri-updater.key`, com a pública em `tauri-updater.key.pub` e a senha em `tauri-updater.password`, todos com permissão 600. Cadastrada nos secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` de `Cialai/cialai` |
 | Developer ID da Apple e certificado Windows | Pendente do usuário. Sem eles o `release.yml` publica macOS com assinatura ad hoc e Windows sem Authenticode |
 

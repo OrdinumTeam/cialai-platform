@@ -23,11 +23,11 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 013 | Preparado | Subprotocolo existe; plano B não foi ativado |
 | 014 | Preparado | Desde 14/09/2026 o Info.plist declara criptografia isenta de documentação, sem distribuição na França; declaração francesa e confirmação jurídica pendentes |
 | 015 | Implementado | Marca, acento, sessões e ANSI aplicados |
-| 016 | Preparado | Workflows existem; execução remota e publicação permanecem pendentes |
+| 016 | Implementado | Em 14/09/2026 o GitHub Actions publicou a prévia `v0.1.0` e o Codemagic enviou o build 1 ao TestFlight interno e o AAB à faixa interna do Play |
 | 017 | Implementado | Entrada pública em inglês e interface em três idiomas estão integradas |
 | 018 | Implementado | Tokens `--mac-*` foram mantidos |
 | 019 | Pendente | Atalhos Linux e Windows dependem da integração da Fase 5 |
-| 020 | Implementado | Leitura móvel Unix e arraste macOS refletem o recorte decidido |
+| 020 | Implementado | Arraste para fora segue só no macOS; desde 14/09/2026 a leitura de arquivos pelo celular também vale no Windows pela tarefa 6.4 |
 | 021 | Implementado | Extração usou o working tree inventariado; commit no Control segue como dependência do usuário |
 | 022 | Implementado | Go 1.26.5 está fixado no módulo e nos workflows |
 | 023 | Implementado | Fundação e aceite externo permanecem separados nos registros |
@@ -125,6 +125,8 @@ Contexto: no macOS ⌘ nunca chega ao shell; no Linux e no Windows Ctrl T, Ctrl 
 ## 020 `mobile_files` só Unix e arraste para fora só macOS na primeira rodada
 
 Contexto: `mobile_files.rs` usa `openat` com `O_NOFOLLOW` e `nlink`; `dragout.rs` usa `NSDraggingSession`. Decisão: Windows devolve `indisponível` nas leituras do celular e o stub do arraste continua até a Fase 6. Consequência: no Windows o celular vê os terminais mas não os arquivos até a Fase 6.
+
+Atualização em 14/09/2026: a tarefa 6.4 ligou no Windows o backend Win32, que abre cada alvo sem seguir reparse points, confere o caminho final do handle dentro da raiz e recusa hard links, com testes na suíte Rust. O arraste para fora continua só no macOS.
 
 ## 021 Extração a partir do working tree do Control
 

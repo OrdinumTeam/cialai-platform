@@ -97,7 +97,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Windows has only a Rust cross check so far. WebView2, ConPTY, installer resources and signing have not been exercised natively. Behavior differences between systems are documented in [docs/14-diferencas-por-plataforma.md](./docs/14-diferencas-por-plataforma.md).
+Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A physical Windows machine, WebView2 with a GPU, installing the packages and code signing have not been exercised. Behavior differences between systems are documented in [docs/14-diferencas-por-plataforma.md](./docs/14-diferencas-por-plataforma.md).
 
 ## Connect your own Headscale server
 

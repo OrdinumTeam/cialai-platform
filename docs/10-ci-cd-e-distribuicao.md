@@ -24,19 +24,19 @@ Checklist original da exportação:
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
-| `ci.yml` | Implementado | Matriz Ubuntu 22.04, Windows 2022 e macOS 14 com sidecar local, `npm test`, bundle sem assinatura e artefatos por sistema. A execução de 14/09/2026 falhou no Windows por CRLF nos checks e no macOS e no Linux porque o bundle pedia a chave privada do updater; `.gitattributes` com LF e `tauri.ci.conf.json` sem artefatos do updater corrigem as duas causas |
+| `ci.yml` | Implementado | Matriz Ubuntu 22.04, Windows 2022 e macOS 14 com sidecar local, `npm test`, bundle sem assinatura e artefatos por sistema; no Ubuntu também `check:text` e checks de navegador por Playwright. Verde nos três sistemas nos runs `34813846975` e `34815427824` de 14/09/2026, depois das correções de CRLF, chave do updater no bundle, npm no Windows, caminhos dos checks, suíte Rust nativa do Windows, bit de execução, tipos do site móvel e caminhos dos testes Go |
 | `spike-headscale.yml` | Preparado | Contrato existe e o spike passou localmente; execução no GitHub não foi observada |
-| `headscale-integration.yml` | Preparado | Workflow e integração Docker existem; o gate remoto no SHA da candidata está pendente |
+| `headscale-integration.yml` | Implementado | Verde no push dos dois repositórios em 14/09/2026, por último no público em `e0c0ce3`, run `34812765185`. A agenda diária roda só no repositório público; o gate no SHA da candidata da versão 1 continua pendente |
 | `release.yml` | Implementado | Guarda com canal de prévia, cinco sidecars, rascunho único, matriz macOS arm64 e Intel, Linux e Windows, assinatura de plataforma opcional, nomes estáveis, `SHA256SUMS` e publicação. Sem Developer ID o macOS sai com assinatura ad hoc e sem Azure Trusted Signing o Windows sai sem Authenticode |
-| `nightly-e2e.yml` | Preparado | Self test diário no Ubuntu 22.04 e no Windows 2022 por `tauri-driver` 2.0.6, com WebKitWebDriver e Xvfb no Linux e Edge WebDriver da versão do WebView2 no Windows; nenhuma execução remota foi observada |
-| `mobile-artifacts.yml` | Pendente | O workflow dedicado ao XCFramework e ao AAR ainda não existe; Codemagic pode compilar os bindings no runner |
-| `ios-testflight`, `ios-archive` e `android-play` | Preparado | Configuração e checks locais existem; apps, integrações, credenciais, builds e uploads não foram executados |
+| `nightly-e2e.yml` | Preparado | Roda no público desde 14/09/2026. O Ubuntu 22.04 passou 8 de 8 em todas as rodadas. No Windows 2022 as capturas mostraram a janela em 1024 por 728, o explorador aberto e o PowerShell respondendo, mas a página do WebView2 sem GPU ficou lenta e deixou de responder ao WebDriver antes do fim do roteiro |
+| `mobile-artifacts.yml` | Implementado | Disparo manual com tag opcional. O run `34811514866` de 14/09/2026 compilou no `macos-14` o `Tunnelcore.xcframework.zip` de 46,6 MB e o `tunnelcore.aar` de 29,9 MB com `arm64-v8a` e `x86_64`, com hashes conferidos, em 7 min 28 s e sem tag. O anexo a uma release ainda não foi executado |
+| `ios-testflight`, `ios-archive` e `android-play` | Implementado | Em 14/09/2026 o `ios-testflight` enviou a 0.1.0 build 1 ao TestFlight interno depois de quatro tentativas e o `android-play` gerou AAB e APK e enviou o AAB como rascunho na faixa interna na primeira tentativa. O `ios-archive` não foi disparado |
 | Scripts em `tools/release` | Implementado | Contratos locais, modo de ensaio e guardas estão versionados e testados sem credenciais reais |
 | Atualizador do desktop | Implementado | Par gerado em 14/09/2026; chave pública em `tauri.conf.json`, validada por `check-updater.mjs`, e chave privada com senha apenas fora do repositório e nos secrets do repositório público |
 | Identificadores públicos | Preparado | Bundle, Team ID e nomes estão documentados; os registros dos apps e ids resultantes dependem do usuário |
 | Credenciais | Pendente | Somente nomes e locais esperados estão versionados; nenhum valor foi criado ou copiado para o repositório |
 | Materiais das lojas | Preparado | Políticas, respostas, textos, capturas planejadas e notas de revisão existem; URLs publicadas e formulários estão pendentes |
-| Release `v1.0.0` | Preparado | `CHANGELOG.md`, procedimento e guarda existem com seis gates pendentes; nenhuma tag ou release foi criada |
+| Release `v1.0.0` | Preparado | `CHANGELOG.md`, procedimento e guarda existem com seis gates pendentes. A prévia `v0.1.0` foi publicada em 14/09/2026 em `Cialai/cialai`, sem assinatura de plataforma |
 
 Go está fixado em 1.26.5 pela decisão 022 e Rust em 1.98.1. As tabelas seguintes descrevem o contrato completo. O estado acima prevalece quando um workflow ou serviço ainda não foi executado.
 
@@ -46,10 +46,10 @@ Go está fixado em 1.26.5 pela decisão 022 e Rust em 1.98.1. As tabelas seguint
 | --- | --- | --- |
 | `ci.yml` | push, PR e manual | Matriz `ubuntu-22.04`, `windows-2022` e `macos-14`; Node, npm, Rust 1.98.1 e Go pelo `go.mod`; no Linux instala WebKitGTK 4.1, GTK, AppIndicator, SVG, `patchelf`, XDo, OpenSSL e zsh; `npm ci`; build do sidecar local; `npm test`; `tauri build` sem assinatura e com `tauri.ci.conf.json`, que desliga os artefatos do updater porque a CI não recebe a chave privada; dmg, AppImage, deb, rpm, nsis e msi anexados ao run. `CARGO_BUILD_JOBS=2` limita Rust. No Ubuntu roda também `npm run check:text`, que confere o texto visível dos três idiomas, das lojas, das políticas e das notas de release, e `npm run test:browser`, que sobe o Vite e executa por Playwright 1.63.0 os roteiros do estúdio, da rede e do celular em Chromium headless. O workflow não substitui os testes físicos |
 | `release.yml` | tag `v*` e manual com a tag | Exige a chave pública e os secrets do updater e confere a tag com as versões do desktop; prévias abaixo de `v1.0.0` dispensam os gates da versão 1 e tags estáveis exigem `check-release.mjs --release`; testa e compila cinco sidecars; cria um único rascunho com as notas de `tools/release/notes`; a matriz `macos-14` arm64 e Intel, `ubuntu-22.04` e `windows-2022` roda `signing-mode.mjs` e `tauri-action@v1` com nomes sem versão; o último job confere os arquivos, grava `SHA256SUMS` e publica como release mais recente. Sidecars brutos e artefatos móveis ainda não entram no workflow; o APK do Codemagic é anexado depois |
-| `headscale-integration.yml` | mudanças no túnel, diário e manual | `ubuntu-22.04` com Docker; vet e integração contra `headscale/headscale:0.29.3` com prazo de doze minutos |
+| `headscale-integration.yml` | mudanças no túnel, diário só no público e manual | `ubuntu-22.04` com Docker; vet e integração contra `headscale/headscale:0.29.3` com prazo de doze minutos |
 | `spike-headscale.yml` | PR no túnel e manual | Executa o spike de política e expiração com Headscale 0.29.3 no Linux |
-| `nightly-e2e.yml` | Diário às 05:17 UTC e manual | Matriz `ubuntu-22.04` e `windows-2022`; instala dependências, `tauri-driver` 2.0.6 e, no Windows, o Edge WebDriver da versão do WebView2; compila sidecar e app de depuração sem bundle; roda `tools/selftest/driver.mjs`, sob Xvfb no Linux, e anexa `selftest.json`, `app.log` e o log do driver mesmo em falha. Não consome secrets |
-| `mobile-artifacts.yml` | Planejado para tag e manual | Ainda ausente; deve publicar `Tunnelcore.xcframework.zip`, `tunnelcore.aar` e hashes para a release |
+| `nightly-e2e.yml` | Diário às 05:17 UTC só no público e manual | Matriz `ubuntu-22.04` e `windows-2022`; instala dependências, `tauri-driver` 2.0.6 e, no Windows, o Edge WebDriver da versão do WebView2; compila sidecar e app de depuração sem bundle; roda `tools/selftest/driver.mjs`, sob Xvfb no Linux, e anexa `selftest.json` com a duração de cada etapa e os diagnósticos de cursor, renderizador e fila de eventos, `app.log`, capturas e o log do driver mesmo em falha; quando o roteiro não termina, grava o andamento em `selftest-progress.json` se a página responder. Não consome secrets |
+| `mobile-artifacts.yml` | manual, com tag opcional | `macos-14`; Go pelo `go.mod` e NDK `28.2.13676358`, o mesmo do Codemagic; `tools/build-tunnel-mobile.sh all`; confere os hashes, que levam só o nome do arquivo; guarda `cialai-mobile-bindings` como artefato e, com a tag de uma release existente, anexa os quatro arquivos e refaz o `SHA256SUMS` com `release-assets.mjs checksums` |
 
 O workflow exige `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. Developer ID e notarização entram quando existirem os secrets `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` e `APPLE_TEAM_ID`. Azure Trusted Signing entra com os secrets `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` e `AZURE_TENANT_ID` e as variáveis `WINDOWS_SIGNING_ENDPOINT`, `WINDOWS_SIGNING_ACCOUNT` e `WINDOWS_SIGNING_PROFILE`. O passo sem Developer ID não recebe nenhuma credencial Apple. Builds de PR nunca recebem secrets.
 
@@ -103,10 +103,10 @@ O repositório privado `ordinum-credentials` guarda referências, donos e proced
 
 | Etapa | Regras |
 | --- | --- |
-| TestFlight interno | Pendente. Exige app, integração, assinatura, build e grupo confirmados pelo usuário |
+| TestFlight interno | Em uso desde 14/09/2026: build 1 da 0.1.0 no grupo interno `OrdinumTeam`, com acesso a todos os builds |
 | TestFlight externo | Pendente. Exige informações de teste, conta de demonstração e Beta App Review; será o ensaio antes da submissão |
 | App Store | Materiais preparados. Submissão, política publicada, auditoria do archive e respostas finais continuam pendentes |
-| Play interno | Pendente. Workflow aponta para `internal`, e o script de API ensaia sem `--commit`; relatório de pré lançamento depende do AAB enviado |
+| Play interno | AAB 0.1.0 com `versionCode` 2 em rascunho na faixa interna desde 14/09/2026; liberar para testadores e o relatório de pré lançamento dependem do Play Console |
 | Play produção | Materiais preparados. Data safety proposta, alvo 36, ícone e capturas precisam ser conferidos contra o AAB final |
 | Textos | Versões curta e longa em português e inglês estão em `docs/stores`; campos marcados dependem de confirmação do usuário |
 | Versões | Desktop pela tag `v<semver>`; celular com versão de marketing `X.Y.Z` e número de build monotônico do `cm-next-build-number.sh` no iOS e do `versionCode` no Android |

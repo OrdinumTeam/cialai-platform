@@ -10,12 +10,13 @@ especificação detalhada continua em [04-desktop.md](./04-desktop.md); este tex
 | --- | --- | --- |
 | macOS arm64 | Suíte Rust nativa com 151 casos aprovados e dois ensaios externos ignorados. O caso do instalador do Chromium passou novamente depois do ajuste portável do fixture | Bundle assinado, notarização e instalação limpa |
 | Ubuntu 22.04 arm64 | Suíte Rust em contêiner com 145 casos aprovados e dois ensaios externos ignorados | WebKitGTK visível, instaladores e IME real |
-| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC | Execução nativa, recursos do bundle, WebView2, ConPTY, IME, instaladores e Authenticode |
+| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando | Máquina física, WebView2 com GPU, self test completo, IME, instalação dos instaladores e Authenticode |
 
 O contêiner Linux teve limite de 6 GiB e dois CPUs e foi removido ao final. O
 cross check Windows usou `CIALAI_SKIP_WINDOWS_RESOURCES=1` porque o host não
-tinha `llvm-rc`; portanto ele não valida o arquivo de recursos. CI remota e
-assinaturas continuam como trabalho preparado, não como evidência de execução.
+tinha `llvm-rc`; portanto ele não valida o arquivo de recursos. A CI remota
+executou os três sistemas em 14/09/2026; assinaturas de plataforma continuam
+como trabalho preparado, não como evidência de execução.
 
 ## Janela, menu e aparência
 
