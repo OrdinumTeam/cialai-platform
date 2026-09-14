@@ -1,10 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../infra/headscale/', import.meta.url));
 const read = (path) => readFileSync(`${root}${path}`, 'utf8');
+
+// O Windows não guarda o bit de execução no disco; lá vale o modo registrado no índice do Git.
+function executable(path) {
+  if (process.platform !== 'win32') return Boolean(statSync(`${root}${path}`).mode & 0o100);
+  return execFileSync('git', ['ls-files', '--stage', '--', path], { cwd: root, encoding: 'utf8' }).startsWith('100755 ');
+}
 
 for (const path of ['docker-compose.yml', 'config/config.yaml.template', 'config/policy.json', 'bootstrap.sh', 'README.md', '.gitignore']) {
   assert.ok(existsSync(`${root}${path}`), `Missing Headscale recipe file: ${path}`);
@@ -55,7 +62,7 @@ assert.match(bootstrap, /valid_ipv4 "\$ipv4"/);
 assert.match(bootstrap, /configtest/);
 assert.match(bootstrap, /apikeys create --expiration 365d/);
 assert.ok(!/apikeys create(?![^\n]*365d)/.test(bootstrap.replace(/docker compose exec headscale headscale apikeys create --expiration 365d/g, '')), 'bootstrap must not create API keys');
-assert.ok(statSync(`${root}bootstrap.sh`).mode & 0o100, 'bootstrap.sh must be executable');
+assert.ok(executable('bootstrap.sh'), 'bootstrap.sh must be executable');
 
 assert.match(read('.gitignore'), /^config\/config\.yaml$/m);
 
