@@ -25,8 +25,11 @@ assinaturas continuam como trabalho preparado, não como evidência de execuçã
 | Efeito | Vibrancy na barra lateral | Fundo opaco, sem efeito nativo | Mica a partir do build 22621, com falha não fatal |
 | Abertura | Animação nativa do quadro | X11 anima posição e tamanho. Wayland abre direto no tamanho final | `SetWindowPos` atualiza o quadro em pixels físicos |
 | Menu | Menu nativo, inclusive Editar para o WKWebView | Botão na toolbar com ações no DOM | Botão na toolbar com ações no DOM |
+| Idioma | Menu de início localizado pelo Rust e menubar da interface refeita ao trocar de idioma | Menu da toolbar no idioma da interface | Menu da toolbar no idioma da interface |
 | Tela cheia | Escape tem guarda contra saída acidental | Escape segue o comportamento da página | Escape segue o comportamento da página |
 | Texto | San Francisco e SF Mono quando disponíveis | Fonte do sistema e família Linux | Segoe UI e Cascadia quando disponíveis |
+
+Nos três sistemas, a confirmação de saída e as mensagens do núcleo usam o idioma escolhido na interface, gravado pelo comando `app_set_locale`. O app não tem ícone de bandeja.
 
 No Wayland, o compositor controla a posição. Restaurar posição e centralizar o
 splash podem não produzir efeito. O app não simula controles próprios nesse

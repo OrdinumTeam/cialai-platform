@@ -10,8 +10,8 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | Tema ANSI e paleta das sessões | Implementado | Azul semântico e dezoito ids foram preservados e testados |
 | Ícones desktop e móvel | Implementado | Fontes opacas e formatos do Tauri foram gerados e o ícone móvel passou no check de assets; lançadores externos não foram conferidos |
 | Tipografia, movimento e dimensões | Implementado | Valores foram preservados na interface compartilhada e nas capturas macOS |
-| Regras de texto em português | Implementado | Checks de interface e revisão dos materiais cobrem os textos atuais |
-| Tradução da interface para inglês | Pendente | A tarefa 6.6 ainda não está integrada nesta linha |
+| Regras de texto da interface | Implementado | Checks de interface e revisão dos materiais cobrem os textos atuais |
+| Interface em três idiomas | Implementado | Português do Brasil, inglês e espanhol neutro têm dicionários com paridade |
 | Capturas de paridade no macOS | Implementado | Comparações claro, escuro, Dev Browser e quatro estados móveis estão em `docs/evidence/task-1.11` |
 | Capturas Linux, Windows e lojas | Pendente | Dependem das implementações integradas, builds nativos e tamanhos exigidos pelas lojas |
 
@@ -138,7 +138,7 @@ Tudo que aparece surge em 140 a 240 ms, só com opacidade e deslocamento, no `--
 
 ## Regras de texto na interface
 
-Sem parênteses para informação secundária; sem hífen isolado, meia-risca ou travessão como separador de campos, rótulos, metadados, títulos ou frases; relações mostradas por rótulo e valor, linhas separadas, subtítulos, chips, colunas, cards, listas ou espaçamento; hifens da ortografia, valores negativos e sintaxe de código preservados; dados brutos podem manter a grafia de origem. Antes de entregar uma tela, varrer o texto visível por `(`, `)`, ` - `, `–` e `—`. Textos em português na primeira rodada, com chaves de tradução preparadas para o inglês na fase de lançamento.
+Sem parênteses para informação secundária; sem hífen isolado, meia-risca ou travessão como separador de campos, rótulos, metadados, títulos ou frases; relações mostradas por rótulo e valor, linhas separadas, subtítulos, chips, colunas, cards, listas ou espaçamento; hifens da ortografia, valores negativos e sintaxe de código preservados; dados brutos podem manter a grafia de origem. Antes de entregar uma tela, varrer o texto visível por `(`, `)`, ` - `, `–` e `—`. A interface oferece português do Brasil como padrão e fallback, inglês e espanhol neutro. Cialai, Headscale, Claude Code e Codex conservam seus nomes.
 
 ## Capturas de referência
 

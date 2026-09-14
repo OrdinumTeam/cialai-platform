@@ -98,14 +98,14 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 5.8 | Preparado | Prévia testada no macOS e Linux; WebView2 não exercitado |
 | 5.9 | Preparado | Descoberta testada no macOS e Linux; Chromium, WebView2 e LibreOffice reais pendentes fora do macOS |
 | 5.10 | Preparado | Diagnóstico e hook testados no macOS e Linux; instalador PowerShell sem execução nativa |
-| 5.11 | Preparado | Backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; animação X11 medida sob Xvfb, Wayland e Windows nativo não exercitados |
+| 5.11 | Preparado | Na main desde `d2678e7`: backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; animação X11 medida sob Xvfb, Wayland e Windows nativo não exercitados |
 | 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; sem execução nativa Linux ou Windows |
-| 5.13 | Implementado | Casca, fontes, `.mac-switch` e JetBrains Mono conferidos no Dev Browser nos três sistemas; WebKitGTK e WebView2 reais não exercitados |
-| 5.14 | Implementado | Terminal, Dev Browser, Janela e caminhos por sistema conferidos no Dev Browser e em testes Rust nos três alvos; troca do Mica ao salvar sem execução Windows |
+| 5.13 | Implementado | Na main desde `d64207d` e `bfccb08`: casca, fontes, `.mac-switch` e JetBrains Mono conferidos em Chromium nos três sistemas, com a cascata de produção protegida; WebKitGTK e WebView2 reais não exercitados |
+| 5.14 | Implementado | Na main desde `b1a4efe`: Terminal, Dev Browser, Janela e caminhos por sistema em testes Rust nos três alvos e conferidos em Chromium nos três idiomas; troca do Mica ao salvar sem execução Windows |
 | 5.15 | Preparado | Suíte Rust passou no macOS e Linux; Windows apenas compilado |
 | 5.16 | Preparado | Matriz do `ci.yml` versionada sem execução remota; release, Playwright e check de texto pendentes |
 | 5.17 | Pendente | Assinaturas e instaladores não foram executados |
-| 5.18 | Preparado | `nightly-e2e.yml`, runner por `tauri-driver` e roteiro portátil existem; self test Linux passou em contêiner com Xvfb e macOS por `tauri dev`; execução remota e Windows pendentes |
+| 5.18 | Preparado | Na main desde `745d7ad`: `nightly-e2e.yml`, runner por `tauri-driver` e roteiro portátil; self test passou no macOS por `tauri dev` e no Ubuntu 22.04 em contêiner com Xvfb; execução remota e Windows pendentes |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
 
 ### Fase 6
@@ -117,7 +117,7 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 6.3 | Pendente | Uso de plano não foi validado nos três sistemas |
 | 6.4 | Preparado | Backend Win32 implementado sem compilação ou execução Windows |
 | 6.5 | Pendente | Arraste externo continua opcional e sem Linux ou Windows |
-| 6.6 | Preparado | Página web do celular migrada; telas React Native e desktop pendentes |
+| 6.6 | Implementado | Desktop, terminais, página e app do celular, menu, diálogos e mensagens nativas do desktop e metadados nativos do app usam português do Brasil, inglês e espanhol neutro a partir de `@cialai/i18n`; `check:i18n` e `check:native-i18n` rodam no `npm test`; menu nativo, WebView2, WebKitGTK, aparelhos e textos de loja em espanhol não exercitados |
 | 6.7 | Pendente | Tokens `--mac-*` permanecem por decisão |
 | 6.8 | Implementado | Documentos 01 a 12 foram revistos com estado datado e check automático |
 
@@ -267,7 +267,7 @@ Aceite: `cargo test` verde nos três sistemas; self test verde nos três; instal
 | 6.3 Uso do plano dos agentes nos três sistemas com o hook instalado por `.sh` e `.ps1` | M | 5.10 | 04 |
 | 6.4 `mobile_files` no Windows com `FILE_FLAG_OPEN_REPARSE_POINT` | M | 5.3 | 04 |
 | 6.5 Arraste para fora no Windows por OLE `DoDragDrop` com `CF_HDROP` e no Linux por `gtk_drag_begin`; opcional | G | 5.11 | 04 |
-| 6.6 Preparação de tradução: chaves de texto no `packages/ui` e no celular, inglês como segundo idioma | M | 1.3 | 08 |
+| 6.6 Interface em três idiomas: português do Brasil como padrão e fallback, inglês e espanhol neutro | M | 1.3 | 08 |
 | 6.7 Renomear `--mac-*` para `--ui-*`; opcional | P | 5.13 | 04 |
 | 6.8 Documentos desta pasta reescritos como documentação viva do que existe | P | tudo | 09 |
 

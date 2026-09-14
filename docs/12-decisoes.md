@@ -24,7 +24,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 014 | Preparado | Configuração verdadeira aplicada; confirmação jurídica e loja pendentes |
 | 015 | Implementado | Marca, acento, sessões e ANSI aplicados |
 | 016 | Preparado | Workflows existem; execução remota e publicação permanecem pendentes |
-| 017 | Preparado | Entrada pública em inglês existe; tradução da interface permanece pendente |
+| 017 | Implementado | Entrada pública em inglês e interface em três idiomas estão integradas |
 | 018 | Implementado | Tokens `--mac-*` foram mantidos |
 | 019 | Pendente | Atalhos Linux e Windows dependem da integração da Fase 5 |
 | 020 | Implementado | Leitura móvel Unix e arraste macOS refletem o recorte decidido |
@@ -39,6 +39,10 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 029 | Implementado | Ícone provisório foi aplicado e depois conferido na tarefa 1.7 |
 | 030 | Implementado | Suíte Rust usa casos elegíveis e contagem real no handoff |
 | 031 | Implementado | SheetJS oficial e esbuild corrigido estão no lockfile |
+| 032 | Preparado | Codemagic concentra os builds móveis; execução em aparelhos permanece pendente |
+| 033 | Preparado | Soak curto registrado; execução contínua de 24 horas permanece pendente |
+| 034 | Preparado | Dependências externas e critérios de aceite continuam explícitos |
+| 035 | Implementado | Português do Brasil, inglês e espanhol neutro adotados nas interfaces, no núcleo nativo do desktop e nos metadados do app móvel |
 
 ## 001 Nome Cialai
 
@@ -187,3 +191,11 @@ Decisão: conservar a carga como suíte opt-in configurável, com padrão de 24 
 Data: 13/09/2026. Decisão: registrar separadamente tudo que a árvore local não consegue provar. O fluxo móvel depende do repositório conectado ao Codemagic, máquinas `mac_mini_m2`, App Store Connect com o app Cialai e API key, identidade e perfis de assinatura, grupo externo do TestFlight, conta e app no Google Play, service account, SDK e NDK compatíveis e ao menos um iPhone e um Android físicos. Os roteiros de rede dependem ainda de Headscale acessível por TLS válido, DERP funcional e redes Wi-Fi e LTE reais. App Review, revisão jurídica de exportação e contas de loja são decisões externas à compilação.
 
 Para a matriz desktop, Linux depende de espaço local acima de 5 GiB ou runner Ubuntu 22.04 equivalente; Windows depende de runner Windows ou `cargo-xwin`, WebView2, LibreOffice e validação real das APIs de arquivos. Decisão consequente: CI, mocks, checks estruturais e código preparado não serão promovidos a comportamento verificado. Cada dependência permanece pendente no handoff até existir artefato, log ou medição da plataforma correspondente.
+
+## 035 Interface em português do Brasil, inglês e espanhol neutro
+
+Data: 13/09/2026. Contexto: a tarefa 6.6 previa preparar a tradução para inglês, mas a interface precisa atender também usuários de língua espanhola sem fragmentar o produto por região. Decisão: adotar português do Brasil como idioma padrão e fallback, com inglês e espanhol neutro como alternativas. Variações regionais de inglês e espanhol são normalizadas para os respectivos idiomas. O primeiro uso segue o idioma do sistema quando compatível. A escolha fica no Secure Store da casca móvel e no armazenamento local das interfaces web e desktop. Cialai, Headscale, Claude Code e Codex conservam seus nomes.
+
+Alternativa rejeitada: dicionários próprios no Rust, no Expo e nos checks, mantidos à mão, porque divergiriam a cada texto novo.
+
+Consequência: `@cialai/i18n` é a fonte única, com dicionários separados por idioma e área e a mesma API pública. O núcleo Rust embute o catálogo das chaves `native.*` gerado por `tools/i18n/native-catalog.mjs` e segue o idioma enviado pela interface, que fica gravado para o menu de início e a confirmação de saída da próxima abertura. O app móvel gera os textos de permissão por idioma pelo campo `locales` do Expo e declara as mesmas línguas no Android por `localeConfig`. `check:i18n` exige as três línguas com as mesmas chaves, valores e placeholders, confere os valores de cada chamada e rejeita textos literais e chaves sem uso; `check:native-i18n` confere o catálogo gerado e as chamadas do Rust. Erros do sidecar e do supervisor com código estável são traduzidos na interface desktop, e erros do protocolo trazem código para a interface traduzir. Mensagens detalhadas criadas pelo computador seguem o idioma escolhido no computador, inclusive quando chegam ao celular. Textos de lojas e políticas em espanhol ficam fora desta decisão e continuam pendentes.

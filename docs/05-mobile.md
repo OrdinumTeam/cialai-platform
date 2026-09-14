@@ -8,6 +8,8 @@ Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CON
 | --- | --- | --- |
 | Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente |
 | Página do celular | Implementado | Composição somente com Terminais e cabeçalho compacto passou nos checks compartilhados |
+| Idiomas da interface | Implementado | Português do Brasil, inglês e espanhol neutro seguem o aparelho e a escolha persistida |
+| Metadados nativos por idioma | Preparado | `CFBundleLocalizations`, textos de câmera, rede local e Face ID por idioma e `localeConfig` do Android saem de `@cialai/i18n` e aparecem na introspecção do Expo; build nativo e aparelho pendentes |
 | Módulo Swift e XCFramework | Preparado | Wrapper e contrato existem; build Swift, link e execução em iPhone estão pendentes |
 | Configuração iOS | Preparado | Bundle, permissões, criptografia e proteção estão declarados; archive assinado não foi auditado |
 | Distribuição iOS | Preparado | Workflows e scripts existem; app, credenciais, TestFlight e App Review estão pendentes |
@@ -90,7 +92,7 @@ Tokens: `expo-secure-store` com chave `cialai.device.<desktopId>` e `WHEN_UNLOCK
 
 ## WebView
 
-O WebView carrega `http://127.0.0.1:47400/?k=<nonce>`; o proxy grava o cookie e redireciona para `/`. Propriedades preservadas de `Shell.tsx:181-205`: `allowsBackForwardNavigationGestures` desligado, `allowsLinkPreview` desligado, `contentInsetAdjustmentBehavior never`, `domStorageEnabled`, `javaScriptEnabled`, `keyboardDisplayRequiresUserAction` desligado, `pullToRefreshEnabled`, `sharedCookiesEnabled` desligado, `onContentProcessDidTerminate` recarregando, `onError` levando a `offline`, `originWhitelist(['*'])` com a guarda de `Shell.tsx:114-121` comparando a origem do proxy. `injectedJavaScriptBeforeContentLoaded` define `window.__CIALAI_SHELL__ = {platform, version, desktopId}`. A página deriva o WebSocket de `location.host`, então conecta em `ws://127.0.0.1:47400/pty` sem saber de túnel. A saúde é sondada em `http://127.0.0.1:47400/api/health` e espera `service: "cialai"`.
+O WebView carrega `http://127.0.0.1:47400/?k=<nonce>`; o proxy grava o cookie e redireciona para `/`. Propriedades preservadas de `Shell.tsx:181-205`: `allowsBackForwardNavigationGestures` desligado, `allowsLinkPreview` desligado, `contentInsetAdjustmentBehavior never`, `domStorageEnabled`, `javaScriptEnabled`, `keyboardDisplayRequiresUserAction` desligado, `pullToRefreshEnabled`, `sharedCookiesEnabled` desligado, `onContentProcessDidTerminate` recarregando, `onError` levando a `offline`, `originWhitelist(['*'])` com a guarda de `Shell.tsx:114-121` comparando a origem do proxy. `injectedJavaScriptBeforeContentLoaded` define `window.__CIALAI_SHELL__` com plataforma, versão, identificador, nome do computador e idioma. A página deriva o WebSocket de `location.host`, então conecta em `ws://127.0.0.1:47400/pty` sem saber de túnel. A saúde é sondada em `http://127.0.0.1:47400/api/health` e espera `service: "cialai"`.
 
 Teclado: a página mede o `visualViewport` em `mobile/keyboard-viewport.js` e reposiciona o prompt; no Android o `app.json` usa `softwareKeyboardLayoutMode: "resize"` para o WebView encolher em vez de rolar. Rota do terminal persistida em `cialai_terminals_phone_route`, então recarregar devolve o mesmo painel.
 
@@ -134,7 +136,7 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 
 ## Página do celular
 
-Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e um cabeçalho compacto com o nome do desktop e o estado da ponte; `TabBar` e `MoreSheet` saem ou ficam vazios; `links.js` e `keyboard-viewport.js` inalterados; `main.jsx` deriva a ponte de `location` como hoje. `PhoneWorkbench` e `PhoneFiles` inalterados: lista, terminal, arquivos e prévia, uma tela por vez, fileira de teclas com Esc, Tab, Shift Tab, Ctrl C, setas, Enter, Ctrl D, Ctrl L e Colar, toque convertido em rolagem por `touch-scroll.js`, concessão de largura por `viewport.js`, sessões encerradas mantendo o histórico local.
+Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e um cabeçalho compacto com o nome do desktop e o estado da ponte; `TabBar` e `MoreSheet` saem ou ficam vazios; `links.js` e `keyboard-viewport.js` permanecem; `main.jsx` deriva a ponte de `location` como hoje. `PhoneWorkbench` e `PhoneFiles` preservam lista, terminal, arquivos e prévia, uma tela por vez. A fileira mantém Esc, Tab, Shift Tab, Ctrl C, setas, Enter, Ctrl D, Ctrl L e Colar. Toque vira rolagem por `touch-scroll.js`, `viewport.js` concede a largura e sessões encerradas conservam o histórico local. Todos os rótulos compartilhados usam o idioma enviado pela casca ou a escolha persistida na página.
 
 ## Testes
 
@@ -142,7 +144,7 @@ Jest com `jest-expo`, herdando os 65 casos de `ios/app` e acrescentando: inspeç
 
 ## Lojas
 
-Identificadores, credenciais por referência e workflows no documento 10. Exigências específicas: questionário de privacidade da App Store e Data safety do Play com "sem coleta", porque nada sai do aparelho além do túnel para o próprio computador; política de privacidade publicada; capturas por tamanho de tela; textos em inglês e português; ícone opaco de 1024 px conferido por `scripts/check-app-icon.swift`, herdado do Control.
+Identificadores, credenciais por referência e workflows no documento 10. Exigências específicas: questionário de privacidade da App Store e Data safety do Play com "sem coleta", porque nada sai do aparelho além do túnel para o próprio computador; política de privacidade publicada; capturas por tamanho de tela; textos em inglês e português; ícone opaco de 1024 px conferido por `scripts/check-app-icon.swift`, herdado do Control. Textos das lojas e políticas em espanhol continuam pendentes por estarem fora da tarefa 6.6.
 
 ## Riscos
 
