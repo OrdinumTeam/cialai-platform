@@ -27,3 +27,4 @@ packages/tunnel-core/build/
 packages/tunnel-core/cialai-tunnel
 .local/
 *.log
+apps/desktop/src-tauri/tauri.release.conf.json

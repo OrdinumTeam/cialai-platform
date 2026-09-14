@@ -27,7 +27,7 @@ for (const triple of triples) {
 const desktopTargets = [...release.matchAll(/^\s+target: ([a-z0-9_-]+)$/gm)].map((match) => match[1]);
 assert.deepEqual(desktopTargets, ['aarch64-apple-darwin', 'x86_64-apple-darwin', 'x86_64-unknown-linux-gnu', 'x86_64-pc-windows-msvc']);
 assert.match(release, /--verify --target \$\{\{ matrix\.target \}\}/);
-assert.match(release, /tauri-apps\/tauri-action@v0/);
+assert.match(release, /tauri-apps\/tauri-action@v1/);
 assert.match(release, /releaseDraft: true/);
 assert.match(release, /TAURI_SIGNING_PRIVATE_KEY/);
 assert.match(release, /check-updater\.mjs --release/);
