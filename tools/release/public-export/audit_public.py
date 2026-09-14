@@ -30,6 +30,10 @@ play_key = [l for l in sa["private_key"].splitlines() if len(l) >= 40][:3]
 for i, frag in enumerate(play_key): secrets[f"corpo chave play {i}"] = frag
 ks = base64.b64encode((SEC / "cialai/upload-keystore.jks").read_bytes()).decode()
 secrets["keystore base64"] = ks[100:160]
+updater_key = (SEC / "cialai/tauri-updater.key").read_text().strip()
+secrets["chave privada do updater"] = updater_key[60:120]
+secrets["corpo da chave privada do updater"] = base64.b64decode(updater_key).decode().splitlines()[1][20:80]
+secrets["senha do updater"] = (SEC / "cialai/tauri-updater.password").read_text().strip()
 
 patterns = {
     "chave privada": re.compile(r"-----BEGIN (RSA |EC |OPENSSH |ENCRYPTED )?PRIVATE KEY-----(?!\\nfixture)"),
@@ -40,6 +44,7 @@ patterns = {
     "jwt": re.compile(r"\beyJ[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{15,}\.[A-Za-z0-9_-]{10,}"),
     "headscale key real": re.compile(r"\bhskey-(api|auth)-[A-Za-z0-9_-]{12}-[A-Za-z0-9_-]{30,}"),
     "tailscale key": re.compile(r"\btskey-[A-Za-z0-9-]{20,}"),
+    "chave privada do updater": re.compile(r"rsign encrypted secret key|dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5"),
     "stripe ou openai": re.compile(r"\b(sk_live_|rk_live_|sk-proj-|sk-[A-Za-z0-9]{40,})"),
     "senha atribuida": re.compile(r"(?i)\b(password|passwd|senha|secret|token)\b\s*[:=]\s*['\"][^'\"\s$<{]{8,}['\"]"),
     "caminho local": re.compile(r"/Users/|focoamorim|Github Projects"),
