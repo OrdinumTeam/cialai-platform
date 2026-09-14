@@ -19,6 +19,12 @@ const ACCESS = Object.freeze({
 });
 
 export const REMOTE_COMMANDS = Object.freeze(Object.keys(ACCESS));
+// Motivos enviados como códigos; a interface mostra o texto no idioma ativo.
+export const SENSITIVE_REASONS = Object.freeze({
+  terminalInput: 'terminal_input',
+  terminalClose: 'terminal_close',
+  computerChange: 'computer_change',
+});
 export const remoteCommandAccess = (command) => ACCESS[command] || null;
 
 function readOnlyError() {
@@ -46,8 +52,8 @@ export function createSensitiveAuthorizer({ requireSensitive, onLock = () => () 
       if (terminalGrants.has(key)) return;
       if (!terminalPending.has(key)) {
         const epoch = lockEpoch;
-        const request = Promise.resolve(requireSensitive('action', 'Autorizar digitação neste terminal')).then(() => {
-          if (epoch !== lockEpoch) throw new Error('A sessão foi bloqueada. Autorize novamente.');
+        const request = Promise.resolve(requireSensitive('action', SENSITIVE_REASONS.terminalInput)).then(() => {
+          if (epoch !== lockEpoch) throw Object.assign(new Error('A sessão foi bloqueada. Autorize novamente.'), { code: 'session_locked' });
           terminalGrants.add(key);
         });
         terminalPending.set(key, request);
@@ -56,11 +62,11 @@ export function createSensitiveAuthorizer({ requireSensitive, onLock = () => () 
       return terminalPending.get(key);
     }
     if (access === 'action') {
-      await requireSensitive('action', 'Encerrar este terminal');
+      await requireSensitive('action', SENSITIVE_REASONS.terminalClose);
       terminalGrants.delete(args.id);
       return;
     }
-    await requireSensitive('session', 'Autorizar alteração no computador');
+    await requireSensitive('session', SENSITIVE_REASONS.computerChange);
   };
 
   return {

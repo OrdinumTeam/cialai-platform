@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createSensitiveAuthorizer, remoteCommandAccess } from '../sensitive.js';
+import { SENSITIVE_REASONS, createSensitiveAuthorizer, remoteCommandAccess } from '../sensitive.js';
 
 test('unknown and desktop-only commands fail closed before authorization', async () => {
   let prompts = 0;
@@ -41,6 +41,22 @@ test('terminal input shares a grant until lock and kill always asks again', asyn
   await authorizer.authorize('pty_kill', { id: 7 });
   await authorizer.authorize('pty_spawn');
   assert.deepEqual(prompts.slice(1).map(([level]) => level), ['action', 'action', 'session']);
+  assert.deepEqual(prompts.map(([, reason]) => reason), [SENSITIVE_REASONS.terminalInput, SENSITIVE_REASONS.terminalInput, SENSITIVE_REASONS.terminalClose, SENSITIVE_REASONS.computerChange]);
+  assert.deepEqual(Object.values(SENSITIVE_REASONS), ['terminal_input', 'terminal_close', 'computer_change']);
   authorizer.dispose();
   assert.equal(lock, null);
+});
+
+test('a lock during a pending terminal grant rejects with a stable code', async () => {
+  let lock;
+  let release;
+  const authorizer = createSensitiveAuthorizer({
+    requireSensitive: () => new Promise((resolve) => { release = resolve; }),
+    onLock: (listener) => { lock = listener; return () => {}; },
+  });
+  const pending = authorizer.authorize('pty_write', { id: 4 });
+  lock();
+  release();
+  await assert.rejects(pending, { code: 'session_locked' });
+  await assert.rejects(authorizer.authorize('fs_reveal'), { code: 'MOBILE_READ_ONLY' });
 });

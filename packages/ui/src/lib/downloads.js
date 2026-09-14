@@ -5,6 +5,7 @@ import { isMobileShell, requestDownload, requestUrlDownload, openExternal as she
 // plugin de arquivos. Fora do Tauri, no Vite de desenvolvimento, usa a âncora.
 
 import { isTauri } from './native.js';
+import { translate } from '../shared/i18n.js';
 
 function anchorDownload(href, name, newTab = false) {
   const anchor = document.createElement('a');
@@ -29,7 +30,7 @@ export async function saveBlob(blob, suggestedName) {
 
   const { save } = await import('@tauri-apps/plugin-dialog');
   const { writeFile } = await import('@tauri-apps/plugin-fs');
-  const path = await save({ defaultPath: suggestedName, title: 'Salvar arquivo' });
+  const path = await save({ defaultPath: suggestedName, title: translate('shared.dialog.saveFile') });
   if (!path) return false;
   const bytes = new Uint8Array(await blob.arrayBuffer());
   await writeFile(path, bytes);

@@ -3,6 +3,7 @@ import * as remote from './remote.js';
 import { createNativeBridge, NATIVE_ONLY_MESSAGE } from '@cialai/protocol/native';
 import { authorizeNative, resetTerminalAuthorization } from './sensitive.js';
 import { platform } from './platform.js';
+import { localizeError } from './errors.js';
 export { NATIVE_ONLY_MESSAGE };
 remote.subscribeState((value) => { if (value.status !== 'connected') resetTerminalAuthorization(); });
 
@@ -43,7 +44,7 @@ const bridge = createNativeBridge({
 });
 
 export const hasBridge = bridge.hasBridge;
-export const invoke = bridge.invoke;
+export const invoke = (command, args) => bridge.invoke(command, args).catch((error) => { throw localizeError(error); });
 export const listen = bridge.listen;
 export const createChannel = bridge.createChannel;
 

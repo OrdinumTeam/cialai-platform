@@ -46,8 +46,16 @@ export async function confirmSensitive(level, reason) {
   });
 }
 
+// O protocolo manda o motivo como código; motivos livres seguem como vieram.
+const SENSITIVE_REASON_KEYS = Object.freeze({
+  terminal_input: 'shared.sensitive.terminalInput',
+  terminal_close: 'shared.sensitive.terminalClose',
+  computer_change: 'shared.sensitive.computerChange',
+});
+
 export async function requireSensitive(level, reason) {
-  if (!await confirmSensitive(level, reason)) throw new Error(translate('shared.shell.actionCanceled'));
+  const key = SENSITIVE_REASON_KEYS[reason];
+  if (!await confirmSensitive(level, key ? translate(key) : reason)) throw new Error(translate('shared.shell.actionCanceled'));
 }
 
 export async function requestDownload(blob, name) {

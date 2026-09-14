@@ -3,11 +3,13 @@
 
 export const NATIVE_ONLY_MESSAGE = 'Disponível só no aplicativo desktop.';
 
+const invalidBridgeUrl = () => Object.assign(new Error('Informe um endereço WebSocket válido.'), { code: 'bridge_url_invalid' });
+
 function explicitBridgeUrl(value) {
   if (!value) return '';
   let url;
-  try { url = new URL(value); } catch (_error) { throw new Error('Informe um endereço WebSocket válido.'); }
-  if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('Informe um endereço WebSocket válido.');
+  try { url = new URL(value); } catch (_error) { throw invalidBridgeUrl(); }
+  if (!['ws:', 'wss:'].includes(url.protocol)) throw invalidBridgeUrl();
   return url.href;
 }
 

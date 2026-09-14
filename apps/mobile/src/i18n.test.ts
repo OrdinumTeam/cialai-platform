@@ -30,7 +30,11 @@ test('localizes biometric reasons received from the shared page', async () => {
   expect(localeModule.localizeSensitiveReason('Autorizar digitação neste terminal'))
     .toBe('Autorizar escritura en este terminal');
   expect(localeModule.localizeSensitiveReason('Encerrar este terminal'))
-    .toBe('Cerrar este terminal');
+    .toBe('Finalizar este terminal');
+  expect(localeModule.localizeSensitiveReason('terminal_input'))
+    .toBe('Autorizar escritura en este terminal');
+  expect(localeModule.localizeSensitiveReason('Finalizar este terminal'))
+    .toBe('Finalizar este terminal');
   expect(localeModule.localizeSensitiveReason('Autorizar alteração no computador'))
     .toBe('Autorizar cambios en la computadora');
   expect(localeModule.localizeSensitiveReason('Motivo externo')).toBe('Motivo externo');

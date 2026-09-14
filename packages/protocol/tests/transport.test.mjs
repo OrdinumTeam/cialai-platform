@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
-import { after, test } from 'node:test';
+import { after, mock, test } from 'node:test';
 
 const listeners = new Map();
 globalThis.window = { addEventListener(name, handler) { listeners.set(name, handler); } };
@@ -70,7 +70,7 @@ test('calls are rejected on disconnect and never replayed after reconnect', asyn
   const pending = remote.invoke('pty_list');
   const sentBeforeClose = socket.sent.length;
   socket.close(1006);
-  await assert.rejects(pending, /computador desconectada/);
+  await assert.rejects(pending, { code: 'bridge_disconnected', message: /computador desconectada/ });
   await new Promise((resolve) => setTimeout(resolve, 530));
   const replacement = SocketFixture.instances.at(-1);
   assert.notEqual(replacement, socket);
@@ -78,6 +78,30 @@ test('calls are rejected on disconnect and never replayed after reconnect', asyn
   assert.equal(replacement.sent.length, 1);
   assert.equal(replacement.sent[0].type, 'hello');
   assert.equal(sentBeforeClose, 2);
+  remote.disconnect();
+});
+
+test('bridge failures carry stable codes for localized interfaces', async () => {
+  await assert.rejects(remote.invoke('pty_list'), { code: 'bridge_disconnected' });
+  assert.throws(() => remote.configure({ url: 'http://127.0.0.1:9999/pty' }), { code: 'bridge_url_invalid' });
+
+  const socket = connection();
+  const failed = remote.invoke('pty_list');
+  socket.receive({ type: 'result', id: socket.sent.at(-1).id, ok: false });
+  await assert.rejects(failed, { code: 'bridge_failed' });
+
+  const detailed = remote.invoke('pty_kill', { id: 3 });
+  socket.receive({ type: 'result', id: socket.sent.at(-1).id, ok: false, error: 'Sessão encerrada' });
+  await assert.rejects(detailed, (error) => error.message === 'Sessão encerrada' && error.code === undefined);
+
+  mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    const slow = remote.invoke('pty_metrics');
+    mock.timers.tick(60000);
+    await assert.rejects(slow, { code: 'bridge_timeout' });
+  } finally {
+    mock.timers.reset();
+  }
   remote.disconnect();
 });
 
@@ -129,5 +153,5 @@ test('bridge URL comes from the served host and only loopback accepts an empty d
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: '192.0.2.4', host: '192.0.2.4:8443' }), 'ws://192.0.2.4:8443/pty');
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: '127.0.0.1', host: '127.0.0.1:1420' }), '');
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost:1420' }, 'ws://127.0.0.1:3720/pty'), 'ws://127.0.0.1:3720/pty');
-  assert.throws(() => remoteBridgeUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost' }, 'https://example.test'), /WebSocket/);
+  assert.throws(() => remoteBridgeUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost' }, 'https://example.test'), { code: 'bridge_url_invalid', message: /WebSocket/ });
 });

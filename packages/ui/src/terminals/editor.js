@@ -446,7 +446,7 @@ export function contentOf(tab) {
 // usuario fecha o painel de salvar sem escolher.
 async function saveUntitled(tab) {
   const root = tab.session?.explorer?.root || tab.session?.cwd || null;
-  const path = await chooseSavePath({ title: translate('terminal.editor.saveFile'), defaultPath: root ? joinPath(root, tab.name) : tab.name });
+  const path = await chooseSavePath({ title: translate('shared.dialog.saveFile'), defaultPath: root ? joinPath(root, tab.name) : tab.name });
   if (!path) return false;
   const content = contentOf(tab);
   const result = await fs.writeText(path, content, null);

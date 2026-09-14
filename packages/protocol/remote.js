@@ -2,6 +2,9 @@
 // WebSocket counterpart of Tauri IPC. Calls in flight are never replayed.
 
 export const DISCONNECTED = 'Ponte com o computador desconectada.';
+
+// O código estável permite que cada interface traduza a falha no seu idioma.
+const bridgeError = (code, message) => Object.assign(new Error(message), { code });
 const EMPTY_STATE = Object.freeze({
   status: 'disabled',
   code: null,
@@ -54,7 +57,7 @@ function detach() {
   active.forEach((channel) => channel.onmessage?.({ type: 'detached', reason: 'socket' }));
   calls.forEach(({ reject, timer }) => {
     clearTimeout(timer);
-    reject(new Error(DISCONNECTED));
+    reject(bridgeError('bridge_disconnected', DISCONNECTED));
   });
   calls.clear();
 }
@@ -90,7 +93,7 @@ function receive(data) {
     calls.delete(message.id);
     clearTimeout(call.timer);
     if (message.ok) call.resolve(message.value);
-    else call.reject(new Error(message.error || 'Falha na ponte com o computador.'));
+    else call.reject(message.error ? new Error(message.error) : bridgeError('bridge_failed', 'Falha na ponte com o computador.'));
     return;
   }
   if (message.type === 'event') {
@@ -156,7 +159,7 @@ export function configure(options) {
   disconnect();
   if (!options?.url) return;
   const url = new URL(options.url);
-  if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('Endereço da ponte inválido.');
+  if (!['ws:', 'wss:'].includes(url.protocol)) throw bridgeError('bridge_url_invalid', 'Endereço da ponte inválido.');
   configured = {
     token: null,
     client: 'cialai-ios',
@@ -181,19 +184,19 @@ export function disconnect() {
 }
 
 export function invoke(cmd, args = {}) {
-  if (snapshot.status !== 'connected' || socket?.readyState !== 1) return Promise.reject(new Error(DISCONNECTED));
+  if (snapshot.status !== 'connected' || socket?.readyState !== 1) return Promise.reject(bridgeError('bridge_disconnected', DISCONNECTED));
   const id = nextCall;
   nextCall += 1;
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       calls.delete(id);
-      reject(new Error('O computador não respondeu a tempo.'));
+      reject(bridgeError('bridge_timeout', 'O computador não respondeu a tempo.'));
     }, 60000);
     calls.set(id, { resolve, reject, timer });
     try { socket.send(JSON.stringify({ type: 'call', id, cmd, args })); } catch (_error) {
       clearTimeout(timer);
       calls.delete(id);
-      reject(new Error(DISCONNECTED));
+      reject(bridgeError('bridge_disconnected', DISCONNECTED));
     }
   });
 }

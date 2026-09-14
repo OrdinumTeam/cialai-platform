@@ -18,10 +18,15 @@ export const getLocale = i18n.getLocale;
 export const subscribeLocale = i18n.subscribe;
 export const t = i18n.t;
 
+// A página atual já manda o motivo traduzido. Códigos e os textos em
+// português de computadores com versões anteriores também são reconhecidos.
 const SENSITIVE_REASON_KEYS = Object.freeze<Record<string, string>>({
-  'Autorizar digitação neste terminal': 'mobile.biometric.authorizeTyping',
-  'Encerrar este terminal': 'mobile.biometric.closeTerminal',
-  'Autorizar alteração no computador': 'mobile.biometric.changeComputer',
+  terminal_input: 'shared.sensitive.terminalInput',
+  terminal_close: 'shared.sensitive.terminalClose',
+  computer_change: 'shared.sensitive.computerChange',
+  'Autorizar digitação neste terminal': 'shared.sensitive.terminalInput',
+  'Encerrar este terminal': 'shared.sensitive.terminalClose',
+  'Autorizar alteração no computador': 'shared.sensitive.computerChange',
 });
 
 export function localizeSensitiveReason(reason: string): string {

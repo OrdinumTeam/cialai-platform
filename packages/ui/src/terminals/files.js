@@ -73,11 +73,11 @@ function demoCall(command, args) {
       { path: 'docs/application/terminais.md', status: 'untracked', staged: false, worktree: true },
     ] };
   }
-  if (command === 'fs_read_text') return { path: args.path, content: '# Demo\n\nConteúdo de demonstração.\n', size: 32, modifiedMs: Date.now(), lineEnding: 'lf' };
+  if (command === 'fs_read_text') return { path: args.path, content: translate('terminal.demo.fileContent'), size: 32, modifiedMs: Date.now(), lineEnding: 'lf' };
   if (command === 'fs_stat') return { path: args.path, exists: true, kind: 'file', size: 32, modifiedMs: Date.now() };
   // Uma planilha pequena em CSV: o SheetJS le como planilha e a captura
   // mostra a tabela.
-  if (command === 'fs_read_bytes') return new TextEncoder().encode('Item,Etapa,Valor\nExemplo A,Planejamento,1250\nExemplo B,Execução,980\nExemplo C,Revisão,2100\n').buffer;
+  if (command === 'fs_read_bytes') return new TextEncoder().encode(translate('terminal.demo.sheet')).buffer;
   if (command === 'office_convert') throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   if (command === 'fs_find') return { root, items: [], truncated: false };
   if (command === 'fs_watch') return 1;

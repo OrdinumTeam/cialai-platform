@@ -115,7 +115,6 @@ export default Object.freeze({
   'terminal.editor.unsupported': 'This format does not have an editor here.',
   'terminal.editor.noneOpen': 'No open files',
   'terminal.editor.untitled': 'Untitled {count}',
-  'terminal.editor.saveFile': 'Save file',
   'terminal.editor.diffTab': '{name}: changes',
   'terminal.editor.backToCode': 'Back to code',
   'terminal.editor.previewHtml': 'Preview HTML',
@@ -433,4 +432,6 @@ export default Object.freeze({
   'terminal.demo.backendTests': 'Backend tests',
   'terminal.demo.reading': 'Reading packages/ui/src/terminals/runtime.js…',
   'terminal.demo.adjustCard': 'I will update the card to show a preview of recent output.',
+  'terminal.demo.fileContent': '# Demo\n\nDemo content.\n',
+  'terminal.demo.sheet': 'Item,Stage,Amount\nExample A,Planning,1250\nExample B,Execution,980\nExample C,Review,2100\n',
 });
