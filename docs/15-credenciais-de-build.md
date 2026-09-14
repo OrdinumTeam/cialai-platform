@@ -8,7 +8,7 @@ Preparado em 13/09/2026.
 
 | Credencial | Arquivo no Ordinum Control | Uso no Codemagic |
 | --- | --- | --- |
-| Chave da API do App Store Connect | `secrets/ordinum/app-store-connect-api-key.p8` | Integração `Cialai ASC API Key`, usada para assinatura, TestFlight e submissão. É a mesma chave da conta Apple da Ordinum usada pelo Advoris |
+| Chave da API do App Store Connect | `secrets/ordinum/app-store-connect-api-key.p8` | Integração `Advoris ASC API Key` já cadastrada no Codemagic, usada para assinatura, TestFlight e submissão. É a mesma chave da conta Apple da Ordinum usada pelo Advoris |
 | Chave RSA de assinatura iOS | `secrets/ordinum/ios-distribution-cert-key.pem` | `CERTIFICATE_PRIVATE_KEY` do grupo `appstore_credentials`, em base64 |
 | Conta de serviço do Google Play | `secrets/ordinum/google-play-service-account.json` | `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS` do grupo `google_play`. Conta `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` do projeto `ordinum`, compartilhada por todos os apps da Ordinum |
 | Upload keystore Android | `secrets/cialai/upload-keystore.jks` | `CM_KEYSTORE_BASE64` do grupo `android_credentials`. Exclusivo do Cialai, alias `upload` |
@@ -22,7 +22,7 @@ O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e se
 
 O Codemagic guarda cópia própria e não lê os arquivos do Ordinum Control. Com o app do Cialai criado no Codemagic apontando para este repositório:
 
-1. Em Integrations, App Store Connect, cadastre a `.p8` com o nome exato `Cialai ASC API Key`, usando emissor e identificador de `cialai.env`.
+1. A integração App Store Connect é a `Advoris ASC API Key`, já cadastrada com a mesma chave da conta Ordinum. Nenhum cadastro novo é necessário; renomear para um nome da Ordinum exige cadastro manual no painel e troca nos yaml dos apps.
 2. No grupo `appstore_credentials`, crie `CERTIFICATE_PRIVATE_KEY` como Secret com o base64 do `.pem`.
 3. Nas variáveis do aplicativo, crie `APP_STORE_APP_ID` com o identificador numérico do app na Apple.
 4. No grupo `android_credentials`, crie as quatro variáveis do keystore como Secret.
@@ -42,7 +42,7 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | --- | --- |
 | App `br.com.ordinum.cialai` no App Store Connect | Criado em 13/09/2026 |
 | App `br.com.ordinum.cialai` no Google Play | Criado em 13/09/2026 |
-| App do Cialai no Codemagic com as integrações e grupos acima | Pendente |
+| App do Cialai no Codemagic com as integrações e grupos acima | Criado em 13/09/2026, app `6aa7525c8ec3de31de94f9ee`, grupos cadastrados pela API |
 | Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
 | Primeiro AAB do app enviado manualmente pelo Play Console, exigência do Google para apps novos | Pendente |
 | Chave do updater e certificados de assinatura do desktop | Pendente, fora desta pasta |

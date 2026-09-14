@@ -19,7 +19,7 @@ test('defines isolated iOS workflows with the documented toolchain', () => {
     const workflow = workflows[name];
     assert.equal(workflow.instance_type, 'mac_mini_m2');
     assert.equal(workflow.max_build_duration, 60);
-    assert.equal(workflow.integrations.app_store_connect, 'Cialai ASC API Key');
+    assert.equal(workflow.integrations.app_store_connect, 'Advoris ASC API Key');
     assert.deepEqual(workflow.environment.groups, ['appstore_credentials']);
     assert.equal(workflow.environment.node, '22.23.2');
     assert.equal(workflow.environment.npm, '10.9.8');
@@ -79,4 +79,5 @@ test('builds and signs the Android binding before publishing to the internal tra
   assert.match(scripts, /gradlew bundleRelease/);
   assert.equal(workflow.publishing.google_play.credentials, '$GCLOUD_SERVICE_ACCOUNT_CREDENTIALS');
   assert.equal(workflow.publishing.google_play.track, 'internal');
+  assert.equal(workflow.publishing.google_play.submit_as_draft, true);
 });

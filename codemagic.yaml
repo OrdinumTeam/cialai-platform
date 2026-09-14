@@ -1,5 +1,6 @@
 # Builds móveis do Cialai. Não há disparo automático configurado.
-# O app, as integrações e os grupos de credenciais são criados no Codemagic pelo usuário.
+# A integração App Store Connect reaproveita a chave da conta Ordinum já cadastrada no Codemagic.
+# Grupos e credenciais estão descritos em docs/15-credenciais-de-build.md.
 
 workflows:
   ios-testflight:
@@ -7,7 +8,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      app_store_connect: Cialai ASC API Key
+      app_store_connect: Advoris ASC API Key
     environment:
       groups:
         - appstore_credentials
@@ -102,7 +103,7 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      app_store_connect: Cialai ASC API Key
+      app_store_connect: Advoris ASC API Key
     environment:
       groups:
         - appstore_credentials
@@ -275,3 +276,4 @@ workflows:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
         track: internal
+        submit_as_draft: true

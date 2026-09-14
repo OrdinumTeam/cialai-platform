@@ -61,7 +61,7 @@ Três workflows em `codemagic.yaml`, no padrão de `$CONTROL/codemagic.yaml` e `
 | `ios-archive` | Igual, com `PROJECT_BUILD_NUMBER` | Nenhuma; só o IPA como artefato |
 | `android-play` | Valida ambiente, instala Go, compila e confere o AAR, executa os testes móveis, gera o projeto, grava credenciais temporárias e compila o AAB | O bloco `google_play` aponta para a faixa interna. A execução publicaria externamente e depende de autorização e credenciais do usuário |
 
-Integração no Codemagic: chave do App Store Connect registrada em Settings, Integrations, Developer Portal com o nome exato `Cialai ASC API Key`, referenciado em `integrations.app_store_connect`. Grupos de variáveis: `appstore_credentials` com `CERTIFICATE_PRIVATE_KEY` em base64 marcada como secreta; `android_credentials` com `CM_KEYSTORE_BASE64`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` injetadas pela API; `google_play` com `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`. Variáveis simples: `APP_STORE_APP_ID`, `BUNDLE_ID`, `APP_ENV`. Contas pessoais não podem usar variáveis globais, então tudo fica por app.
+Integração no Codemagic: chave do App Store Connect da conta Ordinum já registrada como `Advoris ASC API Key` e referenciada em `integrations.app_store_connect`. Grupos de variáveis: `appstore_credentials` com `CERTIFICATE_PRIVATE_KEY` em base64 marcada como secreta; `android_credentials` com `CM_KEYSTORE_BASE64`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` injetadas pela API; `google_play` com `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`. Variáveis simples: `APP_STORE_APP_ID`, `BUNDLE_ID`, `APP_ENV`. Contas pessoais não podem usar variáveis globais, então tudo fica por app.
 
 Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `CODEMAGIC_API_TOKEN` e `CODEMAGIC_APP_ID` do ambiente ou de um `.env` local fora da árvore pública, com `cm_download` que só manda o token para `api.codemagic.io` sem porta e reclassifica a URL após redirecionamento; `cm-trigger.sh`, `cm-watch.sh` a cada 15 s, `cm-log.sh` com `--download`, `cm-publish.sh`, `cm-next-build-number.sh` que aborta em saída não numérica; `_stores.py` com JWT ES256 para o App Store Connect e RS256 com OAuth2 para o Play, usando só `cryptography` e `curl --http1.1 --retry 3`; `asc_api.py` com `builds`, `versions`, `testflight`; `play_api.py` com `status` e `upload` em modo de ensaio sem `--commit`; `ios-gen-signing-key.sh` gerando a chave RSA de assinatura com `ssh-keygen -m PEM`. Os três scripts de loja são idênticos aos do Advoris e do CowSynch e precisam ser espelhados quando mudarem.
 
@@ -75,7 +75,7 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Identificador do desktop | `br.com.ordinum.cialai` no `tauri.conf.json` |
 | Esquema de URL | `cialai`, reservado para deep links futuros |
 | App no App Store Connect | Criado em 13/09/2026, `APP_STORE_APP_ID` igual a `6811702125` |
-| App no Codemagic | A criar apontando para o repositório privado `OrdinumTeam/cialai-platform`; o id vai em `CODEMAGIC_APP_ID` |
+| App no Codemagic | Criado em 13/09/2026 a partir do repositório privado `OrdinumTeam/cialai-platform`, `CODEMAGIC_APP_ID` igual a `6aa7525c8ec3de31de94f9ee` |
 | App no Google Play | Criado em 13/09/2026 na conta `7730543760992383205`, Play App ID `4975087090602407034` |
 | Conta de serviço do Play | `ordinum-play-publisher@ordinum.iam.gserviceaccount.com`, do projeto `ordinum`, compartilhada pelos apps da Ordinum e validada pela API em 13/09/2026 |
 | Nome de exibição | Cialai |
