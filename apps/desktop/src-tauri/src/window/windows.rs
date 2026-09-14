@@ -9,7 +9,9 @@
 use tauri::WebviewWindow;
 use windows_sys::Win32::UI::WindowsAndMessaging::{SWP_NOACTIVATE, SWP_NOZORDER, SetWindowPos};
 
-use super::{Origin, Rect, logical_rect, mica_supported, physical_rect, wants_mica};
+use super::{
+    Origin, Rect, logical_rect, mica_supported, physical_rect, wants_mica, window_rect_for_client,
+};
 
 pub const ORIGIN: Origin = Origin::TopLeft;
 
@@ -62,9 +64,12 @@ fn scale(window: &WebviewWindow) -> f64 {
     window.scale_factor().unwrap_or(1.0)
 }
 
+/// Quadro da area cliente. Com `decorations: false` e sombra, o tao mantem
+/// bordas invisiveis e `outer_size` passa do tamanho de abertura, o que fazia a
+/// janela nunca crescer.
 pub fn current_frame(window: &WebviewWindow) -> Option<Rect> {
-    let position = window.outer_position().ok()?;
-    let size = window.outer_size().ok()?;
+    let position = window.inner_position().ok()?;
+    let size = window.inner_size().ok()?;
     Some(logical_rect(
         position.x,
         position.y,
@@ -72,6 +77,21 @@ pub fn current_frame(window: &WebviewWindow) -> Option<Rect> {
         size.height,
         scale(window),
     ))
+}
+
+/// Bordas invisiveis entre o retangulo da janela e a area cliente, em pixels.
+fn invisible_borders(window: &WebviewWindow) -> Option<(i32, i32, i32, i32)> {
+    let outer_position = window.outer_position().ok()?;
+    let outer_size = window.outer_size().ok()?;
+    let inner_position = window.inner_position().ok()?;
+    let inner_size = window.inner_size().ok()?;
+    let left = inner_position.x - outer_position.x;
+    let top = inner_position.y - outer_position.y;
+    let right =
+        i32::try_from(outer_size.width).ok()? - i32::try_from(inner_size.width).ok()? - left;
+    let bottom =
+        i32::try_from(outer_size.height).ok()? - i32::try_from(inner_size.height).ok()? - top;
+    Some((left, top, right, bottom))
 }
 
 /// Area util do monitor da janela, sem a barra de tarefas.
@@ -91,7 +111,9 @@ pub fn set_frame(window: &WebviewWindow, frame: Rect, _display: bool) {
     let Ok(hwnd) = window.hwnd() else {
         return;
     };
-    let (x, y, width, height) = physical_rect(frame, scale(window));
+    let borders = invisible_borders(window).unwrap_or((0, 0, 0, 0));
+    let (x, y, width, height) =
+        window_rect_for_client(physical_rect(frame, scale(window)), borders);
     // SAFETY: o HWND e o da janela principal viva, e a chamada roda na thread
     // principal via `on_main_thread`. Com SWP_NOZORDER o segundo argumento e
     // ignorado.

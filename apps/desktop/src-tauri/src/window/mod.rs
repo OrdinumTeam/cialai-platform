@@ -470,6 +470,22 @@ fn physical_rect(frame: Rect, scale: f64) -> (i32, i32, i32, i32) {
     )
 }
 
+/// Retangulo da janela para uma area cliente, em pixels. Janela sem moldura com
+/// sombra no Windows tem bordas invisiveis: o retangulo da janela e maior que a
+/// area cliente, e a coreografia trabalha sempre com a area cliente.
+#[cfg(any(test, target_os = "windows"))]
+fn window_rect_for_client(
+    (x, y, width, height): (i32, i32, i32, i32),
+    (left, top, right, bottom): (i32, i32, i32, i32),
+) -> (i32, i32, i32, i32) {
+    (
+        x - left,
+        y - top,
+        width + left + right,
+        height + top + bottom,
+    )
+}
+
 /// Sessao Wayland: `WAYLAND_DISPLAY` presente e o GTK sem `GDK_BACKEND`
 /// pedindo X11 como primeira opcao. Pelo XWayland a janela volta a ser
 /// posicionavel.
@@ -652,6 +668,14 @@ mod tests {
             }
         );
         assert_eq!(physical_rect(frame, 1.5), (300, 150, 660, 480));
+        assert_eq!(
+            window_rect_for_client((100, 50, 440, 320), (8, 0, 8, 8)),
+            (92, 50, 456, 328)
+        );
+        assert_eq!(
+            window_rect_for_client((100, 50, 440, 320), (0, 0, 0, 0)),
+            (100, 50, 440, 320)
+        );
         assert_eq!(
             physical_rect(logical_rect(-1920, 0, 1920, 1040, 1.0), 1.0),
             (-1920, 0, 1920, 1040)
