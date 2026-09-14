@@ -61,7 +61,13 @@ if [[ "$target" == "android" || "$target" == "all" ]]; then
   if [[ -z "$ndk_root" && -d "$android_sdk/ndk" ]]; then
     ndk_root="$(find "$android_sdk/ndk" -mindepth 1 -maxdepth 1 -type d | sort | tail -1)"
   fi
-  [[ -n "$ndk_root" && -x "$ndk_root/toolchains/llvm/prebuilt/$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)/bin/clang" ]] || {
+  # O NDK publica binarios universais em darwin-x86_64 inclusive no Apple Silicon, e o gomobile procura esse nome.
+  case "$(uname -s)" in
+    Darwin) ndk_host="darwin-x86_64" ;;
+    Linux) ndk_host="linux-x86_64" ;;
+    *) ndk_host="" ;;
+  esac
+  [[ -n "$ndk_root" && -n "$ndk_host" && -x "$ndk_root/toolchains/llvm/prebuilt/$ndk_host/bin/clang" ]] || {
     echo "Preflight falhou: NDK Android com toolchain LLVM nao encontrado." >&2
     exit 1
   }

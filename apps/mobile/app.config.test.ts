@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import type { ConfigContext } from 'expo/config';
 
 import { SUPPORTED_LOCALES, dictionaries } from '@cialai/i18n';
@@ -66,6 +69,15 @@ describe('Expo app config', () => {
   test('fails clearly for an invalid application environment', () => {
     process.env.APP_ENV = 'invalid';
     expect(() => buildConfig(context)).toThrow('APP_ENV');
+  });
+
+  test('builds Android only for the ABIs shipped by the gomobile binding', () => {
+    const plugin = buildConfig(context).plugins?.find(
+      entry => Array.isArray(entry) && entry[0] === 'expo-build-properties'
+    ) as [string, { android: { buildArchs: string[] } }] | undefined;
+    expect(plugin?.[1].android.buildArchs).toEqual(['arm64-v8a', 'x86_64']);
+    const binder = readFileSync(join(__dirname, '../../tools/build-tunnel-mobile.sh'), 'utf8');
+    expect(binder).toContain('-target=android/arm64,android/amd64');
   });
 
   test('uses the monotonic Codemagic build number as Android version code', () => {

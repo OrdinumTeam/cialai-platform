@@ -93,7 +93,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         android: {
           compileSdkVersion: 36,
           targetSdkVersion: 36,
-          minSdkVersion: 26
+          minSdkVersion: 26,
+          // Mesmas ABIs do tunnelcore.aar gerado pelo gomobile; outra ABI instalaria o app sem o núcleo do túnel.
+          buildArchs: ['arm64-v8a', 'x86_64']
         },
         ios: {
           deploymentTarget: '16.4'
