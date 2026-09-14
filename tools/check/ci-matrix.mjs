@@ -78,4 +78,28 @@ assert.equal(viteFsPath('D:\\a\\cialai\\', 'packages/ui/x.js'), '/@fs/D:/a/ciala
 const ciConfig = JSON.parse(readFileSync(`${root}/apps/desktop/src-tauri/tauri.ci.conf.json`, 'utf8'));
 assert.equal(ciConfig.bundle.createUpdaterArtifacts, false, 'o bundle da CI não pode exigir a chave privada do updater');
 
-console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned and artifacts');
+// Bindings móveis: disparo manual, mesmo script e NDK do Codemagic e anexo à release só com tag.
+const { createRequire } = await import('node:module');
+// O mesmo js-yaml que o teste do codemagic.yaml resolve a partir do app móvel.
+const yaml = createRequire(`${root}/apps/mobile/package.json`)('js-yaml');
+const mobileSource = readFileSync(`${root}/.github/workflows/mobile-artifacts.yml`, 'utf8');
+const mobile = yaml.load(mobileSource);
+assert.deepEqual(Object.keys(mobile.on), ['workflow_dispatch'], 'os bindings móveis só rodam por disparo manual');
+assert.equal(mobile.permissions.contents, 'read');
+const bindings = mobile.jobs.bindings;
+assert.equal(bindings['runs-on'], 'macos-14');
+const codemagic = yaml.load(readFileSync(`${root}/codemagic.yaml`, 'utf8'));
+assert.equal(mobile.env.ANDROID_NDK_VERSION, codemagic.workflows['android-play'].environment.ndk, 'o NDK dos bindings acompanha o Codemagic');
+const mobileRuns = bindings.steps.map((step) => step.run || '').join('\n');
+assert.match(mobileRuns, /tools\/build-tunnel-mobile\.sh all "\$RUNNER_TEMP\/mobile"/);
+assert.match(mobileRuns, /shasum -a 256 -c Tunnelcore\.xcframework\.zip\.sha256/);
+assert.match(mobileRuns, /shasum -a 256 -c tunnelcore\.aar\.sha256/);
+const attach = bindings.steps.find((step) => /gh release upload/.test(step.run || ''));
+assert.equal(attach?.if, "inputs.tag != ''", 'sem tag os bindings não tocam em nenhuma release');
+assert.match(attach.run, /release-assets\.mjs checksums "\$RELEASE_TAG"/, 'o SHA256SUMS da release precisa cobrir os bindings');
+assert.deepEqual([...mobileSource.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]), ['GITHUB_TOKEN']);
+const binder = readFileSync(`${root}/tools/build-tunnel-mobile.sh`, 'utf8');
+assert.match(binder, /cd "\$output_dir" && shasum -a 256 Tunnelcore\.xcframework\.zip > Tunnelcore\.xcframework\.zip\.sha256/, 'o hash publicado não leva caminho do runner');
+assert.match(binder, /cd "\$output_dir" && shasum -a 256 tunnelcore\.aar > tunnelcore\.aar\.sha256/);
+
+console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, artifacts and mobile bindings');

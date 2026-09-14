@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Mobile artifacts
+
+# Compila os bindings gomobile do núcleo do túnel num runner macOS, com o mesmo
+# script e o mesmo NDK dos builds do Codemagic. Sem tag, os arquivos ficam só
+# como artefatos do workflow; com a tag de uma release existente, eles entram
+# nela e o SHA256SUMS da release é refeito com todos os arquivos.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag that receives the bindings, empty keeps them as workflow artifacts
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-artifacts-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+env:
+  ANDROID_NDK_VERSION: 28.2.13676358
+  RELEASE_TAG: ${{ inputs.tag }}
+
+jobs:
+  bindings:
+    name: Tunnelcore XCFramework and AAR
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Install the Android NDK used by Codemagic
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ANDROID_NDK_VERSION" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION" >> "$GITHUB_ENV"
+      - name: Build the bindings
+        run: tools/build-tunnel-mobile.sh all "$RUNNER_TEMP/mobile"
+      - name: Check the hashes of the published files
+        run: |
+          mkdir -p "$RUNNER_TEMP/publish"
+          for name in Tunnelcore.xcframework.zip Tunnelcore.xcframework.zip.sha256 tunnelcore.aar tunnelcore.aar.sha256; do
+            cp "$RUNNER_TEMP/mobile/$name" "$RUNNER_TEMP/publish/$name"
+          done
+          cd "$RUNNER_TEMP/publish"
+          shasum -a 256 -c Tunnelcore.xcframework.zip.sha256
+          shasum -a 256 -c tunnelcore.aar.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cialai-mobile-bindings
+          path: ${{ runner.temp }}/publish
+          if-no-files-found: error
+      - name: Attach to the release and refresh SHA256SUMS
+        if: inputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP"/publish/* --clobber
+          node tools/release/release-assets.mjs checksums "$RELEASE_TAG"

@@ -88,7 +88,8 @@ build_ios() {
   ditto -c -k --sequesterRsrc --keepParent \
     "$output_dir/Tunnelcore.xcframework" \
     "$output_dir/Tunnelcore.xcframework.zip"
-  shasum -a 256 "$output_dir/Tunnelcore.xcframework.zip" > "$output_dir/Tunnelcore.xcframework.zip.sha256"
+  # O hash leva só o nome do arquivo, para conferir em qualquer pasta e publicar sem caminho do runner.
+  (cd "$output_dir" && shasum -a 256 Tunnelcore.xcframework.zip > Tunnelcore.xcframework.zip.sha256)
 }
 
 build_android() {
@@ -97,7 +98,7 @@ build_android() {
     -androidapi=26 \
     -o "$output_dir/tunnelcore.aar" \
     ./mobile
-  shasum -a 256 "$output_dir/tunnelcore.aar" > "$output_dir/tunnelcore.aar.sha256"
+  (cd "$output_dir" && shasum -a 256 tunnelcore.aar > tunnelcore.aar.sha256)
 }
 
 case "$target" in
