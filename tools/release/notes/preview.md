@@ -2,7 +2,7 @@
 
 This is an early preview of Cialai for macOS, Windows, Linux and Android. It is meant for people who want to try the terminal studio and report problems. Expect rough edges.
 
-**The installers are not signed with an Apple Developer ID or a Windows code signing certificate yet.** Your system will warn you before the first launch. The macOS app carries an ad hoc signature so it can run on Apple silicon, and in app updates are still verified with the Cialai updater key.
+**The macOS app is signed with the Ordinum Developer ID and notarized by Apple.** It opens like any other app downloaded from the internet. **The Windows installers are not signed with a code signing certificate yet**, so Windows will warn you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### Which file to download
 
@@ -21,11 +21,7 @@ iOS is coming soon through TestFlight.
 ### Open the app on macOS
 
 1. Open the DMG and drag Cialai to Applications.
-2. Open Cialai. macOS says it cannot verify the developer. Click Done.
-3. Open System Settings, choose Privacy & Security and scroll to Security.
-4. Next to the message about Cialai, click Open Anyway and confirm with your password or Touch ID.
-
-If macOS says the app is damaged, run `xattr -dr com.apple.quarantine /Applications/Cialai.app` in Terminal and open it again.
+2. Open Cialai. On the first launch macOS reminds you that the app was downloaded from the internet. Click Open.
 
 ### Install on Windows
 

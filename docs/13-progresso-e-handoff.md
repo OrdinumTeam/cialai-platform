@@ -1152,6 +1152,56 @@ Custo. As rodadas de CI no privado usam minutos pagos de macOS e Windows; o rela
 
 Control. O commit `c20d7a5` levou só `.gitignore`, `docs/README.md` e `docs/apps` ao remoto, em fast forward; as oito alterações do usuário continuam sem commit.
 
+### 14/09/2026, Developer ID e primeira notarização da tarefa 5.17
+
+A pedido do usuário, o certificado Developer ID Application G2 `CQX8UUTSUL` da Ordinum foi criado pelo Dev Browser, com chave e CSR gerados localmente, e vale até 15/09/2031. O `.p12` com o intermediário da Apple, a senha, a chave e o `.cer` ficam em `ordinum-control/secrets/ordinum`, e o `ordinum.env` ganhou a identidade e os caminhos. O usuário pediu os segredos no Control, então o mapa `docs/apps/credenciais.md` e o `.gitignore` de lá também mudaram, sem commit.
+
+O `release.yml` e o `signing-mode.mjs` passaram a notarizar pela chave da API do App Store Connect, com os secrets `APPLE_API_ISSUER`, `APPLE_API_KEY` e `APPLE_API_PRIVATE_KEY`, sem Apple ID nem senha de app. O identificador da chave e o emissor são validados, a chave é gravada em `$RUNNER_TEMP/private_keys` num passo próprio e o Tauri recebe só o caminho. As variáveis foram confirmadas no binário do `@tauri-apps/cli` 2.11.4. `tools/check/release-workflow.mjs` cobre o novo contrato e passou.
+
+Evidência local no macOS Apple silicon, com `tauri build --bundles app` e o atualizador desligado só nesse teste: a submissão `8ab83f68-39e3-441f-b7cf-9a67cb0dcae3`, primeira da equipe, ficou das 14:23 às 15:40 em análise e terminou `Accepted`, com ticket grampeado. `codesign --verify --deep --strict` passou, app e `cialai-tunnel` saíram com Developer ID, runtime endurecido e carimbo de tempo, `stapler validate` passou e `spctl` respondeu `accepted` com `source=Notarized Developer ID`. DMG, alvo Intel, runner do GitHub e o download real pelo site ainda não foram verificados.
+
+Por decisão do usuário, a chave Admin não foi para o repositório público: a Team Key `GitHub Actions Notarization`, papel Developer, foi criada pelo Dev Browser, gravada em `ordinum-control/secrets/ordinum/app-store-connect-notary-key.p8` e autenticou no `notarytool history`. Os seis secrets `APPLE_*` foram cadastrados em `Cialai/cialai`, e o `signing-mode.mjs` com os mesmos valores escolheu `developer-id`. `notes/preview.md` passou a descrever o macOS notarizado sem liberação manual, com o Windows ainda sem assinatura, e o check recusa os passos antigos.
+
+O usuário pediu para não publicar agora. Nenhum commit, push, tag ou release foi feito; a release mais recente continua a `v0.1.1` ad hoc e o download do Mac pelo site ainda bloqueia. As oito alterações desta entrega ficaram sem commit na árvore, que agora está na branch `conectividade/spikes` de outra frente, junto com arquivos dessa frente que não pertencem à assinatura.
+
+Levantado para a publicação, sem executar:
+
+1. Commitar só `.github/workflows/release.yml`, `tools/release/signing-mode.mjs`, `tools/release/notes/preview.md`, `tools/release/README.md`, `tools/check/release-workflow.mjs` e os documentos 10 e 15, mais só as linhas desta entrega no documento 13, que também recebe entradas da outra frente, na branch que for para `main`.
+2. Subir a versão para 0.1.2 nos mesmos arquivos do commit `388fee5` da 0.1.1: `CHANGELOG.md`, os `package.json` da raiz, do desktop, do mobile, de `protocol`, `tunnel-core` e `ui`, `package-lock.json`, `Cargo.toml`, `Cargo.lock` e `tauri.conf.json`. O `release-channel.mjs` recusa a tag se as versões divergirem.
+3. `export_public.py` usa `git archive HEAD`, então só leva o que foi commitado. Em 14/09/2026 a exportação do `dd301fb` era idêntica ao `main` público `65918f8`, com diferença só numa pasta vazia; copiar por cima do clone de `Cialai/cialai`, rodar `audit_public.py` e a suíte antes do push.
+4. A tag `v0.1.2` no público dispara o `release.yml`. Enquanto a release estiver em rascunho, anexar `Cialai_android_universal.apk`, porque o site aponta para `/releases/latest/download` e o link do Android quebra sem ele.
+5. Conferir no `.dmg` baixado pelo site `spctl -a -vvv` com `source=Notarized Developer ID` e `xcrun stapler validate`, nos dois alvos.
+
+As notas assumem Developer ID; se os secrets saírem, o macOS volta a ad hoc com notas desatualizadas. O teste local deixou 1,6 GB em `apps/desktop/src-tauri/target`, ignorado pelo Git.
+
+### 14/09/2026, pacote local do CON-010 de conectividade direta
+
+Criada a branch `conectividade/spikes` a partir de `dd301fb`, carregando e preservando as oito alterações locais preexistentes de assinatura e notarização. O diretório novo `packages/tunnel-core/spikes/directpath` contém um comando experimental com servidor e cliente QUIC, identidades Ed25519 persistentes em arquivo `0600`, certificados autoassinados, TLS 1.3 mútuo pinado nos dois lados, ALPN próprio, oferta JSON estrita, coleta de candidatos LAN e IPv6 global, descoberta e criação de mapeamento por PCP, NAT-PMP e UPnP, consulta STUN e pacotes de abertura não QUIC. QUIC, STUN e abertura compartilham o mesmo socket UDP por `quic.Transport`, `ReadNonQUICPacket` e `WriteTo`. `go.mod` fixa `github.com/quic-go/quic-go v0.62.0`.
+
+`go test -race -count=1 -v ./spikes/directpath` aprovou seis testes: eco autenticado, rejeição da chave errada do servidor, rejeição da chave errada do cliente antes de entregar uma conexão à aplicação, persistência e permissão da identidade, oferta estrita e abertura pelo socket do QUIC. `go vet ./...`, `go test -race -mod=readonly ./...`, `go mod tidy -diff` e o build do comando terminaram com código 0. Um smoke na mesma máquina negociou TLS 1.3 em 2,033 ms e mediu dez ecos com mediana de 0,065 ms e p95 de 0,408 ms. Na execução final, a consulta a `stun.cloudflare.com:3478` pelo socket compartilhado respondeu em 43 ms e a coleta inteira levou 251 ms; o endereço público não foi versionado e nenhum protocolo de mapeamento respondeu nessa rede.
+
+O `README.md` do spike documenta a execução em duas máquinas e a troca manual das ofertas para abertura simultânea. O CON-010 continua em andamento: smoke local e teste unitário não aprovam sua tabela de três redes reais. A próxima ação é executar o roteiro na mesma LAN, depois com o cliente roteado por 4G/5G e numa terceira rede, preservando as linhas JSON e anotando o tipo de NAT. Nenhum commit, push, workflow remoto, aparelho móvel ou segunda máquina foi usado nesta entrega.
+
+### 14/09/2026, pacote local do CON-011 com Tor single-hop
+
+Criados `tools/fetch-tor.mjs` e seu teste. O downloader fixa o Tor Expert Bundle 15.0.22 e os hashes do manifesto assinado para macOS ARM64 e x86_64, Linux x86_64 e Windows x86_64, escolhe o host, baixa de forma idempotente, rejeita hash divergente e extrai sob `packages/tunnel-core/build/tor`, já ignorado. No macOS, os quatro Mach-O do pacote recebem assinatura ad hoc local somente depois de o arquivo original conferir; isso tornou executável o bundle sem alterar a evidência do arquivo baixado. O arquivo oficial dessa versão não publica Expert Bundle Linux ARM64, lacuna explícita para CON-040. O bundle macOS ARM64 tem 18.714.433 bytes, conferiu o SHA-256 `e8ea3f667c83309abad34280f0f9e1cfae52843da6b8db111ca15d6221051db5` e contém Tor 0.4.9.12.
+
+O novo comando em `packages/tunnel-core/spikes/torpath` gera uma chave onion ED25519-V3 persistente e privada, calcula o endereço esperado, inicia o Tor pelo `bine v0.2.0` e publica com `ADD_ONION`, `Flags=NonAnonymous`. O `torrc` gerado contém `SocksPort 0`, control port automático gravado em arquivo, SAFECOOKIE, os dois modos de serviço single-hop, PID do processo Go proprietário e GeoIP do bundle. O endereço devolvido pelo Tor tem de coincidir com a chave antes que o listener seja aceito. Sobre o listener roda TLS 1.3 mútuo com certificados Ed25519 autoassinados e pins nos dois lados. O cliente inicia um Tor comum pelo mesmo bundle ou usa um SOCKS externo, faz conexões novas e separa tempos de control port, bootstrap, dial SOCKS, handshake TLS e eco. O shutdown envia HALT, cancela o filho se necessário, espera a saída e também fica protegido por `__OwningControllerProcess`.
+
+Cinco testes Go com race cobrem endereço v3 estável após recarga da chave, mTLS e eco aceitos, pin incorreto, sete opções do `torrc` e percentis. Três testes Node cobrem versão, targets, ausência oficial de Linux ARM64, hashes e localização do binário extraído. Vet e build do spike passaram. O Tor respondeu `Configuration was valid` para o `torrc` gerado.
+
+O smoke real local usou um Tor servidor e outro cliente no mesmo Mac. Na primeira execução, o servidor abriu o control port em 0,219 s, fez bootstrap em 15,818 s e publicou em 5,088 s; o cliente abriu o controle em 0,203 s, fez bootstrap em 13,194 s, completou dois dials em 6,633 s e 1,039 s, handshakes em 0,891 s e 1,012 s e seis ecos com mediana agregada de 0,909 s e p95 de 1,249 s. Depois de encerrar e reutilizar os mesmos estados, o servidor fez bootstrap em 1,801 s, publicou em 5,129 s no mesmo endereço e o cliente fez bootstrap em 2,139 s. Essa conexão demorou 109,672 s no SOCKS, 1,005 s no TLS e três ecos tiveram mediana de 1,021 s e p95 de 1,291 s. Os quatro PIDs Tor não existiam após as linhas `tor_stopped`.
+
+CON-011 continua em andamento. As execuções locais provam código, configuração, rede Tor e persistência, mas não substituem dez partidas frias, dez conexões quentes e duas máquinas reais. O `README.md` define o roteiro, inclusive o uso de um diretório de estado novo por partida fria, o reinício com o mesmo `onion.key` e a checagem final por PID. Nenhum commit, push, workflow remoto, aparelho móvel ou segunda máquina foi usado.
+
+### 14/09/2026, protocolo local inicial do CON-012
+
+Criado `packages/tunnel-core/spikes/rendezvous` como pacote importável, ainda sem adaptadores reais. O wire format JSON v1 é delimitado por linha, limitado a 64 KiB e estrito contra campos desconhecidos, JSON extra, session IDs não canônicos, chaves que não sejam Ed25519 base64url e ofertas com mais de 32 candidatos, endereço inválido ou duplicado. As mensagens são `client_offer`, `server_offer`, `direct_ready`, `switch_ack` e `fallback`.
+
+A coordenação exige que a chave de cada oferta seja a mesma do peer autenticado no mTLS do canal Tor e compara os bytes em tempo constante. Depois da troca de candidatos, os dois lados enviam pacotes de abertura; o contrato `DirectTransport` obriga oferta, STUN, abertura e QUIC a compartilhar um socket UDP. O cliente só devolve caminho direto depois de discar e receber `switch_ack`; o servidor só confirma depois de aceitar a conexão e receber `direct_ready`. Falha no dial ou no accept manda `fallback` e mantém o caminho Tor. A medição registra tempos de oferta e confirmação em milissegundos, candidato escolhido, pacotes enviados e reconhecidos e eventual falha da abertura.
+
+Cinco testes com transporte falso provam o upgrade confirmado nos dois lados, exigem que o servidor abra o candidato STUN refletido do cliente, simulam NAT simétrico com fallback, recusam uma oferta cuja chave difere do peer Tor e cobrem schema e tamanho. `go test -race -count=50 ./spikes/rendezvous` e `go vet ./spikes/rendezvous` passaram. Isso prova o protocolo e a máquina de estados, não o furo de NAT. CON-012 continua em andamento até os adaptadores usarem o stream onion e o `quic.Transport` reais e as combinações físicas serem medidas.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |
@@ -1192,6 +1242,10 @@ Control. O commit `c20d7a5` levou só `.gitignore`, `docs/README.md` e `docs/app
 | `.github/workflows/spike-headscale.yml` | Integração do spike no Linux, sem execução remota registrada |
 | `packages/tunnel-core/spikes/headscale/headscale_test.go` | Experimento Docker reproduzível, sem usar servidor do usuário |
 | `packages/tunnel-core/spikes/mobileprobe/probe.go` | API experimental Go para o primeiro ensaio móvel |
+| `packages/tunnel-core/spikes/directpath/` | Harness CON-010 de QUIC, mTLS, candidatos, portmapper, STUN e abertura pelo mesmo socket; medições físicas pendentes |
+| `packages/tunnel-core/spikes/torpath/` | Harness CON-011 de onion v3 single-hop persistente, mTLS, SOCKS e medidas; duas máquinas e 20 amostras pendentes |
+| `packages/tunnel-core/spikes/rendezvous/` | Protocolo e coordenação CON-012 Tor → QUIC com fallback e teste falso; adaptadores e redes reais pendentes |
+| `tools/fetch-tor.mjs`, `tools/fetch-tor.test.mjs` | Tor Expert Bundle 15.0.22 por target com hashes fixos, extração e assinatura ad hoc local no macOS |
 | `packages/tunnel-core/internal/rpc/`, `internal/statedir/`, `internal/logx/`, `internal/node/` | Fundação de produção da tarefa 2.1 e testes sem rede |
 | `packages/tunnel-core/internal/control/`, `internal/headscale/` | Fronteira administrativa e cliente REST 0.29 da tarefa 2.2, com testes falsos |
 | `packages/tunnel-core/internal/pairing/` | Codec, sessões de uso único e registro de dispositivos da tarefa 2.3 |
@@ -1235,9 +1289,18 @@ npm run check:source
 1. Confirmar um contato de segurança e o prazo de resposta em `SECURITY.md` e decidir se o relatório privado de vulnerabilidades do GitHub fica ligado em `Cialai/cialai`.
 2. O usuário deve fazer o commit das oito alterações do Control conforme 0.2. Depois atualizar o inventário conscientemente, sem apagar mudanças da origem.
 3. Testar em aparelhos: o build 1 da 0.1.0 pelo TestFlight interno com `docs/testes/roteiro-3.9-ios.md` e o APK da release ou a faixa interna do Play, depois de liberar o rascunho, com `docs/testes/roteiro-4.7-android.md`. Executar os spikes 1, 2, 4 e 5 com as medições do documento 06; o soak de 24 horas continua obrigatório.
-4. Assinatura de plataforma: Developer ID da Apple com notarização e certificado Windows por Azure Trusted Signing, cadastrados como secrets e variáveis de `Cialai/cialai`. O `release.yml` escolhe o modo sozinho quando eles existirem.
+4. Assinatura de plataforma: o macOS está pronto, com Developer ID, notarização local aceita e os seis secrets `APPLE_*` em `Cialai/cialai`; falta publicar a prévia 0.1.2 seguindo os cinco passos da entrada de 14/09/2026 sobre Developer ID, quando o usuário autorizar. O Windows continua pendente do Azure Trusted Signing.
 5. Conformidade de exportação: declaração para a App Store da França e confirmação jurídica da atualização da decisão 014.
 6. Windows: investigar com os diagnósticos do autoteste a página do WebView2 sem GPU que para de responder ao WebDriver no nightly, e conferir num Windows físico instalação, terminal, arquivos pelo celular e a atualização da 0.1.0 para a 0.1.1.
 7. Conferir o ícone no Dock, na barra de tarefas e nos lançadores com os instaladores das prévias.
 8. Fase 2: cumprir o aceite manual no macOS com um Headscale real.
 9. Tradução: conferir menu nativo e confirmação de saída no app macOS nos três idiomas, WebView2 e WebKitGTK reais, metadados por idioma nos builds do Codemagic e textos de loja em espanhol.
+
+## Conectividade — checkpoint de 14/09/2026 18:21
+
+- CON-012: `rendezvous/tls_control.go` agora adapta o stream mTLS onion, exige TLS 1.3 e usa a chave Ed25519 do certificado aceito. `go test -race ./spikes/rendezvous` passou; próximo subpasso é `QUICDirectTransport` sobre um único socket UDP.
+- CON-012 18:25: `QUICDirectTransport` implementa coleta, STUN, mapeamento, abertura não QUIC, dial e accept no mesmo socket. O teste race com QUIC real em loopback passou; próximo subpasso liga os adaptadores aos comandos Tor de campo.
+- CON-012 18:30: `torpath rendezvous-server` e `rendezvous-client` agora fazem o fluxo onion mTLS → QUIC e emitem medição/probe JSON. Os testes race dos dois pacotes passaram; próximo passo é o smoke local com `build/tor/macos-aarch64/tor/tor`.
+- CON-012 18:35: smoke 1 publicou o onion, mas o SOCKS retornou `TTL expired` antes da troca; servidor atingiu o deadline e os PIDs 20017/21361 não ficaram órfãos. Saídas em `build/rendezvous-{server,client}/smoke-attempt-1.jsonl`; repetir uma vez com estado quente e timeout de 5 min.
+- CON-012 18:37: smoke 2 quente alcançou mTLS, STUN, ofertas e 4/5 ACKs de abertura, então preservou Tor porque o pin ainda exigia o ALPN antigo. Corrigir o verificador parametrizado e repetir; saída em `smoke-attempt-2.jsonl`.
+- CON-012 18:44: verificador de ALPN parametrizado e teste race aprovado. No smoke 3, a primeira discagem teve `TTL expired`, mas a repetição no mesmo onion confirmou a mesma sessão, 4/5 ACKs e `path=direct` nos dois lados em 2,356/3,194 s; PIDs encerrados e JSON em `build/rendezvous-{server,client}/smoke-attempt-3.jsonl`. Parte local concluída; redes físicas pendentes. CON-013 iniciado.

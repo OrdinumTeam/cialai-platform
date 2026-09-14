@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Escolhe a assinatura de plataforma possível para o alvo e grava a configuração extra do Tauri.
 // Sem Developer ID o macOS recebe assinatura ad hoc, que basta para abrir no Apple Silicon.
+// A notarização usa a chave da API do App Store Connect, sem Apple ID nem senha de app.
 // Sem conta do Azure Trusted Signing o Windows sai sem Authenticode. Nenhum valor é impresso.
 import { writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -9,9 +10,9 @@ const APPLE_DEVELOPER_ID = [
   'APPLE_CERTIFICATE',
   'APPLE_CERTIFICATE_PASSWORD',
   'APPLE_SIGNING_IDENTITY',
-  'APPLE_ID',
-  'APPLE_PASSWORD',
-  'APPLE_TEAM_ID',
+  'APPLE_API_ISSUER',
+  'APPLE_API_KEY',
+  'APPLE_API_PRIVATE_KEY',
 ];
 const WINDOWS_TRUSTED_SIGNING = [
   'AZURE_CLIENT_ID',
@@ -26,7 +27,14 @@ const present = (env, names) => names.every((name) => (env[name] ?? '').trim() !
 
 export function signingPlan(target, env) {
   if (target.endsWith('-apple-darwin')) {
-    if (present(env, APPLE_DEVELOPER_ID)) return { macos: 'developer-id', windows: 'none', config: {} };
+    if (present(env, APPLE_DEVELOPER_ID)) {
+      // O identificador da chave vira nome de arquivo no runner e o emissor segue o formato UUID da Apple.
+      if (!/^[A-Z0-9]{10}$/.test(env.APPLE_API_KEY.trim())) throw new Error('APPLE_API_KEY has unexpected characters');
+      if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(env.APPLE_API_ISSUER.trim())) {
+        throw new Error('APPLE_API_ISSUER must be an App Store Connect issuer ID');
+      }
+      return { macos: 'developer-id', windows: 'none', config: {} };
+    }
     return { macos: 'adhoc', windows: 'none', config: { bundle: { macOS: { signingIdentity: '-' } } } };
   }
   if (target.endsWith('-pc-windows-msvc')) {

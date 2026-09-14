@@ -46,6 +46,7 @@ test('builds the iOS binding on the runner before Expo prebuild', () => {
   }
   const binder = fs.readFileSync(path.join(root, 'tools/build-tunnel-mobile.sh'), 'utf8');
   assert.match(binder, /go tool gomobile bind/);
+  assert.match(binder, /go -C "\$core_dir" env GOVERSION/);
 });
 
 test('keeps the gomobile headers inside the vendored framework instead of the pod sources', () => {

@@ -145,3 +145,34 @@ func TestVersionAndStoppedStatusAreStable(t *testing.T) {
 		t.Fatalf("unexpected stopped status %q, %v", status, err)
 	}
 }
+
+func TestConnectivityDependenciesExposeQUICAndSOCKSWithoutDialing(t *testing.T) {
+	raw, err := connectivityDependenciesJSON("ios", func(string, string) error {
+		t.Fatal("iOS must not set the Android ECN workaround")
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var info connectivityDependencies
+	if err := json.Unmarshal([]byte(raw), &info); err != nil {
+		t.Fatal(err)
+	}
+	if info.Platform != "ios" || info.QUICVersion != "v1" || !info.SOCKS5 || info.AndroidECNWorkaround {
+		t.Fatalf("unexpected connectivity dependencies: %+v", info)
+	}
+}
+
+func TestConnectivityDependenciesDisableECNOnAndroid(t *testing.T) {
+	var name, value string
+	raw, err := connectivityDependenciesJSON("android", func(gotName, gotValue string) error {
+		name, value = gotName, gotValue
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if name != quicDisableECNEnvironment || value != "true" || !strings.Contains(raw, `"androidEcnWorkaround":true`) {
+		t.Fatalf("Android workaround not prepared: name=%q value=%q payload=%s", name, value, raw)
+	}
+}

@@ -29,8 +29,15 @@ assert.deepEqual(signingPlan('aarch64-apple-darwin', empty), {
   macos: 'adhoc', windows: 'none', config: { bundle: { macOS: { signingIdentity: '-' } } },
 });
 assert.equal(signingPlan('x86_64-apple-darwin', { APPLE_CERTIFICATE: 'x' }).macos, 'adhoc');
-const apple = Object.fromEntries(['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY', 'APPLE_ID', 'APPLE_PASSWORD', 'APPLE_TEAM_ID'].map((name) => [name, 'fixture']));
+const apple = {
+  ...Object.fromEntries(['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY', 'APPLE_API_PRIVATE_KEY'].map((name) => [name, 'fixture'])),
+  APPLE_API_KEY: 'ABCDE12345', APPLE_API_ISSUER: '69a6de70-0000-47e3-e053-5b8c7c11a4d1',
+};
 assert.deepEqual(signingPlan('aarch64-apple-darwin', apple), { macos: 'developer-id', windows: 'none', config: {} });
+assert.equal(signingPlan('aarch64-apple-darwin', { ...apple, APPLE_API_PRIVATE_KEY: '' }).macos, 'adhoc');
+assert.equal(signingPlan('aarch64-apple-darwin', { ...apple, APPLE_ID: 'fixture', APPLE_PASSWORD: 'fixture', APPLE_API_KEY: '' }).macos, 'adhoc');
+assert.throws(() => signingPlan('aarch64-apple-darwin', { ...apple, APPLE_API_KEY: '../../x' }), /APPLE_API_KEY/);
+assert.throws(() => signingPlan('aarch64-apple-darwin', { ...apple, APPLE_API_ISSUER: 'issuer' }), /issuer ID/);
 assert.deepEqual(signingPlan('x86_64-pc-windows-msvc', empty), { macos: 'none', windows: 'unsigned', config: {} });
 const azure = {
   AZURE_CLIENT_ID: 'fixture', AZURE_CLIENT_SECRET: 'fixture', AZURE_TENANT_ID: 'fixture',
@@ -82,10 +89,13 @@ const withoutMacSignature = { ...signatures };
 delete withoutMacSignature['Cialai_x64.app.tar.gz.sig'];
 assert.throws(() => updaterManifest({ tag: 'v0.1.0', repo: 'Cialai/cialai', names: stable, signatures: withoutMacSignature, notes: '', date: new Date() }), /darwin-x86_64/);
 
-// Notas da prévia: aviso de binários sem assinatura de plataforma e passos do macOS e do Windows.
+// Notas da prévia: macOS notarizado sem liberação manual e passos do Windows ainda sem assinatura.
 const preview = releaseNotes(read('tools/release/notes/preview.md'), 'v0.1.0');
-for (const required of ['not signed with an Apple Developer ID', 'Privacy & Security', 'Open Anyway', 'More info', 'Run anyway', 'SHA256SUMS', 'TestFlight']) {
+for (const required of ['signed with the Ordinum Developer ID and notarized by Apple', 'Windows installers are not signed', 'More info', 'Run anyway', 'SHA256SUMS', 'TestFlight']) {
   assert.ok(preview.includes(required), `preview notes are missing: ${required}`);
+}
+for (const stale of ['Open Anyway', 'Privacy & Security', 'com.apple.quarantine']) {
+  assert.ok(!preview.includes(stale), `preview notes still teach the unsigned macOS bypass: ${stale}`);
 }
 assert.ok(!preview.includes('{{'), 'preview notes kept a template variable');
 for (const name of ['Cialai_aarch64.dmg', 'Cialai_x64.dmg', 'Cialai_x64-setup.exe', 'Cialai_x64.msi', 'Cialai_amd64.AppImage', 'Cialai_amd64.deb', 'Cialai_x86_64.rpm', 'Cialai_android_universal.apk']) {
@@ -113,6 +123,12 @@ const developerStep = workflow.slice(workflow.indexOf('- name: Build and upload 
 const defaultStep = workflow.slice(workflow.indexOf('- name: Build and upload\n'), workflow.indexOf('\n  publish:'));
 assert.match(developerStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
 assert.match(developerStep, /APPLE_CERTIFICATE: \$\{\{ secrets\.APPLE_CERTIFICATE \}\}/);
+assert.match(developerStep, /APPLE_API_KEY: \$\{\{ secrets\.APPLE_API_KEY \}\}/);
+assert.doesNotMatch(developerStep, /APPLE_ID|APPLE_PASSWORD|APPLE_API_PRIVATE_KEY/, 'Tauri must notarize with the API key file only');
+const keyStep = workflow.slice(workflow.indexOf('- name: Write the notarization key'), workflow.indexOf('- name: Build and upload with Developer ID'));
+assert.match(keyStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
+assert.match(keyStep, /"\$RUNNER_TEMP\/private_keys\/AuthKey_\$\{APPLE_API_KEY\}\.p8"/);
+assert.match(keyStep, /echo "APPLE_API_KEY_PATH=\$key_path" >> "\$GITHUB_ENV"/);
 assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id'/);
 assert.doesNotMatch(defaultStep, /APPLE_/, 'the ad hoc build must not receive Apple credentials');
 const publish = workflow.slice(workflow.indexOf('\n  publish:'));

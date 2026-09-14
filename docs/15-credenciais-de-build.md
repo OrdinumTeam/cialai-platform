@@ -15,6 +15,7 @@ Preparado em 13/09/2026.
 | Senhas e alias do keystore | `secrets/cialai/key.properties` | `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` do grupo `android_credentials` |
 | Token e identificadores da conta | `secrets/ordinum/ordinum.env` | Token da API do Codemagic, emissor e identificador da chave Apple, time e conta do Play, compartilhados por todos os apps |
 | Identificadores do app | `secrets/cialai/cialai.env` | Bundle, pacote, identificadores do app na Apple, no Play e no Codemagic em `CODEMAGIC_APP_ID`, e caminhos do keystore |
+| Developer ID Application da Ordinum | `secrets/ordinum/developer-id-application.p12` e `secrets/ordinum/developer-id-application.password` | Não se aplica ao Codemagic. Vai para os secrets `APPLE_CERTIFICATE` em base64 e `APPLE_CERTIFICATE_PASSWORD` do repositório público; a identidade fica em `DEVELOPER_ID_APPLICATION_IDENTITY` do `ordinum.env` |
 | Chave do atualizador do desktop | `secrets/cialai/tauri-updater.key` e `secrets/cialai/tauri-updater.password` | Não se aplica ao Codemagic. Vai para os secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` do repositório público pelo `gh secret set` lendo do arquivo |
 
 O app `br.com.ordinum.cialai` foi criado no App Store Connect em 13/09/2026 e seu identificador `6811702125` já está em `APP_STORE_APP_ID` no `cialai.env`.
@@ -47,7 +48,8 @@ pbcopy < secrets/ordinum/google-play-service-account.json
 | Convite de `ordinum-play-publisher@ordinum.iam.gserviceaccount.com` em Usuários e permissões do Play Console, com permissão na conta inteira | Ativo desde 13/09/2026 |
 | Primeiro AAB do app | Enviado pelo `android-play` do Codemagic em 14/09/2026 como rascunho na faixa interna, `versionCode` 2, sem envio manual. Liberar o rascunho para testadores é passo do Play Console |
 | Chave do updater do desktop | Gerada em 14/09/2026 em `secrets/cialai/tauri-updater.key`, com a pública em `tauri-updater.key.pub` e a senha em `tauri-updater.password`, todos com permissão 600. Cadastrada nos secrets `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` de `Cialai/cialai` |
-| Developer ID da Apple e certificado Windows | Pendente do usuário. Sem eles o `release.yml` publica macOS com assinatura ad hoc e Windows sem Authenticode |
+| Developer ID da Apple | Certificado G2 criado em 14/09/2026, válido até 15/09/2031, guardado em `secrets/ordinum`. A notarização usa a chave `GitHub Actions Notarization`, papel Developer, em `secrets/ordinum/app-store-connect-notary-key.p8`. Os seis secrets `APPLE_*` foram cadastrados em `Cialai/cialai` em 14/09/2026, lidos dos arquivos sem exibir valores; passam a valer quando o `release.yml` novo chegar ao público |
+| Certificado Windows | Pendente. Sem Azure Trusted Signing o `release.yml` publica Windows sem Authenticode |
 
 ## Proteção e rotação
 

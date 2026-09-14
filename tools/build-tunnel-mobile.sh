@@ -33,7 +33,9 @@ require_command() {
 require_command go
 require_command shasum
 
-go_version="$(go env GOVERSION)"
+# Consulta dentro do módulo para que GOTOOLCHAIN=auto selecione a versão do
+# go.mod mesmo quando o script é iniciado na raiz, cujo Go global pode ser mais antigo.
+go_version="$(go -C "$core_dir" env GOVERSION)"
 [[ "$go_version" == "go1.26.5" ]] || {
   echo "Preflight falhou: Go 1.26.5 e obrigatorio, encontrado $go_version." >&2
   exit 1
