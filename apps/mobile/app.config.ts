@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES, dictionaries, type Locale } from '@cialai/i18n';
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 type AppEnvironment = 'development' | 'preview' | 'production';
@@ -11,17 +12,27 @@ function resolveAppEnvironment(): AppEnvironment {
 function resolveAndroidVersionCode(): number {
   const value = process.env.PROJECT_BUILD_NUMBER?.trim();
   if (!value) return 1;
-  if (!/^[1-9][0-9]*$/.test(value)) throw new Error('PROJECT_BUILD_NUMBER inválido para o Android.');
+  if (!/^[1-9][0-9]*$/.test(value)) throw new Error('project_build_number_invalid');
   const versionCode = Number(value);
   if (!Number.isSafeInteger(versionCode) || versionCode > 2_100_000_000) {
-    throw new Error('PROJECT_BUILD_NUMBER inválido para o Android.');
+    throw new Error('project_build_number_invalid');
   }
   return versionCode;
 }
 
+// Textos dos pedidos de permissão do iOS vindos do mesmo dicionário da interface.
+function permissionTexts(locale: Locale) {
+  const text = dictionaries[locale];
+  return {
+    NSCameraUsageDescription: text['mobile.permission.camera'],
+    NSLocalNetworkUsageDescription: text['mobile.permission.localNetwork'],
+    NSFaceIDUsageDescription: text['mobile.permission.faceId']
+  };
+}
+
 export default ({ config }: ConfigContext): ExpoConfig => {
   const appEnv = resolveAppEnvironment();
-  const faceIDPermission = 'O Cialai usa o Face ID para autorizar ações sensíveis no computador.';
+  const permissions = permissionTexts(DEFAULT_LOCALE);
 
   return {
     ...config,
@@ -32,6 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     platforms: ['ios', 'android'],
     scheme: 'cialai',
     icon: '../desktop/design/app-icon-1024.png',
+    locales: Object.fromEntries(SUPPORTED_LOCALES.map(locale => [locale, { ios: permissionTexts(locale) }])),
     ios: {
       bundleIdentifier: 'br.com.ordinum.cialai',
       buildNumber: '1',
@@ -42,11 +54,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           'NSFileProtectionCompleteUntilFirstUserAuthentication'
       },
       infoPlist: {
-        CFBundleDevelopmentRegion: 'pt-BR',
-        CFBundleLocalizations: ['pt-BR'],
-        NSCameraUsageDescription: 'O Cialai usa a câmera somente para ler o código de vínculo exibido no computador.',
-        NSLocalNetworkUsageDescription: 'O Cialai procura seu computador na rede local antes de usar o caminho remoto.',
-        NSFaceIDUsageDescription: faceIDPermission
+        CFBundleDevelopmentRegion: DEFAULT_LOCALE,
+        CFBundleLocalizations: [...SUPPORTED_LOCALES],
+        ...permissions
       }
     },
     android: {
@@ -66,14 +76,15 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     plugins: [
       'expo-dev-client',
       ['expo-camera', {
-        cameraPermission: 'O Cialai usa a câmera somente para ler o código de vínculo exibido no computador.',
+        cameraPermission: permissions.NSCameraUsageDescription,
         recordAudioAndroid: false,
         barcodeScannerEnabled: true
       }],
       ['expo-secure-store', { configureAndroidBackup: false }],
-      ['expo-local-authentication', { faceIDPermission }],
+      ['expo-local-authentication', { faceIDPermission: permissions.NSFaceIDUsageDescription }],
       ['./plugins/with-loopback-network-security.cjs'],
       ['./plugins/with-android-release-signing.cjs'],
+      ['./plugins/with-android-locales.cjs', { locales: [...SUPPORTED_LOCALES] }],
       ['expo-build-properties', {
         android: {
           compileSdkVersion: 36,

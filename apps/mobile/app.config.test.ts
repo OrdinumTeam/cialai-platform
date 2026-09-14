@@ -1,5 +1,7 @@
 import type { ConfigContext } from 'expo/config';
 
+import { SUPPORTED_LOCALES, dictionaries } from '@cialai/i18n';
+
 import buildConfig from './app.config';
 
 const context = { config: {} } as ConfigContext;
@@ -34,6 +36,24 @@ describe('Expo app config', () => {
     expect(JSON.stringify(config.plugins)).toContain('targetSdkVersion');
   });
 
+  test('localizes native permission prompts from the shared dictionaries', () => {
+    const config = buildConfig(context);
+    expect(config.ios?.infoPlist?.CFBundleDevelopmentRegion).toBe('pt-BR');
+    expect(config.ios?.infoPlist?.CFBundleLocalizations).toEqual([...SUPPORTED_LOCALES]);
+    expect(Object.keys(config.locales ?? {})).toEqual([...SUPPORTED_LOCALES]);
+    for (const locale of SUPPORTED_LOCALES) {
+      expect(config.locales?.[locale]).toEqual({ ios: {
+        NSCameraUsageDescription: dictionaries[locale]['mobile.permission.camera'],
+        NSLocalNetworkUsageDescription: dictionaries[locale]['mobile.permission.localNetwork'],
+        NSFaceIDUsageDescription: dictionaries[locale]['mobile.permission.faceId']
+      } });
+    }
+    expect(config.ios?.infoPlist?.NSCameraUsageDescription).toBe(dictionaries['pt-BR']['mobile.permission.camera']);
+    expect(JSON.stringify(config.locales)).toContain('cámara');
+    expect(JSON.stringify(config.locales)).toContain('local network');
+    expect(config.plugins).toContainEqual(['./plugins/with-android-locales.cjs', { locales: [...SUPPORTED_LOCALES] }]);
+  });
+
   test('fails clearly for an invalid application environment', () => {
     process.env.APP_ENV = 'invalid';
     expect(() => buildConfig(context)).toThrow('APP_ENV');
@@ -43,6 +63,6 @@ describe('Expo app config', () => {
     process.env.PROJECT_BUILD_NUMBER = '42';
     expect(buildConfig(context).android?.versionCode).toBe(42);
     process.env.PROJECT_BUILD_NUMBER = 'invalid';
-    expect(() => buildConfig(context)).toThrow('PROJECT_BUILD_NUMBER');
+    expect(() => buildConfig(context)).toThrow('project_build_number_invalid');
   });
 });
