@@ -502,7 +502,9 @@ mod tests {
         raw.extend_from_slice(&2i32.to_ne_bytes());
         raw.extend_from_slice(b"/usr/bin/node\0\0\0");
         raw.extend_from_slice(b"node\0/x/@anthropic-ai/claude-code/cli.js\0HOME=/x\0");
-        raw.extend_from_slice(b"CLAUDE_CONFIG_DIR=/x/.claude-webrota\0OPENAI_API_KEY=segredo\0CLAUDE_PROFILE=WebRota\0\0\0");
+        raw.extend_from_slice(
+            b"CLAUDE_CONFIG_DIR=/x/.claude-work\0OPENAI_API_KEY=segredo\0CLAUDE_PROFILE=Work\0\0\0",
+        );
         raw.extend_from_slice(b"executable_path=/usr/bin/node\0ptr_munge=abc\0");
         let parsed = parse_procargs(&raw).unwrap();
         assert_eq!(parsed.exe, "/usr/bin/node");
@@ -517,11 +519,11 @@ mod tests {
         // So as chaves de interesse ficam; o segredo e as apple strings nao.
         assert_eq!(
             parsed.env.get("CLAUDE_CONFIG_DIR").map(String::as_str),
-            Some("/x/.claude-webrota")
+            Some("/x/.claude-work")
         );
         assert_eq!(
             parsed.env.get("CLAUDE_PROFILE").map(String::as_str),
-            Some("WebRota")
+            Some("Work")
         );
         assert_eq!(parsed.env.len(), 2, "{:?}", parsed.env);
     }

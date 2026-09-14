@@ -741,7 +741,7 @@ mod tests {
             session_id: ID.into(),
             cwd: Some(cwd_text.clone()),
             config_dir: Some(profile_text.clone()),
-            profile_name: Some("WebRota".into()),
+            profile_name: Some("Work".into()),
             args: strings(&[
                 "--dangerously-skip-permissions",
                 "--model",
@@ -753,7 +753,7 @@ mod tests {
         assert_eq!(
             resume_command(&session, "/", ShellFlavor::Posix).unwrap(),
             format!(
-                "cd {} && CLAUDE_CONFIG_DIR={} CLAUDE_PROFILE=WebRota claude --resume {ID} --dangerously-skip-permissions --model 'opus; rm -rf ~'",
+                "cd {} && CLAUDE_CONFIG_DIR={} CLAUDE_PROFILE=Work claude --resume {ID} --dangerously-skip-permissions --model 'opus; rm -rf ~'",
                 shell_quote(&cwd_text, ShellFlavor::Posix),
                 shell_quote(&profile_text, ShellFlavor::Posix),
             )
@@ -913,7 +913,7 @@ mod tests {
             "CODEX_HOME".to_string(),
             codex_home.to_string_lossy().to_string(),
         );
-        env.insert("CODEX_PROFILE".to_string(), "WebRota".to_string());
+        env.insert("CODEX_PROFILE".to_string(), "Work".to_string());
         let command = CommandLine {
             exe: "/x/codex".into(),
             argv: strings(&["codex", "--yolo"]),
@@ -926,7 +926,7 @@ mod tests {
             found.config_dir.as_deref(),
             Some(codex_home.to_string_lossy().as_ref())
         );
-        assert_eq!(found.profile_name.as_deref(), Some("WebRota"));
+        assert_eq!(found.profile_name.as_deref(), Some("Work"));
         assert_eq!(
             found.args,
             strings(&["--dangerously-bypass-approvals-and-sandbox"])

@@ -152,7 +152,7 @@ pub struct ForegroundProcess {
     pub stopped: bool,
     /// Diretorio atual do processo, lido do kernel.
     pub cwd: Option<String>,
-    /// Pasta de configuracao do agente, como `~/.claude-webrota`, lida do
+    /// Pasta de configuracao do agente, como `~/.claude-work`, lida do
     /// ambiente do processo; padrao do agente quando nao ha variavel.
     pub config_dir: Option<String>,
     /// Slug do perfil, o mesmo do arquivo de uso publicado pelo hook.

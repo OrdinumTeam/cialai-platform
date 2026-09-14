@@ -9,7 +9,7 @@ describe('local proxy URL policy', () => {
   });
 
   test.each([
-    'https://studio.ordinum-team.ts.net',
+    'https://studio.example-tailnet.ts.net',
     `http://localhost:47400/?k=${NONCE}`,
     `http://[::1]:47400/?k=${NONCE}`,
     `http://192.168.1.4:47400/?k=${NONCE}`,

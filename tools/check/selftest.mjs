@@ -24,7 +24,7 @@ for (const contract of [
   'app_request_quit',
 ]) assert.match(selftest, new RegExp(contract), `Missing selftest contract: ${contract}`);
 
-assert.doesNotMatch(selftest, /\/Users\/focoamorim|\.ordinum|\/tmp\/oc-selftest/);
+assert.doesNotMatch(selftest, /\/Users\/[^/]+\/Github Projects|\.ordinum|\/tmp\/oc-selftest/);
 assert.match(main, /tools\/selftest\/selftest-app\.js/);
 assert.match(commands, /pub fn app_selftest_paths/);
 assert.match(lib, /commands::app_selftest_paths/);

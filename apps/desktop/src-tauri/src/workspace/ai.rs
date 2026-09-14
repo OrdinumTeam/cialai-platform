@@ -20,8 +20,8 @@
 //! O uso vale para a conta, nao para a pasta. Como o usuario tem varios
 //! perfis do mesmo agente, cada um com a propria conta, o numero e publicado
 //! e lido **por perfil**: o slug da pasta de configuracao, `claude` para
-//! `~/.claude`, `claude-webrota` para `~/.claude-webrota`, `codex-amorim`
-//! para `~/.codex-amorim`. O card casa o perfil do processo, lido do
+//! `~/.claude`, `claude-work` para `~/.claude-work`, `codex-work`
+//! para `~/.codex-work`. O card casa o perfil do processo, lido do
 //! ambiente dele, com o perfil do arquivo.
 
 use std::collections::BTreeMap;
@@ -88,7 +88,7 @@ pub struct UsageSession {
 pub struct AgentUsage {
     /// Nome do agente como `procs::agent_of` o reconhece.
     pub agent: String,
-    /// Slug do perfil: `claude`, `claude-webrota`, `codex`, `codex-amorim`.
+    /// Slug do perfil: `claude`, `claude-work`, `codex`, `codex-work`.
     pub profile: String,
     /// Pasta de configuracao ou home do Codex de onde o numero veio.
     pub config_dir: Option<String>,
@@ -496,9 +496,9 @@ mod tests {
         fs::create_dir_all(dir.join(CLAUDE_DIR)).unwrap();
         let now = now_ms();
         fs::write(
-            dir.join(CLAUDE_DIR).join("claude-webrota.json"),
+            dir.join(CLAUDE_DIR).join("claude-work.json"),
             format!(
-                r#"{{"agent":"Claude Code","format":2,"profile":"claude-webrota","profileName":"WebRota","configDir":"/Users/x/.claude-webrota","plan":"max","model":"Fable 5.1","updatedAtMs":{now},
+                r#"{{"agent":"Claude Code","format":2,"profile":"claude-work","profileName":"Work","configDir":"/Users/x/.claude-work","plan":"max","model":"Fable 5.1","updatedAtMs":{now},
                    "sessions":[{{"sessionId":"s1","cwd":"/Users/x/projeto","model":"Fable 5.1","updatedAtMs":{now}}},{{"sessionId":"s0","cwd":"/Users/x/outro","model":"Opus 5","updatedAtMs":{}}}],
                    "windows":[{{"id":"five_hour","label":"Sessão","usedPercent":12.5,"resetsAtMs":1789000000000}},{{"id":"seven_day","label":"Semana","usedPercent":34.0}}]}}"#,
                 now - 1000
@@ -509,12 +509,9 @@ mod tests {
         assert_eq!(list.len(), 1);
         let usage = &list[0];
         assert_eq!(usage.agent, "Claude Code");
-        assert_eq!(usage.profile, "claude-webrota");
-        assert_eq!(usage.profile_name.as_deref(), Some("WebRota"));
-        assert_eq!(
-            usage.config_dir.as_deref(),
-            Some("/Users/x/.claude-webrota")
-        );
+        assert_eq!(usage.profile, "claude-work");
+        assert_eq!(usage.profile_name.as_deref(), Some("Work"));
+        assert_eq!(usage.config_dir.as_deref(), Some("/Users/x/.claude-work"));
         assert_eq!(usage.model.as_deref(), Some("Fable 5.1"));
         assert_eq!(usage.plan.as_deref(), Some("max"));
         assert_eq!(usage.windows.len(), 2);
@@ -524,8 +521,8 @@ mod tests {
         assert!(!usage.stale);
         // Arquivo antigo continua sendo lido, mas marcado.
         fs::write(
-            dir.join(CLAUDE_DIR).join("claude-webrota.json"),
-            r#"{"profile":"claude-webrota","windows":[{"id":"a","label":"Sessão","usedPercent":1.0}],"updatedAtMs":1}"#,
+            dir.join(CLAUDE_DIR).join("claude-work.json"),
+            r#"{"profile":"claude-work","windows":[{"id":"a","label":"Sessão","usedPercent":1.0}],"updatedAtMs":1}"#,
         )
         .unwrap();
         assert!(claude(&dir, &dir)[0].stale);
@@ -585,10 +582,10 @@ mod tests {
         assert_eq!(list[0].source, "statusline legado");
         // Com a pasta nova povoada, o legado deixa de contar.
         fs::create_dir_all(dir.join(CLAUDE_DIR)).unwrap();
-        fs::write(dir.join(CLAUDE_DIR).join("claude-webrota.json"), format!(r#"{{"updatedAtMs":{now},"windows":[{{"id":"a","label":"Sessão","usedPercent":1.0}}]}}"#)).unwrap();
+        fs::write(dir.join(CLAUDE_DIR).join("claude-work.json"), format!(r#"{{"updatedAtMs":{now},"windows":[{{"id":"a","label":"Sessão","usedPercent":1.0}}]}}"#)).unwrap();
         let list = claude(&home, &dir);
         assert_eq!(list.len(), 1);
-        assert_eq!(list[0].profile, "claude-webrota");
+        assert_eq!(list[0].profile, "claude-work");
         fs::remove_dir_all(&dir).unwrap();
     }
 
@@ -640,7 +637,7 @@ mod tests {
         fs::write(velho.join("rollout-a.jsonl"), linha(90.0)).unwrap();
         // Perfil separado e outra conta: os dois numeros valem, cada um no
         // seu home.
-        let novo = dir.join(".codex-aamorim/sessions/2026/09/08");
+        let novo = dir.join(".codex-work/sessions/2026/09/08");
         fs::create_dir_all(&novo).unwrap();
         std::thread::sleep(Duration::from_millis(20));
         fs::write(novo.join("rollout-b.jsonl"), linha(4.0)).unwrap();
@@ -652,7 +649,7 @@ mod tests {
             .expect("home padrao");
         let perfil = list
             .iter()
-            .find(|usage| usage.profile == "codex-aamorim")
+            .find(|usage| usage.profile == "codex-work")
             .expect("home do perfil");
         assert_eq!(padrao.windows[0].used_percent, 90.0);
         assert_eq!(perfil.windows[0].used_percent, 4.0);
@@ -661,7 +658,7 @@ mod tests {
                 .config_dir
                 .as_deref()
                 .unwrap()
-                .ends_with("/.codex-aamorim")
+                .ends_with("/.codex-work")
         );
         fs::remove_dir_all(&dir).unwrap();
     }

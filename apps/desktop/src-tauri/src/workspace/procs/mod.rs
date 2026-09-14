@@ -592,8 +592,8 @@ mod tests {
     fn profile_slug_rules() {
         assert_eq!(profile_slug(Path::new("/Users/x/.claude")), "claude");
         assert_eq!(
-            profile_slug(Path::new("/Users/x/.codex-aamorim")),
-            "codex-aamorim"
+            profile_slug(Path::new("/Users/x/.codex-work")),
+            "codex-work"
         );
         assert_eq!(profile_slug(Path::new("/")), "perfil");
     }
