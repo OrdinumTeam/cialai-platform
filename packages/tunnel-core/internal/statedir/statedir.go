@@ -19,13 +19,16 @@ import (
 var ErrLocked = errors.New("tunnel state is already owned by a live process")
 
 type Paths struct {
-	Root     string
-	TSNet    string
-	Devices  string
-	Identity string
-	PairLock string
-	Log      string
-	PID      string
+	Root        string
+	TSNet       string
+	Devices     string
+	Identity    string
+	IdentityKey string
+	Tor         string
+	OnionKey    string
+	PairLock    string
+	Log         string
+	PID         string
 }
 
 func Prepare(root string) (Paths, error) {
@@ -38,9 +41,13 @@ func Prepare(root string) (Paths, error) {
 		TSNet:    filepath.Join(root, "tsnet"),
 		Devices:  filepath.Join(root, "devices.json"),
 		Identity: filepath.Join(root, "identity.json"),
-		PairLock: filepath.Join(root, "pair.lock"),
-		Log:      filepath.Join(root, "tunnel.log"),
-		PID:      filepath.Join(root, "pid"),
+		// IdentityKey holds the Ed25519 seed; identity.json v2 carries only public data.
+		IdentityKey: filepath.Join(root, "identity.key"),
+		Tor:         filepath.Join(root, "tor"),
+		OnionKey:    filepath.Join(root, "tor", "onion.key"),
+		PairLock:    filepath.Join(root, "pair.lock"),
+		Log:         filepath.Join(root, "tunnel.log"),
+		PID:         filepath.Join(root, "pid"),
 	}
 	for _, path := range []string{paths.Root, paths.TSNet} {
 		if err := privateDir(path); err != nil {
