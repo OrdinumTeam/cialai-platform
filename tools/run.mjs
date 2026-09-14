@@ -42,7 +42,9 @@ const jobs = {
 const job = jobs[process.argv[2]];
 if (!job) throw new Error(`Unknown job: ${process.argv[2]}`);
 for (const [command, ...args] of job.commands) {
-  const result = spawnSync(command, args, { cwd: `${root}/${job.cwd}`, stdio: 'inherit', shell: false });
+  // No Windows o npm é um .cmd, que o Node só executa por um shell; os argumentos são fixos deste arquivo.
+  const shell = process.platform === 'win32' && command === 'npm';
+  const result = spawnSync(command, args, { cwd: `${root}/${job.cwd}`, stdio: 'inherit', shell });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

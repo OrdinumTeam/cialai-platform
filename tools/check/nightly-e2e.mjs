@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -104,14 +105,15 @@ assert.deepEqual(common.driverCapabilities('/app/cialai-desktop'), {
 });
 const parsed = common.parseDriverArgs(['--app', '/a', '--artifacts', 'evidencias', '--timeout', '120', '--native-driver', '/bin/msedgedriver'], { root: '/repo', platform: 'linux', env: {} });
 assert.equal(parsed.app, '/a');
-assert.equal(parsed.artifacts.replaceAll('\\', '/'), '/repo/evidencias');
+// O runner resolve a pasta de evidências no sistema em que roda; no Windows ela ganha a letra do disco.
+assert.equal(parsed.artifacts, path.resolve('/repo', 'evidencias'));
 assert.equal(parsed.timeoutMs, 120000);
 assert.equal(parsed.port, 4444);
 assert.equal(parsed.driver, 'tauri-driver');
 assert.deepEqual(parsed.driverArgs, ['--port', '4444', '--native-driver', '/bin/msedgedriver']);
 const defaults = common.parseDriverArgs([], { root: '/repo', platform: 'win32', env: { CARGO_TARGET_DIR: '/cache/target', TAURI_DRIVER: '/bin/tauri-driver' } });
 assert.equal(defaults.app.replaceAll('\\', '/'), '/cache/target/debug/cialai-desktop.exe');
-assert.equal(defaults.artifacts.replaceAll('\\', '/'), '/repo/target/selftest');
+assert.equal(defaults.artifacts, path.resolve('/repo', 'target', 'selftest'));
 assert.equal(defaults.timeoutMs, 300000);
 assert.equal(defaults.driver, '/bin/tauri-driver');
 
