@@ -4,6 +4,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,7 +15,7 @@ import (
 func TestVersionAndDoctor(t *testing.T) {
 	var output, stderr bytes.Buffer
 	stdio := streams{in: strings.NewReader(""), out: &output, err: &stderr}
-	if code := run([]string{"version"}, stdio, func(int) bool { return true }); code != 0 || !strings.Contains(output.String(), "cialai-tunnel 0.1.0") || !strings.Contains(output.String(), "tailscale 1.102.0") {
+	if code := run([]string{"version"}, stdio, func(int) bool { return true }); code != 0 || !strings.Contains(output.String(), "cialai-tunnel "+sidecar.Version) || !strings.Contains(output.String(), "tailscale 1.102.0") {
 		t.Fatalf("bad version: code %d output %q", code, output.String())
 	}
 	output.Reset()

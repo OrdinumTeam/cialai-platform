@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	Version = "0.1.0"
+	Version = "0.2.0"
 	// TailscaleVersion is the tailscale.com module that provides the gateway
 	// port mapper; the hello event keeps announcing it.
 	TailscaleVersion = "1.102.0"
