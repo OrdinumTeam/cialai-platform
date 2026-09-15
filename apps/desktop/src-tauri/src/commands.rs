@@ -16,7 +16,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::i18n::{t, tf};
 use crate::platform::{self, PlatformInfo, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
-use crate::tunnel::{RpcProblem, SecretStatus, Supervisor};
+use crate::tunnel::{Awake, RpcProblem, SecretStatus, Supervisor};
 use crate::workspace::ai::{self, AgentUsage, UsageCache};
 use crate::workspace::browser::{BrowserInfo, BrowserManager};
 use crate::workspace::dragout;
@@ -62,6 +62,9 @@ pub fn set_preferences(
         && let Some(window) = app.get_webview_window("main")
     {
         crate::window::apply_backdrop(&window, next.window.backdrop());
+    }
+    if let Some(awake) = app.try_state::<Awake>() {
+        awake.set_enabled(next.network.keep_awake_while_paired);
     }
     prefs.set(next.clone());
     Ok(next)

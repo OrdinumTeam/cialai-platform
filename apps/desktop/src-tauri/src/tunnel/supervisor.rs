@@ -16,6 +16,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::bridge::{BridgeControl, IdentityControl};
 
+use super::awake::Awake;
 use super::credentials::{ApiKeyStore, SecretStatus, api_key_prefix};
 use super::protocol::{
     EventFrame, Inbound, MAX_LINE_BYTES, PROTOCOL_VERSION, RpcProblem, encode_request,
@@ -131,6 +132,7 @@ struct Inner {
     events: EventSink,
     bridge: Arc<dyn IdentityControl>,
     secrets: ApiKeyStore,
+    awake: Awake,
     next_id: AtomicU64,
     next_generation: AtomicU64,
     process: Mutex<Option<ProcessHandle>>,
@@ -151,6 +153,7 @@ impl Supervisor {
         mobile_site: &MobileSite,
         bridge: BridgeSession,
         bridge_control: BridgeControl,
+        awake: Awake,
     ) -> Result<Self, String> {
         let binary = resolve_binary(app)?;
         let tor_binary = resolve_tor_binary(app)?;
@@ -175,6 +178,7 @@ impl Supervisor {
             }),
             Arc::new(bridge_control),
             ApiKeyStore::new(state_dir.join("headscale-api-key")),
+            awake,
         ))
     }
 
@@ -183,6 +187,7 @@ impl Supervisor {
         events: EventSink,
         bridge: Arc<dyn IdentityControl>,
         secrets: ApiKeyStore,
+        awake: Awake,
     ) -> Self {
         Self {
             inner: Arc::new(Inner {
@@ -190,6 +195,7 @@ impl Supervisor {
                 events,
                 bridge,
                 secrets,
+                awake,
                 next_id: AtomicU64::new(1),
                 next_generation: AtomicU64::new(1),
                 process: Mutex::new(None),
@@ -384,6 +390,13 @@ impl Supervisor {
 }
 
 impl Inner {
+    /// Eventos do sidecar atualizam as identidades da ponte e a contagem de
+    /// sessões da vigília antes de seguir para a interface.
+    fn observe_event(&self, event: &EventFrame) {
+        self.sync_bridge_event(event);
+        self.awake.observe(event);
+    }
+
     fn sync_bridge_call(&self, command: &str, args: &Value, result: &Value) {
         match command {
             "edge.serve" => self.bridge.set_desktop(&args["desktop"]),
@@ -660,6 +673,8 @@ impl Inner {
             return;
         };
         removed.collect_tree();
+        // As sessões móveis morreram com o processo sem emitir `session.closed`.
+        self.awake.sidecar_exited();
         self.fail_pending(RpcProblem::local(
             "tunnel_disconnected",
             "O núcleo do túnel foi desconectado.",
@@ -728,6 +743,7 @@ impl Inner {
             process.kill();
         }
         *lock(&self.process) = None;
+        self.awake.sidecar_exited();
         self.fail_pending(RpcProblem::local(
             "tunnel_stopped",
             "O núcleo do túnel foi encerrado.",
@@ -799,7 +815,7 @@ fn read_output(
             }
             Inbound::Event(event) => {
                 let channel = event_channel(&event.name);
-                owner.sync_bridge_event(&event);
+                owner.observe_event(&event);
                 if let Ok(payload) = serde_json::to_value(event) {
                     (owner.events)(channel, payload);
                 }
@@ -900,6 +916,7 @@ fn resolve_tor_binary(app: &AppHandle) -> Result<PathBuf, String> {
 mod tests {
     use std::fs;
 
+    use super::super::awake::AwakeBackend;
     use super::*;
 
     #[derive(Clone, Default)]
@@ -962,6 +979,7 @@ mod tests {
             Arc::new(|_, _| {}),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("unused-key")),
+            Awake::disabled(),
         );
         let args = supervisor
             .inner
@@ -1008,6 +1026,7 @@ mod tests {
             Arc::new(|_, _| {}),
             Arc::new(bridge.clone()),
             ApiKeyStore::new(root.join("unused-key")),
+            Awake::disabled(),
         );
 
         supervisor.inner.sync_bridge_call(
@@ -1046,6 +1065,54 @@ mod tests {
                 json!({"kind":"upsert", "value":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
             ]
         );
+    }
+
+    #[derive(Clone, Default)]
+    struct AwakeCalls(Arc<Mutex<Vec<&'static str>>>);
+
+    impl AwakeBackend for AwakeCalls {
+        fn acquire(&mut self) -> Result<(), String> {
+            lock(&self.0).push("acquire");
+            Ok(())
+        }
+
+        fn release(&mut self) {
+            lock(&self.0).push("release");
+        }
+    }
+
+    #[test]
+    fn sidecar_sessions_and_tunnel_exit_drive_the_awake_assertion() {
+        let root = std::env::temp_dir();
+        let calls = AwakeCalls::default();
+        let backend = calls.clone();
+        let awake = Awake::spawn(move || backend, true);
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                root.join("sidecar"),
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("unused-key")),
+            awake.clone(),
+        );
+        let session = |name: &str| EventFrame {
+            name: name.into(),
+            data: json!({"deviceId":"dev_fixture", "transport":"lan"}),
+            ts: "2026-09-14T12:00:00Z".into(),
+        };
+
+        supervisor.inner.observe_event(&session("session.opened"));
+        supervisor.shutdown_blocking();
+        supervisor.inner.observe_event(&session("session.closed"));
+        awake.shutdown_blocking();
+
+        assert_eq!(*lock(&calls.0), ["acquire", "release"]);
     }
 
     #[test]
@@ -1110,6 +1177,7 @@ printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
             Arc::new(|_, _| {}),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("key")),
+            Awake::disabled(),
         );
         let result = supervisor
             .doctor(Some("https://headscale.example".into()))
@@ -1193,6 +1261,7 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
             }),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("key")),
+            Awake::disabled(),
         );
         let result = supervisor.call("logs.tail", json!({"lines":10})).unwrap();
         assert_eq!(result, json!({"lines":[]}));

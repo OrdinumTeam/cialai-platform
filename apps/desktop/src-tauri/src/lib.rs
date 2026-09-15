@@ -126,6 +126,8 @@ pub fn run() {
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
             let backdrop = preferences.window.backdrop().to_string();
+            let awake = tunnel::Awake::start(preferences.network.keep_awake_while_paired);
+            app.manage(awake.clone());
             let prefs = prefs::PrefsState::new(preferences);
             app.manage(prefs.clone());
             app.manage(workspace::terminal::TerminalManager::new(
@@ -168,6 +170,7 @@ pub fn run() {
                 &mobile_site,
                 bridge_session,
                 bridge_control,
+                awake,
             )
             .map_err(std::io::Error::other)?;
             app.manage(supervisor);
@@ -208,6 +211,9 @@ pub fn run() {
             }
             if let Some(tunnel) = handle.try_state::<tunnel::Supervisor>() {
                 tunnel.shutdown_blocking();
+            }
+            if let Some(awake) = handle.try_state::<tunnel::Awake>() {
+                awake.shutdown_blocking();
             }
         }
     });

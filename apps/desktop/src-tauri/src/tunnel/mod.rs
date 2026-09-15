@@ -5,10 +5,12 @@ use std::path::{Path, PathBuf};
 
 use tauri::{AppHandle, Manager, Runtime};
 
+mod awake;
 mod credentials;
 mod protocol;
 mod supervisor;
 
+pub use awake::Awake;
 pub use credentials::SecretStatus;
 pub use protocol::RpcProblem;
 pub use supervisor::{BridgeSession, Supervisor};

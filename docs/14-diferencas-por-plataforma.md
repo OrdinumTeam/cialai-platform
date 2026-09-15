@@ -114,6 +114,60 @@ com `WEBKIT_DISABLE_DMABUF_RENDERER=1` e
 `WEBKIT_DISABLE_COMPOSITING_MODE=1`. Essas variáveis são alternativas de
 diagnóstico, não padrões do produto.
 
+## Energia durante o uso remoto
+
+A preferência Manter ativo durante o uso remoto, gravada como
+`network.keepAwakeWhilePaired`, vem desligada. Desligada, o Cialai não cria
+assertiva nem inibidor e a energia segue a política do sistema. Ligada, o app
+impede o repouso por inatividade enquanto houver pelo menos um celular com
+sessão aberta no túnel e libera o pedido quando o último celular desconecta,
+quando a preferência é desligada, quando o núcleo do túnel para e quando o app
+sai. A tela continua apagando pelo próprio temporizador e a tampa continua
+valendo nos três sistemas.
+
+| Tema | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Pedido | `IOPMAssertionCreateWithName` com `PreventUserIdleSystemSleep` | Inibidores por D-Bus no logind, no GNOME e em `org.freedesktop.PowerManagement` | `SetThreadExecutionState` com `ES_CONTINUOUS` e `ES_SYSTEM_REQUIRED` |
+| Como conferir | `pmset -g assertions` lista `Cialai com celular conectado` | `systemd-inhibit --list` e `gnome-session-inhibit --list` | `powercfg /requests` num terminal de administrador, na seção SYSTEM |
+| Evidência | Assertiva real criada e liberada em 14/09/2026 | Não verificado | Não verificado |
+
+O app registra em `app.log` quando a vigília fica ativa, quando é liberada e
+quando o sistema recusa o pedido. Uma recusa não afeta o túnel e o pedido é
+tentado de novo na próxima conexão ou desconexão.
+
+No macOS, a assertiva não impede o repouso pela tampa, pelo menu Apple ou por
+falta de bateria. A sessão de 20 minutos sem repouso por inatividade ainda
+aguarda validação física.
+
+No Linux, o Cialai considera a vigília ativa quando pelo menos um destes pedidos
+é aceito:
+
+- bloqueio `idle` do `org.freedesktop.login1`, respeitado pelo logind quando
+  `IdleAction` está configurado;
+- `org.gnome.SessionManager.Inhibit` com o sinalizador de suspensão, que o
+  gnome-settings-daemon consulta antes da suspensão automática;
+- `org.freedesktop.PowerManagement.Inhibit`, oferecido por gerenciadores de
+  energia como os do KDE Plasma e do XFCE.
+
+O GNOME não consulta o bloqueio `idle` do logind para suspender por
+inatividade, por isso o pedido ao gerenciador de sessão é necessário. Nesse
+ambiente, o inibidor de suspensão também pode fazer o comando Suspender do menu
+não agir enquanto houver celular conectado; a tampa segue a configuração do
+logind. Nenhum dos pedidos mantém a tela acesa ou impede o bloqueio de tela.
+Sem barramento de sessão ou de sistema, sem logind ou com um gerenciador de
+energia que ignora esses serviços, como em alguns gerenciadores de janelas,
+contêineres e WSL, a política normal continua valendo.
+
+No Windows, uma thread própria do Cialai cria e libera o pedido, porque
+`SetThreadExecutionState` vale só para a thread que chamou. Em computadores com
+Modern Standby, que `powercfg /a` identifica como S0 Low Power Idle, o pedido
+reinicia o temporizador de repouso, mas há aparelhos que entram em espera
+conectada depois que a tela apaga mesmo com ele ativo. Nessa espera, a política
+de rede do sistema decide se o Wi-Fi continua ligado, e o celular pode perder a
+conexão. Tampa e botão de energia levam à espera em qualquer caso. O Cialai não
+mantém a tela acesa nem usa `PowerRequestExecutionRequired`; o comportamento
+num aparelho físico com Modern Standby ainda não foi verificado.
+
 ## Empacotamento
 
 | Sistema | Formatos | Política de distribuição |
