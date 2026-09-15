@@ -1,5 +1,7 @@
 # Roteiro Manual 4.7 para Android
 
+Nota: a conectividade atual é validada por [`roteiro-conectividade.md`](roteiro-conectividade.md). Os cenários de Headscale desta folha ficaram históricos.
+
 Estado: roteiro preparado, execução em aparelho real pendente
 
 Use uma cópia impressa por combinação de aparelho, versão do Android, build móvel e sistema do desktop. Execute ao menos uma rodada no Android 12 e outra no Android 14 ou mais novo. Todos os projetos, usuários e nomes precisam ser fictícios.

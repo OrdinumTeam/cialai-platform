@@ -1,5 +1,7 @@
 # Roteiro Manual 3.9 para iPhone
 
+Nota: a conectividade atual é validada por [`roteiro-conectividade.md`](roteiro-conectividade.md). Os cenários de Headscale desta folha ficaram históricos.
+
 Estado: roteiro preparado, execução em aparelho real pendente
 
 Use uma cópia impressa por combinação de iPhone, versão do iOS, build móvel e sistema do desktop. Todos os projetos, usuários e nomes precisam ser fictícios.

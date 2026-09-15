@@ -67,6 +67,7 @@ const documents = [
   'docs/legal/privacy-policy-pt-BR.md',
   'tools/release/notes/preview.md',
   'tools/release/notes/stable.md',
+  'docs/testes/roteiro-conectividade.md',
 ];
 for (const path of documents) {
   proseOf(read(path)).split('\n').forEach((line, index) => {
