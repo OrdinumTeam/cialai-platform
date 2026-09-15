@@ -68,6 +68,42 @@ export function buildTheme() {
   };
 }
 
+// Cor dos tokens, em hex ou rgb, como [r, g, b, alfa].
+function parseColor(value) {
+  const text = String(value || '').trim();
+  const hex = text.match(/^#([\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i);
+  if (hex) {
+    const digits = hex[1].length <= 4 ? [...hex[1]].map((digit) => digit + digit).join('') : hex[1];
+    const byte = (index) => parseInt(digits.slice(index, index + 2), 16);
+    return [byte(0), byte(2), byte(4), digits.length === 8 ? byte(6) / 255 : 1];
+  }
+  const rgb = text.match(/^rgba?\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*(?:,\s*(\d*\.?\d+)\s*)?\)$/i);
+  if (rgb) return [Number(rgb[1]), Number(rgb[2]), Number(rgb[3]), rgb[4] === undefined ? 1 : Math.min(1, Number(rgb[4]))];
+  return null;
+}
+
+// Uma cor translucida composta sobre o fundo, em #rrggbb opaco.
+export function opaqueColor(value, background, fallback) {
+  const color = parseColor(value) || parseColor(fallback);
+  const base = parseColor(background) || [255, 255, 255, 1];
+  const channel = (index) => Math.round(base[index] + (color[index] - base[index]) * color[3]).toString(16).padStart(2, '0');
+  return `#${channel(0)}${channel(1)}${channel(2)}`;
+}
+
+// Cores da busca na saida. O addon passa as decoracoes ao parser do xterm,
+// que so aceita #RRGGBB opaco: com var() cada busca lancava css.toColor e
+// nada era marcado. Os tokens translucidos sao compostos sobre o fundo.
+export function searchDecorations() {
+  const dark = isDarkTheme();
+  const surface = token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
+  return {
+    matchBackground: opaqueColor(token('--terminais-editor-search'), surface, 'rgba(194,122,0,.22)'),
+    activeMatchBackground: opaqueColor(token('--mac-accent-soft-hover'), surface, dark ? 'rgba(255,122,178,.24)' : 'rgba(226,59,132,.14)'),
+    matchOverviewRuler: opaqueColor(token('--mac-warn'), surface, dark ? '#f0a629' : '#c27a00'),
+    activeMatchColorOverviewRuler: opaqueColor(token('--mac-accent'), surface, dark ? '#ff7ab2' : '#e23b84'),
+  };
+}
+
 // Mesmo padrao do Mapa: observa data-theme no html em vez de depender do
 // contexto de aparencia, que as views nao recebem.
 export function watchTheme(apply) {

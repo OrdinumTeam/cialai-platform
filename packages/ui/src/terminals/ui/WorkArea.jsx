@@ -17,6 +17,7 @@ import Splitter from './Splitter.jsx';
 import { accentStyle } from './SessionCard.jsx';
 import { describe, fitAndResize, hostTerminal, insertPaths, isWorking, releaseTerminal, reopen, runningLabel, setEditorRatio, setMaximized } from '../runtime.js';
 import { swapIn } from '../motion.js';
+import { searchDecorations } from '../theme.js';
 import { LAYOUT_LIMITS, getLayout, setLayout } from '../layout.js';
 import { fs, isPreviewable, shortPath } from '../files.js';
 import { openFile } from '../editor.js';
@@ -41,7 +42,7 @@ function FindBar({ session, onClose }) {
     const timer = setTimeout(() => inputRef.current?.focus(), 20);
     return () => { clearTimeout(timer); session.search.clearDecorations(); };
   }, [session]);
-  const options = { incremental: true, decorations: { matchOverviewRuler: 'var(--mac-warn)', activeMatchColorOverviewRuler: 'var(--mac-accent)', matchBackground: 'var(--terminais-editor-search)', activeMatchBackground: 'var(--mac-accent-soft-hover)' } };
+  const options = { incremental: true, decorations: searchDecorations() };
   const next = () => { if (query) session.search.findNext(query, options); };
   const previous = () => { if (query) session.search.findPrevious(query, options); };
   useEffect(() => { if (query) session.search.findNext(query, options); else session.search.clearDecorations(); }, [query]);

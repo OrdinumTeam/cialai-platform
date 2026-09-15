@@ -78,6 +78,31 @@ async function assertImeTyping(term) {
   }
 }
 
+// Cmd F no terminal abre a busca na saida, que precisa marcar os resultados
+// sem erro no parser de cores do xterm.
+async function assertTerminalFind(session) {
+  const errors = [];
+  const onError = (event) => errors.push(event.message || String(event.error));
+  let results = 0;
+  const listener = session.search.onDidChangeResults((event) => { results = event.resultCount; });
+  window.addEventListener('error', onError);
+  try {
+    session.term.focus();
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true, cancelable: true }));
+    const input = await until(() => document.querySelector('.terminais-find input'), 'terminal find bar');
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'claude');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await until(() => results > 0, 'terminal find results');
+    await pause(250);
+    assert(errors.length === 0, `Terminal find failed: ${errors[0]}`);
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await until(() => !document.querySelector('.terminais-find'), 'terminal find close');
+  } finally {
+    listener.dispose();
+    window.removeEventListener('error', onError);
+  }
+}
+
 document.title = 'CHECK: Cialai studio';
 await until(() => runtime.isDemo(), 'terminal demo mode');
 assert(runtime.isDemo(), 'Browser check must run only in terminal demo mode');
@@ -106,6 +131,8 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   assert(document.querySelectorAll('.mac-nav-item').length === 2, 'Desktop navigation must expose Terminais and Dispositivos');
   assert(!/Ordinum Control|Stack local|Reuniões/.test(document.body.textContent), 'Removed Control UI is visible');
   assert(runtime.orderedSessions().length >= 2, 'Terminal demo sessions missing');
+  assert(!document.querySelector('.terminais-work__actions [aria-label="Buscar na saída"], .terminais-work__actions [aria-label="Copiar seleção"]'), 'Session header must not show find or copy buttons');
+  await assertTerminalFind(runtime.getState().selected);
 
   window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', metaKey: true, bubbles: true, cancelable: true }));
   await until(() => document.querySelector('.mac-palette'), 'command palette');
