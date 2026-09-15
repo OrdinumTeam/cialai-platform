@@ -103,6 +103,12 @@ jobs:
           TOR_LIBRARIES: ${{ github.workspace }}/apps/desktop/src-tauri/resources/tor/tor
         run: LD_LIBRARY_PATH="$TOR_LIBRARIES${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
 
+      # O AppImage do linuxdeploy traz bibliotecas que o Mesa do sistema carrega e um AppRun que vaza variáveis;
+      # o anexo sai corrigido como na release. O smoke em Ubuntu 24.04 e Arch fica no appimage-smoke.yml.
+      - name: Corrigir o AppImage para distribuições novas
+        if: runner.os == 'Linux'
+        run: node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
+
       - name: Anexar bundles
         uses: actions/upload-artifact@v4
         with:

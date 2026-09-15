@@ -13,6 +13,11 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * Expo shells for iOS and Android with QR pairing, protected local profiles and biometric session locking
 * Signed update support prepared for desktop releases
 * Automated checks for the desktop, shared interface, tunnel protocol, mobile shell and release documentation
+* An AppImage smoke test that opens the Linux app under Xvfb on Ubuntu 24.04 and Arch Linux with the system Mesa, WebKitGTK and GVfs
+
+### Fixed
+
+* The Linux AppImage no longer aborts on current distributions such as Arch Linux with Mesa 26 and recent Ubuntu. The system Mesa stack and its base libraries now come from the host, the WebKit helpers find the bundled libraries on their own, the bundled GLib ignores the host GIO modules and the launcher no longer exports `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` or `QT_PLUGIN_PATH`. The updater signature is made over the final AppImage
 
 ### Security
 

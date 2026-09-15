@@ -2,15 +2,16 @@
 // Cria, confere, soma e publica a release do GitHub pelo gh, sem expor tokens.
 // Uso:
 //   node tools/release/release-assets.mjs draft <tag> <preview|stable>
+//   node tools/release/release-assets.mjs upload-linux <tag> <pasta bundle do Tauri>
 //   node tools/release/release-assets.mjs updater-json <tag>
 //   node tools/release/release-assets.mjs verify <tag>
 //   node tools/release/release-assets.mjs checksums <tag>
 //   node tools/release/release-assets.mjs publish <tag>
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const CHECKSUM_FILE = 'SHA256SUMS';
@@ -35,6 +36,29 @@ export const REQUIRED_ASSETS = [
 
 export function missingAssets(names) {
   return REQUIRED_ASSETS.filter(([, pattern]) => !names.some((name) => pattern.test(name))).map(([label]) => label);
+}
+
+// Os pacotes Linux sobem pelo gh depois da correção do AppImage, com os nomes que o tauri-action gerava com
+// "[name]_[arch][setup][ext]": Cialai_0.2.0_amd64.AppImage vira Cialai_amd64.AppImage e
+// Cialai-0.2.0-1.x86_64.rpm vira Cialai_x86_64.rpm, com as assinaturas .sig acompanhando.
+export function stableLinuxName(fileName) {
+  const debian = fileName.match(/^([^_]+)_[^_]+_([^_.]+)(\.AppImage|\.deb)(\.sig)?$/);
+  if (debian) return `${debian[1]}_${debian[2]}${debian[3]}${debian[4] ?? ''}`;
+  const rpm = fileName.match(/^(.+)-[^-]+-\d+\.([^.]+)\.rpm(\.sig)?$/);
+  if (rpm) return `${rpm[1]}_${rpm[2]}.rpm${rpm[3] ?? ''}`;
+  return null;
+}
+
+export function linuxReleaseAssets(files) {
+  const assets = files
+    .map((source) => ({ source, name: stableLinuxName(basename(source)) }))
+    .filter(({ name }) => name)
+    .sort((left, right) => (left.name < right.name ? -1 : 1));
+  const names = assets.map(({ name }) => name);
+  if (new Set(names).size !== names.length) throw new Error(`Duplicate Linux bundles: ${names.join(', ')}`);
+  const missing = missingAssets(names).filter((label) => label.startsWith('Linux '));
+  if (missing.length) throw new Error(`Linux bundle is missing: ${missing.join(', ')}`);
+  return assets;
 }
 
 // O latest.json é montado uma vez, depois da matriz, para que jobs paralelos não sobrescrevam as
@@ -124,6 +148,24 @@ function draft(tag, channel) {
   console.log(`release_id=${created.id}`);
 }
 
+function uploadLinux(tag, bundle) {
+  if (!bundle) throw new Error('Pass the Tauri bundle directory');
+  requireRelease(tag);
+  const files = ['appimage', 'deb', 'rpm'].flatMap((kind) => readdirSync(join(bundle, kind)).map((name) => join(bundle, kind, name)));
+  const assets = linuxReleaseAssets(files);
+  const directory = mkdtempSync(join(tmpdir(), 'cialai-linux-'));
+  try {
+    const paths = assets.map(({ source, name }) => {
+      copyFileSync(source, join(directory, name));
+      return join(directory, name);
+    });
+    gh(['release', 'upload', tag, ...paths, '--repo', repository(), '--clobber']);
+    console.log(`PASS ${assets.length} Linux assets uploaded to ${tag}: ${assets.map(({ name }) => name).join(', ')}`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
 function updaterJson(tag) {
   const release = requireRelease(tag);
   const names = release.assets.map((asset) => asset.name);
@@ -190,13 +232,14 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const [command, tag, channel] = process.argv.slice(2);
   const commands = {
     draft: () => draft(tag, channel),
+    'upload-linux': () => uploadLinux(tag, channel),
     'updater-json': () => updaterJson(tag),
     verify: () => verify(tag),
     checksums: () => checksums(tag),
     publish: () => publish(tag),
   };
   if (!commands[command] || !tag) {
-    console.error('Usage: release-assets.mjs draft|updater-json|verify|checksums|publish <tag> [channel]');
+    console.error('Usage: release-assets.mjs draft|upload-linux|updater-json|verify|checksums|publish <tag> [channel|bundle]');
     process.exit(64);
   }
   commands[command]();

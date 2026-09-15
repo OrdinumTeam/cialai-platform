@@ -10,6 +10,7 @@ especificação detalhada continua em [04-desktop.md](./04-desktop.md); este tex
 | --- | --- | --- |
 | macOS arm64 | Suíte Rust nativa com 151 casos aprovados e dois ensaios externos ignorados. O caso do instalador do Chromium passou novamente depois do ajuste portável do fixture | Bundle assinado, notarização e instalação limpa |
 | Ubuntu 22.04 arm64 | Suíte Rust em contêiner com 145 casos aprovados e dois ensaios externos ignorados | WebKitGTK visível, instaladores e IME real |
+| AppImage x86_64 | Em 15/09/2026, no run `34948496705` do público, `smoke.sh` abriu a prévia 0.2.0 corrigida por `fix-appimage.mjs` sob Xvfb no Ubuntu 24.04 e num contêiner Arch com Mesa, WebKitGTK e GVfs do sistema, com a interface renderizada e os processos do WebKit vivos. Sem a correção, a mesma prévia abortou no Arch com `EGL_BAD_PARAMETER` e mostrou `undefined symbol` no GVfs do Ubuntu 24.04 | Sessão Wayland real, GPU física, driver NVIDIA e atualização automática de um AppImage instalado |
 | Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando | Máquina física, WebView2 com GPU, self test completo, IME, instalação dos instaladores e Authenticode |
 
 O contêiner Linux teve limite de 6 GiB e dois CPUs e foi removido ao final. O
@@ -184,12 +185,59 @@ num aparelho físico com Modern Standby ainda não foi verificado.
 | Sistema | Formatos | Política de distribuição |
 | --- | --- | --- |
 | macOS | `app` e `dmg` | Developer ID, hardened runtime e notarização nas releases |
-| Linux | `deb`, `rpm` e `AppImage` | Build de referência em Ubuntu 22.04, sem assinatura de código |
+| Linux | `deb`, `rpm` e `AppImage` | Build de referência em Ubuntu 22.04, AppImage pós-processado por `fix-appimage.mjs`, sem assinatura de código |
 | Windows | `nsis` e `msi` | Authenticode nas releases e pacote sem assinatura em nightly |
 
 O sidecar precisa ser compilado para o triplo de destino antes do Tauri. A CI de
 push e pull request prepara bundles sem credenciais; publicar, assinar e criar
 release pertencem a fluxos separados.
+
+### AppImage em distribuições novas
+
+O AppImage sai do `tauri build` com o linuxdeploy no Ubuntu 22.04 e passa por
+`tools/release/fix-appimage.mjs` antes do anexo da CI e antes da assinatura do
+atualizador na release. Sem esse passo, a prévia 0.2.0 abortava ao abrir no
+Arch com Mesa 26 e no Ubuntu recente.
+
+| Mudança | Motivo |
+| --- | --- |
+| Saem do bundle as famílias `libwayland`, `libxcb`, `libX11`, `libXau`, `libXdmcp`, `libXext`, `libXfixes`, `libdrm`, `libgbm`, `libEGL`, `libGL`, `libgallium` e `libvulkan`, e as bases `libexpat`, `libz`, `libzstd`, `libffi`, `libelf`, `libstdc++` e `libgcc_s` | O WebKit abre o `libEGL_mesa` e o `libgallium` do sistema. Com as cópias do Ubuntu 22.04 no bundle, as dependências deles eram resolvidas pelas versões antigas e o EGL falhava com `EGL_BAD_ALLOC` ou `EGL_BAD_PARAMETER`, seguido de `Aborting` |
+| O RUNPATH de todo ELF do bundle aponta para `usr/lib` | O `WebKitWebProcess` e o `WebKitNetworkProcess` tinham `RUNPATH=$ORIGIN` numa pasta sem bibliotecas e só achavam a `libwebkit2gtk` embutida pelo `LD_LIBRARY_PATH`; sem ele, carregavam a do sistema |
+| AppRun próprio, em `tools/release/appimage/AppRun` | O AppRun do linuxdeploy exportava `PATH`, `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` e `QT_PLUGIN_PATH`, herdados pelos terminais. O novo define só tema, módulos e dados do GTK, GdkPixbuf e GSettings do bundle |
+| `GIO_MODULE_DIR` aponta para os módulos GIO do bundle e `GIO_EXTRA_MODULES` sai do ambiente; `GTK_PATH` fica só com o bundle | A GLib 2.72 embutida carregava o `libgvfsdbus.so` do sistema e falhava com `undefined symbol: g_task_set_static_name`. O TLS do WebKit vem do `libgiognutls.so` embutido |
+| Reempacotamento com appimagetool 1.9.1 e o runtime estático `20251108` do type2-runtime, fixados por SHA 256 | O runtime estático abre sem `libfuse2` instalado |
+
+Continuam no bundle o WebKitGTK 4.1, o JavaScriptCore, a libsoup, a ICU 70, o
+GTK 3, a GLib, o GStreamer e o libxml2, que não existem em todas as
+distribuições nas versões do build; o Arch já trocou o soname do libxml2. O piso
+continua sendo a glibc 2.35 do Ubuntu 22.04.
+
+O AppRun mantém `GDK_BACKEND=x11`. O WebKitGTK do Ubuntu 22.04 cai no backend
+Wayland do GTK, como registrado em tauri-apps/tauri#8541, e a animação de
+abertura precisa posicionar a janela, o que o Wayland não permite. Em sessões
+Wayland o app abre pelo XWayland; `CIALAI_GDK_BACKEND=wayland` troca o backend
+para diagnóstico. O teste nativo sem X11 que funcionou no Arch usou o WebKitGTK
+2.52 do sistema, não o embutido.
+
+O AppRun também continua entrando em `$APPDIR/usr` antes de abrir o app. O
+linuxdeploy-plugin-gtk troca `/usr` por `././` dentro da `libwebkit2gtk`, e o
+WebKit acha os processos auxiliares por caminho relativo ao diretório de
+trabalho. O diretório de onde o app foi aberto fica em `OWD`, e processos filhos
+precisam de diretório de trabalho explícito.
+
+No Debian e no Ubuntu, o `.deb` é a alternativa ao AppImage e usa o WebKitGTK e
+as bibliotecas do próprio sistema:
+
+```sh
+cd ~/Downloads
+wget https://github.com/Cialai/cialai/releases/latest/download/Cialai_amd64.deb
+sudo apt install ./Cialai_amd64.deb
+cialai-desktop
+```
+
+No Fedora e no openSUSE, o equivalente é o `Cialai_x86_64.rpm`. O smoke de
+`appimage-smoke.yml` e a checagem de conflitos com o Mesa estão descritos em
+[10-ci-cd-e-distribuicao.md](./10-ci-cd-e-distribuicao.md).
 
 ## Conectividade com o celular
 

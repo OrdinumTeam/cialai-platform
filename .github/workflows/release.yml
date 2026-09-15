@@ -276,7 +276,7 @@ jobs:
           cp "$dmg" "$RUNNER_TEMP/$asset"
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$asset" --repo "$GITHUB_REPOSITORY" --clobber
       - name: Build and upload
-        if: steps.signing.outputs.macos != 'developer-id'
+        if: steps.signing.outputs.macos != 'developer-id' && runner.os != 'Linux'
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -295,6 +295,37 @@ jobs:
           releaseAssetNamePattern: "[name]_[arch][setup][ext]"
           uploadUpdaterJson: false
           retryAttempts: 1
+      # The linuxdeploy AppImage ships libraries that the system Mesa also loads and an AppRun that leaks variables
+      # into child processes. Linux builds with the Tauri CLI, so nothing reaches the draft before fix-appimage.mjs
+      # rewrites the AppImage and the updater signature is made again over the final file and checked.
+      - name: Build the Linux bundles
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target ${{ matrix.target }} --config src-tauri/tauri.release.conf.json
+      - name: Fix the AppImage and sign it again
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          BUNDLE: apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
+        run: |
+          appimage=("$GITHUB_WORKSPACE/$BUNDLE"/appimage/*.AppImage)
+          test "${#appimage[@]}" -eq 1 && test -f "${appimage[0]}"
+          node tools/release/fix-appimage.mjs "${appimage[0]}"
+          rm "${appimage[0]}.sig"
+          (cd apps/desktop && npx tauri signer sign "${appimage[0]}")
+          node tools/release/verify-updater-signature.mjs "${appimage[0]}"
+      - name: Upload the Linux bundles to the draft
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: node tools/release/release-assets.mjs upload-linux "$RELEASE_TAG" apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle
 
   publish:
     name: Checksums and publication

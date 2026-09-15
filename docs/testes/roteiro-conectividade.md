@@ -57,6 +57,19 @@ As metas de cada cenário vêm da seção 9 do plano de conectividade e estão r
 - [ ] Relógios automáticos ativos no computador e nos celulares
 - [ ] Nenhum QR, token, chave, endereço onion completo ou endereço IP público será anexado à evidência
 
+### Instalação no computador Linux
+
+No Debian e no Ubuntu, instale pelo pacote `.deb`, que usa o WebKitGTK e as bibliotecas do próprio sistema. O Cialai passa a aparecer no menu de aplicativos.
+
+```sh
+cd ~/Downloads
+wget https://github.com/Cialai/cialai/releases/latest/download/Cialai_amd64.deb
+sudo apt install ./Cialai_amd64.deb
+cialai-desktop
+```
+
+No Fedora e no openSUSE, use o `Cialai_x86_64.rpm` com o gerenciador de pacotes da distribuição. O `Cialai_amd64.AppImage` é a alternativa para as demais distribuições: torne o arquivo executável com `chmod +x Cialai_amd64.AppImage` e abra. Prévias até a 0.2.0 abortam ao abrir em distribuições novas com `EGL_BAD_PARAMETER` ou `undefined symbol: g_task_set_static_name`; nesse caso, use o pacote da distribuição. Anote na Identificação da rodada qual formato foi instalado.
+
 ### Onde ver o transporte e o diagnóstico no computador
 
 | O que ver | Onde | Texto na tela |

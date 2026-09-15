@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Contrato do release.yml e dos auxiliares de canal, assinatura e arquivos da release.
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
+import { readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { appVersions, releaseChannel } from '../release/release-channel.mjs';
 import { signingPlan } from '../release/signing-mode.mjs';
-import { CHECKSUM_FILE, formatChecksums, missingAssets, releaseNotes, updaterManifest } from '../release/release-assets.mjs';
+import {
+  CHECKSUM_FILE, formatChecksums, linuxReleaseAssets, missingAssets, releaseNotes, stableLinuxName, updaterManifest,
+} from '../release/release-assets.mjs';
+import {
+  APPIMAGE_RUNTIME, APPIMAGETOOL, APPRUN_PATHS, APPRUN_TEMPLATE, bundleRunpath, hostLibraryReason,
+} from '../release/fix-appimage.mjs';
+import { verifyUpdaterSignature } from '../release/verify-updater-signature.mjs';
 
 const rootUrl = new URL('../../', import.meta.url);
 const root = fileURLToPath(rootUrl);
@@ -50,6 +57,7 @@ assert.ok(!JSON.stringify(trusted.config).includes('AZURE_CLIENT_SECRET'));
 assert.throws(() => signingPlan('x86_64-pc-windows-msvc', { ...azure, WINDOWS_SIGNING_ACCOUNT: 'a; rm' }), /unexpected characters/);
 assert.throws(() => signingPlan('x86_64-pc-windows-msvc', { ...azure, WINDOWS_SIGNING_ENDPOINT: 'https://example.com' }), /Azure/);
 assert.deepEqual(signingPlan('x86_64-unknown-linux-gnu', empty).config, {});
+assert.equal(signingPlan('x86_64-unknown-linux-gnu', apple).macos, 'none', 'Linux never takes the Developer ID tauri-action path');
 assert.throws(() => signingPlan('riscv64gc-unknown-none', empty), /Unknown release target/);
 
 // Arquivos: nomes estáveis sem versão para /releases/latest/download e somas no formato do sha256sum.
@@ -68,6 +76,23 @@ assert.equal(
   `${digest}  a.dmg\n${digest}  b.deb\n`,
 );
 assert.throws(() => formatChecksums([{ name: 'a', sha256: 'zz' }]), /Invalid SHA 256/);
+
+// Pacotes Linux enviados pelo gh depois da correção do AppImage, com os nomes estáveis do tauri-action.
+assert.equal(stableLinuxName('Cialai_0.2.0_amd64.AppImage'), 'Cialai_amd64.AppImage');
+assert.equal(stableLinuxName('Cialai_0.2.0_amd64.AppImage.sig'), 'Cialai_amd64.AppImage.sig');
+assert.equal(stableLinuxName('Cialai_1.0.0-rc.1_amd64.deb'), 'Cialai_amd64.deb');
+assert.equal(stableLinuxName('Cialai-0.2.0-1.x86_64.rpm.sig'), 'Cialai_x86_64.rpm.sig');
+assert.equal(stableLinuxName('Cialai.AppDir'), null);
+const linuxBundle = [
+  'appimage/Cialai.AppDir', 'appimage/Cialai_0.2.0_amd64.AppImage', 'appimage/Cialai_0.2.0_amd64.AppImage.sig',
+  'deb/Cialai_0.2.0_amd64.deb', 'deb/Cialai_0.2.0_amd64.deb.sig', 'rpm/Cialai-0.2.0-1.x86_64.rpm', 'rpm/Cialai-0.2.0-1.x86_64.rpm.sig',
+];
+assert.deepEqual(linuxReleaseAssets(linuxBundle).map(({ name }) => name), [
+  'Cialai_amd64.AppImage', 'Cialai_amd64.AppImage.sig', 'Cialai_amd64.deb', 'Cialai_amd64.deb.sig', 'Cialai_x86_64.rpm', 'Cialai_x86_64.rpm.sig',
+]);
+assert.ok(linuxReleaseAssets(linuxBundle).every(({ source, name }) => linuxBundle.includes(source) && stable.includes(name.replace(/\.(deb|rpm)\.sig$/, '.$1'))));
+assert.throws(() => linuxReleaseAssets(linuxBundle.filter((file) => !file.endsWith('.AppImage.sig'))), /Linux AppImage signature/);
+assert.throws(() => linuxReleaseAssets([...linuxBundle, 'appimage/Cialai_0.1.0_amd64.AppImage']), /Duplicate/);
 
 // latest.json montado depois da matriz com URLs da tag, chaves por sistema e por instalador.
 const signatures = Object.fromEntries(stable.filter((name) => /\.(app\.tar\.gz|AppImage|exe|msi)$/.test(name)).map((name) => [`${name}.sig`, `sig-${name}\n`]));
@@ -88,6 +113,72 @@ assert.equal(manifest.platforms['linux-x86_64'].url, 'https://github.com/Cialai/
 const withoutMacSignature = { ...signatures };
 delete withoutMacSignature['Cialai_x64.app.tar.gz.sig'];
 assert.throws(() => updaterManifest({ tag: 'v0.1.0', repo: 'Cialai/cialai', names: stable, signatures: withoutMacSignature, notes: '', date: new Date() }), /darwin-x86_64/);
+
+// Correção do AppImage: bibliotecas que o Mesa do sistema carrega saem do bundle, o que só o bundle tem fica.
+const reportConflicts = ['libelf.so.1', 'libffi.so.8', 'libwayland-client.so.0', 'libXau.so.6', 'libxcb-randr.so.0', 'libxcb-shm.so.0', 'libXdmcp.so.6', 'libzstd.so.1'];
+for (const name of [
+  ...reportConflicts, 'libwayland-server.so.0', 'libwayland-egl.so.1', 'libxcb.so.1', 'libxcb-render.so.0', 'libX11.so.6', 'libX11-xcb.so.1',
+  'libXext.so.6', 'libXfixes.so.3', 'libdrm.so.2', 'libdrm_intel.so.1', 'libgbm.so.1', 'libEGL.so.1', 'libEGL_mesa.so.0', 'libGL.so.1',
+  'libGLX_mesa.so.0', 'libGLdispatch.so.0', 'libgallium-26.2.2-arch1.1.so', 'libexpat.so.1', 'libz.so.1', 'libstdc++.so.6', 'libgcc_s.so.1',
+]) {
+  assert.ok(hostLibraryReason(name), `the AppImage must leave ${name} to the system`);
+}
+for (const name of [
+  'libwebkit2gtk-4.1.so.0', 'libjavascriptcoregtk-4.1.so.0', 'libsoup-3.0.so.0', 'libicuuc.so.70', 'libgtk-3.so.0', 'libgdk-3.so.0',
+  'libglib-2.0.so.0', 'libgio-2.0.so.0', 'libgstreamer-1.0.so.0', 'libgstgl-1.0.so.0', 'libxml2.so.2', 'libjpeg.so.8', 'libepoxy.so.0',
+  'libxkbcommon.so.0', 'libXi.so.6', 'libXrender.so.1', 'libdw.so.1', 'libzip.so.4', 'libssl.so.3', 'libcrypto.so.3', 'libevent-2.1.so.7',
+]) {
+  assert.equal(hostLibraryReason(name), null, `the AppImage must keep ${name}`);
+}
+assert.equal(bundleRunpath('usr/bin/cialai-desktop'), '$ORIGIN/../lib');
+assert.equal(bundleRunpath('usr/lib/libwebkit2gtk-4.1.so.0'), '$ORIGIN');
+assert.equal(bundleRunpath('usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess'), '$ORIGIN/../..');
+assert.equal(bundleRunpath('usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess'), '$ORIGIN/../..');
+assert.equal(bundleRunpath('usr/lib/x86_64-linux-gnu/gio/modules/libgiognutls.so'), '$ORIGIN/../../..');
+assert.equal(bundleRunpath('usr/lib/Cialai/tor/tor/tor'), null, 'Tor keeps its own $ORIGIN runpath');
+for (const tool of [APPIMAGETOOL, APPIMAGE_RUNTIME]) {
+  assert.match(tool.url, new RegExp(`^https://github\\.com/AppImage/[\\w-]+/releases/download/${tool.version.replaceAll('.', '\\.')}/[\\w.-]+x86_64(\\.AppImage)?$`));
+  assert.match(tool.sha256, /^[0-9a-f]{64}$/, `${tool.url} needs a pinned SHA-256`);
+}
+const appRun = readFileSync(APPRUN_TEMPLATE, 'utf8');
+assert.ok(statSync(APPRUN_TEMPLATE).mode & 0o111, 'the AppRun template must be executable');
+assert.match(appRun, /^#!\/bin\/sh\n/);
+for (const leaked of ['PATH', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH', 'PYTHONDONTWRITEBYTECODE', 'PERLLIB', 'QT_PLUGIN_PATH']) {
+  assert.doesNotMatch(appRun, new RegExp(`^\\s*(export\\s+)?${leaked}=`, 'm'), `the AppRun must not set ${leaked}`);
+}
+assert.match(appRun, /^export GIO_MODULE_DIR="\$lib\/gio\/modules"$/m, 'the bundled GLib must not load the system GIO modules');
+assert.match(appRun, /^unset GIO_EXTRA_MODULES$/m);
+assert.match(appRun, /^export GTK_PATH="\$lib\/gtk-3\.0"$/m, 'GTK modules come from the bundle only');
+assert.match(appRun, /^export GDK_BACKEND="\$\{CIALAI_GDK_BACKEND:-x11\}"$/m);
+assert.ok(appRun.indexOf('cd "$APPDIR/usr"') < appRun.indexOf('exec "$APPDIR/usr/bin/cialai-desktop" "$@"'), 'WebKit finds its helpers relative to $APPDIR/usr');
+for (const [, path] of appRun.matchAll(/"\$(?:lib|APPDIR)(\/[^"$]+)"/g)) {
+  const relative = path.startsWith('/usr/') ? path.slice(1) : `usr/lib/x86_64-linux-gnu${path}`;
+  if (relative === 'usr' || relative.endsWith('/usr')) continue;
+  assert.ok(APPRUN_PATHS.some((required) => required === relative || required.startsWith(`${relative}/`)), `fix-appimage.mjs must require ${relative}`);
+}
+
+// Assinatura minisign do atualizador conferida sobre o arquivo final, com um par descartável.
+const updaterKeys = generateKeyPairSync('ed25519');
+const rawPublic = Buffer.from(updaterKeys.publicKey.export({ format: 'jwk' }).x, 'base64url');
+const keyId = Buffer.from('0123456789abcdef', 'hex');
+const minisign = (lines) => Buffer.from(`${lines.join('\n')}\n`).toString('base64');
+const updaterPublicKey = minisign(['untrusted comment: minisign public key: EFCDAB8967452301', Buffer.concat([Buffer.from('Ed'), keyId, rawPublic]).toString('base64')]);
+const signed = Buffer.from('final AppImage');
+const signedDigest = createHash('blake2b512').update(signed).digest();
+const fileSignature = sign(null, signedDigest, updaterKeys.privateKey);
+const trustedComment = 'timestamp:1789461340\tfile:Cialai_0.2.0_amd64.AppImage';
+const updaterSignature = (signature = fileSignature, comment = trustedComment) => minisign([
+  'untrusted comment: signature from tauri secret key',
+  Buffer.concat([Buffer.from('ED'), keyId, signature]).toString('base64'),
+  `trusted comment: ${comment}`,
+  sign(null, Buffer.concat([signature, Buffer.from(trustedComment)]), updaterKeys.privateKey).toString('base64'),
+]);
+assert.deepEqual(verifyUpdaterSignature({ digest: signedDigest, signature: updaterSignature(), publicKey: updaterPublicKey }), { trustedComment });
+const repacked = createHash('blake2b512').update(Buffer.from('linuxdeploy AppImage')).digest();
+assert.throws(() => verifyUpdaterSignature({ digest: repacked, signature: updaterSignature(), publicKey: updaterPublicKey }), /does not match the file/);
+assert.throws(() => verifyUpdaterSignature({ digest: signedDigest, signature: updaterSignature(fileSignature, 'file:other'), publicKey: updaterPublicKey }), /Trusted comment/);
+const otherKey = minisign(['untrusted comment: minisign public key: 0000000000000000', Buffer.concat([Buffer.from('Ed'), Buffer.alloc(8), rawPublic]).toString('base64')]);
+assert.throws(() => verifyUpdaterSignature({ digest: signedDigest, signature: updaterSignature(), publicKey: otherKey }), /another key/);
 
 // Notas da prévia: macOS notarizado sem liberação manual e passos do Windows ainda sem assinatura.
 const preview = releaseNotes(read('tools/release/notes/preview.md'), 'v0.1.0');
@@ -114,13 +205,13 @@ assert.match(workflow, /node tools\/release\/release-assets\.mjs draft "\$RELEAS
 assert.equal((workflow.match(/uses: tauri-apps\/tauri-action@v1/g) ?? []).length, 2);
 assert.equal((workflow.match(/releaseId: \$\{\{ needs\.draft\.outputs\.release_id \}\}/g) ?? []).length, 2);
 assert.equal((workflow.match(/releaseAssetNamePattern: "\[name\]_\[arch\]\[setup\]\[ext\]"/g) ?? []).length, 2);
-assert.equal((workflow.match(/--config src-tauri\/tauri\.release\.conf\.json/g) ?? []).length, 2);
+assert.equal((workflow.match(/--config src-tauri\/tauri\.release\.conf\.json/g) ?? []).length, 3, 'both tauri-action steps and the Linux build use the release config');
 assert.equal((workflow.match(/uploadUpdaterJson: false/g) ?? []).length, 2, 'parallel jobs must not race on latest.json');
 assert.match(workflow, /node tools\/release\/signing-mode\.mjs\n\s+--target \$\{\{ matrix\.target \}\}\n\s+--config-out apps\/desktop\/src-tauri\/tauri\.release\.conf\.json/);
 assert.match(workflow, /- os: macos-14\n\s+target: aarch64-apple-darwin\n\s+- os: macos-14\n\s+target: x86_64-apple-darwin/);
 assert.doesNotMatch(workflow, /macos-13/, 'macos-13 runners are retired');
 const developerStep = workflow.slice(workflow.indexOf('- name: Build and upload with Developer ID'), workflow.indexOf('- name: Build and upload\n'));
-const defaultStep = workflow.slice(workflow.indexOf('- name: Build and upload\n'), workflow.indexOf('\n  publish:'));
+const defaultStep = workflow.slice(workflow.indexOf('- name: Build and upload\n'), workflow.indexOf('- name: Build the Linux bundles'));
 assert.match(developerStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
 assert.match(developerStep, /APPLE_CERTIFICATE: \$\{\{ secrets\.APPLE_CERTIFICATE \}\}/);
 assert.match(developerStep, /APPLE_API_KEY: \$\{\{ secrets\.APPLE_API_KEY \}\}/);
@@ -129,7 +220,7 @@ const keyStep = workflow.slice(workflow.indexOf('- name: Write the notarization 
 assert.match(keyStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
 assert.match(keyStep, /"\$RUNNER_TEMP\/private_keys\/AuthKey_\$\{APPLE_API_KEY\}\.p8"/);
 assert.match(keyStep, /echo "APPLE_API_KEY_PATH=\$key_path" >> "\$GITHUB_ENV"/);
-assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id'/);
+assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id' && runner\.os != 'Linux'\n/, 'tauri-action must not upload the unfixed AppImage');
 assert.doesNotMatch(defaultStep, /APPLE_/, 'the ad hoc build must not receive Apple credentials');
 // O DMG criado depois da notarização do .app também é notarizado, grampeado e substitui o enviado pelo tauri-action.
 const dmgStep = workflow.slice(workflow.indexOf('- name: Notarize, staple and replace the DMG'), workflow.indexOf('- name: Build and upload\n'));
@@ -145,6 +236,24 @@ assert.match(notarizer, /xcrun notarytool submit "\$dmg"/);
 assert.match(notarizer, /--key "\$APPLE_API_KEY_PATH" --key-id "\$APPLE_API_KEY" --issuer "\$APPLE_API_ISSUER"/);
 assert.match(notarizer, /\[\[ "\$status" == "Accepted" \]\]/);
 assert.match(notarizer, /xcrun stapler staple "\$dmg"/);
+
+// Linux: build pelo CLI, correção, nova assinatura conferida e só então o envio ao rascunho.
+const linuxNames = ['- name: Build the Linux bundles', '- name: Fix the AppImage and sign it again', '- name: Upload the Linux bundles to the draft', '\n  publish:'];
+const linuxStart = linuxNames.map((name) => workflow.indexOf(name));
+assert.ok(linuxStart.every((index, position) => index > 0 && (position === 0 || linuxStart[position - 1] < index)), 'Linux steps run build, fix and upload in order');
+const [linuxBuild, linuxFix, linuxUpload] = [0, 1, 2].map((position) => workflow.slice(linuxStart[position], linuxStart[position + 1]));
+const secretsOf = (step) => [...step.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]);
+for (const step of [linuxBuild, linuxFix, linuxUpload]) assert.match(step, /\n\s+if: runner\.os == 'Linux'\n/);
+assert.match(linuxBuild, /working-directory: apps\/desktop\n/);
+assert.match(linuxBuild, /run: npx tauri build --target \$\{\{ matrix\.target \}\} --config src-tauri\/tauri\.release\.conf\.json\n/);
+assert.deepEqual(secretsOf(linuxBuild), ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD'], 'the Linux build does not upload');
+assert.deepEqual(secretsOf(linuxFix), ['TAURI_SIGNING_PRIVATE_KEY', 'TAURI_SIGNING_PRIVATE_KEY_PASSWORD']);
+assert.match(linuxFix, /BUNDLE: apps\/desktop\/src-tauri\/target\/\$\{\{ matrix\.target \}\}\/release\/bundle\n/);
+const fixOrder = ['node tools/release/fix-appimage.mjs "${appimage[0]}"', 'rm "${appimage[0]}.sig"', 'npx tauri signer sign "${appimage[0]}"', 'node tools/release/verify-updater-signature.mjs "${appimage[0]}"'];
+assert.ok(fixOrder.every((command, index) => linuxFix.includes(command) && (index === 0 || linuxFix.indexOf(fixOrder[index - 1]) < linuxFix.indexOf(command))), 'the AppImage is fixed, signed again and verified in this order');
+assert.deepEqual(secretsOf(linuxUpload), ['GITHUB_TOKEN']);
+assert.match(linuxUpload, /run: node tools\/release\/release-assets\.mjs upload-linux "\$RELEASE_TAG" apps\/desktop\/src-tauri\/target\/\$\{\{ matrix\.target \}\}\/release\/bundle\n/);
+assert.ok(workflow.indexOf('Let the AppImage bundler find the Tor libraries') < linuxStart[0], 'the Tor libraries are visible to the Linux bundler');
 const torSignStart = workflow.indexOf('- name: Sign the nested Tor binaries with Developer ID');
 assert.ok(torSignStart > workflow.indexOf('node tools/fetch-tor.mjs --stage'), 'Tor is staged before its Developer ID signature');
 assert.ok(torSignStart < workflow.indexOf('- name: Write the notarization key'), 'nested Tor binaries are signed before the Tauri build');

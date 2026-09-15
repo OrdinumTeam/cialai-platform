@@ -297,7 +297,7 @@ Detalhes em `09-monorepo-e-ferramentas.md` e `10-ci-cd-e-distribuicao.md`. Em re
 | ConPTY reflui a saída, ignora `?2026` e o `<u` do kitty em `TERMINAL_RESET` de `journal.rs:49`; Windows PowerShell 5.1 sem bracketed paste; repintura no redimensionamento no Windows 10 | Exigir Windows 10 21H2 ou 11; pwsh 7 padrão; replay do jornal na largura atual sem `resizeRenderer`; reset específico para ConPTY |
 | Leitura de ambiente e cwd falha em processos elevados no Windows | Perfil padrão; dica no card; retomada do Codex por cwd e mtime |
 | WebKitGTK sem WebGL ou com bugs de composição | Fallback já existente; variáveis documentadas; medir com `yes`; preferência de scrollback menor só no Linux |
-| AppImage com versões de WebKitGTK e GLib do host | Compilar em Ubuntu 22.04; recomendar deb e rpm |
+| AppImage com versões de WebKitGTK e GLib do host | Compilar em Ubuntu 22.04; `tools/release/fix-appimage.mjs` deixa a pilha gráfica com o sistema, corrige o RUNPATH dos auxiliares do WebKit e isola os módulos GIO; `appimage-smoke.yml` abre o AppImage no Ubuntu 24.04 e no Arch; recomendar deb e rpm |
 | `/proc` escondido por `hidepid` ou Snap | Campos ilegíveis viram nulos, contrato de `terminal.rs:151-154` |
 | Assinatura e notarização | Orçar certificados na Fase 0; nightly sem assinatura; releases assinadas |
 | Wayland sem posicionamento | Abertura sem animação; splash dentro da janela final |

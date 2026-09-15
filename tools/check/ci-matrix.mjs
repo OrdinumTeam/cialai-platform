@@ -40,6 +40,7 @@ for (const required of [
   'playwright/cli.js install --with-deps chromium',
   'npm run test:browser',
   'npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json',
+  'node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage',
   'actions/upload-artifact@v4',
   'if-no-files-found: error',
   'bundle/dmg/*.dmg',
@@ -63,6 +64,13 @@ assert.ok(
 assert.ok(
   workflow.indexOf('npm test') < workflow.indexOf('npm run build --workspace @cialai/desktop'),
   'o bundle só pode ser criado depois da suíte',
+);
+const fixStep = workflow.slice(workflow.indexOf('- name: Corrigir o AppImage para distribuições novas'), workflow.indexOf('- name: Anexar bundles'));
+assert.match(fixStep, /\n\s+if: runner\.os == 'Linux'\n/, 'a correção do AppImage roda só no Linux');
+assert.ok(
+  workflow.indexOf('- name: Criar bundle sem assinatura no Linux') < workflow.indexOf('- name: Corrigir o AppImage para distribuições novas')
+    && workflow.indexOf('- name: Corrigir o AppImage para distribuições novas') < workflow.indexOf('- name: Anexar bundles'),
+  'o AppImage anexado ao run é o corrigido',
 );
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
 assert.match(workflow, /^on:\n {2}push:\n(?: {4}#.*\n)? {4}branches: \["\*\*"\]\n/m, 'tags de release não disparam a CI de novo');
@@ -150,4 +158,47 @@ assert.match(labRouter, /--random-fully/, 'o NAT simétrico sorteia a porta púb
 assert.match(labRouter, /-j DNAT --to-destination "\$LAN_HOST"/, 'o NAT cone encaminha o UDP de entrada ao host interno');
 assert.match(readFileSync(`${root}/packages/tunnel-core/integration/netlab_test.go`, 'utf8'), /^\/\/go:build netlab$/m, 'o laboratório fica fora do go test comum');
 
-console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, artifacts, mobile bindings and net lab');
+// Smoke do AppImage corrigido em Linux real: PR que toque o empacotamento e disparo manual, só no público em PR.
+const smokeSource = readFileSync(`${root}/.github/workflows/appimage-smoke.yml`, 'utf8');
+const smoke = yaml.load(smokeSource);
+assert.deepEqual(Object.keys(smoke.on).sort(), ['pull_request', 'workflow_dispatch'], 'o smoke do AppImage roda em PR e por disparo manual');
+for (const path of [
+  '.github/workflows/appimage-smoke.yml', '.github/workflows/release.yml', 'tools/release/fix-appimage.mjs', 'tools/release/appimage/**',
+  'tools/release/verify-updater-signature.mjs', 'tools/fetch-tor.mjs', 'apps/desktop/package.json', 'apps/desktop/src-tauri/Cargo.lock',
+  'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/tauri.linux.conf.json',
+]) {
+  assert.ok(smoke.on.pull_request.paths.includes(path), `PR que toca ${path} precisa rodar o smoke do AppImage`);
+}
+assert.equal(smoke.permissions.contents, 'read');
+assert.ok(!smokeSource.includes('secrets.'), 'o smoke do AppImage não pode consumir segredos');
+const bundleJob = smoke.jobs.bundle;
+assert.equal(bundleJob['runs-on'], 'ubuntu-22.04', 'o AppImage sai do mesmo Ubuntu da release');
+assert.equal(bundleJob.if, "github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'");
+const bundleRuns = bundleJob.steps.map((step) => step.run || '').join('\n');
+const bundleOrder = [
+  ['npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json --bundles appimage', 'o smoke cria o AppImage sem a chave do updater'],
+  ['node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage', 'o smoke abre o AppImage corrigido'],
+  ['npx tauri signer sign "${appimage[0]}"', 'a assinatura descartável cobre o arquivo corrigido'],
+  ['verify-updater-signature.mjs" "${appimage[0]}" --public-key', 'a assinatura descartável é conferida'],
+];
+bundleOrder.forEach(([text, message], index) => {
+  assert.ok(bundleRuns.includes(text) && (index === 0 || bundleRuns.indexOf(bundleOrder[index - 1][0]) < bundleRuns.indexOf(text)), message);
+});
+assert.ok(bundleJob.steps.some((step) => step.uses === 'actions/upload-artifact@v4' && step.with?.name === 'cialai-appimage'), 'o AppImage corrigido segue para os smokes');
+assert.equal(smoke.jobs.ubuntu['runs-on'], 'ubuntu-24.04');
+assert.equal(smoke.jobs.arch.container, 'archlinux:latest');
+for (const [name, packages] of [['ubuntu', ['xvfb', 'libgl1-mesa-dri', 'libwebkit2gtk-4.1-0', 'gvfs']], ['arch', ['mesa', 'webkit2gtk-4.1', 'gvfs', 'xorg-server-xvfb']]]) {
+  const job = smoke.jobs[name];
+  assert.equal(job.needs, 'bundle');
+  const runs = job.steps.map((step) => step.run || '').join('\n');
+  for (const item of packages) assert.match(runs, new RegExp(`\\s${item.replaceAll('.', '\\.')}(\\s|$)`), `${name} instala ${item}`);
+  assert.match(runs, /tools\/release\/appimage\/smoke\.sh appimage\/\*\.AppImage 20 smoke-logs/, `${name} abre o AppImage por 20 s`);
+  assert.ok(job.steps.some((step) => step.uses === 'actions/upload-artifact@v4' && step.if === 'always()'), `${name} guarda logs e capturas mesmo com falha`);
+}
+assert.match(smoke.jobs.arch.steps.map((step) => step.run || '').join('\n'), /tools\/release\/appimage\/mesa-conflicts\.sh appimage\/\*\.AppImage/, 'o Arch confere as dependências do Mesa');
+const smokeScript = readFileSync(`${root}/tools/release/appimage/smoke.sh`, 'utf8');
+for (const guard of ['Aborting', 'undefined symbol', 'Failed to load module: ', 'core dumped', 'WebKitWebProcess', 'WebKitNetworkProcess', 'launch extraido /', 'LD_LIBRARY_PATH PYTHONHOME PYTHONPATH PERLLIB QT_PLUGIN_PATH']) {
+  assert.ok(smokeScript.includes(guard), `o smoke do AppImage perdeu a guarda: ${guard}`);
+}
+
+console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, fixed AppImage, AppImage smoke, artifacts, mobile bindings and net lab');
