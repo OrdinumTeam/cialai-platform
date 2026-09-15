@@ -72,7 +72,8 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBN0EzNTQyNjg1RjJBN0QKUldSOUtsOW9RalY2cXBPcU12eDh1QzNYaVZCT1p6MzlFUWMrQ08xNnEySlBLdjhOY1ViajVUYmsK",
       "endpoints": [
-        "https://github.com/Cialai/cialai/releases/latest/download/latest.json"
+        "https://github.com/Cialai/cialai/releases/latest/download/latest.json",
+        "https://cialai.com.br/downloads/latest.json"
       ],
       "windows": {
         "installMode": "passive"

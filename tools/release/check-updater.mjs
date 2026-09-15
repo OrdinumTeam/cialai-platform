@@ -14,8 +14,10 @@ const workflow = read('.github/workflows/release.yml');
 const placeholder = 'REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY';
 
 assert.equal(config.bundle.createUpdaterArtifacts, true);
+// O espelho no site atende quando o GitHub não entrega a release; o manifesto espelhado aponta para os mesmos arquivos assinados.
 assert.deepEqual(config.plugins?.updater?.endpoints, [
   'https://github.com/Cialai/cialai/releases/latest/download/latest.json',
+  'https://cialai.com.br/downloads/latest.json',
 ]);
 assert.equal(typeof config.plugins?.updater?.pubkey, 'string');
 assert.match(cargo, /^tauri-plugin-updater = /m);
