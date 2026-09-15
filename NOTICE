@@ -9,6 +9,11 @@ Phase 0 dependency inventory:
   https://github.com/tailscale/tailscale/blob/v1.102.0/LICENSE
 - Headscale: BSD-3-Clause, used as a separate Docker test service
   https://github.com/juanfont/headscale/blob/v0.29.3/LICENSE
+- Pion mDNS v2.2.0: MIT, announces the desktop on the local network in the
+  tunnel core
+  https://github.com/pion/mdns/blob/v2.2.0/LICENSE
+- Pion logging v0.2.4: MIT, required by Pion mDNS
+  https://github.com/pion/logging/blob/v0.2.4/LICENSE
 
 Tor Expert Bundle 15.0.22, packaged with the desktop app as separate programs
 in $RESOURCE/tor by tools/fetch-tor.mjs; the upstream license texts ship in

@@ -7,6 +7,8 @@ require (
 	github.com/coder/websocket v1.8.14
 	github.com/cretz/bine v0.2.0
 	github.com/mitchellh/go-ps v1.0.0
+	github.com/pion/logging v0.2.4
+	github.com/pion/mdns/v2 v2.2.0
 	github.com/quic-go/quic-go v0.62.0
 	golang.org/x/net v0.59.0
 	tailscale.com v1.102.0
