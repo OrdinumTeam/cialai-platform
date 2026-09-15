@@ -19,9 +19,11 @@
 
 <p align="center">
   <a href="https://cialai.com.br">Website</a> ·
+  <a href="#download">Download</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#pairing-and-network">Pairing</a> ·
   <a href="#build-from-source">Build</a> ·
+  <a href="#how-connectivity-is-built-and-validated">Method</a> ·
   <a href="#public-networks-and-limits">Networks and limits</a> ·
   <a href="../docs/README.md">Docs</a> ·
   <a href="../SECURITY.md">Security</a>
@@ -33,7 +35,7 @@
 </picture>
 
 > [!WARNING]
-> Cialai is experimental and has no supported production release yet. Preview installers are published on GitHub Releases; store apps are not. See [Status](#status) for what is verified today and what is only prepared.
+> Cialai is experimental and has no supported production release yet. Preview installers are available on [cialai.com.br](https://cialai.com.br/#baixar); store apps are not published. See [Status](#status) for what is verified today and what is only prepared.
 
 ## Why Cialai
 
@@ -73,6 +75,23 @@ Cialai is built for people who keep several projects and several coding agents r
 </table>
 
 <sub>Screenshots come from the UI demo fixture. Outside the native shell xterm does not paint, so terminal panes appear empty in these captures.</sub>
+
+## Download
+
+Preview builds for every platform are on [cialai.com.br](https://cialai.com.br/#baixar). File names carry no version, so each link always points to the latest preview.
+
+| Platform | File | Notes |
+| --- | --- | --- |
+| macOS on Apple silicon | [`Cialai_aarch64.dmg`](https://cialai.com.br/downloads/Cialai_aarch64.dmg) | Signed with the Ordinum Developer ID; the app and the disk image are notarized by Apple |
+| macOS on Intel | [`Cialai_x64.dmg`](https://cialai.com.br/downloads/Cialai_x64.dmg) | Same signature and notarization |
+| Windows 10 and 11 | [`Cialai_x64-setup.exe`](https://cialai.com.br/downloads/Cialai_x64-setup.exe) or [`Cialai_x64.msi`](https://cialai.com.br/downloads/Cialai_x64.msi) | Not code signed yet; SmartScreen asks for confirmation on the first launch |
+| Debian, Ubuntu and derivatives | [`Cialai_amd64.deb`](https://cialai.com.br/downloads/Cialai_amd64.deb) | Recommended on these systems: uses the WebKitGTK of the system. `sudo apt install ./Cialai_amd64.deb` |
+| Fedora, openSUSE and derivatives | [`Cialai_x86_64.rpm`](https://cialai.com.br/downloads/Cialai_x86_64.rpm) | Recommended on these systems. `sudo dnf install ./Cialai_x86_64.rpm` |
+| Other Linux distributions | [`Cialai_amd64.AppImage`](https://cialai.com.br/downloads/Cialai_amd64.AppImage) | Portable build for x64 |
+| Android 8 or newer | [`Cialai_android_universal.apk`](https://cialai.com.br/downloads/Cialai_android_universal.apk) | Signed APK for arm64 and x86_64 |
+| iPhone | TestFlight | Internal testing group only for now |
+
+Checksums are in [`SHA256SUMS.txt`](https://cialai.com.br/downloads/SHA256SUMS.txt). Desktop updates are signed with the Cialai updater key and verified by the app before installing, in every format above.
 
 ## Architecture
 
@@ -193,7 +212,8 @@ sequenceDiagram
 | Direct path | QUIC over UDP, with candidates from the local network, global IPv6, a port mapped by UPnP, NAT-PMP or PCP and an optional STUN reflected address |
 | Backup path | The same mutual TLS inside the Tor network, through a single hop onion service on the desktop. The onion address derives from a persisted key, so it is always in the QR |
 | Path choice | Local network first, then direct over the internet, then the backup through Tor. On the backup the phone tries a NAT punch coordinated over the control channel and moves to direct when it succeeds |
-| Pairing entry | A key that is not paired only reaches `POST /pair`, only while a pairing code is active; approval by code is optional |
+| Pairing entry | A key that is not paired only reaches `POST /pair`, only while a pairing code is active |
+| Approval | Optional. The desktop and the phone show the same four digit code, derived from the pairing id and the phone key, so a second phone that photographed the QR shows a different code |
 | Rate limits | 5 pairing attempts per minute; a pairing code is locked after 10 wrong secrets |
 | Tokens | One `cdt1` token per phone per desktop, rotated every 30 days with 24 h of overlap |
 | Revocation | The Devices screen revokes a phone; its sessions close on both transports and the bridge closes its sockets with code 4401 |
@@ -214,6 +234,43 @@ sequenceDiagram
 
 Full specifications: [bridge protocol](../docs/07-protocolo-da-ponte.md) and [network and pairing](../docs/06-rede-headscale-e-pareamento.md).
 
+## How connectivity is built and validated
+
+The automatic connectivity follows a written plan with nine phases. Every task has an objective, dependencies, a completion criterion and an evidence field, and a task is only checked when its evidence is recorded: commands, runs, measurements or the device used.
+
+| Phase | Goal | State on 15 September 2026 |
+| --- | --- | --- |
+| 0 Analysis and decision | Study both code bases, compare Iroh, libp2p, WebRTC, HyperDHT, Headscale and Tor, and choose the architecture | Done |
+| 1 Small real proof | Direct QUIC, embedded Tor and NAT punch spikes, gomobile compatibility | Spikes and bindings done; binding sizes fell by 55 percent; measurements on two computers and real phones pending |
+| 2 Go transport core | Identity, direct QUIC, candidates, Tor controller, rendezvous, path manager, edge, pairing, proxy, sidecar and mobile API | Done, 13 of 13 tasks, including the NAT lab |
+| 3 Desktop | Bundled Tor, cascade shutdown, automatic start, phone access panel, keep awake and self test | Built and tested; clean installs on the three systems and a 20 minute keep awake session pending |
+| 4 Phone | Native Tor on iOS and Android, local discovery, v2 store, screens and lifecycle | Built; Android paired end to end on the emulator, iOS compiled for the simulator and shipped to TestFlight; real phones pending |
+| 5 Security and continuity | Pairing protections, revocation on both paths, single execution across path changes and token rotation | Done except the optional onion client authorization |
+| 6 Headscale removal | Delete the former mode and rewrite the living documentation | Waits for the real device phase |
+| 7 Real devices | 15 scenarios on real phones, routers, mobile networks, CGNAT and a 24 hour soak | Checklist ready in [docs/testes/roteiro-conectividade.md](../docs/testes/roteiro-conectividade.md); runs pending |
+| 8 Publication | Preview with the new connectivity and public documentation | Preview 0.2.0 published before the real device approvals; this page is part of it |
+
+Three kinds of validation are kept apart, and no simulated test approves a physical scenario:
+
+| Kind | Proves | Where |
+| --- | --- | --- |
+| Automated unit | Contracts, rejections, state machines and the protocol | `go test -race`, `cargo test`, Jest and Node tests |
+| Automated simulated | Cone and symmetric NAT, blocked UDP, the Tor backup, revocation and restarts | `tools/net-lab` in Docker with eight scenarios, also in the `net-lab.yml` workflow |
+| Physical | Real networks, carriers, routers, suspension, battery and store review | The connectivity checklist, filled on real devices |
+
+The plan sets these targets for the physical runs. They are goals, not measurements yet:
+
+| Metric | Target |
+| --- | --- |
+| Page ready on the same network | 2 s in 9 of 10 openings |
+| Page ready over a direct internet path | 3 s in 9 of 10 openings |
+| Page ready over the Tor backup, Tor already running | 6 s in 9 of 10 openings |
+| Reconnection after switching from Wi-Fi to mobile data | 10 s in 10 of 10 |
+| Key echo latency, median | 60 ms on the local network, 150 ms direct over the internet, 400 ms on the backup |
+| Revocation | Sockets closed within 1 s, the phone shows removed within 5 s |
+| Desktop at rest | Sidecar and `tor` under 150 MB of RSS together and under 1 percent CPU |
+| Soak | 24 hours with no disconnection caused by the proxy |
+
 ## Security model
 
 * The page never sees a credential. The phone proxy and the tunnel edge authenticate on both sides, and the bridge only accepts the edge.
@@ -226,16 +283,16 @@ Please report vulnerabilities privately as described in [SECURITY.md](../SECURIT
 
 ## Status
 
-Snapshot of 15 September 2026. The desktop and mobile rows were last reviewed on 13 September 2026. The live record with commands and results is [docs/13-progresso-e-handoff.md](../docs/13-progresso-e-handoff.md).
+Snapshot of 15 September 2026. The live record with commands and results is [docs/13-progresso-e-handoff.md](../docs/13-progresso-e-handoff.md).
 
 | Area | Verified | Pending |
 | --- | --- | --- |
-| Desktop on macOS | Rust core with 151 tests passing and 2 ignored on arm64; Tauri self test with 8 scenarios | Human parity review against the prototype |
-| Desktop on Linux | Rust core with 145 tests passing on Ubuntu 22.04 arm64 inside a container; GitHub Actions builds, tests and bundles on Ubuntu 22.04 | Visible WebKitGTK run, Dev Browser and Office conversion |
-| Desktop on Windows | GitHub Actions runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on Windows 2022 | Physical machine, ConPTY, WebView2 with a GPU, IME and Authenticode |
-| Automatic connectivity | Identity, direct QUIC, port mapping, STUN, DNS-SD, onion service, pairing, NAT punch and revocation covered by automated suites and by in process tests against the real Tor network | The [connectivity checklist](../docs/testes/roteiro-conectividade.md) on real phones, computers and networks |
-| iOS and Android | Expo shell, native module and Jest suites; Android preview APK published | iOS build, Tor on real phones, device checks and store review |
-| CI and releases | Desktop matrix green on GitHub Actions; previews 0.1.0 and 0.1.1 published with desktop installers, the Android APK and a signed updater manifest; macOS notarization accepted locally | Windows code signing, TestFlight, store review and version 1.0.0 |
+| Desktop on macOS | Rust core with 214 tests; self test with 11 scenarios in the app binary, including the automatic network and the QR read back from the screen; preview 0.2.0 signed and notarized | Human parity review against the prototype |
+| Desktop on Linux | Rust suite on Ubuntu in a container and on GitHub Actions; process metrics checked against `/proc`; the AppImage fix for recent distributions validated on Ubuntu 24.04 and Arch with Mesa 26 | Visible WebKitGTK run on a physical machine |
+| Desktop on Windows | GitHub Actions runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on Windows 2022 | Physical machine, WebView2 with a GPU, IME and code signing |
+| Automatic connectivity | Automated suites, in process tests against the real Tor network, the Docker NAT lab and an Android release build paired on the emulator with a real desktop sidecar over the direct path and the Tor backup | The connectivity checklist on real phones, computers and networks |
+| iOS and Android | Native Tor and the v2 module on both; TestFlight build of 0.2.0 in internal testing; Android APK published | Real phones, the Play internal track and store review |
+| CI and releases | CI green on Ubuntu, macOS and Windows; preview 0.2.0 published with installers, the Android APK, `SHA256SUMS` and a signed updater manifest; 0.2.1 with Linux and interface fixes in preparation | Windows code signing, store review and version 1.0.0 |
 
 ## Build from source
 
@@ -280,7 +337,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Planned desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows. Platform specific behavior is documented in [docs/14-diferencas-por-plataforma.md](../docs/14-diferencas-por-plataforma.md).
+Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows; on Linux the release fixes the AppImage after bundling so it runs with the graphics stack of recent distributions. Platform specific behavior is documented in [docs/14-diferencas-por-plataforma.md](https://github.com/Cialai/cialai/blob/main/docs/14-diferencas-por-plataforma.md).
 
 ### Tests and checks
 
@@ -290,8 +347,10 @@ Rebuild the sidecar before calling Cargo directly or starting the app. The sidec
 | `npm run test:desktop` | UI build, `cargo fmt`, `clippy` with warnings as errors and `cargo test` |
 | `npm run test:tunnel` | Historical Headscale recipe check, `go vet` and `go test` for the tunnel core; the tests against the public Tor network run only with `CIALAI_TOR_BIN`, as described in CONTRIBUTING |
 | `npm run test:ui`, `test:protocol`, `test:i18n`, `test:mobile` | Package suites, with Jest on mobile |
-| `npm run test:selftest` | 8 scenarios inside the macOS app binary |
-| `npm run test:integration:headscale` | Legacy Headscale mode against Headscale 0.29.3 in Docker, kept until that mode is removed |
+| `npm run test:selftest` | 11 scenarios inside the macOS app binary, including the automatic network and the pairing QR |
+| `npm run test:browser` | Headless Chromium checks of the desktop studio, the network screens and the phone terminal, including fast IME typing |
+| `npm run test:netlab` | The Docker NAT lab: local network, cone to cone, symmetric NAT to the backup, blocked UDP, revocation, sidecar and Tor restarts and pairing protections |
+| `npm run test:integration:headscale` | Legacy Headscale mode, manual only and no longer built by the v2 sidecar, kept until that mode is removed |
 | `npm run build:tunnel` | Sidecars for 5 target triples with `SHA256SUMS` |
 
 ## Public networks and limits
