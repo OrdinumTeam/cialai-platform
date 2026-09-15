@@ -83,7 +83,8 @@ jobs:
     name: iOS app for the simulator
     if: inputs.ios_app
     needs: bindings
-    runs-on: macos-15
+    # O Expo 57 não compila no Xcode 26.3, o mais novo do macos-15.
+    runs-on: macos-26
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
@@ -92,9 +93,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
-      - name: Select the newest Xcode
+      - name: Select the newest stable Xcode 26
         run: |
-          xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcode="$(ls -d /Applications/Xcode_26.*.app | sort -V | tail -1)"
           sudo xcode-select -s "$xcode"
           xcodebuild -version
       - uses: actions/download-artifact@v4
@@ -114,12 +115,21 @@ jobs:
           npx expo prebuild --platform ios --no-install
           cd ios
           pod install
+          # O Tor em processo precisa entrar na versão fixada no podspec.
+          tor="$(sed -nE "s/.*spec\.dependency 'Tor', '([0-9.]+)'.*/\1/p" ../modules/cialai-tunnel/ios/CialaiTunnel.podspec)"
+          grep -Fq "  - Tor/CTor ($tor)" Podfile.lock
       - name: Build for the simulator without signing
         run: |
           set -o pipefail
           cd apps/mobile/ios
           workspace="$(ls -d *.xcworkspace | head -1)"
           scheme="${workspace%.xcworkspace}"
-          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+          log="$RUNNER_TEMP/xcodebuild.log"
+          if ! xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
             -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO build | tail -200
+            CODE_SIGNING_ALLOWED=NO build > "$log" 2>&1; then
+            grep -E 'error:|BUILD FAILED' "$log" | head -80
+            tail -80 "$log"
+            exit 1
+          fi
+          tail -20 "$log"
