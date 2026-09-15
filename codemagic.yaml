@@ -245,18 +245,28 @@ workflows:
       - name: Gerar projeto Android
         script: |
           set -euo pipefail
-          # O AGP 8.12 instala a plataforma 37.0 no meio do build e depois não a encontra como alvo
-          # android-37. Com o pacote presente antes do Gradle, como no SDK local, o build passa.
+          # O AGP 8.12 procura o alvo android-37. A máquina do Codemagic traz uma pasta platforms/android-37 de
+          # uma prévia, que o AGP não reconhece como esse alvo, e o pacote 37.0 se apresenta como nível 37.0.
+          # A pasta da prévia sai do caminho e uma cópia do pacote 37.0 com o nível 37 nos metadados atende a
+          # busca, sem mudar o compileSdk. O diagnóstico do SDK sai como artefato.
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/share/android-sdk}}"
           sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
           [[ -x "$sdkmanager_bin" ]] || sdkmanager_bin="$(command -v sdkmanager)"
           (set +o pipefail; yes 2>/dev/null | "$sdkmanager_bin" --install "platforms;android-37.0" > /dev/null)
           test -d "$sdk_root/platforms/android-37.0"
-          echo "ANDROID_HOME=${ANDROID_HOME:-} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
-          ls -la "$sdk_root/platforms"
-          cat "$sdk_root/platforms/android-37.0/source.properties"
-          # O pacote se apresenta como nível 37.0 e a busca do AGP 8.12 na máquina do Codemagic pede o alvo
-          # android-37. Uma cópia do pacote com o nível 37 nos metadados atende a busca sem mudar o compileSdk.
+          diag="$CM_BUILD_DIR/build/android-sdk-diagnostico.txt"
+          mkdir -p "$(dirname "$diag")"
+          {
+            echo "ANDROID_HOME=${ANDROID_HOME:-} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-} sdk_root=$sdk_root"
+            echo "== antes =="
+            ls -la "$sdk_root/platforms"
+            for dir in "$sdk_root"/platforms/*/; do echo "-- $dir"; cat "$dir/source.properties" 2>/dev/null || echo "sem source.properties"; done
+          } | tee "$diag"
+          if [[ -d "$sdk_root/platforms/android-37" ]] && ! { grep -qx 'AndroidVersion.ApiLevel=37' "$sdk_root/platforms/android-37/source.properties" && grep -qx 'AndroidVersion.CodeName=' "$sdk_root/platforms/android-37/source.properties"; } 2>/dev/null; then
+            mkdir -p "$sdk_root/platforms-previa"
+            mv "$sdk_root/platforms/android-37" "$sdk_root/platforms-previa/android-37"
+            echo "pasta android-37 da prévia movida para platforms-previa" | tee -a "$diag"
+          fi
           if [[ ! -d "$sdk_root/platforms/android-37" ]]; then
             cp -R "$sdk_root/platforms/android-37.0" "$sdk_root/platforms/android-37"
             python3 - "$sdk_root/platforms/android-37" <<'PY'
@@ -267,8 +277,9 @@ workflows:
           package = root / "package.xml"
           package.write_text(package.read_text().replace("<api-level>37.0</api-level>", "<api-level>37</api-level>").replace('path="platforms;android-37.0"', 'path="platforms;android-37"'))
           PY
+            echo "cópia android-37 criada a partir de android-37.0" | tee -a "$diag"
           fi
-          grep -E "ApiLevel" "$sdk_root/platforms/android-37/source.properties"
+          { echo "== depois =="; ls -la "$sdk_root/platforms"; cat "$sdk_root/platforms/android-37/source.properties"; } | tee -a "$diag"
           cd apps/mobile
           npx expo prebuild --platform android --no-install
       - name: Configurar assinatura Android
@@ -318,6 +329,7 @@ workflows:
       - build/mobile/android/tunnelcore.aar
       - build/mobile/android/tunnelcore.aar.sha256
       - build_android.log
+      - build/android-sdk-diagnostico.txt
     publishing:
       google_play:
         credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
