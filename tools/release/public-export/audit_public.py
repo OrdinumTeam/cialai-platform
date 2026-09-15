@@ -4,7 +4,8 @@ from collections import defaultdict
 from pathlib import Path
 
 OUT = Path(sys.argv[1])
-SEC = Path("/Users/focoamorim/Github Projects/OrdinumTeam/ordinum-control/secrets")
+# O Control é irmão do privado: tools/release/public-export/audit_public.py fica três pastas abaixo da raiz
+SEC = Path(__file__).resolve().parents[4] / "ordinum-control/secrets"
 
 env = dict(re.findall(r'^([A-Z_]+)="?([^"\n]*)"?$', (SEC / "ordinum/ordinum.env").read_text(), re.M))
 kp = dict(re.findall(r'^(\w+)=(.*)$', (SEC / "cialai/key.properties").read_text(), re.M))
@@ -47,7 +48,7 @@ patterns = {
     "chave privada do updater": re.compile(r"rsign encrypted secret key|dW50cnVzdGVkIGNvbW1lbnQ6IHJzaWduIGVuY3J5cHRlZCBzZWNyZXQga2V5"),
     "stripe ou openai": re.compile(r"\b(sk_live_|rk_live_|sk-proj-|sk-[A-Za-z0-9]{40,})"),
     "senha atribuida": re.compile(r"(?i)\b(password|passwd|senha|secret|token)\b\s*[:=]\s*['\"][^'\"\s$<{]{8,}['\"]"),
-    "caminho local": re.compile(r"/Users/|focoamorim|Github Projects"),
+    "caminho local": re.compile(r"/Users/|focoamorim|Github Projects|Ordinum/Repos"),
     "docs internos": re.compile(r"13-progresso-e-handoff|15-credenciais-de-build|AGENTS\.md|control-source|secrets/ordinum|secrets/cialai"),
     "repo privado": re.compile(r"OrdinumTeam"),
     "conta play": re.compile(r"7730543760992383205"),

@@ -6,7 +6,8 @@ Depois rode audit_public.py na mesma pasta e a suite completa antes de publicar.
 import json, re, shutil, subprocess, sys, tarfile, io
 from pathlib import Path
 
-SRC = Path("/Users/focoamorim/Github Projects/OrdinumTeam/cialai-platform")
+# A raiz do privado vem do próprio arquivo: tools/release/public-export/export_public.py
+SRC = Path(__file__).resolve().parents[3]
 OUT = Path(sys.argv[1])
 
 EXCLUDE = {
@@ -96,7 +97,7 @@ edit("docs/02-analise-do-prototipo.md", [
 edit("docs/12-decisoes.md", [("em `docs/evidence/control-source.json`", "num inventário interno")])
 edit("tools/release/.env.example", [(re.compile(r"^GOOGLE_PLAY_ACCOUNT_ID=\d+$", re.M), "GOOGLE_PLAY_ACCOUNT_ID=")])
 
-local = re.compile(r"/Users/[A-Za-z0-9._-]+/Github Projects/OrdinumTeam/(ordinum-control|cialai-platform|advoris-mobile|ordinum-marketing/projects/CIALAI)")
+local = re.compile(r"/Users/[A-Za-z0-9._-]+/(?:Github Projects|Ordinum/Repos)/OrdinumTeam/(ordinum-control|cialai-platform|advoris-mobile|ordinum-marketing/projects/CIALAI)")
 names = {"ordinum-control": "$CONTROL", "cialai-platform": "$CIALAI", "advoris-mobile": "$ADVORIS", "ordinum-marketing/projects/CIALAI": "$MARCA"}
 for file in OUT.rglob("*"):
     if not file.is_file() or file.suffix.lower() in {".png", ".webp", ".jpg", ".jpeg", ".gif", ".ico", ".icns", ".jar", ".aar", ".zip", ".pdf", ".rtf"}:
