@@ -198,6 +198,13 @@ func TestInspectPairPayloadOmitsSecretsAndKnowsPairedDesktops(t *testing.T) {
 	if view["v"] != float64(2) || view["known"] != false || view["candidates"] != float64(1) || desktopView["id"] != desktop.ID() || desktopView["fingerprint"] != desktop.Fingerprint() || desktopView["name"] != "Mac de Teste" {
 		t.Fatalf("inspection %s", inspected)
 	}
+	decoded, err := pairing.Decode(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if view["approvalCode"] != pairing.ApprovalCode(decoded.PairID, tunnel.local.PublicKey()) {
+		t.Fatalf("approval code %v does not match the desktop derivation", view["approvalCode"])
+	}
 	rememberDesktop(t, tunnel, desktop, onion)
 	if view := decode[map[string]any](t, must(tunnel.InspectPairPayload(payload))); view["known"] != true {
 		t.Fatalf("paired desktop not known: %v", view)

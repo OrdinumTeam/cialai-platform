@@ -3,9 +3,6 @@ package sidecar
 
 import (
 	"context"
-	"crypto/rand"
-	"fmt"
-	"math/big"
 	"sync"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
@@ -42,14 +39,14 @@ func (queue *approvalQueue) Await(ctx context.Context, request edge.ApprovalRequ
 		delete(queue.pending, request.PairID)
 		queue.mu.Unlock()
 	}()
-	code := "0000"
-	if value, err := rand.Int(rand.Reader, big.NewInt(10000)); err == nil {
-		code = fmt.Sprintf("%04d", value.Int64())
+	public, err := identity.ParsePublicKey(request.Device.PublicKey)
+	if err != nil {
+		return pairing.NewError("pair_denied", "A chave do aparelho no pedido de pareamento é inválida.")
 	}
-	fingerprint := ""
-	if public, err := identity.ParsePublicKey(request.Device.PublicKey); err == nil {
-		fingerprint = identity.Fingerprint(public)
-	}
+	// The phone derives the same code from the QR pairing id and its own key
+	// and shows it before asking, so the person compares both screens.
+	code := pairing.ApprovalCode(request.PairID, public)
+	fingerprint := identity.Fingerprint(public)
 	queue.emit("pair.requested", map[string]any{
 		"pairId": request.PairID, "device": request.Device, "fingerprint": fingerprint,
 		"transport": request.Transport, "code": code, "until": request.Until,

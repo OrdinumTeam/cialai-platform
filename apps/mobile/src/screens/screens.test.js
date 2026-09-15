@@ -68,7 +68,7 @@ test('Pair explains the QR flow, camera use and a pairing notice', async () => {
 test('Pair shows the short fingerprint and the progress of each stage', async () => {
   jest.useFakeTimers();
   mockInspect.mockResolvedValue({ v: 2, desktop: { id: desktopId, name: 'Mac de Foco', fingerprint: '0123456789abcdef' },
-    expiresAt: 1_800_000_000, candidates: 3, known: true });
+    expiresAt: 1_800_000_000, candidates: 3, known: true, approvalCode: '4821' });
   let resolvePair;
   mockPair.mockImplementation(() => new Promise(resolve => { resolvePair = resolve; }));
   const onPaired = jest.fn(async () => {});
@@ -80,6 +80,8 @@ test('Pair shows the short fingerprint and the progress of each stage', async ()
   expect(mockInspect).toHaveBeenCalledWith('CIALAI2.payload');
   expect(text(tree)).toMatch(/Vincular a Mac de Foco\?/);
   expect(text(tree)).toMatch(/0123 4567 89ab cdef/);
+  expect(text(tree)).toMatch(/Código de aprovação/);
+  expect(text(tree)).toContain('4821');
   expect(text(tree)).toMatch(/Já vinculado/);
   expect(text(tree)).not.toMatch(forbiddenOnMainScreens);
 

@@ -70,6 +70,8 @@ export default Object.freeze({
   'mobile.pair.cameraUse': 'The camera is used only to scan the Cialai code.',
   'mobile.pair.confirm': 'Pair',
   'mobile.pair.confirmTitle': 'Pair with {name}?',
+  'mobile.pair.approvalCode': 'Approval code',
+  'mobile.pair.approvalHint': 'If the computer asks for approval, check that it shows this same code.',
   'mobile.pair.fingerprint': 'Computer fingerprint',
   'mobile.pair.fingerprintHint': 'Check that it matches the one shown on the computer before pairing.',
   'mobile.pair.instruction': 'Open Pair phone on the computer',

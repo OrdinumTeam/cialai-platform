@@ -24,7 +24,7 @@ Steps
 1. Open the dedicated desktop through the access method above. Cialai is already running there with the Review session open.
 2. In Cialai on the desktop, choose Pair phone. The desktop shows a pairing QR code.
 3. Open Cialai on the iPhone, scan the QR code shown by the desktop, check that the computer fingerprint matches and choose Pair.
-4. When the desktop shows a four digit approval code, choose Authorize on the desktop.
+4. When the desktop shows a four digit approval code, check that the phone shows the same code on its pairing screen and choose Authorize on the desktop.
 5. Choose Review Mac in the Computers screen. A Direct or Backup badge shows the path in use. From another network the first connection can take a few moments while the backup connection gets ready.
 6. Open the Review session to see terminal history and the fictional welcome file.
 

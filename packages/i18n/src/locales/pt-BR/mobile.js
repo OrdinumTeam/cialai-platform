@@ -70,6 +70,8 @@ export default Object.freeze({
   'mobile.pair.cameraUse': 'A câmera é usada somente para ler o código do Cialai.',
   'mobile.pair.confirm': 'Vincular',
   'mobile.pair.confirmTitle': 'Vincular a {name}?',
+  'mobile.pair.approvalCode': 'Código de aprovação',
+  'mobile.pair.approvalHint': 'Se o computador pedir aprovação, confira se ele mostra este mesmo código.',
   'mobile.pair.fingerprint': 'Impressão digital do computador',
   'mobile.pair.fingerprintHint': 'Confira se é a mesma exibida no computador antes de vincular.',
   'mobile.pair.instruction': 'Abra Vincular celular no computador',

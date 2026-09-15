@@ -54,12 +54,20 @@ type inspectionView struct {
 	ExpiresAt  int64                     `json:"expiresAt"`
 	Candidates int                       `json:"candidates"`
 	Known      bool                      `json:"known"`
+	// ApprovalCode is the four digit code the desktop shows when it asks for
+	// approval; it binds the QR pairing id to this phone key.
+	ApprovalCode string `json:"approvalCode"`
 }
 
 // InspectPairPayload validates a CIALAI2 QR without returning its secret or
-// pairing id, and tells whether the desktop is already paired.
+// pairing id, tells whether the desktop is already paired and gives the
+// approval code the desktop will show for this phone.
 func (tunnel *Tunnel) InspectPairPayload(payload string) (string, error) {
 	inspection, err := pairing.Inspect(payload, tunnel.now())
+	if err != nil {
+		return "", pairingProblem(err)
+	}
+	payloadFields, err := pairing.Decode(payload)
 	if err != nil {
 		return "", pairingProblem(err)
 	}
@@ -69,6 +77,7 @@ func (tunnel *Tunnel) InspectPairPayload(payload string) (string, error) {
 	return marshalJSON(inspectionView{
 		Version: inspection.Version, Desktop: inspection.Desktop, ExpiresAt: inspection.ExpiresAt,
 		Candidates: inspection.Candidates, Known: known,
+		ApprovalCode: pairing.ApprovalCode(payloadFields.PairID, tunnel.local.PublicKey()),
 	})
 }
 

@@ -136,6 +136,15 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
               {formatFingerprint(inspection.desktop.fingerprint)}
             </Text>
             <Text style={[styles.hint, { color: palette.tertiaryLabel }]}>{t('mobile.pair.fingerprintHint')}</Text>
+            {inspection.approvalCode ? (
+              <View style={styles.approval}>
+                <Text style={[styles.label, { color: palette.secondaryLabel }]}>{t('mobile.pair.approvalCode')}</Text>
+                <Text selectable accessibilityLabel={t('mobile.pair.approvalCode')} style={[styles.approvalCode, { color: palette.label }]}>
+                  {inspection.approvalCode}
+                </Text>
+                <Text style={[styles.hint, { color: palette.tertiaryLabel }]}>{t('mobile.pair.approvalHint')}</Text>
+              </View>
+            ) : null}
           </View>
           {busy ? (
             <View accessibilityLiveRegion="polite" style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
@@ -236,6 +245,8 @@ const styles = StyleSheet.create({
   readingText: { fontSize: 15 },
   permissionText: { marginTop: 14, fontSize: 15, lineHeight: 21 },
   confirmContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+  approval: { marginTop: 14, gap: 4 },
+  approvalCode: { fontSize: 28, fontVariant: ['tabular-nums'], letterSpacing: 6, fontWeight: '600' },
   known: { marginTop: 14, gap: 8 },
   chip: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
   chipText: { fontSize: 13, fontWeight: '600' },

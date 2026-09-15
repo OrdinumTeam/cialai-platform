@@ -17,6 +17,7 @@ export type PairInspection = {
   expiresAt: number;
   candidates: number;
   known: boolean;
+  approvalCode: string;
 };
 
 export type PairResult = {

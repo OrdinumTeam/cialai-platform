@@ -530,7 +530,7 @@ func TestApprovalQueueEmitsCodeAndResolves(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(events) != 2 || len(events[0]["code"].(string)) != 4 || events[0]["fingerprint"] != phone.Fingerprint() || events[0]["transport"] != "direct" {
+	if len(events) != 2 || events[0]["code"] != pairing.ApprovalCode("p_fixture", phone.PublicKey()) || events[0]["fingerprint"] != phone.Fingerprint() || events[0]["transport"] != "direct" {
 		t.Fatalf("pair.requested: %+v", events)
 	}
 }
