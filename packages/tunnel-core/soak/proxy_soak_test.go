@@ -24,24 +24,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/coder/websocket"
 )
 
-type soakTunnel struct {
+// soakDialer stands in for the path manager with one stable direct path to
+// the loopback echo backend.
+type soakDialer struct {
 	endpoint string
-	peer     node.Peer
+	path     pathmgr.Path
+	failures atomic.Uint64
 }
 
-func (tunnel *soakTunnel) Peer(string) (node.Peer, bool) {
-	return tunnel.peer, true
+func (dialer *soakDialer) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	var direct net.Dialer
+	return direct.DialContext(ctx, network, dialer.endpoint)
 }
 
-func (tunnel *soakTunnel) Dial(ctx context.Context, network, _ string) (net.Conn, error) {
-	var dialer net.Dialer
-	return dialer.DialContext(ctx, network, tunnel.endpoint)
-}
+func (dialer *soakDialer) Active() pathmgr.Path { return dialer.path }
+
+func (dialer *soakDialer) ReportFailure(error) { dialer.failures.Add(1) }
 
 type echoStats struct {
 	accepted      atomic.Uint64
@@ -272,13 +275,12 @@ func TestProxySoak(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(stats.handler))
 	defer backend.Close()
 	backendAddress := strings.TrimPrefix(backend.URL, "http://")
-	tunnel := &soakTunnel{
+	dialer := &soakDialer{
 		endpoint: backendAddress,
-		peer:     node.Peer{NodeKey: "nodekey:" + strings.Repeat("a", 64), IP4: "100.64.0.2"},
+		path:     pathmgr.Path{DesktopID: "desktop-soak", Transport: "direct", Kind: pathmgr.KindLAN, Since: time.Now()},
 	}
 	instance, err := proxy.New(proxy.Config{
-		Tunnel: tunnel, DesktopID: "desktop-soak", DesktopNodeKey: tunnel.peer.NodeKey,
-		DesktopPort: 4740, DeviceToken: testDeviceToken(), ReadTimeout: time.Minute,
+		Dialer: dialer, DesktopID: "desktop-soak", DeviceToken: testDeviceToken(), ReadTimeout: time.Minute,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -357,6 +359,9 @@ func TestProxySoak(t *testing.T) {
 	report.BackendAccepted = stats.accepted.Load()
 	report.BackendDisconnects = stats.disconnected.Load()
 	report.BackendUnexpectedErrors = stats.unexpectedErr.Load()
+	if failures := dialer.failures.Load(); failures != 0 && report.Failure == "" {
+		report.Failure = fmt.Sprintf("proxy reported %d path failures", failures)
+	}
 	if err := writeReport(config.ReportPath, report); err != nil {
 		t.Fatalf("write report: %v", err)
 	}

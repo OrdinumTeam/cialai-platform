@@ -23,6 +23,7 @@ import (
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
 	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
@@ -236,8 +237,8 @@ func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort i
 		return "", err
 	}
 	instance, err := proxy.New(proxy.Config{
-		Tunnel: tunnel.node, DesktopID: desktop.ID, DesktopNodeKey: desktop.NodeKey,
-		DesktopPort: desktop.Port, DeviceToken: deviceToken,
+		Dialer:    tailnetDialer{manager: tunnel.node, nodeKey: desktop.NodeKey, port: desktop.Port},
+		DesktopID: desktop.ID, DeviceToken: deviceToken,
 		OnToken: func(next string) error {
 			tunnel.emit("proxy", map[string]any{"state": "token-rotated", "desktopId": desktop.ID, "deviceToken": next})
 			return nil
@@ -394,6 +395,31 @@ func (tunnel *Tunnel) exchangePair(payload pairing.Payload, nodeKey, name, model
 	}
 	return result, nil
 }
+
+// tailnetDialer lets the proxy dial the desktop peer of the tsnet node.
+type tailnetDialer struct {
+	manager *node.Manager
+	nodeKey string
+	port    int
+}
+
+func (dialer tailnetDialer) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	peer, ok := dialer.manager.Peer(dialer.nodeKey)
+	if !ok || (peer.IP4 == "" && peer.IP6 == "") {
+		return nil, errors.New("desktop peer is not visible")
+	}
+	host := peer.IP4
+	if host == "" {
+		host = peer.IP6
+	}
+	return dialer.manager.Dial(ctx, network, net.JoinHostPort(host, fmt.Sprint(dialer.port)))
+}
+
+func (dialer tailnetDialer) Active() pathmgr.Path {
+	return pathmgr.Path{DesktopID: dialer.nodeKey, Transport: "tailnet", Kind: pathmgr.KindDirect}
+}
+
+func (tailnetDialer) ReportFailure(error) {}
 
 func (tunnel *Tunnel) startLocked(profile storedProfile, authKey string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)

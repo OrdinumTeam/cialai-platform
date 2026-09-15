@@ -13,6 +13,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -30,6 +31,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
 	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
@@ -157,7 +159,7 @@ func TestDesktopPairsPhoneThroughHeadscale(t *testing.T) {
 	}
 
 	t.Log("WebSocket frames cross proxy, tunnel, edge and bridge")
-	localProxy, err := proxy.New(proxy.Config{Tunnel: phone, DesktopID: payload.Desktop.ID, DesktopNodeKey: payload.Desktop.NodeKey, DesktopPort: payload.Desktop.Port, DeviceToken: paired.Token})
+	localProxy, err := proxy.New(proxy.Config{Dialer: tailnetDialer{manager: phone, nodeKey: payload.Desktop.NodeKey, port: payload.Desktop.Port}, DesktopID: payload.Desktop.ID, DeviceToken: paired.Token})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -456,6 +458,28 @@ func (client *sidecarClient) waitEvent(t *testing.T, name string, match func(jso
 }
 
 func discard(string, ...any) {}
+
+// tailnetDialer lets the proxy dial the desktop peer of the Headscale-era
+// phone node, which this suite keeps exercising until CON-070 removes it.
+type tailnetDialer struct {
+	manager *node.Manager
+	nodeKey string
+	port    int
+}
+
+func (dialer tailnetDialer) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	peer, ok := dialer.manager.Peer(dialer.nodeKey)
+	if !ok || peer.IP4 == "" {
+		return nil, errors.New("desktop peer is not visible")
+	}
+	return dialer.manager.Dial(ctx, network, net.JoinHostPort(peer.IP4, strconv.Itoa(dialer.port)))
+}
+
+func (dialer tailnetDialer) Active() pathmgr.Path {
+	return pathmgr.Path{DesktopID: dialer.nodeKey, Transport: "tailnet", Kind: pathmgr.KindDirect}
+}
+
+func (tailnetDialer) ReportFailure(error) {}
 
 func upNode(t *testing.T, controlURL, userID, userName, hostname, authKey string) (*node.Manager, node.Status) {
 	t.Helper()
