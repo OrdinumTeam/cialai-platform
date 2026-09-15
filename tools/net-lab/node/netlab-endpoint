@@ -1,0 +1,10 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Ponta do laboratório atrás de um roteador: troca a rota padrão do Docker pelo
+# roteador da rede e espera os processos que o teste inicia por docker exec.
+set -eu
+
+ip route del default >/dev/null 2>&1 || true
+ip route add default via "$ROUTER"
+touch /run/netlab-ready
+exec sleep infinity

@@ -1,0 +1,80 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Roteador doméstico do laboratório: NAT por iptables entre a rede interna e a
+# "internet" simulada.
+#
+#   netlab-router                 aplica NAT_MODE e BLOCK_UDP e fica de pé
+#   netlab-router apply MODO UDP  troca o modo em execução e zera os fluxos UDP
+#
+# MODO cone: mapeamento independente de endereço e porta, porque o SNAT
+# preserva a porta de origem do único host interno, e filtragem independente
+# de endereço e porta, porque todo UDP que chega ao IP público é encaminhado
+# ao host interno na mesma porta.
+# MODO symmetric: SNAT com --random-fully, uma porta pública nova por destino,
+# e só respostas de fluxos conhecidos entram.
+# UDP blocked: descarta todo UDP entre a rede interna e a internet; TCP segue.
+set -eu
+
+iface_of() {
+  ip -o -4 addr show | awk -v wanted="$1" '{ split($4, parts, "/"); if (parts[1] == wanted) print $2 }'
+}
+
+apply() {
+  mode=$1
+  udp=$2
+  wan=$(iface_of "$WAN_IP")
+  lan=$(iface_of "$LAN_IP")
+  if [ -z "$wan" ] || [ -z "$lan" ]; then
+    echo "netlab-router: interfaces de $WAN_IP e $LAN_IP não encontradas" >&2
+    exit 1
+  fi
+  # Cadeias próprias: o NAT de saída do DNS embutido do Docker fica intacto.
+  for chain in NETLAB_PRE NETLAB_POST; do
+    iptables -t nat -N "$chain" >/dev/null 2>&1 || iptables -t nat -F "$chain"
+  done
+  iptables -t nat -C PREROUTING -j NETLAB_PRE >/dev/null 2>&1 || iptables -t nat -A PREROUTING -j NETLAB_PRE
+  iptables -t nat -C POSTROUTING -j NETLAB_POST >/dev/null 2>&1 || iptables -t nat -I POSTROUTING 1 -j NETLAB_POST
+  iptables -F FORWARD
+  iptables -P FORWARD DROP
+  if [ "$udp" = "blocked" ]; then
+    iptables -A FORWARD -p udp -j DROP
+  fi
+  iptables -A FORWARD -i "$lan" -o "$wan" -j ACCEPT
+  iptables -A FORWARD -i "$wan" -o "$lan" -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+  case "$mode" in
+    cone)
+      iptables -t nat -A NETLAB_POST -o "$wan" -j SNAT --to-source "$WAN_IP"
+      iptables -t nat -A NETLAB_PRE -i "$wan" -d "$WAN_IP" -p udp -j DNAT --to-destination "$LAN_HOST"
+      iptables -A FORWARD -i "$wan" -o "$lan" -d "$LAN_HOST" -p udp -m conntrack --ctstate DNAT -j ACCEPT
+      ;;
+    symmetric)
+      iptables -t nat -A NETLAB_POST -o "$wan" -j SNAT --to-source "$WAN_IP" --random-fully
+      ;;
+    *)
+      echo "netlab-router: modo desconhecido $mode" >&2
+      exit 2
+      ;;
+  esac
+  # Fluxos UDP antigos manteriam o mapeamento do modo anterior. Os TCP ficam:
+  # a conexão de saída com a rede Tor simulada sobrevive, como sobreviveria
+  # a uma troca de configuração do roteador de casa.
+  conntrack -D -p udp >/dev/null 2>&1 || true
+  echo "$mode $udp" > /run/netlab-mode
+  echo "netlab-router: $mode, udp $udp, wan $wan, lan $lan"
+}
+
+if [ "${1:-}" = "apply" ]; then
+  apply "$2" "$3"
+  exit 0
+fi
+
+# Sem rota padrão, endereços que não pertencem a uma rede ligada ao roteador
+# ficam inalcançáveis, como IPs privados na internet.
+ip route del default >/dev/null 2>&1 || true
+udp=open
+if [ "${BLOCK_UDP:-0}" = "1" ]; then
+  udp=blocked
+fi
+apply "${NAT_MODE:-cone}" "$udp"
+touch /run/netlab-ready
+exec sleep infinity

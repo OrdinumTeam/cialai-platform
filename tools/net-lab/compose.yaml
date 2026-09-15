@@ -1,0 +1,158 @@
+# SPDX-License-Identifier: Apache-2.0
+# Laboratório de NAT e reserva do Cialai. Veja tools/net-lab/README.md.
+#
+# Redes:
+#   internet     203.0.113.0/24  STUN, rede Tor simulada e os IPs públicos dos roteadores
+#   desktop-lan  10.231.1.0/24   computador e o celular da mesma rede
+#   phone-lan    10.231.2.0/24   celular de outra rede
+#
+# Os binários chegam por NETLAB_BIN, compilados para linux pelo teste com a
+# tag netlab: cialai-tunnel, netlab-node e tor/tor, cópia do netlab-node.
+name: cialai-netlab
+
+x-node: &node
+  image: cialai-netlab-node:local
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true
+  cap_add: [NET_ADMIN]
+  volumes:
+    - ${NETLAB_BIN:?defina NETLAB_BIN com os binários linux do laboratório}:/opt/netlab:ro
+  healthcheck:
+    test: ["CMD", "test", "-f", "/run/netlab-ready"]
+    interval: 1s
+    timeout: 2s
+    retries: 60
+
+x-lan-sysctls: &lan-sysctls
+  net.ipv6.conf.all.disable_ipv6: "1"
+
+x-router-sysctls: &router-sysctls
+  net.ipv4.ip_forward: "1"
+  net.ipv6.conf.all.disable_ipv6: "1"
+
+services:
+  stun:
+    image: coturn/coturn:4.7.0
+    command:
+      - --stun-only
+      - --no-auth
+      - --no-cli
+      - --no-tls
+      - --no-dtls
+      - --listening-ip=203.0.113.3
+      - --listening-port=3478
+      - --log-file=stdout
+      - --simple-log
+    sysctls: *lan-sysctls
+    networks:
+      internet:
+        ipv4_address: 203.0.113.3
+
+  relay:
+    <<: *node
+    command: ["/opt/netlab/netlab-node", "relay", "-socks", "203.0.113.4:9050", "-service", "203.0.113.4:9051"]
+    cap_add: []
+    sysctls: *lan-sysctls
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -ltn | grep -q 203.0.113.4:9051"]
+      interval: 1s
+      timeout: 2s
+      retries: 60
+    networks:
+      internet:
+        ipv4_address: 203.0.113.4
+
+  router-desktop:
+    <<: *node
+    command: ["netlab-router"]
+    environment:
+      NAT_MODE: ${DESKTOP_NAT:-cone}
+      BLOCK_UDP: ${DESKTOP_BLOCK_UDP:-0}
+      WAN_IP: 203.0.113.11
+      LAN_IP: 10.231.1.2
+      LAN_HOST: 10.231.1.10
+    sysctls: *router-sysctls
+    networks:
+      internet:
+        ipv4_address: 203.0.113.11
+      desktop-lan:
+        ipv4_address: 10.231.1.2
+
+  router-phone:
+    <<: *node
+    command: ["netlab-router"]
+    environment:
+      NAT_MODE: ${PHONE_NAT:-cone}
+      BLOCK_UDP: ${PHONE_BLOCK_UDP:-0}
+      WAN_IP: 203.0.113.12
+      LAN_IP: 10.231.2.2
+      LAN_HOST: 10.231.2.10
+    sysctls: *router-sysctls
+    networks:
+      internet:
+        ipv4_address: 203.0.113.12
+      phone-lan:
+        ipv4_address: 10.231.2.2
+
+  desktop:
+    <<: *node
+    command: ["netlab-endpoint"]
+    environment:
+      ROUTER: 10.231.1.2
+      NETLAB_RELAY: 203.0.113.4:9051
+    sysctls: *lan-sysctls
+    depends_on:
+      router-desktop: {condition: service_healthy}
+      relay: {condition: service_healthy}
+      stun: {condition: service_started}
+    networks:
+      desktop-lan:
+        ipv4_address: 10.231.1.10
+
+  phone-lan:
+    <<: *node
+    command: ["netlab-endpoint"]
+    environment:
+      ROUTER: 10.231.1.2
+      NETLAB_RELAY_SOCKS: 203.0.113.4:9050
+    sysctls: *lan-sysctls
+    depends_on:
+      router-desktop: {condition: service_healthy}
+    networks:
+      desktop-lan:
+        ipv4_address: 10.231.1.20
+
+  phone:
+    <<: *node
+    command: ["netlab-endpoint"]
+    environment:
+      ROUTER: 10.231.2.2
+      NETLAB_RELAY_SOCKS: 203.0.113.4:9050
+    sysctls: *lan-sysctls
+    depends_on:
+      router-phone: {condition: service_healthy}
+    networks:
+      phone-lan:
+        ipv4_address: 10.231.2.10
+
+networks:
+  internet:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 203.0.113.0/24
+  desktop-lan:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 10.231.1.0/24
+  phone-lan:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    ipam:
+      config:
+        - subnet: 10.231.2.0/24
