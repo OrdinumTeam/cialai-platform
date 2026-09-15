@@ -252,6 +252,23 @@ workflows:
           [[ -x "$sdkmanager_bin" ]] || sdkmanager_bin="$(command -v sdkmanager)"
           (set +o pipefail; yes 2>/dev/null | "$sdkmanager_bin" --install "platforms;android-37.0" > /dev/null)
           test -d "$sdk_root/platforms/android-37.0"
+          echo "ANDROID_HOME=${ANDROID_HOME:-} ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          ls -la "$sdk_root/platforms"
+          cat "$sdk_root/platforms/android-37.0/source.properties"
+          # O pacote se apresenta como nível 37.0 e a busca do AGP 8.12 na máquina do Codemagic pede o alvo
+          # android-37. Uma cópia do pacote com o nível 37 nos metadados atende a busca sem mudar o compileSdk.
+          if [[ ! -d "$sdk_root/platforms/android-37" ]]; then
+            cp -R "$sdk_root/platforms/android-37.0" "$sdk_root/platforms/android-37"
+            python3 - "$sdk_root/platforms/android-37" <<'PY'
+          import pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          properties = root / "source.properties"
+          properties.write_text(properties.read_text().replace("AndroidVersion.ApiLevel=37.0", "AndroidVersion.ApiLevel=37"))
+          package = root / "package.xml"
+          package.write_text(package.read_text().replace("<api-level>37.0</api-level>", "<api-level>37</api-level>").replace('path="platforms;android-37.0"', 'path="platforms;android-37"'))
+          PY
+          fi
+          grep -E "ApiLevel" "$sdk_root/platforms/android-37/source.properties"
           cd apps/mobile
           npx expo prebuild --platform android --no-install
       - name: Configurar assinatura Android

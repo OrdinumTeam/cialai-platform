@@ -18,6 +18,7 @@ RUN apt-get update \
       libwebkit2gtk-4.1-dev \
       patchelf \
       pkg-config \
+      xdg-utils \
       xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
