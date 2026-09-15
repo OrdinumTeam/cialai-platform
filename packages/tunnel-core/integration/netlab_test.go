@@ -15,11 +15,15 @@ package integration_test
 // report.txt and report.json, under NETLAB_ARTIFACTS when it is set.
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 )
 
 const (
@@ -46,6 +50,8 @@ func TestNetLabNATAndFallback(t *testing.T) {
 	t.Run("revogacao", func(t *testing.T) { scenarioRevocation(t, lab, desktop) })
 	t.Run("reinicio_do_sidecar", func(t *testing.T) { scenarioSidecarRestart(t, lab, desktop, status) })
 	t.Run("reinicio_do_tor", func(t *testing.T) { scenarioTorRestart(t, lab, desktop) })
+	// Last: it spends the pairing attempts of the minute on both origins.
+	t.Run("protecoes_do_pareamento", func(t *testing.T) { scenarioPairingProtections(t, lab, desktop) })
 }
 
 // openNetwork puts both routers in cone mode with UDP open and refreshes the
@@ -452,3 +458,113 @@ func scenarioTorRestart(t *testing.T, lab *netLab, desktop *labDesktop) {
 }
 
 func itoa(value int) string { return strconv.Itoa(value) }
+
+// scenarioPairingProtections runs part of CON-060 through the phone API and
+// the real sidecar, across the NAT over the direct path and with UDP blocked
+// over the fallback: the photo of a used QR, the four digit approval denied
+// on the desktop and the limit of pairing attempts per minute. Each refusal
+// carries its code to the phone and pair.failed to the desktop. Expiry, the
+// ten failure block, rotation and the TLS key mismatch are covered with the
+// pairing clock in internal/edge and internal/sidecar.
+func scenarioPairingProtections(t *testing.T, lab *netLab, desktop *labDesktop) {
+	result := lab.scenario(t, "protecoes_do_pareamento")
+	openNetwork(t, lab, desktop)
+	t.Cleanup(func() {
+		desktop.setApproval(t, false)
+		lab.setRouter(t, "router-phone", "cone", false)
+	})
+	for _, name := range []string{"direct", "tor"} {
+		lab.setRouter(t, "router-phone", "cone", name == "tor")
+		owner := lab.startPhone(t, "phone", "dono-"+name)
+		owner.must(t, "tor", map[string]any{"enabled": true})
+		other := lab.startPhone(t, "phone", "outro-"+name)
+		other.must(t, "tor", map[string]any{"enabled": true})
+
+		payload := desktop.pairBegin(t)
+		if paired := owner.pairPayload(t, payload); paired.Transport != name {
+			t.Fatalf("o dono pareou por %s", paired.Transport)
+		}
+		// The dialog already shows the next QR when the photo is used.
+		desktop.pairBegin(t)
+		mark := desktop.mark()
+		reply := other.request(t, "pair", map[string]any{"payload": payload})
+		expectRefusal(t, desktop, mark, reply, "pair_consumed", name)
+		result.step(t, name+": foto do QR usado", ms(reply.MS), "celular "+reply.code()+", computador pair.failed")
+
+		desktop.setApproval(t, true)
+		payload = desktop.pairBegin(t)
+		mark = desktop.mark()
+		waitReply := other.requestAsync(t, "pair", map[string]any{"payload": payload})
+		requested, _, _ := desktop.waitEvent(t, mark, "pair.requested", "pedido de aprovação", func(data json.RawMessage) bool {
+			return field(data, "transport") == name
+		})
+		code := field(requested, "code")
+		if _, err := strconv.Atoi(code); err != nil || len(code) != 4 {
+			t.Fatalf("pair.requested sem código de quatro dígitos: %s", requested)
+		}
+		desktop.call(t, "pair.deny", map[string]any{"pairId": field(requested, "pairId")}, nil)
+		reply = waitReply()
+		expectRefusal(t, desktop, mark, reply, "pair_denied", name)
+		result.step(t, name+": aprovação por código negada", ms(reply.MS), "código "+code+", celular "+reply.code())
+		desktop.setApproval(t, false)
+
+		// Wrong secrets until the edge limits the origin: at most the sixth
+		// request of the minute, counting the pairings above.
+		guessed := guessedQR(t, desktop.pairBegin(t), name == "tor")
+		limited := 0
+		for attempt := 1; attempt <= 6 && limited == 0; attempt++ {
+			mark = desktop.mark()
+			reply = other.request(t, "pair", map[string]any{"payload": guessed})
+			switch reply.code() {
+			case "pair_secret_mismatch":
+				expectRefusal(t, desktop, mark, reply, "pair_secret_mismatch", name)
+			case "pair_rate_limited":
+				expectRefusal(t, desktop, mark, reply, "pair_rate_limited", name)
+				limited = attempt
+			default:
+				t.Fatalf("tentativa %d com segredo errado: %+v", attempt, reply)
+			}
+		}
+		if limited == 0 {
+			t.Fatal("seis pedidos no mesmo minuto não foram limitados")
+		}
+		result.step(t, name+": limite de tentativas por minuto", ms(reply.MS), "pair_rate_limited na tentativa "+itoa(limited)+" com segredo errado")
+		owner.close()
+		other.close()
+	}
+	result.Path = "direct e tor"
+}
+
+// guessedQR keeps the desktop and onion of a real QR with a guessed secret;
+// over the fallback it drops the direct candidates the blocked UDP would wait
+// for.
+func guessedQR(t *testing.T, payload string, onionOnly bool) string {
+	t.Helper()
+	decoded, err := pairing.Decode(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret := make([]byte, 32)
+	_, _ = rand.Read(secret)
+	decoded.Secret = base64.RawURLEncoding.EncodeToString(secret)
+	if onionOnly {
+		decoded.Candidates = nil
+	}
+	encoded, err := pairing.Encode(decoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return encoded
+}
+
+// expectRefusal checks the phone error code and the pair.failed event the
+// desktop emitted for it on the transport.
+func expectRefusal(t *testing.T, desktop *labDesktop, mark int, reply phoneReply, code, name string) {
+	t.Helper()
+	if reply.OK || reply.code() != code {
+		t.Fatalf("esperado %s pelo celular, veio %+v", code, reply)
+	}
+	desktop.waitEvent(t, mark, "pair.failed", "pair.failed "+code, func(data json.RawMessage) bool {
+		return field(data, "code") == code && field(data, "transport") == name
+	})
+}

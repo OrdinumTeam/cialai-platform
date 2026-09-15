@@ -449,6 +449,16 @@ func (desktop *labDesktop) startNetwork(t *testing.T) netStatus {
 	return status
 }
 
+// setApproval turns the four digit approval on or off through net.start,
+// which applies it to the running network.
+func (desktop *labDesktop) setApproval(t *testing.T, required bool) {
+	t.Helper()
+	desktop.call(t, "net.start", map[string]any{
+		"desktopName": netLabDesktopName, "requireApproval": required, "stun": []string{netLabSTUN},
+		"staticDir": desktop.staticDir, "bridgeUrl": desktop.bridgeURL, "proxySecret": netLabProxySecret,
+	}, nil)
+}
+
 // waitEvent waits for a sidecar event named name whose data matches.
 func (desktop *labDesktop) waitEvent(t *testing.T, from int, name, what string, match func(json.RawMessage) bool) (json.RawMessage, int, time.Time) {
 	t.Helper()
@@ -550,6 +560,13 @@ func (lab *netLab) startPhone(t *testing.T, service, name string) *labPhone {
 
 func (phone *labPhone) request(t *testing.T, command string, args any) phoneReply {
 	t.Helper()
+	return phone.requestAsync(t, command, args)()
+}
+
+// requestAsync sends a command and returns the function that waits for its
+// reply, so the test can act on the desktop while the phone waits.
+func (phone *labPhone) requestAsync(t *testing.T, command string, args any) func() phoneReply {
+	t.Helper()
 	phone.mu.Lock()
 	phone.next++
 	id := phone.next
@@ -559,17 +576,20 @@ func (phone *labPhone) request(t *testing.T, command string, args any) phoneRepl
 		args = map[string]any{}
 	}
 	phone.send(t, map[string]any{"id": id, "cmd": command, "args": args})
-	raw, _, _ := phone.wait(t, from, 2*time.Minute, "resposta de "+command, func(raw json.RawMessage) bool {
-		var frame struct {
-			ID uint64 `json:"id"`
+	return func() phoneReply {
+		t.Helper()
+		raw, _, _ := phone.wait(t, from, 2*time.Minute, "resposta de "+command, func(raw json.RawMessage) bool {
+			var frame struct {
+				ID uint64 `json:"id"`
+			}
+			return json.Unmarshal(raw, &frame) == nil && frame.ID == id
+		})
+		var reply phoneReply
+		if err := json.Unmarshal(raw, &reply); err != nil {
+			t.Fatalf("resposta de %s: %v", command, err)
 		}
-		return json.Unmarshal(raw, &frame) == nil && frame.ID == id
-	})
-	var reply phoneReply
-	if err := json.Unmarshal(raw, &reply); err != nil {
-		t.Fatalf("resposta de %s: %v", command, err)
+		return reply
 	}
-	return reply
 }
 
 func (phone *labPhone) must(t *testing.T, command string, args any) phoneReply {
@@ -632,7 +652,12 @@ type connectResult struct {
 // pair runs a QR from pair.begin through the phone and returns the result.
 func (phone *labPhone) pair(t *testing.T, desktop *labDesktop) pairResult {
 	t.Helper()
-	payload := desktop.pairBegin(t)
+	return phone.pairPayload(t, desktop.pairBegin(t))
+}
+
+// pairPayload pairs with a QR payload the test already holds.
+func (phone *labPhone) pairPayload(t *testing.T, payload string) pairResult {
+	t.Helper()
 	reply := phone.must(t, "pair", map[string]any{"payload": payload})
 	var result pairResult
 	if err := json.Unmarshal(reply.Result, &result); err != nil {
