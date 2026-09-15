@@ -318,6 +318,21 @@ func (n *network) startTor() {
 	}
 	n.tor = service
 	n.onion = listener
+	// StartDesktop returns before the supervisor reports its first phase;
+	// the snapshot fills the status unless a callback already did.
+	initial := torStatus(service.State())
+	if initial.Onion == "" {
+		initial.Onion = n.onionAddress
+	}
+	n.mu.Lock()
+	pending := n.torState.State == torDisabled
+	if pending {
+		n.torState = initial
+	}
+	n.mu.Unlock()
+	if pending {
+		n.config.onTorState(initial)
+	}
 }
 
 // torChanged receives every snapshot of the supervisor, serially.

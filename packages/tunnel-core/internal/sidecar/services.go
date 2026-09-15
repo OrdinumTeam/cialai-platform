@@ -136,6 +136,9 @@ func (runtime *runtimeState) netStart(ctx context.Context, raw json.RawMessage) 
 	runtime.net = n
 	runtime.lastError = nil
 	runtime.mu.Unlock()
+	// The local candidates arrive a few milliseconds after the socket opens;
+	// the first status already lists them.
+	n.waitCandidates(ctx, firstCandidatesWait)
 	runtime.emitTor(n.status().Tor)
 	runtime.emitter.trigger()
 	return runtime.status(), nil

@@ -416,8 +416,10 @@ func startFakeTor(config tor.DesktopConfig) (*fakeTor, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Like tor.StartDesktop, the first phase is only in the snapshot: the
+	// supervisor reports it later.
 	fake := &fakeTor{address: key.Address(), listener: listener, onState: config.OnState}
-	fake.set(func(state *tor.State) { state.Phase = tor.PhaseStarting })
+	fake.state = tor.State{Phase: tor.PhaseStarting, Address: fake.address}
 	return fake, nil
 }
 

@@ -190,6 +190,9 @@ func TestFakeTorBootstrapsPublishesAndClosesWithShutdown(t *testing.T) {
 	if status.State != netReady || status.Tor.State != torStarting || status.Tor.Onion != fake.Address() {
 		t.Fatalf("Tor starting must not hold the network: %+v", status)
 	}
+	if first, _ := h.waitEvent(t, "tor.state", 0, testTimeout, nil); !strings.Contains(string(first), `"state":"starting"`) {
+		t.Fatalf("first tor.state before the supervisor reported: %s", first)
+	}
 	fake.set(func(state *tor.State) {
 		state.Phase = tor.PhaseBootstrapping
 		state.Bootstrap = tor.Bootstrap{Progress: 37}
