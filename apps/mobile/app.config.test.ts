@@ -80,6 +80,17 @@ describe('Expo app config', () => {
     expect(binder).toContain('-target=android/arm64,android/amd64');
   });
 
+  test('pins the in-process Tor pod once for iOS', () => {
+    const config = buildConfig(context);
+    const plugin = config.plugins?.find(
+      entry => Array.isArray(entry) && entry[0] === 'expo-build-properties'
+    ) as [string, { ios: { extraPods: { name: string; version: string; modular_headers: boolean }[] } }] | undefined;
+    const tor = plugin?.[1].ios.extraPods.find(pod => pod.name === 'Tor');
+    expect(tor).toEqual({ name: 'Tor', version: expect.stringMatching(/^409\.\d+\.\d+$/), modular_headers: true });
+    const podspec = readFileSync(join(__dirname, 'modules/cialai-tunnel/ios/CialaiTunnel.podspec'), 'utf8');
+    expect(podspec).toContain(`spec.dependency 'Tor', '${tor?.version}'`);
+  });
+
   test('uses the monotonic Codemagic build number as Android version code', () => {
     process.env.PROJECT_BUILD_NUMBER = '42';
     expect(buildConfig(context).android?.versionCode).toBe(42);

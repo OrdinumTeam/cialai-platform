@@ -3,6 +3,9 @@ import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 type AppEnvironment = 'development' | 'preview' | 'production';
 
+// Versão do Tor.framework fixada em modules/cialai-tunnel/ios/CialaiTunnel.podspec.
+const IOS_TOR_POD_VERSION = '409.11.2';
+
 function resolveAppEnvironment(): AppEnvironment {
   const value = process.env.APP_ENV?.trim() || 'development';
   if (value === 'development' || value === 'preview' || value === 'production') return value;
@@ -99,7 +102,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
           buildArchs: ['arm64-v8a', 'x86_64']
         },
         ios: {
-          deploymentTarget: '16.4'
+          deploymentTarget: '16.4',
+          // O módulo Swift importa o Tor, um pod Objective-C sem módulo; sem cabeçalhos
+          // modulares o CocoaPods recusa a dependência em bibliotecas estáticas.
+          extraPods: [{ name: 'Tor', version: IOS_TOR_POD_VERSION, modular_headers: true }]
         }
       }]
     ],
