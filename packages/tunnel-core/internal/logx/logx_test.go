@@ -16,13 +16,13 @@ func TestLoggerRedactsCredentialsAndSensitiveFieldNames(t *testing.T) {
 	var output bytes.Buffer
 	logger := New(&output, 10)
 	logger.SetClock(func() time.Time { return time.Date(2026, 9, 12, 20, 0, 0, 0, time.UTC) })
-	logger.Info("joining with tskey-auth-secret, cdt1.device.secret, CIALAI1.payload and token=visible", Fields{
+	logger.Info("joining with tskey-auth-secret, cdt1.device.secret, CIALAI1.payload, CIALAI2.payload and token=visible", Fields{
 		"apiKey": "hskey-api-prefix-secret",
 		"nested": map[string]any{"deviceToken": "cdt1.device.secret", "safe": "kept"},
 		"node":   "nodekey:abcdef",
 	})
 	line := strings.TrimSpace(output.String())
-	for _, secret := range []string{"tskey-auth-secret", "visible", "hskey-api-prefix-secret", "cdt1.device.secret", "CIALAI1.payload", "nodekey:abcdef"} {
+	for _, secret := range []string{"tskey-auth-secret", "visible", "hskey-api-prefix-secret", "cdt1.device.secret", "CIALAI1.payload", "CIALAI2.payload", "nodekey:abcdef"} {
 		if strings.Contains(line, secret) {
 			t.Fatalf("secret leaked: %s", secret)
 		}

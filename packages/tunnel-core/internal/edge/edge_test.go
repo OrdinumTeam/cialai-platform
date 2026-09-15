@@ -420,7 +420,7 @@ func TestUnregisteredSessionOnlyReachesPairAndTheSameSessionOpensPty(t *testing.
 		}
 	}
 	if headers.Get("X-Cialai-Proxy-Secret") != "bridge-secret" || headers.Get("X-Cialai-Device-Id") != result.DeviceID ||
-		headers.Get("X-Cialai-Device-Key") != key || headers.Get("X-Cialai-Node-Key") != key || headers.Get("X-Cialai-Transport") != transport.NameDirect {
+		headers.Get("X-Cialai-Device-Key") != key || headers.Get("X-Cialai-Node-Key") != "" || headers.Get("X-Cialai-Transport") != transport.NameDirect {
 		t.Fatalf("trusted headers missing: %#v", headers)
 	}
 	if headers.Get("Authorization") != "" || headers.Get("Origin") != "http://127.0.0.1:47400" {
@@ -835,5 +835,41 @@ func TestServeReportsAStoppedListenerAndCloseEndsIt(t *testing.T) {
 	case <-listener.closing:
 	default:
 		t.Fatal("Close did not close the transport listener")
+	}
+}
+
+// The sidecar applies a new desktop name and approval setting to the edge
+// that is already serving, without dropping its sessions.
+func TestDesktopNameAndApprovalChangeWhileServing(t *testing.T) {
+	h := newEdge(t, "http://127.0.0.1:3720")
+	if err := h.server.SetDesktopName(" "); err == nil {
+		t.Fatal("an empty desktop name was accepted")
+	}
+	if err := h.server.SetDesktopName("Mac renomeado"); err != nil {
+		t.Fatal(err)
+	}
+	h.server.SetRequireApproval(true)
+	key := phoneKey(t)
+	waiting := h.listener.open(key, transport.NameDirect, "192.168.15.40:51234", false)
+	pairID, secret := h.beginPairing(t)
+	response, body := send(t, client(t, waiting), http.MethodPost, "/pair", pairBody(pairID, secret, key), nil)
+	expectProblem(t, response, body, http.StatusServiceUnavailable, "pair_timeout")
+
+	h.server.SetRequireApproval(false)
+	session := h.listener.open(key, transport.NameDirect, "192.168.15.40:51235", false)
+	phone := client(t, session)
+	response, body = send(t, phone, http.MethodPost, "/pair", pairBody(pairID, secret, key), nil)
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("pairing without approval: HTTP %d %s", response.StatusCode, body)
+	}
+	var paired struct {
+		Desktop map[string]string `json:"desktop"`
+	}
+	if err := json.Unmarshal(body, &paired); err != nil || paired.Desktop["name"] != "Mac renomeado" || paired.Desktop["id"] != h.config.Desktop.ID {
+		t.Fatalf("pair response desktop: %s", body)
+	}
+	response, body = send(t, phone, http.MethodGet, "/api/health", nil, nil)
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(body), `"name":"Mac renomeado"`) {
+		t.Fatalf("health after rename: HTTP %d %s", response.StatusCode, body)
 	}
 }

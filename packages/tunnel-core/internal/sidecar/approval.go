@@ -8,15 +8,21 @@ import (
 	"math/big"
 	"sync"
 
-	edge "github.com/Cialai/cialai/packages/tunnel-core/internal/edge/edgev1"
-	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 )
 
+// approvalQueue asks the desktop to confirm pairings when approval is
+// required: pair.requested shows a four digit code and pair.approve or
+// pair.deny answers it.
 type approvalQueue struct {
 	mu      sync.Mutex
 	pending map[string]chan bool
 	emit    func(string, any)
 }
+
+var _ edge.Approver = (*approvalQueue)(nil)
 
 func newApprovalQueue(emit func(string, any)) *approvalQueue {
 	return &approvalQueue{pending: make(map[string]chan bool), emit: emit}
@@ -38,9 +44,16 @@ func (queue *approvalQueue) Await(ctx context.Context, request edge.ApprovalRequ
 	}()
 	code := "0000"
 	if value, err := rand.Int(rand.Reader, big.NewInt(10000)); err == nil {
-		code = leftPadCode(value.Int64())
+		code = fmt.Sprintf("%04d", value.Int64())
 	}
-	queue.emit("pair.requested", map[string]any{"pairId": request.PairID, "device": request.Device, "code": code, "until": request.Until})
+	fingerprint := ""
+	if public, err := identity.ParsePublicKey(request.Device.PublicKey); err == nil {
+		fingerprint = identity.Fingerprint(public)
+	}
+	queue.emit("pair.requested", map[string]any{
+		"pairId": request.PairID, "device": request.Device, "fingerprint": fingerprint,
+		"transport": request.Transport, "code": code, "until": request.Until,
+	})
 	select {
 	case approved := <-decision:
 		if !approved {
@@ -50,10 +63,6 @@ func (queue *approvalQueue) Await(ctx context.Context, request edge.ApprovalRequ
 	case <-ctx.Done():
 		return pairing.NewError("pair_timeout", "O computador não respondeu ao pedido de pareamento.")
 	}
-}
-
-func leftPadCode(value int64) string {
-	return fmt.Sprintf("%04d", value)
 }
 
 func (queue *approvalQueue) resolve(pairID string, approved bool) bool {

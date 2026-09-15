@@ -86,6 +86,16 @@ func TestDoctorRunsTheBundledTor(t *testing.T) {
 	}
 }
 
+// The Headscale health check left the doctor with the control commands.
+func TestDoctorNoLongerTakesAControlURL(t *testing.T) {
+	var output, stderr bytes.Buffer
+	stdio := streams{in: strings.NewReader(""), out: &output, err: &stderr}
+	code := run([]string{"doctor", "--state-dir", filepath.Join(t.TempDir(), "state"), "--control-url", "https://hs.example"}, stdio, func(int) bool { return true })
+	if code != 2 {
+		t.Fatalf("doctor accepted --control-url: code %d output %q", code, output.String())
+	}
+}
+
 func TestServeRequiresAnAbsoluteTorPath(t *testing.T) {
 	var output, stderr bytes.Buffer
 	stdio := streams{in: strings.NewReader(""), out: &output, err: &stderr}

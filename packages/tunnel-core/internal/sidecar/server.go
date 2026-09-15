@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Package sidecar composes the tunnel services behind the bounded stdio RPC.
+// Package sidecar composes the tunnel services behind the bounded stdio RPC:
+// the desktop identity, the direct QUIC listener with its candidates, the Tor
+// onion service, the edge that serves both and the device registry.
 package sidecar
 
 import (
@@ -10,16 +12,20 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/rpc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 const (
-	Version          = "0.1.0"
+	Version = "0.1.0"
+	// TailscaleVersion is the tailscale.com module that provides the gateway
+	// port mapper; the hello event keeps announcing it.
 	TailscaleVersion = "1.102.0"
 )
+
+// Capabilities are announced in the hello response.
+var Capabilities = []string{"direct", "tor", "pairing", "devices"}
 
 type Options struct {
 	Paths            statedir.Paths
@@ -29,15 +35,13 @@ type Options struct {
 	ParentPID        int
 	Alive            func(int) bool
 	HandshakeTimeout time.Duration
-	AdminFactory     func(string, string, string) (control.ControlAdmin, error)
-	// AllowLoopbackHTTP accepts an http control URL on loopback in pairing
-	// payloads. Only development and the Docker integration suite set it.
-	AllowLoopbackHTTP bool
 	// TorExecutable is the tor binary the desktop bundles as $RESOURCE/tor,
-	// resolved by the native supervisor and passed as --tor-bin. It may be
-	// empty or name a missing file on a build without Tor; the network start
-	// hands it to tor.StartDesktop, which validates it.
+	// resolved by the native supervisor and passed as --tor-bin. Empty keeps
+	// the onion service disabled; a missing file makes it fail while the
+	// direct path still works.
 	TorExecutable string
+	// Network holds the defaults and test seams of net.start.
+	Network NetworkConfig
 }
 
 type readResult struct {
@@ -99,12 +103,14 @@ func Serve(parent context.Context, options Options) int {
 		return 2
 	}
 	if err := writer.Write(rpc.Success(first.request.ID, map[string]any{
-		"protocol": rpc.ProtocolVersion, "capabilities": []string{"control", "edge", "pairing", "devices"},
+		"protocol": rpc.ProtocolVersion, "capabilities": Capabilities,
 	})); err != nil {
 		return 2
 	}
 
 	runtime := newRuntime(options, writer)
+	// Every exit path closes the edge, the listeners, the mapping and Tor, so
+	// no tor child outlives the sidecar.
 	defer runtime.close()
 	done := make(chan struct{})
 	var shutdownOnce sync.Once

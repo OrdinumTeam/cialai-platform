@@ -115,6 +115,10 @@ type Server struct {
 	pairFailureGrace time.Duration
 	revokeGrace      time.Duration
 
+	// settingsMu guards the desktop name and RequireApproval, which the
+	// sidecar changes while the edge serves.
+	settingsMu sync.RWMutex
+
 	rateMu sync.Mutex
 	rates  map[string]rateWindow
 
@@ -165,6 +169,37 @@ func New(config Config) (*Server, error) {
 	}
 	server.proxy = server.newBridgeProxy()
 	return server, nil
+}
+
+// SetDesktopName changes the name phones see from now on in health, pairing
+// responses and approvals. The id and the public key never change.
+func (server *Server) SetDesktopName(name string) error {
+	if strings.TrimSpace(name) == "" {
+		return errors.New("desktop name is required")
+	}
+	server.settingsMu.Lock()
+	server.config.Desktop.Name = name
+	server.settingsMu.Unlock()
+	return nil
+}
+
+// SetRequireApproval changes whether the next pairings wait for the desktop.
+func (server *Server) SetRequireApproval(required bool) {
+	server.settingsMu.Lock()
+	server.config.RequireApproval = required
+	server.settingsMu.Unlock()
+}
+
+func (server *Server) desktop() pairing.Desktop {
+	server.settingsMu.RLock()
+	defer server.settingsMu.RUnlock()
+	return server.config.Desktop
+}
+
+func (server *Server) requireApproval() bool {
+	server.settingsMu.RLock()
+	defer server.settingsMu.RUnlock()
+	return server.config.RequireApproval
 }
 
 func parseBridgeURL(raw string) (*url.URL, error) {
@@ -281,9 +316,10 @@ func (server *Server) serveHealth(response http.ResponseWriter, request *http.Re
 	response.Header().Set("Content-Type", "application/json")
 	response.WriteHeader(http.StatusOK)
 	if request.Method == http.MethodGet {
+		desktop := server.desktop()
 		_ = json.NewEncoder(response).Encode(map[string]any{
 			"status": "ok", "service": "cialai",
-			"desktop": map[string]string{"id": server.config.Desktop.ID, "name": server.config.Desktop.Name},
+			"desktop": map[string]string{"id": desktop.ID, "name": desktop.Name},
 		})
 	}
 }
@@ -446,7 +482,7 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 		fail(input.PairID, status, code, err.Error())
 		return
 	}
-	if server.config.RequireApproval {
+	if server.requireApproval() {
 		if server.config.Approver == nil {
 			fail(input.PairID, http.StatusServiceUnavailable, "pair_timeout", "O computador não respondeu ao pedido de pareamento.")
 			return
@@ -490,15 +526,16 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 	if listener := server.currentListener(); listener != nil {
 		promoted = listener.Promote(session.PeerKey())
 	}
+	desktop := server.desktop()
 	card := server.config.Reach()
-	card.PublicKey = server.config.Desktop.PublicKey
+	card.PublicKey = desktop.PublicKey
 	if card.Candidates == nil {
 		card.Candidates = []pairing.Candidate{}
 	}
 	response.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(response).Encode(map[string]any{
 		"deviceId": device.ID, "token": token,
-		"desktop":  map[string]string{"id": server.config.Desktop.ID, "name": server.config.Desktop.Name, "publicKey": server.config.Desktop.PublicKey},
+		"desktop":  map[string]string{"id": desktop.ID, "name": desktop.Name, "publicKey": desktop.PublicKey},
 		"reach":    card,
 		"issuedAt": server.config.Now().UTC().Format(time.RFC3339),
 	})
@@ -627,12 +664,16 @@ func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.R
 	removeTokenProtocol(request.Header, token)
 	request = request.WithContext(context.WithValue(request.Context(), bridgeIdentityKey{}, bridgeIdentity{Device: device, Transport: session.Transport()}))
 	server.emit("session.opened", map[string]string{"deviceId": device.ID, "transport": session.Transport(), "remoteAddr": remoteAddr, "deviceKey": device.DeviceKey})
+	// Deferred so a panic or an early return of the proxy never leaves the
+	// socket counted by the desktop.
+	defer func() {
+		reason := "closed"
+		if _, registered := server.config.Devices.RegisteredKey(device.DeviceKey); !registered {
+			reason = "revoked"
+		}
+		server.emit("session.closed", map[string]string{"deviceId": device.ID, "transport": session.Transport(), "reason": reason})
+	}()
 	server.proxy.ServeHTTP(response, request)
-	reason := "closed"
-	if _, registered := server.config.Devices.RegisteredKey(device.DeviceKey); !registered {
-		reason = "revoked"
-	}
-	server.emit("session.closed", map[string]string{"deviceId": device.ID, "transport": session.Transport(), "reason": reason})
 }
 
 func bearerToken(value string) string {
@@ -678,9 +719,9 @@ type bridgeIdentity struct {
 	Transport string
 }
 
-// newBridgeProxy forwards to the bridge with the trusted identity headers.
-// X-Cialai-Node-Key repeats the device key until the bridge reads
-// X-Cialai-Device-Key (CON-045).
+// newBridgeProxy forwards to the bridge with the trusted identity headers:
+// the proxy secret, the device id and key from the v2 registry and the
+// transport. Every X-Cialai-* header from the phone is dropped first.
 func (server *Server) newBridgeProxy() *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
@@ -696,7 +737,6 @@ func (server *Server) newBridgeProxy() *httputil.ReverseProxy {
 			request.Out.Header.Set("X-Cialai-Proxy-Secret", server.config.ProxySecret)
 			request.Out.Header.Set("X-Cialai-Device-Id", identity.Device.ID)
 			request.Out.Header.Set("X-Cialai-Device-Key", identity.Device.DeviceKey)
-			request.Out.Header.Set("X-Cialai-Node-Key", identity.Device.DeviceKey)
 			request.Out.Header.Set("X-Cialai-Transport", identity.Transport)
 		},
 		ModifyResponse: func(response *http.Response) error {

@@ -16,7 +16,7 @@ import (
 const Redacted = "[redacted]"
 
 var (
-	credentialPattern = regexp.MustCompile(`(?i)(hskey-|tskey-|nodekey:|privkey:|cdt1\.|cialai1\.)[a-z0-9._~-]+`)
+	credentialPattern = regexp.MustCompile(`(?i)(hskey-|tskey-|nodekey:|privkey:|cdt1\.|cialai1\.|cialai2\.)[a-z0-9._~-]+`)
 	queryPattern      = regexp.MustCompile(`(?i)(secret|token|key)=([^&\s]+)`)
 )
 

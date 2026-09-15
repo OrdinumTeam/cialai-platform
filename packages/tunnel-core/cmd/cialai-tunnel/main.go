@@ -4,17 +4,13 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
+	"os/signal"
 	"path/filepath"
-	"strconv"
-	"strings"
+	"syscall"
 	"time"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
@@ -101,7 +97,11 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 		_, _ = fmt.Fprintln(stdio.err, "o nível de log precisa ser info ou debug")
 		return 2
 	}
-	return sidecar.Serve(context.Background(), sidecar.Options{
+	// SIGINT and SIGTERM end the sidecar like shutdown, so the network and the
+	// Tor child are closed before the process exits.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return sidecar.Serve(ctx, sidecar.Options{
 		Paths: paths, Input: stdio.in, Output: stdio.out, Logger: logger,
 		ParentPID: *parentPID, Alive: alive, HandshakeTimeout: 5 * time.Second,
 		TorExecutable: *torBin,
@@ -112,7 +112,6 @@ func runDoctor(args []string, stdio streams) int {
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stdio.err)
 	stateDir := flags.String("state-dir", "", "diretório de estado")
-	controlURL := flags.String("control-url", "", "URL do Headscale")
 	torBin := flags.String("tor-bin", "", "executável do Tor embutido")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *stateDir == "" {
 		return 2
@@ -128,13 +127,6 @@ func runDoctor(args []string, stdio streams) int {
 	}
 	checks["state"] = map[string]any{"ok": true, "path": paths.Root}
 	result["ok"] = true
-	if *controlURL != "" {
-		check, checkErr := checkControl(*controlURL)
-		checks["control"] = check
-		if checkErr != nil {
-			result["ok"] = false
-		}
-	}
 	if *torBin != "" {
 		check, checkErr := checkTor(*torBin)
 		checks["tor"] = check
@@ -147,30 +139,6 @@ func runDoctor(args []string, stdio streams) int {
 		return 1
 	}
 	return 0
-}
-
-func checkControl(raw string) (map[string]any, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Scheme != "https" && parsed.Scheme != "http") {
-		return map[string]any{"ok": false, "message": "A URL do Headscale é inválida."}, errors.New("invalid control URL")
-	}
-	if parsed.Scheme == "http" {
-		ip := net.ParseIP(parsed.Hostname())
-		if ip == nil || !ip.IsLoopback() {
-			return map[string]any{"ok": false, "message": "O Headscale precisa usar HTTPS fora do computador."}, errors.New("insecure control URL")
-		}
-	}
-	client := &http.Client{Timeout: 5 * time.Second}
-	request, _ := http.NewRequest(http.MethodGet, strings.TrimRight(parsed.String(), "/")+"/health", nil)
-	response, err := client.Do(request)
-	if err != nil {
-		return map[string]any{"ok": false, "message": "O servidor Headscale não respondeu."}, err
-	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		return map[string]any{"ok": false, "message": "A saúde do Headscale respondeu com HTTP " + strconv.Itoa(response.StatusCode) + "."}, errors.New("unhealthy control server")
-	}
-	return map[string]any{"ok": true, "host": parsed.Hostname()}, nil
 }
 
 // checkTor runs the bundled tor with --version, which proves that the
