@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Linux packages
+
+# Só disparo manual. Refaz o .deb e o .rpm de uma versão já publicada, com o mesmo caminho do job Linux do
+# release.yml, sem AppImage e sem tocar na release: os arquivos saem como artefato do run, e a troca na release e
+# no espelho do site é feita depois de conferidos.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit ou branch a compilar
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  packages:
+    name: deb e rpm
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      TARGET: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm install --global npm@10.9.8
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.1
+          targets: x86_64-unknown-linux-gnu
+      - name: Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev patchelf libxdo-dev libssl-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+      - name: Test the Tor library path
+        working-directory: packages/tunnel-core
+        run: go test -mod=readonly -count=1 -run TestWithLibraryDir ./internal/tor/
+      - name: Build the Linux sidecar
+        run: |
+          node tools/build-tunnel.mjs --target "$TARGET"
+          node tools/build-tunnel.mjs --verify --target "$TARGET"
+      - name: Stage the pinned Tor Expert Bundle
+        run: |
+          node tools/fetch-tor.mjs --stage --target "$TARGET"
+          node tools/fetch-tor.mjs --verify-resource --target "$TARGET"
+      - run: npm ci
+      - name: Keep the release build environment
+        run: echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/apps/desktop/src-tauri/resources/tor/tor${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+      - name: Write the release configuration
+        run: node tools/release/signing-mode.mjs --target "$TARGET" --config-out apps/desktop/src-tauri/tauri.release.conf.json
+      - name: Build the deb and rpm
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: npx tauri build --target "$TARGET" --config src-tauri/tauri.release.conf.json --bundles deb,rpm
+      - name: Check the packaged Tor launcher and the updater signatures
+        shell: bash
+        env:
+          BUNDLE: apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+        run: |
+          deb=("$BUNDLE"/deb/*.deb)
+          rpm=("$BUNDLE"/rpm/*.rpm)
+          test "${#deb[@]}" -eq 1 && test -f "${deb[0]}" && test "${#rpm[@]}" -eq 1 && test -f "${rpm[0]}"
+          node tools/release/verify-updater-signature.mjs "${deb[0]}"
+          node tools/release/verify-updater-signature.mjs "${rpm[0]}"
+          root="$RUNNER_TEMP/deb"
+          dpkg-deb -x "${deb[0]}" "$root"
+          grep -q "LD_LIBRARY_PATH=" "$root/usr/bin/cialai-tunnel"
+          tor_dir="$root/usr/lib/Cialai/tor/tor"
+          env -u LD_LIBRARY_PATH LD_LIBRARY_PATH="$tor_dir" "$tor_dir/tor" --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cialai-linux-packages
+          path: |
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm.sig
+          if-no-files-found: error
+          retention-days: 7

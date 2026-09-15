@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -39,8 +40,34 @@ func (creator execCreator) New(ctx context.Context, args ...string) (process.Pro
 	if len(creator.env) > 0 {
 		command.Env = append(os.Environ(), creator.env...)
 	}
+	if runtime.GOOS == "linux" {
+		environ := command.Env
+		if environ == nil {
+			environ = os.Environ()
+		}
+		command.Env = withLibraryDir(environ, command.Dir)
+	}
 	hideWindow(command)
 	return &execProcess{command: command}, nil
+}
+
+// withLibraryDir puts dir first in LD_LIBRARY_PATH. The Linux Expert Bundle
+// ships libevent, libssl and libcrypto next to a tor binary without RUNPATH,
+// and the .deb and .rpm install it unchanged, so without this tor exits 127.
+func withLibraryDir(environ []string, dir string) []string {
+	const key = "LD_LIBRARY_PATH="
+	value := dir
+	result := make([]string, 0, len(environ)+1)
+	for _, entry := range environ {
+		if !strings.HasPrefix(entry, key) {
+			result = append(result, entry)
+			continue
+		}
+		if rest := strings.TrimPrefix(entry, key); rest != "" {
+			value = dir + ":" + rest
+		}
+	}
+	return append(result, key+value)
 }
 
 type execProcess struct {
