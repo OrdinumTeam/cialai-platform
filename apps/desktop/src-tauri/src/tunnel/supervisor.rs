@@ -931,6 +931,7 @@ mod tests {
             Arc::new(|_, _| {}),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("unused-key")),
+            Awake::disabled(),
         );
         for command in ["hello", "shutdown", "edge.serve", "edge.stop"] {
             let problem = supervisor.call(command, json!({})).unwrap_err();
@@ -1269,6 +1270,7 @@ printf '%s\n' '{"id":4,"ok":true,"result":{}}'
             Arc::new(|_, _| {}),
             Arc::new(bridge.clone()),
             ApiKeyStore::new(root.join("key")),
+            Awake::disabled(),
         );
         let status = supervisor
             .call(
