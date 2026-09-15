@@ -261,11 +261,19 @@ func (proxy *Proxy) ServeHTTP(response http.ResponseWriter, request *http.Reques
 	}
 	if request.Method == http.MethodGet && constantEqual(request.URL.Query().Get("k"), nonce) && proxy.claimNonce() {
 		http.SetCookie(response, &http.Cookie{Name: CookieName, Value: nonce, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode})
-		response.Header().Set("Location", "/")
+		// The page only derives its bridge from the host when it is not on
+		// loopback, so the redirect names the WebSocket of this proxy.
+		response.Header().Set("Location", BridgeLocation(port))
 		response.WriteHeader(http.StatusFound)
 		return
 	}
 	proxy.problem(response, http.StatusForbidden, "proxy_unauthorized", "Esta abertura local não é válida.")
+}
+
+// BridgeLocation is where the one-use opening redirects the WebView: the page
+// root with the loopback WebSocket of the proxy as its bridge.
+func BridgeLocation(port int) string {
+	return "/?bridge=" + url.QueryEscape("ws://127.0.0.1:"+strconv.Itoa(port)+"/pty")
 }
 
 func (proxy *Proxy) validCookie(request *http.Request, nonce string) bool {

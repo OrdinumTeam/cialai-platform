@@ -304,5 +304,8 @@ test('bridge URL comes from the served host and only loopback accepts an empty d
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: '192.0.2.4', host: '192.0.2.4:8443' }), 'ws://192.0.2.4:8443/pty');
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: '127.0.0.1', host: '127.0.0.1:1420' }), '');
   assert.equal(remoteBridgeUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost:1420' }, 'ws://127.0.0.1:3720/pty'), 'ws://127.0.0.1:3720/pty');
+  // The phone proxy redirects its one-use opening to the page root with its own loopback WebSocket as the bridge.
+  const opened = new URL('http://127.0.0.1:47400/?bridge=ws%3A%2F%2F127.0.0.1%3A47400%2Fpty');
+  assert.equal(remoteBridgeUrl(opened, opened.searchParams.get('bridge')), 'ws://127.0.0.1:47400/pty');
   assert.throws(() => remoteBridgeUrl({ protocol: 'http:', hostname: 'localhost', host: 'localhost' }, 'https://example.test'), { code: 'bridge_url_invalid', message: /WebSocket/ });
 });

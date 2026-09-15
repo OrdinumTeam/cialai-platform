@@ -133,7 +133,7 @@ func TestNonceBecomesStrictHTTPOnlyCookieAndIsSingleClaim(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47400/?k="+proxy.nonce, nil)
 	response := httptest.NewRecorder()
 	proxy.ServeHTTP(response, request)
-	if response.Code != http.StatusFound || response.Header().Get("Location") != "/" {
+	if response.Code != http.StatusFound || response.Header().Get("Location") != "/?bridge=ws%3A%2F%2F127.0.0.1%3A47400%2Fpty" {
 		t.Fatalf("nonce bootstrap failed: HTTP %d headers %#v", response.Code, response.Header())
 	}
 	cookies := response.Result().Cookies()
