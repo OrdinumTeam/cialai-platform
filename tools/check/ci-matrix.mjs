@@ -105,6 +105,13 @@ const attach = bindings.steps.find((step) => /gh release upload/.test(step.run |
 assert.equal(attach?.if, "inputs.tag != ''", 'sem tag os bindings não tocam em nenhuma release');
 assert.match(attach.run, /release-assets\.mjs checksums "\$RELEASE_TAG"/, 'o SHA256SUMS da release precisa cobrir os bindings');
 assert.deepEqual([...mobileSource.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]), ['GITHUB_TOKEN']);
+// App iOS para o simulador: opcional, depois dos bindings, sem assinatura e sem secrets.
+const iosApp = mobile.jobs['ios-app'];
+assert.equal(iosApp.if, 'inputs.ios_app', 'o app iOS só compila quando pedido');
+assert.equal(iosApp.needs, 'bindings', 'o app iOS usa o XCFramework recém compilado');
+const iosRuns = iosApp.steps.map((step) => step.run || '').join('\n');
+assert.match(iosRuns, /CODE_SIGNING_ALLOWED=NO/, 'o app do simulador não assina');
+assert.match(iosRuns, /-sdk iphonesimulator/);
 const binder = readFileSync(`${root}/tools/build-tunnel-mobile.sh`, 'utf8');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 Tunnelcore\.xcframework\.zip > Tunnelcore\.xcframework\.zip\.sha256/, 'o hash publicado não leva caminho do runner');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 tunnelcore\.aar > tunnelcore\.aar\.sha256/);

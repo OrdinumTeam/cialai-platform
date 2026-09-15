@@ -4,7 +4,9 @@ name: Mobile artifacts
 # Compila os bindings gomobile do núcleo do túnel num runner macOS, com o mesmo
 # script e o mesmo NDK dos builds do Codemagic. Sem tag, os arquivos ficam só
 # como artefatos do workflow; com a tag de uma release existente, eles entram
-# nela e o SHA256SUMS da release é refeito com todos os arquivos.
+# nela e o SHA256SUMS da release é refeito com todos os arquivos. Com ios_app,
+# o app iOS é compilado para o simulador sem assinatura, só para provar que o
+# módulo nativo e os pods compilam sem Xcode local nem minutos do Codemagic.
 on:
   workflow_dispatch:
     inputs:
@@ -13,6 +15,11 @@ on:
         required: false
         default: ""
         type: string
+      ios_app:
+        description: Also build the iOS app for the simulator, unsigned, to check the native module
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -71,3 +78,48 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" "$RUNNER_TEMP"/publish/* --clobber
           node tools/release/release-assets.mjs checksums "$RELEASE_TAG"
+
+  ios-app:
+    name: iOS app for the simulator
+    if: inputs.ios_app
+    needs: bindings
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Select the newest Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+          xcodebuild -version
+      - uses: actions/download-artifact@v4
+        with:
+          name: cialai-mobile-bindings
+          path: ${{ runner.temp }}/bindings
+      - name: Place the XCFramework in the native module
+        run: |
+          cd "$RUNNER_TEMP/bindings"
+          shasum -a 256 -c Tunnelcore.xcframework.zip.sha256
+          ditto -x -k Tunnelcore.xcframework.zip "$GITHUB_WORKSPACE/apps/mobile/modules/cialai-tunnel/ios/"
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate the iOS project
+        run: |
+          cd apps/mobile
+          npx expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Build for the simulator without signing
+        run: |
+          set -o pipefail
+          cd apps/mobile/ios
+          workspace="$(ls -d *.xcworkspace | head -1)"
+          scheme="${workspace%.xcworkspace}"
+          xcodebuild -workspace "$workspace" -scheme "$scheme" -configuration Release \
+            -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO build | tail -200
