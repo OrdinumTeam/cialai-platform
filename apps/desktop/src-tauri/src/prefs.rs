@@ -3,7 +3,7 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -77,15 +77,122 @@ impl WindowPreferences {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", default)]
+/// Limite do nome do computador aceito por `net.start`, em caracteres.
+pub const DESKTOP_NAME_MAX_CHARS: usize = 48;
+/// Nome usado quando o sistema nao informa o nome do computador.
+const FALLBACK_DESKTOP_NAME: &str = "Cialai";
+
+/// Rede do computador. A conexao sobe sozinha ao abrir o Cialai; so ficam o
+/// nome mostrado no celular, a aprovacao por codigo e a vigilia. Os campos do
+/// Headscale de versoes anteriores sao ignorados na leitura e somem ao salvar.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", from = "StoredNetworkPreferences")]
 pub struct NetworkPreferences {
-    pub control_url: Option<String>,
-    pub user_id: Option<String>,
-    pub user_name: Option<String>,
-    pub desktop_name: Option<String>,
+    pub desktop_name: String,
     pub require_approval: bool,
     pub keep_awake_while_paired: bool,
+}
+
+impl Default for NetworkPreferences {
+    fn default() -> Self {
+        StoredNetworkPreferences::default().into()
+    }
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+struct StoredNetworkPreferences {
+    desktop_name: Option<String>,
+    require_approval: bool,
+    keep_awake_while_paired: bool,
+}
+
+impl From<StoredNetworkPreferences> for NetworkPreferences {
+    fn from(stored: StoredNetworkPreferences) -> Self {
+        Self {
+            desktop_name: clean_desktop_name(stored.desktop_name.as_deref())
+                .unwrap_or_else(computer_name),
+            require_approval: stored.require_approval,
+            keep_awake_while_paired: stored.keep_awake_while_paired,
+        }
+    }
+}
+
+/// Nome sem espacos nas pontas, sem caracteres de controle e com no maximo
+/// 48 caracteres; vazio vira `None`.
+pub fn clean_desktop_name(value: Option<&str>) -> Option<String> {
+    let cleaned: String = value?
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect();
+    let trimmed: String = cleaned
+        .trim()
+        .chars()
+        .take(DESKTOP_NAME_MAX_CHARS)
+        .collect();
+    let trimmed = trimmed.trim_end();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+/// Nome deste computador, lido uma vez do sistema.
+pub fn computer_name() -> String {
+    static NAME: OnceLock<String> = OnceLock::new();
+    NAME.get_or_init(|| {
+        clean_desktop_name(detect_computer_name().as_deref())
+            .unwrap_or_else(|| FALLBACK_DESKTOP_NAME.into())
+    })
+    .clone()
+}
+
+// No macOS o nome do computador de Compartilhamento e o que a pessoa
+// reconhece; o nome de host fica de reserva.
+#[cfg(target_os = "macos")]
+fn detect_computer_name() -> Option<String> {
+    let output = std::process::Command::new("/usr/sbin/scutil")
+        .args(["--get", "ComputerName"])
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok();
+    output
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
+        .filter(|name| !name.is_empty())
+        .or_else(host_name)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_computer_name() -> Option<String> {
+    std::env::var("COMPUTERNAME").ok()
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
+fn detect_computer_name() -> Option<String> {
+    host_name()
+}
+
+#[cfg(unix)]
+fn host_name() -> Option<String> {
+    let mut buffer = [0u8; 256];
+    // SAFETY: o buffer tem o tamanho informado e o resultado termina em NUL
+    // ou ocupa o buffer inteiro, tratado abaixo.
+    let status = unsafe { libc::gethostname(buffer.as_mut_ptr().cast(), buffer.len()) };
+    if status != 0 {
+        return None;
+    }
+    let end = buffer
+        .iter()
+        .position(|byte| *byte == 0)
+        .unwrap_or(buffer.len());
+    let name = String::from_utf8_lossy(&buffer[..end]).into_owned();
+    let name = name.strip_suffix(".local").unwrap_or(&name).to_string();
+    (!name.is_empty()).then_some(name)
 }
 
 fn prefs_path(app: &AppHandle) -> Option<PathBuf> {
@@ -101,9 +208,14 @@ impl Preferences {
             return Self::default();
         };
         match fs::read_to_string(path) {
-            Ok(raw) => serde_json::from_str(&raw).unwrap_or_default(),
+            Ok(raw) => Self::parse(&raw),
             Err(_) => Self::default(),
         }
+    }
+
+    /// Le o arquivo gravado; conteudo invalido volta ao padrao.
+    pub fn parse(raw: &str) -> Self {
+        serde_json::from_str(raw).unwrap_or_default()
     }
 
     pub fn save(&self, app: &AppHandle) -> Result<(), String> {
@@ -175,6 +287,79 @@ mod tests {
         assert_eq!(prefs.terminal.shell.as_deref(), Some("/bin/fish"));
         assert!(prefs.terminal.args.is_empty());
         assert_eq!(prefs.project_roots, ["~/Projects"]);
+    }
+
+    #[test]
+    fn old_preferences_file_drops_headscale_fields() {
+        let prefs = Preferences::parse(
+            r#"{
+              "appearance": "dark",
+              "projectRoots": ["~/src"],
+              "network": {
+                "controlUrl": "https://headscale.exemplo.com",
+                "userId": "42",
+                "userName": "alice",
+                "desktopName": "  Mac do Estúdio  ",
+                "requireApproval": true,
+                "keepAwakeWhilePaired": true
+              }
+            }"#,
+        );
+        assert_eq!(prefs.appearance, "dark");
+        assert_eq!(prefs.project_roots, ["~/src"]);
+        assert_eq!(
+            prefs.network,
+            NetworkPreferences {
+                desktop_name: "Mac do Estúdio".into(),
+                require_approval: true,
+                keep_awake_while_paired: true,
+            }
+        );
+        let saved = serde_json::to_value(&prefs).unwrap();
+        for removed in ["controlUrl", "userId", "userName"] {
+            assert!(
+                saved["network"].get(removed).is_none(),
+                "campo do Headscale persistido: {removed}"
+            );
+        }
+        assert_eq!(
+            saved["network"],
+            json!({"desktopName": "Mac do Estúdio", "requireApproval": true, "keepAwakeWhilePaired": true})
+        );
+        assert_eq!(Preferences::parse(&saved.to_string()), prefs);
+    }
+
+    #[test]
+    fn desktop_name_defaults_to_the_computer_name() {
+        let name = computer_name();
+        assert!(!name.trim().is_empty());
+        assert!(name.chars().count() <= DESKTOP_NAME_MAX_CHARS);
+        assert_eq!(NetworkPreferences::default().desktop_name, name);
+        for network in [
+            json!({}),
+            json!({"desktopName": null}),
+            json!({"desktopName": "   "}),
+        ] {
+            let prefs: Preferences = serde_json::from_value(json!({ "network": network })).unwrap();
+            assert_eq!(prefs.network.desktop_name, name);
+            assert!(!prefs.network.require_approval);
+            assert!(!prefs.network.keep_awake_while_paired);
+        }
+        assert_eq!(Preferences::parse("{").network.desktop_name, name);
+    }
+
+    #[test]
+    fn desktop_name_is_trimmed_to_the_sidecar_limit() {
+        let long = "Estúdio ".repeat(10);
+        let cleaned = clean_desktop_name(Some(&long)).unwrap();
+        assert_eq!(cleaned.chars().count(), 47);
+        assert!(!cleaned.ends_with(' '));
+        assert_eq!(
+            clean_desktop_name(Some("Mac\tdo\nEstúdio")).as_deref(),
+            Some("Mac do Estúdio")
+        );
+        assert_eq!(clean_desktop_name(Some(" \u{7} ")), None);
+        assert_eq!(clean_desktop_name(None), None);
     }
 
     #[test]

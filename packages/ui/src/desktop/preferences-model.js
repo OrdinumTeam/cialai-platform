@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Pure preference helpers shared by the UI and its contract tests.
 import { translate } from './i18n.js';
+import { normalizeNetworkPreferences } from './tunnel-model.js';
 
 const APPEARANCES = new Set(['system', 'light', 'dark']);
 // Fundo da janela no Windows: automático aplica o Mica quando o sistema
@@ -13,10 +14,8 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   projectRoots: Object.freeze(['~/Projects']),
   devBrowser: Object.freeze({ chromiumPath: null }),
   window: Object.freeze({ backdrop: 'auto' }),
+  // A rede sobe sozinha; o nome vazio usa o nome do computador no Rust.
   network: Object.freeze({
-    controlUrl: null,
-    userId: null,
-    userName: null,
     desktopName: null,
     requireApproval: false,
     keepAwakeWhilePaired: false,
@@ -53,7 +52,11 @@ export function normalizePreferenceDraft(value = {}) {
       ...(value.window || {}),
       backdrop: BACKDROPS.includes(value.window?.backdrop) ? value.window.backdrop : 'auto',
     },
-    network: { ...DEFAULT_PREFERENCES.network, ...(value.network || {}) },
+    network: {
+      ...DEFAULT_PREFERENCES.network,
+      ...normalizeNetworkPreferences(value.network),
+      desktopName: value.network?.desktopName == null ? null : String(value.network.desktopName),
+    },
   };
 }
 
@@ -73,15 +76,7 @@ export function sanitizePreferences(value) {
       ...normalized.devBrowser,
       chromiumPath: optional(normalized.devBrowser.chromiumPath),
     },
-    network: {
-      ...normalized.network,
-      controlUrl: optional(normalized.network.controlUrl)?.replace(/\/+$/, '') || null,
-      userId: optional(normalized.network.userId),
-      userName: optional(normalized.network.userName),
-      desktopName: optional(normalized.network.desktopName),
-      requireApproval: Boolean(normalized.network.requireApproval),
-      keepAwakeWhilePaired: Boolean(normalized.network.keepAwakeWhilePaired),
-    },
+    network: normalizeNetworkPreferences(normalized.network),
   };
 }
 
