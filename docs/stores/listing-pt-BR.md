@@ -17,7 +17,7 @@ Terminais em todo lugar
 ## Texto promocional da App Store
 
 ```text
-Acompanhe seus terminais, arquivos e sessões de código pelo celular com conexão cifrada e infraestrutura sob seu controle.
+Acompanhe seus terminais, arquivos e sessões de código pelo celular com uma conexão cifrada que se configura sozinha.
 ```
 
 ## Descrição breve do Google Play
@@ -48,10 +48,11 @@ Principais recursos:
 • Revogação de aparelhos pelo computador
 • Proteção biométrica para ações sensíveis no celular
 • Conexão cifrada de ponta a ponta entre aparelhos pareados
+• Conexão automática, direta quando a rede permite e pelo Tor como reserva
 
-O Cialai precisa do aplicativo desktop e de um servidor Headscale informado por você. A Ordinum não oferece uma nuvem do Cialai e não recebe o conteúdo dos seus projetos ou terminais. A operação do Headscale permanece sob sua responsabilidade.
+O Cialai precisa do aplicativo desktop aberto no computador. Não há servidor para configurar: o celular conecta direto quando a rede permite e pela rede Tor como reserva. A Ordinum não oferece uma nuvem do Cialai e não recebe o conteúdo dos seus projetos ou terminais.
 
-Consulte a política de privacidade e a documentação do projeto antes de configurar sua rede.
+Consulte a política de privacidade e a documentação do projeto para saber quais redes públicas a conexão usa.
 ```
 <!-- STORE_LONG_END -->
 
@@ -83,7 +84,7 @@ Esta é a primeira versão do Cialai para celular:
 • Retome a conexão depois de mudar de rede ou voltar ao aplicativo.
 • Proteja perfis e tokens no armazenamento seguro do aparelho.
 
-O aplicativo requer o Cialai no computador e um servidor Headscale configurado pela pessoa usuária.
+O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser configurado.
 ```
 
 ## Campos dependentes do usuário

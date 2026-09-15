@@ -20,7 +20,7 @@ No data categories should be declared as collected or shared for the current And
 
 - The app has no analytics, advertising, crash reporting or publisher account service.
 - Data exchanged with the desktop follows the user's request and stays between paired devices.
-- The user provides the Headscale server and controls its operator and retention.
+- Cialai operates no server. Paired devices connect directly or through the public Tor network, and optional STUN requests to public Cloudflare and Google servers carry no project or terminal content.
 - Mobile profiles and tokens remain in local secure storage.
 - Camera access scans a pairing code and does not upload or retain images.
 - Biometric verification is handled by Android and the app does not receive biometric templates.

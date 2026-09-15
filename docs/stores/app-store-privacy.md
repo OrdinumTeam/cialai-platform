@@ -26,7 +26,7 @@ No additional data types should be selected after this answer.
 
 - The iOS app has no Ordinum account, analytics, advertising or crash reporting service.
 - Project files and terminal content travel only between the user's paired devices.
-- The user selects and controls the Headscale server used for device coordination.
+- Cialai operates no server. Paired devices connect directly or through the public Tor network, and optional STUN requests to public Cloudflare and Google servers carry no project or terminal content.
 - Pairing details and connection profiles remain on the device.
 - Device tokens use secure local storage.
 - Biometric verification is performed by iOS and the app does not receive biometric templates.

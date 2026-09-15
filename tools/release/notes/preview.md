@@ -4,6 +4,37 @@ This is an early preview of Cialai for macOS, Windows, Linux and Android. It is 
 
 **The macOS app is signed with the Ordinum Developer ID and notarized by Apple.** It opens like any other app downloaded from the internet. **The Windows installers are not signed with a code signing certificate yet**, so Windows will warn you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
+### What is new
+
+Your phone now reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
+
+### Pair your phone again
+
+Phones paired with a 0.1.x preview are not carried over. After updating the desktop and the Android app:
+
+1. Open Cialai on the computer and choose Pair phone.
+2. Scan the QR code with the Cialai app on the phone. The code changes every 90 seconds and expires after 10 minutes.
+3. If approval is enabled, check the code on the computer and click Authorize.
+
+On the same network the phone connects right away. From another network it waits until the backup connection is ready.
+
+### Public networks used
+
+Cialai runs no server of its own, and neither does Ordinum. The connection uses only these public networks:
+
+| Network | Purpose |
+| --- | --- |
+| Tor network | Meeting point and backup connection |
+| STUN servers from Cloudflare and Google | Optional, finds the public address for the direct connection |
+| DNS-SD on your local network | Lets the phone find the computer nearby |
+
+### Known limits
+
+* The computer must be on with Cialai open.
+* Networks that block both Tor and UDP leave the phone without a connection.
+* The backup through Tor is slower than a direct connection.
+* This preview passed automated tests, including tests against the real Tor network. Checks on real phones and networks are still pending.
+
 ### Which file to download
 
 | Platform | File |

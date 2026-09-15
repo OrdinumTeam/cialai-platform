@@ -17,7 +17,7 @@ Terminals wherever you go
 ## App Store promotional text
 
 ```text
-Reach your terminals, files and coding sessions from your phone through encrypted connections and infrastructure you control.
+Reach your terminals, files and coding sessions from your phone over an encrypted connection that sets itself up.
 ```
 
 ## Google Play short description
@@ -48,10 +48,11 @@ Key features:
 • Device revocation from the desktop
 • Biometric protection for sensitive actions on mobile
 • End to end encrypted connectivity between paired devices
+• Automatic connection, direct when the network allows and through Tor as backup
 
-Cialai requires the desktop application and a Headscale server you provide. Ordinum does not operate a Cialai cloud and does not receive your project or terminal content. You remain responsible for your Headscale service.
+Cialai requires the desktop application open on your computer. There is no server to set up: your phone connects directly when the network allows and through the Tor network as backup. Ordinum does not operate a Cialai cloud and does not receive your project or terminal content.
 
-Read the privacy policy and project documentation before configuring your network.
+Read the privacy policy and project documentation to learn which public networks the connection uses.
 ```
 <!-- STORE_LONG_END -->
 
@@ -83,7 +84,7 @@ This is the first Cialai release for mobile:
 • Reconnect after changing networks or returning to the application.
 • Protect profiles and tokens with secure device storage.
 
-The app requires Cialai on your computer and a Headscale server configured by the user.
+The app requires Cialai open on your computer. No server setup is needed.
 ```
 
 ## Fields that require owner input
