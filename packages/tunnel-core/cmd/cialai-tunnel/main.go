@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/mdns"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/tor"
@@ -104,8 +105,14 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 	return sidecar.Serve(ctx, sidecar.Options{
 		Paths: paths, Input: stdio.in, Output: stdio.out, Logger: logger,
 		ParentPID: *parentPID, Alive: alive, HandshakeTimeout: 5 * time.Second,
-		TorExecutable: *torBin,
+		TorExecutable: *torBin, Network: sidecar.NetworkConfig{NewAnnouncer: announceLocal},
 	})
+}
+
+// announceLocal publishes the direct listener by DNS-SD on the local network,
+// so a phone on the same Wi-Fi finds the desktop without the reach card.
+func announceLocal(config sidecar.AnnouncerConfig) (sidecar.Announcer, error) {
+	return mdns.Start(mdns.Config{PublicKey: config.PublicKey, Port: config.Port, Logf: config.Logf})
 }
 
 func runDoctor(args []string, stdio streams) int {
