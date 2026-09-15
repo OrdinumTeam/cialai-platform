@@ -169,6 +169,11 @@ jobs:
           node tools/fetch-tor.mjs --stage --target ${{ matrix.target }}
           node tools/fetch-tor.mjs --verify-resource --target ${{ matrix.target }}
       - run: npm ci
+      # O linuxdeploy do AppImage não segue o $ORIGIN do tor empacotado; a pasta dele entra no LD_LIBRARY_PATH do build Linux.
+      - name: Let the AppImage bundler find the Tor libraries
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/apps/desktop/src-tauri/resources/tor/tor${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Choose platform signing
         id: signing
         shell: bash

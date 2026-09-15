@@ -91,8 +91,17 @@ jobs:
         run: npm run test:browser
 
       # A CI não recebe a chave do atualizador; o bundle sai sem os arquivos assinados do updater.
+      # No Linux o linuxdeploy do AppImage confere as dependências de todo ELF do bundle e não segue o $ORIGIN do tor
+      # empacotado; a pasta dele entra no LD_LIBRARY_PATH só neste passo, para achar libevent, libssl e libcrypto.
       - name: Criar bundle sem assinatura
+        if: runner.os != 'Linux'
         run: npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
+
+      - name: Criar bundle sem assinatura no Linux
+        if: runner.os == 'Linux'
+        env:
+          TOR_LIBRARIES: ${{ github.workspace }}/apps/desktop/src-tauri/resources/tor/tor
+        run: LD_LIBRARY_PATH="$TOR_LIBRARIES${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
 
       - name: Anexar bundles
         uses: actions/upload-artifact@v4
