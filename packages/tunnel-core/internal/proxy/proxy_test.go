@@ -661,7 +661,8 @@ func TestBridgeRevocationCloseRevokesThePathManager(t *testing.T) {
 	}))
 	defer backend.Close()
 	dialer := newFakeDialer(backend.Listener.Addr().String())
-	proxy, err := New(Config{Dialer: dialer, DesktopID: "desktop-one", DeviceToken: deviceToken(9)})
+	var notified atomic.Int32
+	proxy, err := New(Config{Dialer: dialer, DesktopID: "desktop-one", DeviceToken: deviceToken(9), OnRevoked: func() { notified.Add(1) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -698,6 +699,9 @@ func TestBridgeRevocationCloseRevokesThePathManager(t *testing.T) {
 	case failure := <-dialer.failures:
 		if !errors.Is(failure, pathmgr.ErrRevoked) || pathmgr.Code(failure) != pathmgr.CodeRevoked {
 			t.Fatalf("reported %v, want a revocation", failure)
+		}
+		if notified.Load() != 1 {
+			t.Fatalf("OnRevoked ran %d times before the report", notified.Load())
 		}
 	case <-time.After(testTimeout):
 		t.Fatal("the 4401 close was not reported to the path manager")

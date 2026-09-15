@@ -1,563 +1,626 @@
 // SPDX-License-Identifier: Apache-2.0
 // Package mobile is the gomobile boundary used by the iOS and Android shells.
-// Structured values cross the native boundary as JSON and device tokens are
-// never persisted by this package.
+// The phone holds an Ed25519 identity, remembers the reach card of each paired
+// desktop and reaches it through the path manager: the local network and the
+// direct internet path over QUIC, or the Tor fallback through the SOCKS
+// listener of the Tor the native side runs. The loopback proxy serves the
+// desktop page over whichever path is active.
+//
+// Only types accepted by gobind cross the boundary; structured values are
+// JSON. Errors read "code: message", and the native side hands the code to
+// TypeScript. Device tokens are never persisted by this package.
+//
+// Events delivered to Listener.OnEvent:
+//
+//	state  status snapshot as in StatusJSON, with desktopId and code when
+//	       offline; {"legacyDiscarded":true} once after discarding version 1
+//	path   {desktopId, transport, path, reason} each time the active path
+//	       changes; path "none" carries the error code as reason
+//	tor    {state, progress} of the Tor fallback
+//	proxy  {state: open | closed | token-rotated | revoked, desktopId, ...};
+//	       token-rotated carries deviceToken for the secure store
+//	pair   {state: lan | direct | tor | confirming | completed, desktopId}
+//	log    {level, message} filtered by SetLogLevel
 package mobile
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
+	"maps"
 	"net"
-	"net/http"
+	"net/netip"
 	"os"
-	"path/filepath"
+	"runtime"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
-	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/mdns"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/tor"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/direct"
 )
 
 const (
-	version             = "0.1.0"
-	mobileStateFile     = "mobile-state.json"
-	maxMobileStateBytes = 1 << 20
+	version           = "0.2.0"
+	proxyCloseTimeout = 5 * time.Second
 )
 
-// Listener receives non-secret lifecycle events. kind is one of state, peer,
-// proxy, pair or log and payloadJSON is always a JSON object.
+const (
+	levelError int32 = iota
+	levelInfo
+	levelDebug
+)
+
+var levelNames = []string{"error", "info", "debug"}
+
+// Listener receives non-secret lifecycle events, except the rotated device
+// token of proxy token-rotated. kind is one of state, path, tor, proxy, pair or
+// log and payloadJSON is always a JSON object.
 type Listener interface {
 	OnEvent(kind string, payloadJSON string)
 }
 
-type storedDesktop struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Port    int    `json:"port"`
-	NodeKey string `json:"nodeKey"`
-}
-
-type storedProfile struct {
-	ID         string                   `json:"id"`
-	ControlURL string                   `json:"controlUrl"`
-	UserID     string                   `json:"userId"`
-	UserName   string                   `json:"userName"`
-	Hostname   string                   `json:"hostname"`
-	Desktops   map[string]storedDesktop `json:"desktops"`
-}
-
-type stateFile struct {
-	Version  int             `json:"version"`
-	Profiles []storedProfile `json:"profiles"`
-}
-
-// Tunnel owns one tsnet node and at most one loopback proxy. Calls which change
-// the active profile are serialized because tsnet state directories have a
-// single owner.
+// Tunnel reaches the paired desktops of one app installation. At most one
+// desktop has a path manager and a loopback proxy at a time; opening another
+// desktop closes them.
 type Tunnel struct {
-	opMu          sync.Mutex
-	mu            sync.RWMutex
-	paths         statedir.Paths
-	listener      Listener
-	node          *node.Manager
-	profiles      map[string]storedProfile
-	activeProfile string
-	openDesktop   string
-	proxy         *proxy.Proxy
-	logLevel      string
+	// opMu serializes the calls that replace the manager or the proxy.
+	opMu sync.Mutex
+	// pairMu keeps one pairing at a time.
+	pairMu sync.Mutex
+
+	paths    statedir.Paths
+	listener Listener
+	local    *identity.Identity
+	tor      *tor.Client
+	now      func() time.Time
+	logLevel atomic.Int32
+
+	// Seams for tests; NewTunnel sets the production values.
+	timings      pathmgr.Timings
+	listenPacket func() (net.PacketConn, error)
+	pairRetry    time.Duration
+	pairTorGrace time.Duration
+
+	mu         sync.Mutex
+	desktops   map[string]storedDesktop
+	reported   map[string][]netip.AddrPort
+	endpoint   *direct.Endpoint
+	manager    *pathmgr.Manager
+	managerID  string
+	managerGen uint64
+	proxy      *proxy.Proxy
+	proxyID    string
+	torStatus  pathmgr.TorStatus
+	ctx        context.Context
+	cancel     context.CancelFunc
+
+	saveMu sync.Mutex
 }
 
 // Version identifies the Go mobile API and is safe to call before NewTunnel.
 func Version() string { return version }
 
-// NewTunnel opens private mobile state. stateDir must be an absolute app data
-// directory which the native module has already excluded from backups.
+// NewTunnel opens the private mobile state: identity.key, which the native
+// module excludes from backups, and mobile-state.json version 2. stateDir must
+// be an absolute app data directory.
 func NewTunnel(stateDir string, listener Listener) (*Tunnel, error) {
-	paths, err := statedir.Prepare(stateDir)
+	if err := prepareQUIC(runtime.GOOS, os.Setenv); err != nil {
+		return nil, err
+	}
+	paths, err := prepareRoot(stateDir)
 	if err != nil {
 		return nil, coded("state_invalid", err)
 	}
-	tunnel := &Tunnel{
-		paths: paths, listener: listener,
-		node:     node.NewTSNetManager(func(string, ...any) {}, func(string, ...any) {}),
-		profiles: map[string]storedProfile{}, logLevel: "info",
+	local, _, _, err := identity.Open(identity.Options{Role: identity.RolePhone, Dir: paths.Root})
+	if err != nil {
+		return nil, coded("identity_invalid", err)
 	}
-	if err := tunnel.load(); err != nil {
+	desktops, legacy, err := loadState(paths)
+	if err != nil {
 		return nil, err
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	tunnel := &Tunnel{
+		paths: paths, listener: listener, local: local, tor: tor.NewClient(), now: time.Now,
+		listenPacket: listenUDP, pairRetry: pairTorRetry, pairTorGrace: pairTorGrace,
+		desktops: desktops, reported: map[string][]netip.AddrPort{},
+		torStatus: pathmgr.TorStatus{State: pathmgr.TorDisabled}, ctx: ctx, cancel: cancel,
+	}
+	tunnel.logLevel.Store(levelInfo)
+	if legacy {
+		tunnel.emit("state", map[string]any{"legacyDiscarded": true})
+		tunnel.log(levelInfo, "discarded the mobile state of a previous Cialai version")
 	}
 	return tunnel, nil
 }
 
-// InspectPairPayload validates the strict QR schema without returning the
-// enrollment key or pairing secret.
-func (tunnel *Tunnel) InspectPairPayload(payload string) (string, error) {
-	inspection, err := pairing.Inspect(payload, time.Now(), false)
-	if err != nil {
-		return "", pairingProblem(err)
+// SetTorEndpoints hands over the listeners of the Tor the native side runs:
+// SOCKS is required, control and cookiePath only serve bootstrap progress. Empty
+// values clear them when that Tor stops.
+func (tunnel *Tunnel) SetTorEndpoints(socksAddr, controlAddr, cookiePath string) error {
+	endpoints := tor.Endpoints{SOCKS: socksAddr, Control: controlAddr, CookiePath: cookiePath}
+	if err := tunnel.tor.SetTorEndpoints(endpoints); err != nil {
+		return coded("tor_endpoints_invalid", err)
 	}
-	tunnel.mu.RLock()
-	for _, profile := range tunnel.profiles {
-		if profile.ControlURL == inspection.Control && profile.UserID == inspection.UserID {
-			inspection.ProfileMatch = "existing"
-			break
-		}
+	status := pathmgr.TorStatus{State: pathmgr.TorUnknown}
+	if endpoints == (tor.Endpoints{}) {
+		status.State = pathmgr.TorDisabled
 	}
-	tunnel.mu.RUnlock()
-	if inspection.ProfileMatch == "" {
-		inspection.ProfileMatch = "new"
+	tunnel.setTor(status)
+	if status.State != pathmgr.TorDisabled {
+		tunnel.reevaluateOffline()
 	}
-	return marshalJSON(inspection)
+	return nil
 }
 
-// Pair joins the matching profile, reaches the desktop through tsnet and
-// exchanges the one-use QR proof for a per-device token returned to native.
-func (tunnel *Tunnel) Pair(payloadText, deviceName, deviceModel, platform, appVersion string) (string, error) {
-	if err := validateDevice(deviceName, deviceModel, platform, appVersion); err != nil {
-		return "", err
-	}
-	payload, err := pairing.Decode(payloadText, false)
+// ReportLanCandidates replaces the addresses native DNS-SD discovery resolved
+// for desktopID, as [{"host","port","id","fp"}].
+func (tunnel *Tunnel) ReportLanCandidates(desktopID string, reportedJSON string) error {
+	addresses, err := mdns.ParseReported(desktopID, []byte(reportedJSON))
 	if err != nil {
-		return "", pairingProblem(err)
-	}
-	if payload.ExpiresAt < time.Now().Add(-time.Minute).Unix() {
-		return "", codedMessage("payload_expired", "Este código expirou. Gere um novo no computador.")
-	}
-
-	tunnel.opMu.Lock()
-	defer tunnel.opMu.Unlock()
-	profile, exists := tunnel.profileFor(payload.ControlURL, payload.UserID)
-	if !exists {
-		profile = storedProfile{
-			ID: profileID(payload.ControlURL, payload.UserID), ControlURL: payload.ControlURL,
-			UserID: payload.UserID, UserName: payload.UserName,
-			Hostname: deviceHostname(deviceModel, profileID(payload.ControlURL, payload.UserID)),
-			Desktops: map[string]storedDesktop{},
-		}
-	}
-	if tunnel.activeProfile != profile.ID {
-		if err := tunnel.stopLocked(); err != nil {
-			return "", err
-		}
-		authKey := ""
-		if !exists && payload.AuthKey != nil {
-			authKey = *payload.AuthKey
-		}
-		if err := tunnel.startLocked(profile, authKey); err != nil {
-			return "", err
-		}
-	}
-	status, err := tunnel.waitForPeer(payload.Desktop.NodeKey, 20*time.Second)
-	if err != nil {
-		return "", err
-	}
-	result, err := tunnel.exchangePair(payload, status.NodeKey, deviceName, deviceModel, platform, appVersion)
-	if err != nil {
-		return "", err
-	}
-	profile.Desktops[payload.Desktop.ID] = storedDesktop{
-		ID: payload.Desktop.ID, Name: result.Desktop.Name, Port: result.Desktop.Port, NodeKey: payload.Desktop.NodeKey,
+		return coded("lan_report_invalid", err)
 	}
 	tunnel.mu.Lock()
-	tunnel.profiles[profile.ID] = profile
+	if _, known := tunnel.desktops[desktopID]; !known {
+		tunnel.mu.Unlock()
+		return desktopUnknown()
+	}
+	tunnel.reported[desktopID] = addresses
+	var manager *pathmgr.Manager
+	if tunnel.managerID == desktopID {
+		manager = tunnel.manager
+	}
 	tunnel.mu.Unlock()
-	if err := tunnel.save(); err != nil {
+	if manager != nil {
+		manager.SetReportedLAN(addresses)
+		if len(addresses) > 0 {
+			tunnel.reevaluateOffline()
+		}
+	}
+	return nil
+}
+
+// Connect evaluates the paths to a paired desktop and waits until one is
+// active or every step failed.
+func (tunnel *Tunnel) Connect(desktopID string) (string, error) {
+	tunnel.opMu.Lock()
+	manager, err := tunnel.managerForLocked(desktopID)
+	ctx := tunnel.context()
+	tunnel.opMu.Unlock()
+	if err != nil {
 		return "", err
 	}
-	output := map[string]any{
-		"profileId": profile.ID, "desktopId": payload.Desktop.ID, "deviceId": result.DeviceID,
-		"token": result.Token, "desktop": map[string]any{
-			"id": payload.Desktop.ID, "name": result.Desktop.Name, "port": result.Desktop.Port, "nodeKey": payload.Desktop.NodeKey,
-		}, "nodeKey": status.NodeKey,
+	result, err := manager.Connect(ctx)
+	if err != nil {
+		tunnel.log(levelDebug, "connect to "+desktopID+" failed: "+err.Error())
+		tunnel.emitState()
+		return "", pathProblem(err)
 	}
-	tunnel.emit("pair", map[string]any{"state": "completed", "profileId": profile.ID, "desktopId": payload.Desktop.ID})
-	return marshalJSON(output)
-}
-
-// StartProfile activates an enrolled profile without accepting credentials.
-func (tunnel *Tunnel) StartProfile(profileID string) error {
-	tunnel.opMu.Lock()
-	defer tunnel.opMu.Unlock()
-	profile, ok := tunnel.profile(profileID)
-	if !ok {
-		return codedMessage("profile_unknown", "O perfil solicitado não existe neste aparelho.")
-	}
-	if tunnel.activeProfile == profileID {
-		return nil
-	}
-	if err := tunnel.stopLocked(); err != nil {
-		return err
-	}
-	return tunnel.startLocked(profile, "")
-}
-
-// Stop closes the loopback proxy before stopping the active node.
-func (tunnel *Tunnel) Stop() error {
-	tunnel.opMu.Lock()
-	defer tunnel.opMu.Unlock()
-	return tunnel.stopLocked()
-}
-
-// StatusJSON returns the last known status even while the node is stopped.
-func (tunnel *Tunnel) StatusJSON() (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	status, err := tunnel.node.Status(ctx)
-	if err != nil && !errors.Is(err, node.ErrStopped) {
-		return "", coded("status_failed", err)
-	}
-	if errors.Is(err, node.ErrStopped) {
-		status = tunnel.node.Snapshot()
-	}
-	return marshalJSON(status)
+	tunnel.touch(desktopID, result.Transport)
+	tunnel.emitState()
+	return marshalJSON(result)
 }
 
 // OpenDesktop creates the authenticated loopback origin consumed by WebView.
+// The proxy dials the desktop through the path manager.
 func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort int) (string, error) {
 	tunnel.opMu.Lock()
 	defer tunnel.opMu.Unlock()
-	profile, ok := tunnel.profile(tunnel.activeProfile)
-	if !ok {
-		return "", codedMessage("profile_inactive", "Inicie o perfil antes de abrir o computador.")
-	}
-	desktop, ok := profile.Desktops[desktopID]
-	if !ok {
-		return "", codedMessage("desktop_unknown", "O computador solicitado não pertence ao perfil ativo.")
-	}
-	if err := tunnel.closeProxyLocked(); err != nil {
+	manager, err := tunnel.managerForLocked(desktopID)
+	if err != nil {
 		return "", err
 	}
+	tunnel.mu.Lock()
+	previous, previousID := tunnel.proxy, tunnel.proxyID
+	tunnel.proxy, tunnel.proxyID = nil, ""
+	tunnel.mu.Unlock()
+	tunnel.closeProxy(previous, previousID)
 	instance, err := proxy.New(proxy.Config{
-		Dialer:    tailnetDialer{manager: tunnel.node, nodeKey: desktop.NodeKey, port: desktop.Port},
-		DesktopID: desktop.ID, DeviceToken: deviceToken,
+		Dialer: manager, DesktopID: desktopID, DeviceToken: deviceToken,
 		OnToken: func(next string) error {
-			tunnel.emit("proxy", map[string]any{"state": "token-rotated", "desktopId": desktop.ID, "deviceToken": next})
+			tunnel.emit("proxy", map[string]any{"state": "token-rotated", "desktopId": desktopID, "deviceToken": next})
 			return nil
+		},
+		OnRevoked: func() {
+			tunnel.emit("proxy", map[string]any{"state": "revoked", "desktopId": desktopID})
 		},
 	})
 	if err != nil {
 		return "", coded("proxy_invalid", err)
+	}
+	if preferredPort < 0 || preferredPort > 65535 {
+		preferredPort = 0
 	}
 	opened, err := instance.Open(preferredPort)
 	if err != nil {
 		return "", coded("proxy_open_failed", err)
 	}
 	tunnel.mu.Lock()
-	tunnel.proxy = instance
-	tunnel.openDesktop = desktop.ID
+	tunnel.proxy, tunnel.proxyID = instance, desktopID
 	tunnel.mu.Unlock()
-	tunnel.emit("proxy", map[string]any{"state": "open", "desktopId": desktop.ID, "port": opened.Port, "warning": opened.Warning})
+	event := map[string]any{"state": "open", "desktopId": desktopID, "port": opened.Port}
+	if opened.Warning != "" {
+		event["warning"] = opened.Warning
+	}
+	tunnel.emit("proxy", event)
 	return marshalJSON(opened)
 }
 
-// CloseDesktop closes the proxy only when it belongs to desktopID.
+// CloseDesktop closes the proxy and the path of desktopID.
 func (tunnel *Tunnel) CloseDesktop(desktopID string) error {
 	tunnel.opMu.Lock()
 	defer tunnel.opMu.Unlock()
-	tunnel.mu.RLock()
-	openID := tunnel.openDesktop
-	tunnel.mu.RUnlock()
-	if openID != "" && openID != desktopID {
+	tunnel.mu.Lock()
+	if tunnel.proxyID != "" && tunnel.proxyID != desktopID {
+		tunnel.mu.Unlock()
 		return codedMessage("desktop_not_open", "Este computador não está aberto no proxy local.")
 	}
-	return tunnel.closeProxyLocked()
-}
-
-// NotifyNetworkChange asks tsnet to rebind and discover a fresh path.
-func (tunnel *Tunnel) NotifyNetworkChange(reachable bool) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := tunnel.node.NotifyNetworkChange(ctx, reachable); err != nil && !errors.Is(err, node.ErrStopped) {
-		tunnel.emit("log", map[string]any{"level": "error", "code": "network_change_failed"})
-		return
+	if tunnel.managerID != desktopID {
+		tunnel.mu.Unlock()
+		return nil
 	}
-	tunnel.emit("state", map[string]any{"reachable": reachable})
+	manager, instance, proxyID := tunnel.detachLocked()
+	tunnel.mu.Unlock()
+	tunnel.release(manager, instance, proxyID)
+	tunnel.emitState()
+	return nil
 }
 
-// NotifyForeground refreshes paths on resume. Native code owns the platform
-// background deadline and may call Stop before a later StartProfile.
-func (tunnel *Tunnel) NotifyForeground(active bool) {
-	if active {
-		tunnel.NotifyNetworkChange(true)
-		return
-	}
-	tunnel.emit("state", map[string]any{"foreground": false})
-}
-
-// ForgetProfile logs out the active profile, removes its tsnet state and drops
-// only non-secret mobile metadata for that profile.
-func (tunnel *Tunnel) ForgetProfile(profileID string) error {
+// Stop cancels pairings and connections in progress and closes the proxy, the
+// path and the QUIC socket. A later Connect starts them again.
+func (tunnel *Tunnel) Stop() error {
+	tunnel.mu.Lock()
+	tunnel.cancel()
+	tunnel.ctx, tunnel.cancel = context.WithCancel(context.Background())
+	tunnel.mu.Unlock()
 	tunnel.opMu.Lock()
 	defer tunnel.opMu.Unlock()
-	if _, ok := tunnel.profile(profileID); !ok {
-		return nil
-	}
-	if tunnel.activeProfile == profileID {
-		if err := tunnel.stopLocked(); err != nil {
-			return err
+	tunnel.mu.Lock()
+	manager, instance, proxyID := tunnel.detachLocked()
+	endpoint := tunnel.endpoint
+	tunnel.endpoint = nil
+	tunnel.mu.Unlock()
+	tunnel.release(manager, instance, proxyID)
+	var err error
+	if endpoint != nil {
+		if closeErr := endpoint.Close(); closeErr != nil {
+			err = coded("stop_failed", closeErr)
 		}
 	}
-	target := tunnel.profileStateDir(profileID)
-	if !pathInside(tunnel.paths.Root, target) {
-		return codedMessage("state_invalid", "O diretório do perfil não é seguro.")
-	}
-	if err := os.RemoveAll(target); err != nil {
-		return coded("profile_forget_failed", err)
-	}
-	tunnel.mu.Lock()
-	delete(tunnel.profiles, profileID)
-	tunnel.mu.Unlock()
-	return tunnel.save()
+	tunnel.emitState()
+	return err
 }
 
-// SetLogLevel selects which sanitized native events may be emitted.
+// StatusJSON returns the connection state, the active path and the fallback.
+func (tunnel *Tunnel) StatusJSON() (string, error) {
+	return marshalJSON(tunnel.status())
+}
+
+type desktopView struct {
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Fingerprint   string    `json:"fingerprint"`
+	PairedAt      time.Time `json:"pairedAt"`
+	LastSeenAt    time.Time `json:"lastSeenAt"`
+	LastTransport string    `json:"lastTransport"`
+}
+
+// DesktopsJSON lists the paired desktops in pairing order.
+func (tunnel *Tunnel) DesktopsJSON() (string, error) {
+	tunnel.mu.Lock()
+	views := make([]desktopView, 0, len(tunnel.desktops))
+	for _, desktop := range tunnel.desktops {
+		views = append(views, desktopView{
+			ID: desktop.ID, Name: desktop.Name, Fingerprint: desktop.Fingerprint,
+			PairedAt: desktop.PairedAt, LastSeenAt: desktop.LastSeenAt, LastTransport: desktop.LastTransport,
+		})
+	}
+	tunnel.mu.Unlock()
+	slices.SortFunc(views, func(left, right desktopView) int {
+		if order := left.PairedAt.Compare(right.PairedAt); order != 0 {
+			return order
+		}
+		return strings.Compare(left.ID, right.ID)
+	})
+	return marshalJSON(map[string]any{"desktops": views})
+}
+
+// NotifyNetworkChange reports that the phone network changed: the active
+// direct session migrates, or the paths are evaluated again.
+func (tunnel *Tunnel) NotifyNetworkChange(reachable bool) {
+	if manager := tunnel.currentManager(); manager != nil {
+		manager.NotifyNetworkChange(reachable)
+	}
+	tunnel.emitState()
+}
+
+// NotifyForeground refreshes the path on resume and re-dials the fallback when
+// it is in use. Native code owns the platform background deadline and may call
+// Stop before a later Connect.
+func (tunnel *Tunnel) NotifyForeground(active bool) {
+	if manager := tunnel.currentManager(); manager != nil {
+		manager.NotifyForeground(active)
+	}
+	tunnel.emitState()
+}
+
+// ForgetDesktop drops the non-secret memory of a desktop and closes its path.
+// The native side deletes the token.
+func (tunnel *Tunnel) ForgetDesktop(desktopID string) error {
+	tunnel.opMu.Lock()
+	defer tunnel.opMu.Unlock()
+	tunnel.mu.Lock()
+	if _, known := tunnel.desktops[desktopID]; !known {
+		tunnel.mu.Unlock()
+		return nil
+	}
+	var manager *pathmgr.Manager
+	var instance *proxy.Proxy
+	var proxyID string
+	if tunnel.managerID == desktopID {
+		manager, instance, proxyID = tunnel.detachLocked()
+	}
+	delete(tunnel.desktops, desktopID)
+	delete(tunnel.reported, desktopID)
+	tunnel.mu.Unlock()
+	tunnel.release(manager, instance, proxyID)
+	err := tunnel.save()
+	tunnel.emitState()
+	return err
+}
+
+// SetLogLevel selects which log events are emitted: error, info or debug.
 func (tunnel *Tunnel) SetLogLevel(level string) {
-	if level != "error" && level != "info" && level != "debug" {
+	if index := slices.Index(levelNames, level); index >= 0 {
+		tunnel.logLevel.Store(int32(index))
+	}
+}
+
+// managerForLocked returns the path manager of desktopID, replacing the manager
+// and proxy of another desktop. The caller holds opMu.
+func (tunnel *Tunnel) managerForLocked(desktopID string) (*pathmgr.Manager, error) {
+	tunnel.mu.Lock()
+	desktop, known := tunnel.desktops[desktopID]
+	if !known {
+		tunnel.mu.Unlock()
+		return nil, desktopUnknown()
+	}
+	if tunnel.manager != nil && tunnel.managerID == desktopID {
+		manager := tunnel.manager
+		tunnel.mu.Unlock()
+		return manager, nil
+	}
+	previous, previousProxy, previousProxyID := tunnel.detachLocked()
+	tunnel.mu.Unlock()
+	tunnel.release(previous, previousProxy, previousProxyID)
+
+	card, err := desktop.card()
+	if err != nil {
+		return nil, coded("state_invalid", err)
+	}
+	endpoint, err := tunnel.ensureEndpoint()
+	if err != nil {
+		return nil, err
+	}
+	tunnel.mu.Lock()
+	tunnel.managerGen++
+	generation := tunnel.managerGen
+	reported := slices.Clone(tunnel.reported[desktopID])
+	tunnel.mu.Unlock()
+	manager, err := pathmgr.New(pathmgr.Config{
+		Card: card, Local: tunnel.local, Direct: endpoint, Tor: tunnel.tor,
+		ListenPacket: tunnel.listenPacket, Timings: tunnel.timings,
+		OnPath: func(event pathmgr.PathEvent) { tunnel.onPath(generation, event) },
+		OnTor: func(status pathmgr.TorStatus) {
+			if tunnel.currentGeneration() == generation {
+				tunnel.setTor(status)
+			}
+		},
+		Logf: func(format string, args ...any) { tunnel.log(levelDebug, fmt.Sprintf(format, args...)) },
+	})
+	if err != nil {
+		return nil, coded("path_setup_failed", err)
+	}
+	manager.SetReportedLAN(reported)
+	tunnel.mu.Lock()
+	tunnel.manager, tunnel.managerID = manager, desktopID
+	tunnel.mu.Unlock()
+	return manager, nil
+}
+
+// detachLocked takes the manager and the proxy out of the tunnel; callbacks of
+// the detached manager are ignored from then on. The caller holds mu and
+// releases them after unlocking, because closing a manager waits for its
+// callbacks.
+func (tunnel *Tunnel) detachLocked() (*pathmgr.Manager, *proxy.Proxy, string) {
+	manager, instance, proxyID := tunnel.manager, tunnel.proxy, tunnel.proxyID
+	tunnel.manager, tunnel.managerID = nil, ""
+	tunnel.proxy, tunnel.proxyID = nil, ""
+	tunnel.managerGen++
+	return manager, instance, proxyID
+}
+
+func (tunnel *Tunnel) release(manager *pathmgr.Manager, instance *proxy.Proxy, proxyID string) {
+	tunnel.closeProxy(instance, proxyID)
+	if manager != nil {
+		_ = manager.Close()
+	}
+}
+
+func (tunnel *Tunnel) closeProxy(instance *proxy.Proxy, desktopID string) {
+	if instance == nil {
 		return
 	}
-	tunnel.mu.Lock()
-	tunnel.logLevel = level
-	tunnel.mu.Unlock()
-}
-
-type pairResponse struct {
-	DeviceID string `json:"deviceId"`
-	Token    string `json:"token"`
-	Desktop  struct {
-		ID   string `json:"id"`
-		Name string `json:"name"`
-		Port int    `json:"port"`
-	} `json:"desktop"`
-}
-
-func (tunnel *Tunnel) exchangePair(payload pairing.Payload, nodeKey, name, model, platform, appVersion string) (pairResponse, error) {
-	body, err := json.Marshal(map[string]any{
-		"v": 1, "pairId": payload.PairID, "secret": payload.Secret,
-		"device": map[string]string{"name": name, "model": model, "platform": platform, "app": appVersion, "nodeKey": nodeKey},
-	})
-	if err != nil {
-		return pairResponse{}, coded("pair_internal", err)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	transport := &http.Transport{Proxy: nil, DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
-		peer, ok := tunnel.node.Peer(payload.Desktop.NodeKey)
-		if !ok {
-			return nil, errors.New("desktop peer disappeared")
-		}
-		host := peer.IP4
-		if host == "" {
-			host = peer.IP6
-		}
-		return tunnel.node.Dial(ctx, network, net.JoinHostPort(host, fmt.Sprint(payload.Desktop.Port)))
-	}}
-	defer transport.CloseIdleConnections()
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://cialai-desktop/pair", bytes.NewReader(body))
-	if err != nil {
-		return pairResponse{}, coded("pair_internal", err)
-	}
-	request.Header.Set("Content-Type", "application/json")
-	response, err := (&http.Client{Transport: transport}).Do(request)
-	if err != nil {
-		return pairResponse{}, codedMessage("peer_not_found", "Seu computador ainda não está acessível. Deixe o Cialai aberto nele e tente de novo.")
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, maxMobileStateBytes+1))
-	if err != nil || len(raw) > maxMobileStateBytes {
-		return pairResponse{}, codedMessage("pair_invalid_response", "O computador devolveu uma resposta de pareamento inválida.")
-	}
-	if response.StatusCode != http.StatusOK {
-		var problem struct {
-			Error struct {
-				Code    string `json:"code"`
-				Message string `json:"message"`
-			} `json:"error"`
-		}
-		if json.Unmarshal(raw, &problem) == nil && problem.Error.Code != "" {
-			return pairResponse{}, codedMessage(problem.Error.Code, problem.Error.Message)
-		}
-		return pairResponse{}, codedMessage("pair_failed", "O computador recusou o pareamento.")
-	}
-	var result pairResponse
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&result); err != nil || result.DeviceID == "" || result.Token == "" || result.Desktop.ID != payload.Desktop.ID || result.Desktop.Name == "" || result.Desktop.Port < 1 || result.Desktop.Port > 65535 {
-		return pairResponse{}, codedMessage("pair_invalid_response", "O computador devolveu uma resposta de pareamento inválida.")
-	}
-	return result, nil
-}
-
-// tailnetDialer lets the proxy dial the desktop peer of the tsnet node.
-type tailnetDialer struct {
-	manager *node.Manager
-	nodeKey string
-	port    int
-}
-
-func (dialer tailnetDialer) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
-	peer, ok := dialer.manager.Peer(dialer.nodeKey)
-	if !ok || (peer.IP4 == "" && peer.IP6 == "") {
-		return nil, errors.New("desktop peer is not visible")
-	}
-	host := peer.IP4
-	if host == "" {
-		host = peer.IP6
-	}
-	return dialer.manager.Dial(ctx, network, net.JoinHostPort(host, fmt.Sprint(dialer.port)))
-}
-
-func (dialer tailnetDialer) Active() pathmgr.Path {
-	return pathmgr.Path{DesktopID: dialer.nodeKey, Transport: "tailnet", Kind: pathmgr.KindDirect}
-}
-
-func (tailnetDialer) ReportFailure(error) {}
-
-func (tunnel *Tunnel) startLocked(profile storedProfile, authKey string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	defer cancel()
-	status, err := tunnel.node.Up(ctx, node.Config{
-		StateDir: tunnel.profileStateDir(profile.ID), ControlURL: profile.ControlURL,
-		UserID: profile.UserID, UserName: profile.UserName, Hostname: profile.Hostname, AuthKey: authKey,
-	})
-	if err != nil {
-		code := "profile_start_failed"
-		if authKey != "" {
-			code = "auth_key_rejected"
-		}
-		return coded(code, err)
-	}
-	tunnel.mu.Lock()
-	tunnel.activeProfile = profile.ID
-	tunnel.mu.Unlock()
-	tunnel.emit("state", status)
-	return nil
-}
-
-func (tunnel *Tunnel) stopLocked() error {
-	if err := tunnel.closeProxyLocked(); err != nil {
-		return err
-	}
-	if err := tunnel.node.Down(); err != nil {
-		return coded("profile_stop_failed", err)
-	}
-	tunnel.mu.Lock()
-	tunnel.activeProfile = ""
-	tunnel.mu.Unlock()
-	tunnel.emit("state", map[string]any{"state": "stopped"})
-	return nil
-}
-
-func (tunnel *Tunnel) closeProxyLocked() error {
-	tunnel.mu.Lock()
-	instance := tunnel.proxy
-	desktopID := tunnel.openDesktop
-	tunnel.proxy = nil
-	tunnel.openDesktop = ""
-	tunnel.mu.Unlock()
-	if instance == nil {
-		return nil
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), proxyCloseTimeout)
 	defer cancel()
 	if err := instance.Close(ctx); err != nil {
-		return coded("proxy_close_failed", err)
+		tunnel.log(levelError, "closing the local proxy failed: "+err.Error())
 	}
 	tunnel.emit("proxy", map[string]any{"state": "closed", "desktopId": desktopID})
-	return nil
 }
 
-func (tunnel *Tunnel) waitForPeer(nodeKey string, timeout time.Duration) (node.Status, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	for {
-		status, err := tunnel.node.Status(ctx)
-		if err == nil {
-			if peer, found := tunnel.node.Peer(nodeKey); found && (peer.IP4 != "" || peer.IP6 != "") {
-				tunnel.emit("peer", peer)
-				return status, nil
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return node.Status{}, codedMessage("peer_not_found", "Seu computador ainda não está acessível. Deixe o Cialai aberto nele e tente de novo.")
-		case <-time.After(100 * time.Millisecond):
-		}
+func (tunnel *Tunnel) ensureEndpoint() (*direct.Endpoint, error) {
+	tunnel.mu.Lock()
+	defer tunnel.mu.Unlock()
+	if tunnel.endpoint != nil {
+		return tunnel.endpoint, nil
 	}
-}
-
-func (tunnel *Tunnel) load() error {
-	raw, err := os.ReadFile(filepath.Join(tunnel.paths.Root, mobileStateFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	packetConn, err := tunnel.listenPacket()
 	if err != nil {
-		return coded("state_read_failed", err)
+		return nil, coded("socket_failed", err)
 	}
-	if len(raw) > maxMobileStateBytes {
-		return codedMessage("state_invalid", "O estado móvel excede o tamanho permitido.")
+	endpoint, err := direct.New(direct.Config{PacketConn: packetConn, Identity: tunnel.local})
+	if err != nil {
+		_ = packetConn.Close()
+		return nil, coded("socket_failed", err)
 	}
-	var stored stateFile
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&stored); err != nil || stored.Version != 1 {
-		return codedMessage("state_invalid", "O estado móvel está corrompido.")
+	tunnel.endpoint = endpoint
+	return endpoint, nil
+}
+
+func (tunnel *Tunnel) onPath(generation uint64, event pathmgr.PathEvent) {
+	tunnel.mu.Lock()
+	if generation != tunnel.managerGen {
+		tunnel.mu.Unlock()
+		return
 	}
-	for _, profile := range stored.Profiles {
-		if profile.ID == "" || profile.ControlURL == "" || profile.UserID == "" || profile.Hostname == "" || profile.Desktops == nil {
-			return codedMessage("state_invalid", "O estado móvel contém um perfil inválido.")
+	instance := tunnel.proxy
+	touched := false
+	if desktop, known := tunnel.desktops[event.DesktopID]; known && event.Path != pathmgr.KindNone {
+		desktop.LastSeenAt, desktop.LastTransport = tunnel.now().UTC().Truncate(time.Second), event.Transport
+		tunnel.desktops[event.DesktopID] = desktop
+		touched = true
+	}
+	tunnel.mu.Unlock()
+	if instance != nil {
+		if closed := instance.PathChanged(event); closed > 0 {
+			tunnel.log(levelDebug, fmt.Sprintf("path change closed %d upstreams", closed))
 		}
-		tunnel.profiles[profile.ID] = profile
 	}
-	return nil
+	tunnel.emit("path", event)
+	if touched {
+		if err := tunnel.save(); err != nil {
+			tunnel.log(levelError, err.Error())
+		}
+	}
+	tunnel.emitState()
+}
+
+func (tunnel *Tunnel) touch(desktopID, transportName string) {
+	tunnel.mu.Lock()
+	desktop, known := tunnel.desktops[desktopID]
+	if known {
+		desktop.LastSeenAt, desktop.LastTransport = tunnel.now().UTC().Truncate(time.Second), transportName
+		tunnel.desktops[desktopID] = desktop
+	}
+	tunnel.mu.Unlock()
+	if known {
+		if err := tunnel.save(); err != nil {
+			tunnel.log(levelError, err.Error())
+		}
+	}
+}
+
+// reevaluateOffline gives an offline manager a new evaluation after something
+// that may bring a path back, such as Tor starting.
+func (tunnel *Tunnel) reevaluateOffline() {
+	if manager := tunnel.currentManager(); manager != nil && manager.Status().State == pathmgr.StateOffline {
+		manager.NotifyNetworkChange(true)
+	}
+}
+
+func (tunnel *Tunnel) setTor(status pathmgr.TorStatus) {
+	tunnel.mu.Lock()
+	changed := tunnel.torStatus != status
+	tunnel.torStatus = status
+	tunnel.mu.Unlock()
+	if changed {
+		tunnel.emit("tor", status)
+	}
+}
+
+func (tunnel *Tunnel) currentManager() *pathmgr.Manager {
+	tunnel.mu.Lock()
+	defer tunnel.mu.Unlock()
+	return tunnel.manager
+}
+
+func (tunnel *Tunnel) currentGeneration() uint64 {
+	tunnel.mu.Lock()
+	defer tunnel.mu.Unlock()
+	return tunnel.managerGen
+}
+
+func (tunnel *Tunnel) context() context.Context {
+	tunnel.mu.Lock()
+	defer tunnel.mu.Unlock()
+	return tunnel.ctx
 }
 
 func (tunnel *Tunnel) save() error {
-	tunnel.mu.RLock()
-	stored := stateFile{Version: 1, Profiles: make([]storedProfile, 0, len(tunnel.profiles))}
-	for _, profile := range tunnel.profiles {
-		stored.Profiles = append(stored.Profiles, profile)
-	}
-	tunnel.mu.RUnlock()
-	raw, err := json.MarshalIndent(stored, "", "  ")
-	if err != nil {
-		return coded("state_write_failed", err)
-	}
-	if err := tunnel.paths.WriteAtomic(filepath.Join(tunnel.paths.Root, mobileStateFile), append(raw, '\n')); err != nil {
-		return coded("state_write_failed", err)
-	}
-	return nil
+	tunnel.saveMu.Lock()
+	defer tunnel.saveMu.Unlock()
+	tunnel.mu.Lock()
+	desktops := maps.Clone(tunnel.desktops)
+	tunnel.mu.Unlock()
+	return writeState(tunnel.paths, desktops)
 }
 
-func (tunnel *Tunnel) profile(profileID string) (storedProfile, bool) {
-	tunnel.mu.RLock()
-	defer tunnel.mu.RUnlock()
-	profile, ok := tunnel.profiles[profileID]
-	return profile, ok
+type statusView struct {
+	State string `json:"state"`
+	// DesktopID and Code name the desktop of the manager and, while offline,
+	// the reason no path reaches it.
+	DesktopID string      `json:"desktopId,omitempty"`
+	Code      string      `json:"code,omitempty"`
+	Active    *activeView `json:"active,omitempty"`
+	Tor       torView     `json:"tor"`
+	Desktops  int         `json:"desktops"`
 }
 
-func (tunnel *Tunnel) profileFor(controlURL, userID string) (storedProfile, bool) {
-	tunnel.mu.RLock()
-	defer tunnel.mu.RUnlock()
-	for _, profile := range tunnel.profiles {
-		if profile.ControlURL == controlURL && profile.UserID == userID {
-			return profile, true
+type activeView struct {
+	DesktopID string    `json:"desktopId"`
+	Transport string    `json:"transport"`
+	Path      string    `json:"path"`
+	Since     time.Time `json:"since"`
+}
+
+type torView struct {
+	State    string `json:"state"`
+	Progress int    `json:"progress"`
+}
+
+func (tunnel *Tunnel) status() statusView {
+	tunnel.mu.Lock()
+	manager, desktopID, torStatus, count := tunnel.manager, tunnel.managerID, tunnel.torStatus, len(tunnel.desktops)
+	tunnel.mu.Unlock()
+	view := statusView{State: string(pathmgr.StateIdle), Tor: torView{State: torStatus.State, Progress: torStatus.Progress}, Desktops: count}
+	if manager == nil {
+		return view
+	}
+	status := manager.Status()
+	view.State, view.DesktopID = string(status.State), desktopID
+	if status.Active != nil {
+		view.Active = &activeView{
+			DesktopID: status.Active.DesktopID, Transport: status.Active.Transport,
+			Path: string(status.Active.Kind), Since: status.Active.Since.UTC(),
 		}
 	}
-	return storedProfile{}, false
+	if status.State == pathmgr.StateOffline {
+		view.Code = status.Error
+	}
+	return view
 }
 
-func (tunnel *Tunnel) profileStateDir(profileID string) string {
-	return filepath.Join(tunnel.paths.Root, "profiles", profileID, "tsnet")
-}
+func (tunnel *Tunnel) emitState() { tunnel.emit("state", tunnel.status()) }
 
 func (tunnel *Tunnel) emit(kind string, payload any) {
 	if tunnel.listener == nil {
@@ -569,43 +632,34 @@ func (tunnel *Tunnel) emit(kind string, payload any) {
 	}
 }
 
-func validateDevice(name, model, platform, appVersion string) error {
-	if strings.TrimSpace(name) == "" || len([]rune(name)) > 48 || strings.TrimSpace(model) == "" || len([]rune(model)) > 64 || strings.TrimSpace(appVersion) == "" || len([]rune(appVersion)) > 32 {
-		return codedMessage("device_invalid", "A identificação deste aparelho é inválida.")
+func (tunnel *Tunnel) log(level int32, message string) {
+	if level <= tunnel.logLevel.Load() {
+		tunnel.emit("log", map[string]string{"level": levelNames[level], "message": message})
 	}
-	if platform != "ios" && platform != "android" {
-		return codedMessage("device_invalid", "A plataforma deste aparelho é inválida.")
-	}
-	return nil
 }
 
-func profileID(controlURL, userID string) string {
-	digest := sha256.Sum256([]byte(controlURL + "\x00" + userID))
-	return "profile_" + base64.RawURLEncoding.EncodeToString(digest[:16])
+var pathMessages = map[string]string{
+	pathmgr.CodeReserveUnavailable: "A conexão de reserva está indisponível e o computador não respondeu pelo caminho direto.",
+	pathmgr.CodeReservePreparing:   "A conexão de reserva ainda está preparando. Tente de novo em instantes.",
+	pathmgr.CodeNoPath:             "O computador não está acessível neste momento.",
+	pathmgr.CodeRevoked:            "Este celular foi removido do computador. Pareie de novo.",
 }
 
-func deviceHostname(model, suffix string) string {
-	clean := strings.ToLower(model)
-	clean = strings.Map(func(character rune) rune {
-		if character >= 'a' && character <= 'z' || character >= '0' && character <= '9' {
-			return character
-		}
-		return '-'
-	}, clean)
-	clean = strings.Trim(strings.Join(strings.FieldsFunc(clean, func(character rune) bool { return character == '-' }), "-"), "-")
-	if clean == "" {
-		clean = "mobile"
+// pathProblem turns a path manager failure into a coded error.
+func pathProblem(err error) error {
+	if errors.Is(err, pathmgr.ErrClosed) || errors.Is(err, context.Canceled) {
+		return codedMessage("stopped", "A conexão foi encerrada antes de concluir.")
 	}
-	tail := suffix
-	if len(tail) > 4 {
-		tail = tail[len(tail)-4:]
+	code := pathmgr.Code(err)
+	message, known := pathMessages[code]
+	if !known {
+		code, message = pathmgr.CodeNoPath, pathMessages[pathmgr.CodeNoPath]
 	}
-	return "cialai-" + clean + "-" + strings.ToLower(tail)
+	return codedMessage(code, message)
 }
 
-func pathInside(root, target string) bool {
-	relative, err := filepath.Rel(filepath.Clean(root), filepath.Clean(target))
-	return err == nil && relative != "." && relative != ".." && !filepath.IsAbs(relative) && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+func desktopUnknown() error {
+	return codedMessage("desktop_unknown", "O computador solicitado não está pareado neste celular.")
 }
 
 func marshalJSON(value any) (string, error) {
@@ -614,13 +668,6 @@ func marshalJSON(value any) (string, error) {
 		return "", coded("json_failed", err)
 	}
 	return string(raw), nil
-}
-
-func pairingProblem(err error) error {
-	if code := pairing.Code(err); code != "" {
-		return codedMessage(code, err.Error())
-	}
-	return coded("payload_invalid", err)
 }
 
 func coded(code string, err error) error {

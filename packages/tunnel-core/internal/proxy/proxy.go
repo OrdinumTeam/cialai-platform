@@ -71,6 +71,9 @@ type Config struct {
 	Now         func() time.Time
 	ReadTimeout time.Duration
 	OnToken     func(string) error
+	// OnRevoked runs once when the bridge closes a socket with
+	// RevokedCloseCode, before the path manager is revoked.
+	OnRevoked func()
 }
 
 type OpenResult struct {
@@ -475,7 +478,12 @@ func (proxy *Proxy) reportRevoked() {
 	if !proxy.revoked.CompareAndSwap(false, true) {
 		return
 	}
-	go proxy.config.Dialer.ReportFailure(fmt.Errorf("desktop bridge closed the socket with %d: %w", RevokedCloseCode, pathmgr.ErrRevoked))
+	go func() {
+		if proxy.config.OnRevoked != nil {
+			proxy.config.OnRevoked()
+		}
+		proxy.config.Dialer.ReportFailure(fmt.Errorf("desktop bridge closed the socket with %d: %w", RevokedCloseCode, pathmgr.ErrRevoked))
+	}()
 }
 
 // upgradeFailed reports a WebSocket whose bridge stayed silent for the read
