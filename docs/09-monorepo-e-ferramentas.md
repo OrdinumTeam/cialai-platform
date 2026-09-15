@@ -91,7 +91,7 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | `npm run test:desktop` | Confere estrutura, ícone, extração, onboarding, self test, sidecar e updater; gera sidecar e recurso móvel; executa build Vite, formatação, clippy e testes Rust |
 | `npm run test:tunnel` | Confere a receita Headscale, executa `go vet` e `go test -mod=readonly ./...` |
 | `npm run test:mobile` | Executa Jest no aplicativo Expo; typecheck e lint têm scripts próprios no workspace e também estão no Codemagic |
-| `npm run test:selftest` | Executa o self test local com dados fictícios e saída em diretório temporário |
+| `npm run test:selftest` | Executa o self test local no app real: terminal, arquivos, editor e Dev Browser com dados fictícios em diretório temporário; rede automática pelo sidecar v2 com a identidade e o Tor do app, sem campo preenchido, QR `CIALAI2.` lido do canvas sem gravar o payload e Dispositivos com `diagnostics.run` |
 | `npm run test:integration:headscale` | Executa a integração Docker com Headscale quando o ambiente estiver disponível |
 | `npm run test:spike:headscale` | Executa o spike local de política e expiração |
 | `npm run check:source` | Confere commit e hashes da origem somente leitura no Control |
