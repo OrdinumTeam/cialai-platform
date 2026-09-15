@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -7,59 +7,67 @@ import { StatusBar } from 'expo-status-bar';
 import {
   addListener as addTunnelListener,
   closeDesktop,
-  forgetProfile,
+  connect,
+  forgetDesktop as forgetTunnelDesktop,
   notifyForeground,
   notifyNetworkChange,
   openDesktop as openTunnelDesktop,
   setLogLevel as setNativeLogLevel,
-  startProfile,
   status,
   version as coreVersion,
-  type PairInspection,
+  type LogLevel,
   type PairResult,
+  type PathKind,
+  type TorProgress,
+  type Transport,
   type TunnelStatus
 } from 'cialai-tunnel';
 
 import { authenticateWithDevice, BiometricSession } from './src/auth/biometrics';
 import { getAppVersion } from './src/config/env';
 import { validateControlUrl } from './src/config/url';
-import { hydrateLocale, useI18n } from './src/i18n';
-import { checkControlHealth } from './src/network/health';
 import {
   deleteDeviceToken,
-  emptyProfileStore,
-  loadProfileStore,
+  emptyDesktopStore,
+  findDesktop,
+  loadDesktopStore,
   markDesktopUsed,
   readDeviceToken,
   recordPair,
+  recordTransport,
   removeDesktop,
-  removeProfile,
   renameDesktop,
+  saveDesktopStore,
   saveDeviceToken,
-  saveProfileStore,
-  type DesktopProfile,
-  type HeadscaleProfile,
-  type ProfileStore
-} from './src/profiles/store';
+  type DesktopEntry,
+  type DesktopStore
+} from './src/desktops/store';
+import { hydrateLocale, useI18n } from './src/i18n';
+import { checkControlHealth } from './src/network/health';
+import { RequestGate } from './src/network/request-gate';
 import { Desktops } from './src/screens/Desktops';
 import { Offline } from './src/screens/Offline';
 import { Pair } from './src/screens/Pair';
 import { Settings } from './src/screens/Settings';
 import { Shell } from './src/screens/Shell';
-import { transition, type AppScreen, type OfflineReason } from './src/state/machine';
-import { handleAppStateTransition, notifyNetworkTransition } from './src/state/lifecycle';
+import { openConnection, outcomeForCode, type ConnectionOutcome, type ConnectionPorts } from './src/state/connection';
+import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction } from './src/state/lifecycle';
+import { describeDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
+import { interpretTunnelEvent, parseTorProgress, reservePercent, type TunnelSignal } from './src/state/tunnel-events';
 import { usePalette } from './src/theme';
 
-type LogLevel = 'error' | 'info' | 'debug';
 type Translator = (key: string, values?: Record<string, string | number>) => string;
 
-function findDesktop(store: ProfileStore, desktopId: string) {
-  for (const profile of store.profiles) {
-    const desktop = profile.desktops.find(candidate => candidate.id === desktopId);
-    if (desktop) return { profile, desktop };
-  }
-  return null;
-}
+// Prazo para o nativo Android reabrir o proxy depois da parada em segundo plano,
+// coberto o orçamento de 20 s da reserva; passado ele, o app reconecta sozinho.
+const NATIVE_REOPEN_WAIT_MS = 30_000;
+
+const connectionPorts: ConnectionPorts = {
+  readToken: desktopId => readDeviceToken(desktopId),
+  connect,
+  openDesktop: (desktopId, token) => openTunnelDesktop(desktopId, token),
+  validateUrl: url => validateControlUrl(url)
+};
 
 function deviceIdentity(version: string, translate: Translator) {
   const constants = Platform.constants as Record<string, unknown>;
@@ -75,236 +83,385 @@ function deviceIdentity(version: string, translate: Translator) {
 function AppContent() {
   const palette = usePalette();
   const { t } = useI18n();
-  const [screen, dispatch] = useReducer(transition, { kind: 'loading' } as AppScreen);
-  const [profiles, setProfiles] = useState<ProfileStore>(emptyProfileStore);
+  const [screen, dispatchScreen] = useReducer(transition, { kind: 'loading' } as AppScreen);
+  const [store, setStore] = useState<DesktopStore>(emptyDesktopStore);
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | null>(null);
+  const [tor, setTor] = useState<TorProgress | null>(null);
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [failures, setFailures] = useState<ReadonlyMap<string, OfflineReason>>(() => new Map());
   const [lockSignal, setLockSignal] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
-  const backgroundedAt = useRef<number | null>(null);
   const [biometricSession] = useState(() => new BiometricSession(authenticateWithDevice));
+  const [openGate] = useState(() => new RequestGate());
+  const screenRef = useRef(screen);
+  const storeRef = useRef(store);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const statusRefresh = useRef<{ running: boolean; again: boolean }>({ running: false, again: false });
+  const inflight = useRef<{ desktopId: string; promise: Promise<boolean> } | null>(null);
+  const nativeReopen = useRef<{ desktopId: string; until: number } | null>(null);
+  const backgroundedAt = useRef<number | null>(null);
   const appVersion = getAppVersion();
   const device = deviceIdentity(appVersion, t);
+  const nativeCoreVersion = useMemo(() => coreVersion(), []);
+
+  // A referência acompanha cada ação no mesmo instante, para eventos nativos que
+  // chegam antes da próxima renderização decidirem com a tela certa.
+  const dispatch = useCallback((action: AppAction) => {
+    screenRef.current = transition(screenRef.current, action);
+    dispatchScreen(action);
+  }, []);
+
+  // Toda escrita passa pela referência e por uma fila, para eventos concorrentes
+  // não gravarem uma loja antiga por cima de uma mais nova.
+  const updateStore = useCallback((update: (current: DesktopStore) => DesktopStore): Promise<void> => {
+    const next = update(storeRef.current);
+    if (next === storeRef.current) return saveQueue.current;
+    storeRef.current = next;
+    setStore(next);
+    saveQueue.current = saveQueue.current.then(() => saveDesktopStore(next)).catch(() => undefined);
+    return saveQueue.current;
+  }, []);
 
   const refreshStatus = useCallback(async () => {
+    const refresh = statusRefresh.current;
+    if (refresh.running) {
+      refresh.again = true;
+      return;
+    }
+    refresh.running = true;
     try {
-      setTunnelStatus(await status());
-    } catch {
-      setTunnelStatus(null);
+      do {
+        refresh.again = false;
+        try {
+          const next = await status();
+          setTunnelStatus(next);
+          const nextTor = parseTorProgress(next.tor);
+          if (nextTor) setTor(nextTor);
+        } catch {
+          setTunnelStatus(null);
+        }
+      } while (refresh.again);
+    } finally {
+      refresh.running = false;
     }
   }, []);
 
-  const persist = useCallback(async (next: ProfileStore) => {
-    setProfiles(next);
-    await saveProfileStore(next);
+  const setFailure = useCallback((desktopId: string, reason: OfflineReason | null) => {
+    setFailures(current => {
+      if ((current.get(desktopId) ?? null) === reason) return current;
+      const next = new Map(current);
+      if (reason) next.set(desktopId, reason);
+      else next.delete(desktopId);
+      return next;
+    });
   }, []);
 
-  const openDesktop = useCallback(async (
-    profile: HeadscaleProfile,
-    desktop: DesktopProfile,
-    reason: OfflineReason = 'desktop'
-  ): Promise<boolean> => {
-    try {
-      if (profiles.lastProfileId !== profile.id) await startProfile(profile.id);
-      const token = await readDeviceToken(desktop.id);
-      if (!token) throw new Error('device_token_missing');
-      const opened = await openTunnelDesktop(desktop.id, token);
-      const localUrl = validateControlUrl(opened.url);
-      const next = markDesktopUsed(profiles, profile.id, desktop.id);
-      await persist(next);
-      await refreshStatus();
-      const healthy = await checkControlHealth(localUrl);
-      dispatch(healthy
-        ? { type: 'desktop-opened', desktopId: desktop.id, url: localUrl }
-        : { type: 'desktop-offline', desktopId: desktop.id, reason });
-      return healthy;
-    } catch {
-      dispatch({ type: 'desktop-offline', desktopId: desktop.id, reason });
-      return false;
+  // Revogação: sem nova tentativa, token apagado e proxy fechado.
+  const revoke = useCallback(async (desktopId: string, navigate = true) => {
+    setFailure(desktopId, 'removed');
+    if (navigate) dispatch({ type: 'desktop-offline', desktopId, reason: 'removed' });
+    await closeDesktop(desktopId).catch(() => undefined);
+    await deleteDeviceToken(desktopId).catch(() => undefined);
+  }, [dispatch, setFailure]);
+
+  const applyOutcome = useCallback(async (outcome: ConnectionOutcome, navigate = true): Promise<boolean> => {
+    const { desktopId } = outcome;
+    switch (outcome.kind) {
+      case 'opened':
+        setFailure(desktopId, null);
+        void updateStore(current => markDesktopUsed(current, desktopId, outcome.transport));
+        if (navigate) {
+          dispatch({ type: 'desktop-opened', desktopId, url: outcome.url, transport: outcome.transport, path: outcome.path });
+        }
+        void refreshStatus();
+        return true;
+      case 'offline':
+        setFailure(desktopId, outcome.reason);
+        if (navigate) dispatch({ type: 'desktop-offline', desktopId, reason: outcome.reason });
+        return false;
+      case 'revoked':
+        await revoke(desktopId, navigate);
+        return false;
+      case 'unpaired': {
+        // Sem token ou desconhecido pelo núcleo: o registro local não serve mais.
+        const name = findDesktop(storeRef.current, desktopId)?.name ?? t('desktop.fallback');
+        await closeDesktop(desktopId).catch(() => undefined);
+        await deleteDeviceToken(desktopId).catch(() => undefined);
+        await updateStore(current => removeDesktop(current, desktopId));
+        setFailure(desktopId, null);
+        if (navigate) dispatch({ type: 'needs-pairing', notice: t('mobile.pair.notice.pairAgain', { name }) });
+        return false;
+      }
     }
-  }, [persist, profiles, refreshStatus]);
+  }, [dispatch, refreshStatus, revoke, setFailure, t, updateStore]);
+
+  // Uma tentativa por computador de cada vez; a troca de tela invalida resultados atrasados.
+  const openSelected = useCallback((desktopId: string): Promise<boolean> => {
+    const running = inflight.current;
+    if (running?.desktopId === desktopId) return running.promise;
+    const waiting = nativeReopen.current;
+    if (waiting?.desktopId === desktopId && waiting.until > Date.now()) return Promise.resolve(false);
+    const epoch = openGate.begin();
+    const attempt = { desktopId, promise: Promise.resolve(false) };
+    setConnectingId(desktopId);
+    attempt.promise = (async () => {
+      try {
+        const outcome = await openConnection(desktopId, connectionPorts);
+        // Resultado de uma tentativa abandonada não navega nem apaga token de um novo pareamento.
+        if (!openGate.isCurrent(epoch)) return outcome.kind === 'opened';
+        return await applyOutcome(outcome);
+      } finally {
+        if (inflight.current === attempt) inflight.current = null;
+        setConnectingId(current => current === desktopId ? null : current);
+      }
+    })();
+    inflight.current = attempt;
+    return attempt.promise;
+  }, [applyOutcome, openGate]);
+
+  const reconnectShell = useCallback(() => {
+    const current = screenRef.current;
+    if (current.kind !== 'shell') return;
+    dispatch({ type: 'desktop-offline', desktopId: current.desktopId, reason: 'reconnecting' });
+    void openSelected(current.desktopId);
+  }, [dispatch, openSelected]);
+
+  const verifyShell = useCallback(async (desktopId: string, url: string, waitForNative: boolean) => {
+    if (await checkControlHealth(url)) return;
+    const current = screenRef.current;
+    if (current.kind !== 'shell' || current.desktopId !== desktopId) return;
+    if (waitForNative) {
+      nativeReopen.current = { desktopId, until: Date.now() + NATIVE_REOPEN_WAIT_MS };
+      dispatch({ type: 'desktop-offline', desktopId, reason: 'reconnecting' });
+      return;
+    }
+    reconnectShell();
+  }, [dispatch, reconnectShell]);
+
+  const runForegroundAction = useCallback(async (action: ForegroundAction) => {
+    if (action.kind === 'verify') await verifyShell(action.desktopId, action.url, false);
+    if (action.kind === 'await-native-reopen') await verifyShell(action.desktopId, action.url, true);
+    if (action.kind === 'reconnect') await openSelected(action.desktopId);
+  }, [openSelected, verifyShell]);
 
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
+      await hydrateLocale();
+      let loaded;
       try {
-        await hydrateLocale();
-        const stored = await loadProfileStore();
-        if (cancelled) return;
-        setProfiles(stored);
-        if (!stored.profiles.length) {
-          dispatch({ type: 'needs-pairing' });
-          return;
-        }
-        const profile = stored.profiles.find(candidate => candidate.id === stored.lastProfileId) ?? stored.profiles[0]!;
-        await startProfile(profile.id);
-        if (cancelled) return;
-        const desktop = profile.desktops.find(candidate => candidate.id === stored.lastDesktopId) ?? profile.desktops[0];
-        if (!desktop) {
-          dispatch({ type: 'show-desktops' });
-          return;
-        }
-        const token = await readDeviceToken(desktop.id);
-        if (!token) {
-          dispatch({ type: 'show-desktops' });
-          return;
-        }
-        const opened = await openTunnelDesktop(desktop.id, token);
-        const localUrl = validateControlUrl(opened.url);
-        const healthy = await checkControlHealth(localUrl);
-        if (!cancelled) {
-          await refreshStatus();
-          dispatch(healthy
-            ? { type: 'desktop-opened', desktopId: desktop.id, url: localUrl }
-            : { type: 'desktop-offline', desktopId: desktop.id, reason: 'desktop' });
-        }
+        loaded = await loadDesktopStore();
       } catch {
-        if (!cancelled) dispatch({
-          type: 'needs-pairing',
-          error: t('mobile.error.profileLoad')
-        });
+        if (!cancelled) dispatch({ type: 'needs-pairing', error: t('mobile.error.storeLoad') });
+        return;
       }
+      if (cancelled) return;
+      storeRef.current = loaded.store;
+      setStore(loaded.store);
+      void refreshStatus();
+      if (!loaded.store.desktops.length) {
+        dispatch({ type: 'needs-pairing', ...(loaded.legacyDiscarded ? { notice: t('mobile.pair.notice.legacy') } : {}) });
+        return;
+      }
+      const last = findDesktop(loaded.store, loaded.store.lastDesktopId);
+      if (!last) {
+        dispatch({ type: 'show-desktops' });
+        return;
+      }
+      dispatch({ type: 'desktop-offline', desktopId: last.id, reason: 'reconnecting' });
+      await openSelected(last.id);
     };
     void bootstrap();
     return () => { cancelled = true; };
-  }, [refreshStatus, t]);
+  }, [dispatch, openSelected, refreshStatus, t]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (biometricSession.handleAppState(nextState)) setLockSignal(value => value + 1);
-      backgroundedAt.current = handleAppStateTransition({
+      const result = handleAppStateTransition({
         nextState,
         backgroundedAt: backgroundedAt.current,
         now: Date.now(),
         platform: Platform.OS === 'android' ? 'android' : 'ios',
-        screen,
-        notifyForeground,
-        checkHealth: checkControlHealth,
-        markOffline: (desktopId, reason) => dispatch({ type: 'desktop-offline', desktopId, reason }),
-        reconnect: desktopId => dispatch({ type: 'desktop-offline', desktopId, reason: 'reconnecting' })
+        screen: screenRef.current,
+        notifyForeground
       });
+      backgroundedAt.current = result.backgroundedAt;
+      void runForegroundAction(result.action);
     });
     return () => subscription.remove();
-  }, [biometricSession, screen]);
+  }, [biometricSession, runForegroundAction]);
 
-  useEffect(() => NetInfo.addEventListener(network => {
-    notifyNetworkTransition(network, notifyNetworkChange);
-  }), []);
+  useEffect(() => {
+    const forward = createNetworkForwarder(notifyNetworkChange);
+    return NetInfo.addEventListener(network => {
+      const change = forward(network);
+      const current = screenRef.current;
+      if (change.changed && change.reachable && current.kind === 'offline' && current.reason !== 'removed') {
+        void openSelected(current.desktopId);
+      }
+    });
+  }, [openSelected]);
+
+  const handleSignal = useCallback((signal: TunnelSignal) => {
+    // Eventos de um computador só trocam a tela quando ele é o que está aberto ou em reconexão.
+    const showing = (desktopId: string) => {
+      const current = screenRef.current;
+      return (current.kind === 'shell' || current.kind === 'offline') && current.desktopId === desktopId;
+    };
+    switch (signal.type) {
+      case 'path': {
+        const { desktopId, transport, path } = signal;
+        dispatch({ type: 'path-changed', desktopId, transport, path });
+        if (transport) void updateStore(current => recordTransport(current, desktopId, transport));
+        return;
+      }
+      case 'status-changed':
+        void refreshStatus();
+        return;
+      case 'tor':
+        setTor(signal.tor);
+        return;
+      case 'token-rotated':
+        void saveDeviceToken(signal.desktopId, signal.deviceToken).catch(() => undefined);
+        return;
+      case 'revoked':
+        void revoke(signal.desktopId, showing(signal.desktopId));
+        return;
+      case 'core-offline':
+        reconnectShell();
+        return;
+      case 'native-reopening':
+        if (!showing(signal.desktopId)) return;
+        nativeReopen.current = { desktopId: signal.desktopId, until: Date.now() + NATIVE_REOPEN_WAIT_MS };
+        dispatch({ type: 'desktop-offline', desktopId: signal.desktopId, reason: 'reconnecting' });
+        return;
+      case 'native-reopened': {
+        nativeReopen.current = null;
+        const { desktopId } = signal;
+        if (!showing(desktopId)) return;
+        let url: string;
+        try {
+          url = validateControlUrl(signal.url);
+        } catch {
+          dispatch({ type: 'desktop-offline', desktopId, reason: 'tunnel' });
+          return;
+        }
+        void (async () => {
+          let transport: Transport | null = null;
+          let path: PathKind | null = null;
+          try {
+            const next = await status();
+            setTunnelStatus(next);
+            if (next.active?.desktopId === desktopId) ({ transport, path } = next.active);
+          } catch {
+            // O ponto fica neutro até o próximo evento de caminho.
+          }
+          setFailure(desktopId, null);
+          if (showing(desktopId)) dispatch({ type: 'desktop-opened', desktopId, url, transport, path });
+        })();
+        return;
+      }
+      case 'native-reopen-failed': {
+        const waiting = nativeReopen.current;
+        nativeReopen.current = null;
+        const current = screenRef.current;
+        const desktopId = signal.desktopId ?? waiting?.desktopId ??
+          (current.kind === 'offline' || current.kind === 'shell' ? current.desktopId : null);
+        if (desktopId) void applyOutcome(outcomeForCode(desktopId, signal.code), showing(desktopId));
+        return;
+      }
+      case 'legacy-discarded':
+        if (screenRef.current.kind === 'pair' && !storeRef.current.desktops.length) {
+          dispatch({ type: 'needs-pairing', notice: t('mobile.pair.notice.legacy') });
+        }
+        return;
+      case 'pair-stage':
+        return;
+    }
+  }, [applyOutcome, dispatch, reconnectShell, refreshStatus, revoke, setFailure, t, updateStore]);
 
   useEffect(() => {
     const subscription = addTunnelListener(event => {
-      if (event.kind === 'state' || event.kind === 'peer') void refreshStatus();
-      if (typeof event.payload === 'object' && event.payload !== null) {
-        const payload = event.payload as { state?: unknown; desktopId?: unknown; deviceToken?: unknown; url?: unknown };
-        if (typeof payload.desktopId === 'string' && typeof payload.deviceToken === 'string') {
-          void saveDeviceToken(payload.desktopId, payload.deviceToken);
-        }
-        if (event.kind === 'state' && payload.state === 'reconnecting' && typeof payload.desktopId === 'string') {
-          dispatch({ type: 'desktop-offline', desktopId: payload.desktopId, reason: 'reconnecting' });
-        }
-        if (event.kind === 'proxy' && payload.state === 'reopened' && typeof payload.desktopId === 'string' && typeof payload.url === 'string') {
-          void (async () => {
-            try {
-              const localUrl = validateControlUrl(payload.url as string);
-              const healthy = await checkControlHealth(localUrl);
-              await refreshStatus();
-              dispatch(healthy
-                ? { type: 'desktop-opened', desktopId: payload.desktopId as string, url: localUrl }
-                : { type: 'desktop-offline', desktopId: payload.desktopId as string, reason: 'reconnecting' });
-            } catch {
-              dispatch({ type: 'desktop-offline', desktopId: payload.desktopId as string, reason: 'reconnecting' });
-            }
-          })();
-        }
-      }
+      for (const signal of interpretTunnelEvent(event)) handleSignal(signal);
     });
     return () => subscription.remove();
-  }, [refreshStatus]);
+  }, [handleSignal]);
 
-  const paired = useCallback(async (inspection: PairInspection, result: PairResult) => {
+  const paired = useCallback(async (result: PairResult) => {
+    // Valida o resultado antes de gravar o token; a gravação usa a loja mais recente.
+    recordPair(storeRef.current, result);
+    openGate.invalidate();
+    inflight.current = null;
     await saveDeviceToken(result.desktopId, result.token);
-    const next = recordPair(profiles, inspection, result);
-    await persist(next);
-    const opened = await openTunnelDesktop(result.desktopId, result.token);
-    const localUrl = validateControlUrl(opened.url);
-    await refreshStatus();
-    dispatch(await checkControlHealth(localUrl)
-      ? { type: 'desktop-opened', desktopId: result.desktopId, url: localUrl }
-      : { type: 'desktop-offline', desktopId: result.desktopId, reason: 'desktop' });
-  }, [persist, profiles, refreshStatus]);
+    await updateStore(current => recordPair(current, result));
+    setFailure(result.desktopId, null);
+    await openSelected(result.desktopId);
+  }, [openGate, openSelected, setFailure, updateStore]);
 
   const showDesktops = useCallback(async () => {
     biometricSession.lock();
     setLockSignal(value => value + 1);
-    if (screen.kind === 'shell') await closeDesktop(screen.desktopId).catch(() => undefined);
+    openGate.invalidate();
+    inflight.current = null;
+    const current = screenRef.current;
+    if (current.kind === 'shell') await closeDesktop(current.desktopId).catch(() => undefined);
     dispatch({ type: 'show-desktops' });
-  }, [biometricSession, screen]);
+    void refreshStatus();
+  }, [biometricSession, dispatch, openGate, refreshStatus]);
 
   const retry = useCallback(async () => {
-    if (screen.kind !== 'offline') return false;
-    const located = findDesktop(profiles, screen.desktopId);
-    return located ? openDesktop(located.profile, located.desktop, 'reconnecting') : false;
-  }, [openDesktop, profiles, screen]);
+    const current = screenRef.current;
+    if (current.kind !== 'offline' || current.reason === 'removed') return false;
+    return openSelected(current.desktopId);
+  }, [openSelected]);
 
-  const forgetDesktop = useCallback((profile: HeadscaleProfile, desktop: DesktopProfile) => {
+  const forgetDesktop = useCallback((desktop: DesktopEntry) => {
     Alert.alert(t('mobile.alert.forgetDesktop.title'), t('mobile.alert.forgetDesktop.detail', { name: desktop.name }), [
       { text: t('mobile.common.cancel'), style: 'cancel' },
       { text: t('mobile.common.forget'), style: 'destructive', onPress: () => void (async () => {
         await closeDesktop(desktop.id).catch(() => undefined);
-        await deleteDeviceToken(desktop.id);
-        await persist(removeDesktop(profiles, profile.id, desktop.id));
+        await forgetTunnelDesktop(desktop.id).catch(() => undefined);
+        await deleteDeviceToken(desktop.id).catch(() => undefined);
+        await updateStore(current => removeDesktop(current, desktop.id));
+        setFailure(desktop.id, null);
+        if (!storeRef.current.desktops.length) dispatch({ type: 'needs-pairing' });
       })() }
     ]);
-  }, [persist, profiles, t]);
+  }, [dispatch, setFailure, t, updateStore]);
 
-  const forgetStoredProfile = useCallback((profileId: string) => {
-    const profile = profiles.profiles.find(candidate => candidate.id === profileId);
-    if (!profile) return;
-    Alert.alert(t('mobile.alert.forgetProfile.title'), t('mobile.alert.forgetProfile.detail', { name: profile.userName }), [
-      { text: t('mobile.common.cancel'), style: 'cancel' },
-      { text: t('mobile.common.forget'), style: 'destructive', onPress: () => void (async () => {
-        for (const desktop of profile.desktops) await deleteDeviceToken(desktop.id);
-        await forgetProfile(profile.id);
-        const next = removeProfile(profiles, profile.id);
-        await persist(next);
-        dispatch(next.profiles.length ? { type: 'show-desktops' } : { type: 'needs-pairing' });
-      })() }
-    ]);
-  }, [persist, profiles, t]);
-
-  const selected = screen.kind === 'shell' || screen.kind === 'offline'
-    ? findDesktop(profiles, screen.desktopId) : null;
+  const describe = useCallback((desktopId: string) => describeDesktop(desktopId, { tunnelStatus, connectingId, failures }),
+    [connectingId, failures, tunnelStatus]);
+  const openFromList = useCallback((desktop: DesktopEntry) => { void openSelected(desktop.id); }, [openSelected]);
+  const rename = useCallback((desktopId: string, name: string) => {
+    void updateStore(current => renameDesktop(current, desktopId, name));
+  }, [updateStore]);
+  const diagnosticsStatus = tunnelStatus && tor ? { ...tunnelStatus, tor } : tunnelStatus;
+  const selected = screen.kind === 'shell' || screen.kind === 'offline' ? findDesktop(store, screen.desktopId) : null;
+  const desktopList = <Desktops store={store} describe={describe} onForgetDesktop={forgetDesktop} onOpen={openFromList}
+    onPair={() => dispatch({ type: 'needs-pairing' })} onRename={rename} onSettings={() => dispatch({ type: 'show-settings' })} />;
 
   let content;
   if (screen.kind === 'loading') {
     content = <View style={[styles.loading, { backgroundColor: palette.background }]}><ActivityIndicator color={palette.accent} size="large" /></View>;
   } else if (screen.kind === 'pair') {
-    content = <Pair device={device} initialError={screen.error} onPaired={paired} />;
+    content = <Pair device={device} initialError={screen.error} notice={screen.notice} onPaired={paired}
+      onCancel={store.desktops.length ? () => dispatch({ type: 'show-desktops' }) : undefined} />;
   } else if (screen.kind === 'settings') {
-    content = <Settings appVersion={appVersion} coreVersion={coreVersion()} logLevel={logLevel}
-      onBack={() => dispatch({ type: 'show-desktops' })} onForgetProfile={forgetStoredProfile}
-      onLogLevel={level => { setLogLevel(level); setNativeLogLevel(level); }} store={profiles} />;
+    content = <Settings appVersion={appVersion} coreVersion={nativeCoreVersion} desktopCount={store.desktops.length}
+      logLevel={logLevel} onBack={() => dispatch({ type: 'show-desktops' })}
+      onLogLevel={level => { setLogLevel(level); setNativeLogLevel(level); }}
+      onRefreshStatus={() => void refreshStatus()} tunnelStatus={diagnosticsStatus} />;
   } else if (screen.kind === 'desktops') {
-    content = <Desktops store={profiles} tunnelStatus={tunnelStatus}
-      onForgetDesktop={forgetDesktop} onOpen={(profile, desktop) => void openDesktop(profile, desktop)}
-      onPair={() => dispatch({ type: 'needs-pairing' })}
-      onRename={(desktopId, name) => void persist(renameDesktop(profiles, desktopId, name))}
-      onSettings={() => dispatch({ type: 'show-settings' })}
-      onSwitchProfile={profile => void (async () => {
-        await startProfile(profile.id);
-        await persist({ ...profiles, lastProfileId: profile.id, lastDesktopId: profile.desktops[0]?.id ?? null });
-        await refreshStatus();
-      })()} />;
+    content = desktopList;
   } else if (screen.kind === 'offline') {
-    content = <Offline onDesktops={() => void showDesktops()} onRetry={retry} reason={screen.reason} />;
+    content = <Offline onDesktops={() => void showDesktops()} onPairAgain={() => dispatch({ type: 'needs-pairing' })}
+      onRetry={retry} reason={screen.reason} reserveProgress={reservePercent(tor)} />;
   } else {
     content = selected ? <Shell biometricSession={biometricSession} desktopId={screen.desktopId}
-      desktopName={selected.desktop.name} lockSignal={lockSignal} onDesktops={() => void showDesktops()}
-      onOffline={() => dispatch({ type: 'desktop-offline', desktopId: screen.desktopId, reason: 'desktop' })}
-      tunnelOnline={tunnelStatus?.state === 'running'} url={screen.url} version={appVersion} />
-      : <Desktops store={profiles} tunnelStatus={tunnelStatus} onForgetDesktop={forgetDesktop}
-        onOpen={(profile, desktop) => void openDesktop(profile, desktop)} onPair={() => dispatch({ type: 'needs-pairing' })}
-        onRename={(desktopId, name) => void persist(renameDesktop(profiles, desktopId, name))}
-        onSettings={() => dispatch({ type: 'show-settings' })} onSwitchProfile={() => undefined} />;
+      desktopName={selected.name} lockSignal={lockSignal} onConnectionLost={reconnectShell}
+      onDesktops={() => void showDesktops()} transport={screen.transport} url={screen.url} version={appVersion} />
+      : desktopList;
   }
 
   return <><StatusBar style="auto" />{content}</>;

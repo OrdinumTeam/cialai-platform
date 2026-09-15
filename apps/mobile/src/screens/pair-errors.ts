@@ -1,34 +1,27 @@
 import { t } from '../i18n';
-
-type TunnelError = {
-  code?: unknown;
-  message?: unknown;
-};
+import { tunnelErrorCode } from '../network/tunnel-errors';
 
 const ERROR_KEYS: Record<string, string> = {
   payload_invalid: 'mobile.pairError.payloadInvalid',
   payload_version: 'mobile.pairError.payloadVersion',
   payload_expired: 'mobile.pairError.payloadExpired',
-  auth_key_rejected: 'mobile.pairError.authKeyRejected',
-  control_unreachable: 'mobile.pairError.controlUnreachable',
-  peer_not_found: 'mobile.pairError.peerNotFound',
   pair_consumed: 'mobile.pairError.pairConsumed',
   pair_expired: 'mobile.pairError.pairExpired',
   pair_unknown: 'mobile.pairError.pairUnknown',
   pair_denied: 'mobile.pairError.pairDenied',
-  pair_timeout: 'mobile.pairError.pairTimeout'
+  pair_timeout: 'mobile.pairError.pairTimeout',
+  pair_rate_limited: 'mobile.pairError.rateLimited',
+  pair_secret_mismatch: 'mobile.pairError.mismatch',
+  pair_key_mismatch: 'mobile.pairError.mismatch',
+  reserve_preparing: 'mobile.pairError.reservePreparing',
+  reserve_unavailable: 'mobile.pairError.unreachable',
+  no_path: 'mobile.pairError.unreachable',
+  desktop_unreachable: 'mobile.pairError.unreachable'
 };
 
-function errorCode(caught: unknown): string | null {
-  if (typeof caught !== 'object' || caught === null) return null;
-  const error = caught as TunnelError;
-  if (typeof error.code === 'string' && error.code in ERROR_KEYS) return error.code;
-  if (typeof error.message !== 'string') return null;
-  const code = error.message.match(/^([a-z_]+)(?::|$)/)?.[1];
-  return code && code in ERROR_KEYS ? code : null;
-}
+const KNOWN_CODES: ReadonlySet<string> = new Set(Object.keys(ERROR_KEYS));
 
 export function pairErrorMessage(caught: unknown): string {
-  const code = errorCode(caught);
+  const code = tunnelErrorCode(caught, KNOWN_CODES);
   return code ? t(ERROR_KEYS[code]!) : t('mobile.pairError.fallback');
 }

@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
 
+import type { Transport } from 'cialai-tunnel';
+
 import type { BiometricSession } from '../auth/biometrics';
 import { pageMessageScript, parsePageMessage, shellMessageScript, type ShellMessage } from '../bridge/messages';
 import { shareDownload } from '../bridge/share-download';
@@ -11,6 +13,7 @@ import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '
 import { localizeSensitiveReason, useI18n } from '../i18n';
 import { checkControlHealth, HEALTH_POLL_INTERVAL_MS } from '../network/health';
 import { usePalette } from '../theme';
+import { TRANSPORT_DESCRIPTION_KEYS, TRANSPORT_KEYS, useTransportColor } from './TransportBadge';
 
 type Props = {
   url: string;
@@ -19,15 +22,17 @@ type Props = {
   version: string;
   biometricSession: BiometricSession;
   lockSignal: number;
-  tunnelOnline: boolean;
-  onOffline: () => void;
+  // Transporte do caminho ativo; nulo enquanto o núcleo procura outro caminho.
+  transport: Transport | null;
+  onConnectionLost: () => void;
   onDesktops: () => void;
 };
 
 export function Shell({
-  url, desktopId, desktopName, version, biometricSession, lockSignal, tunnelOnline, onOffline, onDesktops
+  url, desktopId, desktopName, version, biometricSession, lockSignal, transport, onConnectionLost, onDesktops
 }: Props) {
   const palette = usePalette();
+  const transportColor = useTransportColor();
   const { locale, t } = useI18n();
   const webView = useRef<WebView>(null);
   const loaded = useRef(false);
@@ -58,7 +63,7 @@ export function Shell({
     const probe = async () => {
       if (cancelled) return;
       const healthy = await checkControlHealth(url);
-      if (!cancelled && !healthy) onOffline();
+      if (!cancelled && !healthy) onConnectionLost();
       else if (!cancelled) timer = setTimeout(() => void probe(), HEALTH_POLL_INTERVAL_MS);
     };
     timer = setTimeout(() => void probe(), HEALTH_POLL_INTERVAL_MS);
@@ -66,7 +71,7 @@ export function Shell({
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [onOffline, url]);
+  }, [onConnectionLost, url]);
 
   useEffect(() => {
     if (Platform.OS !== 'android') return;
@@ -131,8 +136,12 @@ export function Shell({
       <SafeAreaView edges={['top']} style={{ backgroundColor: palette.surface }}>
         <View style={[styles.toolbar, { borderBottomColor: palette.separator }]}>
           <View style={styles.toolbarStatus}>
-            <View style={[styles.connectedDot, { backgroundColor: tunnelOnline ? palette.success : palette.danger }]} />
+            <View style={[styles.connectedDot, { backgroundColor: transportColor(transport) }]} />
             <Text numberOfLines={1} style={[styles.toolbarTitle, { color: palette.label }]}>{desktopName}</Text>
+            <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
+              numberOfLines={1} style={[styles.transportText, { color: palette.secondaryLabel }]}>
+              {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
+            </Text>
           </View>
           <Pressable accessibilityLabel={t('mobile.shell.showDesktops')} accessibilityRole="button" onPress={onDesktops}
             style={({ pressed }) => [styles.desktopsButton, pressed && styles.pressed]}>
@@ -150,7 +159,7 @@ export function Shell({
         javaScriptEnabled
         keyboardDisplayRequiresUserAction={false}
         onContentProcessDidTerminate={() => webView.current?.reload()}
-        onError={onOffline}
+        onError={onConnectionLost}
         onLoad={() => {
           loaded.current = true;
           biometricSession.lock();
@@ -174,7 +183,8 @@ const styles = StyleSheet.create({
   webView: { flex: 1, backgroundColor: 'transparent' },
   toolbar: { minHeight: 44, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 8 },
   toolbarStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  toolbarTitle: { flex: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
+  transportText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  toolbarTitle: { flexShrink: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
   desktopsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   desktopsText: { fontSize: 15, lineHeight: 21, fontWeight: '600' },
   pressed: { opacity: 0.55 },

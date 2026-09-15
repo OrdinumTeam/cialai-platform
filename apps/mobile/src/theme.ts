@@ -13,6 +13,7 @@ const light = {
   accentText: '#FFFFFF',
   danger: '#D92D20',
   success: '#248A3D',
+  warning: '#B25F00',
   overlay: 'rgba(255, 255, 255, 0.94)',
   shadow: '#000000'
 } as const;
@@ -30,6 +31,7 @@ const dark = {
   accentText: '#32101F',
   danger: '#FF6961',
   success: '#30D158',
+  warning: '#FFB340',
   overlay: 'rgba(33, 23, 28, 0.94)',
   shadow: '#000000'
 } as const;

@@ -1,44 +1,46 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import type { TunnelStatus } from 'cialai-tunnel';
-
+import { formatLastSeen } from '../desktops/format';
+import { MAX_DESKTOP_NAME, type DesktopEntry, type DesktopStore } from '../desktops/store';
 import { useI18n } from '../i18n';
-import type { DesktopProfile, HeadscaleProfile, ProfileStore } from '../profiles/store';
+import type { DesktopConnection, DesktopConnectionState } from '../state/machine';
 import { usePalette } from '../theme';
+import { TransportBadge } from './TransportBadge';
 
 type Props = {
-  store: ProfileStore;
-  tunnelStatus: TunnelStatus | null;
-  onOpen: (profile: HeadscaleProfile, desktop: DesktopProfile) => void;
+  store: DesktopStore;
+  describe: (desktopId: string) => DesktopConnection;
+  onOpen: (desktop: DesktopEntry) => void;
   onPair: () => void;
   onSettings: () => void;
-  onSwitchProfile: (profile: HeadscaleProfile) => void;
   onRename: (desktopId: string, name: string) => void;
-  onForgetDesktop: (profile: HeadscaleProfile, desktop: DesktopProfile) => void;
+  onForgetDesktop: (desktop: DesktopEntry) => void;
 };
 
-function formatLastSeen(value: string, locale: string, never: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return never;
-  return new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(date);
-}
+const STATE_KEYS: Readonly<Record<DesktopConnectionState, string>> = {
+  idle: 'mobile.desktops.state.idle',
+  connecting: 'mobile.desktops.state.connecting',
+  connected: 'mobile.desktops.state.connected',
+  offline: 'mobile.desktops.state.offline',
+  removed: 'mobile.desktops.state.removed'
+};
 
-export function Desktops({
-  store, tunnelStatus, onOpen, onPair, onSettings, onSwitchProfile, onRename, onForgetDesktop
-}: Props) {
+export function Desktops({ store, describe, onOpen, onPair, onSettings, onRename, onForgetDesktop }: Props) {
   const palette = usePalette();
   const { locale, t } = useI18n();
-  const activeProfile = store.profiles.find(profile => profile.id === store.lastProfileId) ?? store.profiles[0];
-  const [selected, setSelected] = useState<{ profile: HeadscaleProfile; desktop: DesktopProfile } | null>(null);
+  const [selected, setSelected] = useState<DesktopEntry | null>(null);
   const [name, setName] = useState('');
-  const peerMap = useMemo(() => new Map(tunnelStatus?.peers.map(peer => [peer.nodeKey, peer]) ?? []), [tunnelStatus]);
+
+  const stateColor = (state: DesktopConnectionState) => state === 'connected' ? palette.success
+    : state === 'connecting' ? palette.warning
+      : state === 'offline' || state === 'removed' ? palette.danger : palette.tertiaryLabel;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerText}>
           <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.desktops.title')}</Text>
           <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>{t('mobile.desktops.subtitle')}</Text>
         </View>
@@ -47,46 +49,35 @@ export function Desktops({
         </Pressable>
       </View>
 
-      {store.profiles.length > 1 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profiles}>
-          {store.profiles.map(profile => {
-            const active = profile.id === activeProfile?.id;
-            return (
-              <Pressable accessibilityRole="button" key={profile.id} onPress={() => onSwitchProfile(profile)}
-                style={[styles.profileChip, { backgroundColor: active ? palette.accent : palette.surface, borderColor: palette.separator }]}>
-                <Text style={{ color: active ? palette.accentText : palette.label, fontWeight: '600' }}>{profile.userName}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
-
       <ScrollView contentContainerStyle={styles.list}>
-        {activeProfile?.desktops.map(desktop => {
-          const peer = peerMap.get(desktop.nodeKey);
-          const online = peer?.online === true;
+        {store.desktops.map(desktop => {
+          const connection = describe(desktop.id);
+          const transport = connection.state === 'connected' ? connection.transport
+            : desktop.lastTransport === '' ? null : desktop.lastTransport;
+          const lastSeen = formatLastSeen(desktop.lastSeenAt, locale);
           return (
             <View key={desktop.id} style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-              <Pressable accessibilityRole="button" onPress={() => onOpen(activeProfile, desktop)} style={styles.cardMain}>
-                <View style={[styles.dot, { backgroundColor: online ? palette.success : palette.tertiaryLabel }]} />
+              <Pressable accessibilityRole="button" disabled={connection.state === 'connecting'} onPress={() => onOpen(desktop)} style={styles.cardMain}>
+                <View style={[styles.dot, { backgroundColor: stateColor(connection.state) }]} />
                 <View style={styles.cardText}>
                   <Text style={[styles.cardTitle, { color: palette.label }]}>{desktop.name}</Text>
-                  <Text style={[styles.cardMeta, { color: palette.secondaryLabel }]}>
-                    {online ? t('mobile.desktops.status.available') : t('mobile.desktops.status.unreachable')}
-                  </Text>
-                  <Text style={[styles.cardMeta, { color: palette.tertiaryLabel }]}>{t('mobile.desktops.lastSeen', {
-                    date: formatLastSeen(desktop.lastSeenAt, locale, t('mobile.desktops.never'))
-                  })}</Text>
+                  <Text style={[styles.cardState, { color: palette.secondaryLabel }]}>{t(STATE_KEYS[connection.state])}</Text>
+                  <View style={styles.cardMetaRow}>
+                    {transport ? <TransportBadge transport={transport} /> : null}
+                    <Text style={[styles.cardMeta, { color: palette.tertiaryLabel }]}>
+                      {lastSeen ? t('mobile.desktops.lastSeen', { date: lastSeen }) : t('mobile.desktops.never')}
+                    </Text>
+                  </View>
                 </View>
               </Pressable>
               <Pressable accessibilityLabel={t('mobile.desktops.optionsFor', { name: desktop.name })} accessibilityRole="button"
-                onPress={() => { setSelected({ profile: activeProfile, desktop }); setName(desktop.name); }} style={styles.options}>
+                onPress={() => { setSelected(desktop); setName(desktop.name); }} style={styles.options}>
                 <Text style={[styles.optionsText, { color: palette.accent }]}>{t('mobile.desktops.options')}</Text>
               </Pressable>
             </View>
           );
         })}
-        {!activeProfile?.desktops.length ? (
+        {!store.desktops.length ? (
           <Text style={[styles.empty, { color: palette.secondaryLabel }]}>{t('mobile.desktops.empty')}</Text>
         ) : null}
         <Pressable accessibilityRole="button" onPress={onPair}
@@ -99,16 +90,16 @@ export function Desktops({
         <View style={styles.modalBackdrop}>
           <View style={[styles.modal, { backgroundColor: palette.surface }]}>
             <Text style={[styles.modalTitle, { color: palette.label }]}>{t('mobile.desktops.optionsTitle')}</Text>
-            <TextInput accessibilityLabel={t('mobile.desktops.nameLabel')} maxLength={48} onChangeText={setName} value={name}
+            <TextInput accessibilityLabel={t('mobile.desktops.nameLabel')} maxLength={MAX_DESKTOP_NAME} onChangeText={setName} value={name}
               style={[styles.input, { backgroundColor: palette.background, color: palette.label, borderColor: palette.separator }]} />
             <Pressable accessibilityRole="button" onPress={() => {
-              if (selected) onRename(selected.desktop.id, name);
+              if (selected) onRename(selected.id, name);
               setSelected(null);
             }} style={styles.modalButton}>
               <Text style={[styles.modalButtonText, { color: palette.accent }]}>{t('mobile.desktops.rename')}</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={() => {
-              if (selected) onForgetDesktop(selected.profile, selected.desktop);
+              if (selected) onForgetDesktop(selected);
               setSelected(null);
             }} style={styles.modalButton}>
               <Text style={[styles.modalButtonText, { color: palette.danger }]}>{t('mobile.common.forget')}</Text>
@@ -126,19 +117,20 @@ export function Desktops({
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 22, paddingTop: 18, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  headerText: { flexShrink: 1 },
   title: { fontSize: 30, lineHeight: 36, fontWeight: '700' },
   subtitle: { marginTop: 3, fontSize: 15 },
   headerButton: { minHeight: 44, justifyContent: 'center', paddingLeft: 16 },
   headerButtonText: { fontSize: 16, fontWeight: '600' },
-  profiles: { paddingHorizontal: 22, gap: 8, paddingBottom: 10 },
-  profileChip: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, paddingVertical: 8, paddingHorizontal: 14 },
   list: { padding: 18, gap: 12 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, overflow: 'hidden' },
   cardMain: { minHeight: 92, flexDirection: 'row', alignItems: 'center', padding: 16 },
   dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
   cardText: { flex: 1 },
   cardTitle: { fontSize: 18, lineHeight: 24, fontWeight: '600' },
-  cardMeta: { marginTop: 2, fontSize: 13, lineHeight: 18 },
+  cardState: { marginTop: 2, fontSize: 15, lineHeight: 20 },
+  cardMetaRow: { marginTop: 6, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+  cardMeta: { fontSize: 13, lineHeight: 18 },
   options: { alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
   optionsText: { fontSize: 15, fontWeight: '600' },
   empty: { textAlign: 'center', paddingVertical: 40, fontSize: 16 },
