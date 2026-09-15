@@ -258,6 +258,23 @@ jobs:
           releaseAssetNamePattern: "[name]_[arch][setup][ext]"
           uploadUpdaterJson: false
           retryAttempts: 1
+      # O Tauri notariza o .app, mas o DMG criado depois sai só assinado; o macOS avalia o próprio DMG baixado.
+      - name: Notarize, staple and replace the DMG
+        if: steps.signing.outputs.macos == 'developer-id'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+        run: |
+          case "${{ matrix.target }}" in
+            aarch64-apple-darwin) asset=Cialai_aarch64.dmg ;;
+            x86_64-apple-darwin) asset=Cialai_x64.dmg ;;
+          esac
+          dmg="$(ls apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg | head -1)"
+          bash tools/release/notarize-dmg.sh "$dmg"
+          cp "$dmg" "$RUNNER_TEMP/$asset"
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/$asset" --repo "$GITHUB_REPOSITORY" --clobber
       - name: Build and upload
         if: steps.signing.outputs.macos != 'developer-id'
         uses: tauri-apps/tauri-action@v1

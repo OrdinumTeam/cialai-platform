@@ -131,6 +131,20 @@ assert.match(keyStep, /"\$RUNNER_TEMP\/private_keys\/AuthKey_\$\{APPLE_API_KEY\}
 assert.match(keyStep, /echo "APPLE_API_KEY_PATH=\$key_path" >> "\$GITHUB_ENV"/);
 assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id'/);
 assert.doesNotMatch(defaultStep, /APPLE_/, 'the ad hoc build must not receive Apple credentials');
+// O DMG criado depois da notarização do .app também é notarizado, grampeado e substitui o enviado pelo tauri-action.
+const dmgStep = workflow.slice(workflow.indexOf('- name: Notarize, staple and replace the DMG'), workflow.indexOf('- name: Build and upload\n'));
+assert.ok(workflow.indexOf('- name: Build and upload with Developer ID') < workflow.indexOf('- name: Notarize, staple and replace the DMG'), 'the DMG is notarized after the Developer ID build');
+assert.match(dmgStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
+assert.match(dmgStep, /bash tools\/release\/notarize-dmg\.sh "\$dmg"/);
+assert.match(dmgStep, /aarch64-apple-darwin\) asset=Cialai_aarch64\.dmg/);
+assert.match(dmgStep, /x86_64-apple-darwin\) asset=Cialai_x64\.dmg/);
+assert.match(dmgStep, /gh release upload "\$RELEASE_TAG" "\$RUNNER_TEMP\/\$asset" --repo "\$GITHUB_REPOSITORY" --clobber/);
+assert.doesNotMatch(dmgStep, /APPLE_API_PRIVATE_KEY|APPLE_CERTIFICATE/, 'the DMG step only reads the key file written before the build');
+const notarizer = readFileSync(new URL('../release/notarize-dmg.sh', import.meta.url), 'utf8');
+assert.match(notarizer, /xcrun notarytool submit "\$dmg"/);
+assert.match(notarizer, /--key "\$APPLE_API_KEY_PATH" --key-id "\$APPLE_API_KEY" --issuer "\$APPLE_API_ISSUER"/);
+assert.match(notarizer, /\[\[ "\$status" == "Accepted" \]\]/);
+assert.match(notarizer, /xcrun stapler staple "\$dmg"/);
 const torSignStart = workflow.indexOf('- name: Sign the nested Tor binaries with Developer ID');
 assert.ok(torSignStart > workflow.indexOf('node tools/fetch-tor.mjs --stage'), 'Tor is staged before its Developer ID signature');
 assert.ok(torSignStart < workflow.indexOf('- name: Write the notarization key'), 'nested Tor binaries are signed before the Tauri build');

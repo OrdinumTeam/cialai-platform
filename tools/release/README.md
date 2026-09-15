@@ -29,7 +29,7 @@ Assinatura de plataforma:
 
 | Sistema | Com credenciais | Sem credenciais |
 | --- | --- | --- |
-| macOS | Developer ID com os secrets `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD` e `APPLE_SIGNING_IDENTITY`, e notarização pela chave da API do App Store Connect com `APPLE_API_ISSUER`, `APPLE_API_KEY` e `APPLE_API_PRIVATE_KEY`. O workflow grava a chave em `$RUNNER_TEMP/private_keys` e passa só o caminho ao Tauri | Assinatura ad hoc com `signingIdentity` igual a `-`, que abre no Apple Silicon depois da liberação em Privacidade e Segurança |
+| macOS | Developer ID com os secrets `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD` e `APPLE_SIGNING_IDENTITY`, e notarização pela chave da API do App Store Connect com `APPLE_API_ISSUER`, `APPLE_API_KEY` e `APPLE_API_PRIVATE_KEY`. O workflow grava a chave em `$RUNNER_TEMP/private_keys` e passa só o caminho ao Tauri; `notarize-dmg.sh` notariza e grampeia depois o DMG | Assinatura ad hoc com `signingIdentity` igual a `-`, que abre no Apple Silicon depois da liberação em Privacidade e Segurança |
 | Windows | Azure Trusted Signing com os secrets `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET` e `AZURE_TENANT_ID` e as variáveis `WINDOWS_SIGNING_ENDPOINT`, `WINDOWS_SIGNING_ACCOUNT` e `WINDOWS_SIGNING_PROFILE` | Instaladores sem Authenticode; o SmartScreen pede Mais informações e Executar assim mesmo |
 | Linux | Não se aplica | AppImage, DEB e RPM sem assinatura de pacote |
 
