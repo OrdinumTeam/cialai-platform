@@ -11,8 +11,8 @@ import { pageMessageScript, parsePageMessage, shellMessageScript, type ShellMess
 import { shareDownload } from '../bridge/share-download';
 import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '../config/url';
 import { localizeSensitiveReason, useI18n } from '../i18n';
-import { checkControlHealth, HEALTH_POLL_INTERVAL_MS } from '../network/health';
-import { usePalette } from '../theme';
+import { checkControlHealth, HEALTH_FAILURE_STRIKES, HEALTH_POLL_INTERVAL_MS } from '../network/health';
+import { usePalette, useThemeMode } from '../theme';
 import { TRANSPORT_DESCRIPTION_KEYS, TRANSPORT_KEYS, useTransportColor } from './TransportBadge';
 
 type Props = {
@@ -32,39 +32,59 @@ export function Shell({
   url, desktopId, desktopName, version, biometricSession, lockSignal, transport, onConnectionLost, onDesktops
 }: Props) {
   const palette = usePalette();
+  const themeMode = useThemeMode();
   const transportColor = useTransportColor();
   const { locale, t } = useI18n();
   const webView = useRef<WebView>(null);
   const loaded = useRef(false);
+  const unlocked = useRef(false);
   const downloadBusy = useRef(false);
   const originWhitelist = useMemo(() => controlOriginWhitelist(url), [url]);
 
   const inject = useCallback((script: string) => {
     if (loaded.current) webView.current?.injectJavaScript(script);
   }, []);
-  const emitShellState = useCallback((unlocked: boolean) => {
+  const emitShellState = useCallback((nextUnlocked: boolean) => {
+    unlocked.current = nextUnlocked;
     const message: ShellMessage = {
       type: 'shell',
       platform: Platform.OS === 'android' ? 'android' : 'ios',
       version,
       desktopId,
-      unlocked
+      unlocked: nextUnlocked,
+      theme: themeMode
     };
     inject(shellMessageScript(message));
-  }, [desktopId, inject, version]);
+  }, [desktopId, inject, themeMode, version]);
 
   useEffect(() => {
     if (lockSignal > 0) emitShellState(false);
   }, [emitShellState, lockSignal]);
 
+  // A aparência muda nos ajustes: a página recebe a escolha sem recarregar.
+  useEffect(() => {
+    if (loaded.current) emitShellState(unlocked.current);
+  }, [emitShellState, themeMode]);
+
+  // Duas sondagens seguidas sem resposta contam como conexão perdida; uma só
+  // pode ser a reserva demorando. Uma resposta boa zera a contagem. Depois de
+  // avisar, a sondagem continua: o app pode confirmar com o núcleo e manter a
+  // página, e um aviso seguinte precisa do mesmo par de falhas.
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
     const probe = async () => {
       if (cancelled) return;
       const healthy = await checkControlHealth(url);
-      if (!cancelled && !healthy) onConnectionLost();
-      else if (!cancelled) timer = setTimeout(() => void probe(), HEALTH_POLL_INTERVAL_MS);
+      if (cancelled) return;
+      failures = healthy ? 0 : failures + 1;
+      if (failures >= HEALTH_FAILURE_STRIKES) {
+        failures = 0;
+        onConnectionLost();
+      }
+      if (cancelled) return;
+      timer = setTimeout(() => void probe(), HEALTH_POLL_INTERVAL_MS);
     };
     timer = setTimeout(() => void probe(), HEALTH_POLL_INTERVAL_MS);
     return () => {
@@ -128,8 +148,8 @@ export function Shell({
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
-      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName, locale
-    })}; true;`, [desktopId, desktopName, locale, version]);
+      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName, locale, theme: themeMode
+    })}; true;`, [desktopId, desktopName, locale, themeMode, version]);
 
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
@@ -138,13 +158,15 @@ export function Shell({
           <View style={styles.toolbarStatus}>
             <View style={[styles.connectedDot, { backgroundColor: transportColor(transport) }]} />
             <Text numberOfLines={1} style={[styles.toolbarTitle, { color: palette.label }]}>{desktopName}</Text>
-            <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
-              numberOfLines={1} style={[styles.transportText, { color: palette.secondaryLabel }]}>
-              {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
-            </Text>
+            <View style={[styles.transportBadge, { backgroundColor: palette.background, borderColor: palette.separator }]}>
+              <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
+                numberOfLines={1} style={[styles.transportText, { color: palette.secondaryLabel }]}>
+                {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
+              </Text>
+            </View>
           </View>
           <Pressable accessibilityLabel={t('mobile.shell.showDesktops')} accessibilityRole="button" onPress={onDesktops}
-            style={({ pressed }) => [styles.desktopsButton, pressed && styles.pressed]}>
+            style={({ pressed }) => [styles.desktopsButton, { backgroundColor: palette.background }, pressed && styles.pressed]}>
             <Text style={[styles.desktopsText, { color: palette.accent }]}>{t('mobile.shell.desktops')}</Text>
           </Pressable>
         </View>
@@ -169,7 +191,10 @@ export function Shell({
         onOpenWindow={event => void openExternal(event.nativeEvent.targetUrl)}
         onShouldStartLoadWithRequest={allowNavigation}
         originWhitelist={originWhitelist}
-        pullToRefreshEnabled
+        overScrollMode="never"
+        // Puxar para atualizar recarregava a página inteira a cada arrasto no
+        // topo do terminal, e o conteúdo piscava. A página se restaura sozinha.
+        pullToRefreshEnabled={false}
         sharedCookiesEnabled={false}
         source={{ uri: url }}
         style={styles.webView}
@@ -181,12 +206,13 @@ export function Shell({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   webView: { flex: 1, backgroundColor: 'transparent' },
-  toolbar: { minHeight: 44, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 8 },
+  toolbar: { minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 10, paddingVertical: 6 },
   toolbarStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  transportText: { fontSize: 13, lineHeight: 18, fontWeight: '600' },
+  transportBadge: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  transportText: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
   toolbarTitle: { flexShrink: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  desktopsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  desktopsButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 18 },
   desktopsText: { fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  pressed: { opacity: 0.55 },
+  pressed: { opacity: 0.55, transform: [{ scale: 0.97 }] },
   connectedDot: { width: 8, height: 8, borderRadius: 4 }
 });

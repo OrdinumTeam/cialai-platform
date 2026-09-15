@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
@@ -8,6 +8,7 @@ import {
   addListener as addTunnelListener,
   inspectPairPayload,
   pair,
+  stop as stopTunnel,
   type DeviceDescription,
   type PairInspection,
   type PairResult
@@ -43,6 +44,8 @@ const STAGE_KEYS: Readonly<Record<PairStage, string>> = {
 };
 
 const STAGE_TICK_MS = 250;
+// Depois disso na reserva, a tela explica a demora e mostra o tempo.
+export const PAIR_SLOW_HINT_MS = 8_000;
 
 export function Pair({ initialError, notice, device, onPaired, onCancel }: Props) {
   const palette = usePalette();
@@ -53,13 +56,19 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
   const [error, setError] = useState(initialError ?? '');
   const [reading, setReading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [progress, dispatchProgress] = useReducer(advancePairProgress, undefined, initialPairProgress);
+  const cancelled = useRef(false);
 
   // Enquanto o pareamento corre, os eventos do núcleo e o relógio avançam a etapa exibida.
   useEffect(() => {
     if (!busy) return;
     const startedAt = Date.now();
-    const timer = setInterval(() => dispatchProgress({ type: 'elapsed', ms: Date.now() - startedAt }), STAGE_TICK_MS);
+    const timer = setInterval(() => {
+      const ms = Date.now() - startedAt;
+      setElapsedMs(ms);
+      dispatchProgress({ type: 'elapsed', ms });
+    }, STAGE_TICK_MS);
     const subscription = addTunnelListener(event => {
       for (const signal of interpretTunnelEvent(event)) {
         if (signal.type === 'pair-stage') dispatchProgress({ type: 'core-stage', state: signal.state });
@@ -95,6 +104,8 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
 
   async function confirm() {
     if (!inspection || !rawPayload) return;
+    cancelled.current = false;
+    setElapsedMs(0);
     setBusy(true);
     setError('');
     dispatchProgress({ type: 'start' });
@@ -103,9 +114,23 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
       dispatchProgress({ type: 'core-stage', state: 'confirming' });
       await onPaired(result);
     } catch (caught) {
-      setError(pairErrorMessage(caught));
+      // Cancelado pela pessoa: o código lido continua na tela para tentar de novo.
+      if (!cancelled.current) setError(pairErrorMessage(caught));
       setBusy(false);
+      dispatchProgress({ type: 'reading' });
     }
+  }
+
+  // Interrompe a tentativa no núcleo; a próxima chamada reabre o que for preciso.
+  async function cancelPairing() {
+    cancelled.current = true;
+    try {
+      await stopTunnel?.();
+    } catch {
+      // Sem núcleo para parar, a tela volta do mesmo jeito.
+    }
+    setBusy(false);
+    dispatchProgress({ type: 'reading' });
   }
 
   function resetCode() {
@@ -116,6 +141,7 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
 
   if (inspection) {
     const percent = reservePercent(progress.tor);
+    const slow = busy && progress.stage === 'reserve' && elapsedMs >= PAIR_SLOW_HINT_MS;
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
         <ScrollView contentContainerStyle={styles.confirmContent}>
@@ -166,20 +192,34 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
                           {t('mobile.reserve.progress', { progress: percent })}
                         </Text>
                       ) : null}
+                      {stage === 'reserve' && status === 'current' && slow ? (
+                        <Text style={[styles.stageDetail, { color: palette.secondaryLabel }]}>
+                          {t('mobile.pair.elapsed', { seconds: Math.floor(elapsedMs / 1000) })}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
                 );
               })}
+              {slow ? (
+                <Text style={[styles.slowHint, { color: palette.secondaryLabel }]}>{t('mobile.pair.slowHint')}</Text>
+              ) : null}
             </View>
           ) : (
             <Pressable accessibilityRole="button" onPress={() => void confirm()}
-              style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
+              style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, pressed && styles.pressedScale]}>
               <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.confirm')}</Text>
             </Pressable>
           )}
-          <Pressable accessibilityRole="button" disabled={busy} onPress={resetCode} style={[styles.secondary, busy && styles.disabled]}>
-            <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.anotherCode')}</Text>
-          </Pressable>
+          {busy ? (
+            <Pressable accessibilityRole="button" onPress={() => void cancelPairing()} style={styles.secondary}>
+              <Text style={[styles.secondaryText, { color: palette.danger }]}>{t('mobile.pair.cancel')}</Text>
+            </Pressable>
+          ) : (
+            <Pressable accessibilityRole="button" onPress={resetCode} style={styles.secondary}>
+              <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.anotherCode')}</Text>
+            </Pressable>
+          )}
           {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
         </ScrollView>
       </SafeAreaView>
@@ -216,7 +256,7 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
             <>
               <Text style={[styles.permissionText, { color: palette.secondaryLabel }]}>{t('mobile.pair.cameraUse')}</Text>
               <Pressable accessibilityRole="button" onPress={() => void requestPermission()}
-                style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
+                style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, pressed && styles.pressedScale]}>
                 <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.allowCamera')}</Text>
               </Pressable>
             </>
@@ -264,10 +304,11 @@ const styles = StyleSheet.create({
   stageText: { flex: 1, marginLeft: 8 },
   stageLabel: { fontSize: 16, lineHeight: 24 },
   stageDetail: { fontSize: 14, lineHeight: 20 },
+  slowHint: { marginTop: 10, fontSize: 14, lineHeight: 20 },
   primary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
   primaryText: { fontSize: 17, fontWeight: '600' },
+  pressedScale: { transform: [{ scale: 0.98 }] },
   secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
   secondaryText: { fontSize: 17, fontWeight: '600' },
-  disabled: { opacity: 0.5 },
   error: { textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 21 }
 });

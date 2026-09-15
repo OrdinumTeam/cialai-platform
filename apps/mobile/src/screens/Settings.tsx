@@ -6,7 +6,7 @@ import type { Locale } from '@cialai/i18n';
 import type { LogLevel, TunnelStatus } from 'cialai-tunnel';
 
 import { useI18n } from '../i18n';
-import { usePalette } from '../theme';
+import { THEME_MODES, usePalette, type ThemeMode } from '../theme';
 import { PATH_KEYS, TOR_STATE_KEYS, TRANSPORT_KEYS } from './TransportBadge';
 
 const LANGUAGE_OPTIONS: readonly { value: Locale; key: string }[] = [
@@ -35,13 +35,15 @@ type Props = {
   appVersion: string;
   coreVersion: string;
   logLevel: LogLevel;
+  themeMode?: ThemeMode;
   onBack: () => void;
   onLogLevel: (level: LogLevel) => void;
+  onThemeMode?: (mode: ThemeMode) => void;
   onRefreshStatus: () => void;
 };
 
 export function Settings({
-  desktopCount, tunnelStatus, appVersion, coreVersion, logLevel, onBack, onLogLevel, onRefreshStatus
+  desktopCount, tunnelStatus, appVersion, coreVersion, logLevel, themeMode = 'system', onBack, onLogLevel, onThemeMode, onRefreshStatus
 }: Props) {
   const palette = usePalette();
   const { locale, setLocale, t } = useI18n();
@@ -79,6 +81,18 @@ export function Settings({
               style={[styles.segmentItem, option.value === locale && { backgroundColor: palette.accent }]}>
               <Text style={{ color: option.value === locale ? palette.accentText : palette.label, fontWeight: '600' }}>
                 {t(option.key)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.appearance')}</Text>
+        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
+          {THEME_MODES.map(mode => (
+            <Pressable accessibilityLabel={t(`mobile.settings.appearance.${mode}`)} accessibilityRole="button"
+              accessibilityState={{ selected: mode === themeMode }} key={mode} onPress={() => onThemeMode?.(mode)}
+              style={[styles.segmentItem, mode === themeMode && { backgroundColor: palette.accent }]}>
+              <Text style={{ color: mode === themeMode ? palette.accentText : palette.label, fontWeight: '600' }}>
+                {t(`mobile.settings.appearance.${mode}`)}
               </Text>
             </Pressable>
           ))}

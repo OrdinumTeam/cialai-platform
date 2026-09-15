@@ -343,9 +343,12 @@ export function TunnelProvider({ children }) {
     return netStatus;
   }, [call, refreshDevices]);
 
-  const beginPair = useCallback(async () => {
+  // `ttlSeconds` é o prazo do código: o diálogo passa o que sobra da janela
+  // de pareamento nas rotações, para a validade não recomeçar a cada código.
+  const beginPair = useCallback(async ({ ttlSeconds } = {}) => {
     setPairEvent(null);
-    const pair = await call('pair.begin', { ttlSeconds: PAIR_TTL_SECONDS });
+    const ttl = Math.max(1, Math.min(PAIR_TTL_SECONDS, Math.floor(Number(ttlSeconds) || PAIR_TTL_SECONDS)));
+    const pair = await call('pair.begin', { ttlSeconds: ttl });
     if (pair?.reserve) setSnapshot((current) => reduceTunnelEvent(current, { event: 'tor.state', data: normalizeTorStatus(pair.reserve) }));
     if (demo && queryParam('approval') === '1') {
       setTimeout(() => setPairEvent({ event: 'pair.requested', data: { pairId: pair.pairId, code: '4827', device: { name: translate('desktop.demo.newPhoneName'), model: 'iPhone 15' } } }), 500);

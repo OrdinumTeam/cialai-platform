@@ -82,6 +82,19 @@ pub struct UsageSession {
     pub cwd: Option<String>,
     #[serde(default)]
     pub model: Option<String>,
+    /// Esforco de raciocinio da sessao: `low`, `medium`, `high`, `xhigh` ou
+    /// `max`, como a linha de estado o recebe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
+    /// Quanto da janela de contexto ja foi usada, em porcento.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_used_percent: Option<f64>,
+    /// Tamanho da janela de contexto em tokens.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_window_size: Option<u64>,
+    /// Custo estimado da sessao em dolares.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cost_usd: Option<f64>,
     #[serde(default)]
     pub updated_at_ms: u64,
 }
@@ -433,6 +446,146 @@ fn codex_at(path: &Path, home_dir: &Path) -> Option<AgentUsage> {
     })
 }
 
+/* ── instalacao da linha de estado do Claude Code ──────────────────── */
+
+/// O hook, embutido no binario: e o mesmo `scripts/claude-statusline.py` do
+/// repositorio que o instalador em Python copia.
+pub const CLAUDE_HOOK_SOURCE: &str = include_str!("../../../../../scripts/claude-statusline.py");
+/// Pasta e nome do hook na pasta pessoal.
+pub const CLAUDE_HOOK_DIR: &str = ".cialai";
+pub const CLAUDE_HOOK_FILE: &str = "claude-statusline.py";
+
+/// Resultado da instalacao: quantos perfis apontam para o hook e quais
+/// guardaram uma linha de estado propria.
+#[derive(Clone, Debug, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HookInstall {
+    pub hook_path: String,
+    /// Perfis que passaram a usar o hook nesta chamada ou ja usavam.
+    pub installed: usize,
+    /// Perfis com um `statusLine` proprio, deixados como estavam.
+    pub kept: Vec<String>,
+    /// Perfis do Claude Code encontrados na pasta pessoal.
+    pub profiles: Vec<String>,
+}
+
+/// Perfis do Claude Code: `~/.claude` e cada `~/.claude-*`, em ordem.
+fn claude_profiles(home: &Path) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let default = home.join(".claude");
+    if default.is_dir() {
+        found.push(default);
+    }
+    if let Ok(read) = fs::read_dir(home) {
+        let mut extra: Vec<PathBuf> = read
+            .flatten()
+            .filter(|item| item.file_type().map(|kind| kind.is_dir()).unwrap_or(false))
+            .map(|item| item.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".claude-"))
+            })
+            .collect();
+        extra.sort();
+        found.extend(extra);
+    }
+    found
+}
+
+/// Comando que o Claude Code roda: o caminho do hook no POSIX, onde o
+/// shebang resolve o Python, e `python "caminho"` no Windows.
+fn hook_command(target: &Path) -> String {
+    if cfg!(windows) {
+        format!("python \"{}\"", target.display())
+    } else {
+        target.to_string_lossy().into_owned()
+    }
+}
+
+fn write_atomic(path: &Path, contents: &str) -> Result<(), String> {
+    let temporary = path.with_extension(format!("json.{}.tmp", std::process::id()));
+    fs::write(&temporary, contents).map_err(|error| error.to_string())?;
+    fs::rename(&temporary, path).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        error.to_string()
+    })
+}
+
+/// Copia o hook para `~/.cialai` e aponta o `statusLine` de cada perfil do
+/// Claude Code para ele. Um perfil com linha de estado propria fica como
+/// esta; um perfil sem `settings.json` ganha um so com o `statusLine`. Cada
+/// `settings.json` alterado deixa uma copia `.bak-<segundos>` ao lado.
+pub fn install_claude_hook(home: &Path) -> Result<HookInstall, String> {
+    let target = home.join(CLAUDE_HOOK_DIR).join(CLAUDE_HOOK_FILE);
+    let parent = target
+        .parent()
+        .ok_or_else(|| "hook sem pasta".to_string())?;
+    fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    if fs::read_to_string(&target).ok().as_deref() != Some(CLAUDE_HOOK_SOURCE) {
+        fs::write(&target, CLAUDE_HOOK_SOURCE).map_err(|error| error.to_string())?;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&target, fs::Permissions::from_mode(0o755))
+            .map_err(|error| error.to_string())?;
+    }
+    let wanted = serde_json::json!({
+        "type": "command",
+        "command": hook_command(&target),
+        "padding": 0,
+    });
+    let mut result = HookInstall {
+        hook_path: crate::platform::to_portable(&target),
+        ..HookInstall::default()
+    };
+    for profile in claude_profiles(home) {
+        let name = profile
+            .file_name()
+            .map(|value| value.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        result.profiles.push(name.clone());
+        let settings = profile.join("settings.json");
+        let mut data = match fs::read_to_string(&settings) {
+            Ok(raw) => match serde_json::from_str::<serde_json::Value>(&raw) {
+                Ok(serde_json::Value::Object(map)) => serde_json::Value::Object(map),
+                // JSON invalido ou de outra forma: nao mexe.
+                _ => {
+                    result.kept.push(name);
+                    continue;
+                }
+            },
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                serde_json::Value::Object(serde_json::Map::new())
+            }
+            Err(error) => return Err(error.to_string()),
+        };
+        let current = data.get("statusLine");
+        if current == Some(&wanted) {
+            result.installed += 1;
+            continue;
+        }
+        if current.is_some_and(|value| !value.is_null()) {
+            result.kept.push(name);
+            continue;
+        }
+        if settings.is_file() {
+            let stamp = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|value| value.as_secs())
+                .unwrap_or(0);
+            let backup = profile.join(format!("settings.json.bak-{stamp}"));
+            fs::copy(&settings, &backup).map_err(|error| error.to_string())?;
+        }
+        data["statusLine"] = wanted.clone();
+        let pretty = serde_json::to_string_pretty(&data).map_err(|error| error.to_string())?;
+        write_atomic(&settings, &format!("{pretty}\n"))?;
+        result.installed += 1;
+    }
+    Ok(result)
+}
+
 /* ── leitura com cache ─────────────────────────────────────────────── */
 
 /// Estado do Tauri: o uso muda devagar, entao alguns segundos de cache
@@ -520,7 +673,7 @@ mod tests {
             dir.join(CLAUDE_DIR).join("claude-work.json"),
             format!(
                 r#"{{"agent":"Claude Code","format":2,"profile":"claude-work","profileName":"Work","configDir":"/Users/x/.claude-work","plan":"max","model":"Fable 5.1","updatedAtMs":{now},
-                   "sessions":[{{"sessionId":"s1","cwd":"/Users/x/projeto","model":"Fable 5.1","updatedAtMs":{now}}},{{"sessionId":"s0","cwd":"/Users/x/outro","model":"Opus 5","updatedAtMs":{}}}],
+                   "sessions":[{{"sessionId":"s1","cwd":"/Users/x/projeto","model":"Fable 5.1","effort":"max","contextUsedPercent":42.5,"contextWindowSize":200000,"costUsd":1.83,"updatedAtMs":{now}}},{{"sessionId":"s0","cwd":"/Users/x/outro","model":"Opus 5","updatedAtMs":{}}}],
                    "windows":[{{"id":"five_hour","label":"Sessão","usedPercent":12.5,"resetsAtMs":1789000000000}},{{"id":"seven_day","label":"Semana","usedPercent":34.0}}]}}"#,
                 now - 1000
             ),
@@ -539,6 +692,13 @@ mod tests {
         assert_eq!(usage.windows[0].used_percent, 12.5);
         assert_eq!(usage.sessions.len(), 2);
         assert_eq!(usage.sessions[0].cwd.as_deref(), Some("/Users/x/projeto"));
+        assert_eq!(usage.sessions[0].effort.as_deref(), Some("max"));
+        assert_eq!(usage.sessions[0].context_used_percent, Some(42.5));
+        assert_eq!(usage.sessions[0].context_window_size, Some(200_000));
+        assert_eq!(usage.sessions[0].cost_usd, Some(1.83));
+        // Sessao publicada por um hook anterior, sem os campos novos.
+        assert_eq!(usage.sessions[1].effort, None);
+        assert_eq!(usage.sessions[1].context_used_percent, None);
         assert!(!usage.stale);
         // Arquivo antigo continua sendo lido, mas marcado.
         fs::write(
@@ -577,6 +737,84 @@ mod tests {
         // Sem `configDir` no arquivo o campo fica vazio: o perfil e o slug.
         assert_eq!(list[1].config_dir, None);
         fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn installs_the_hook_in_every_profile_and_keeps_custom_status_lines() {
+        let home = sandbox("hook");
+        fs::create_dir_all(home.join(".claude")).unwrap();
+        fs::write(home.join(".claude/settings.json"), "{\"theme\":\"dark\"}\n").unwrap();
+        // Perfil sem settings.json ganha um so com a linha de estado.
+        fs::create_dir_all(home.join(".claude-work")).unwrap();
+        // Linha de estado propria fica como esta.
+        fs::create_dir_all(home.join(".claude-custom")).unwrap();
+        fs::write(
+            home.join(".claude-custom/settings.json"),
+            "{\"statusLine\":{\"type\":\"command\",\"command\":\"meu-hook\"}}",
+        )
+        .unwrap();
+        // Pasta que nao e perfil e arquivo solto sao ignorados.
+        fs::create_dir_all(home.join(".claudette")).unwrap();
+        fs::write(home.join(".claude-notes"), "x").unwrap();
+
+        let first = install_claude_hook(&home).unwrap();
+        // `~/.claude` primeiro; os demais perfis em ordem alfabetica.
+        assert_eq!(
+            first.profiles,
+            [".claude", ".claude-custom", ".claude-work"]
+        );
+        assert_eq!(first.installed, 2, "{first:?}");
+        assert_eq!(first.kept, [".claude-custom"]);
+        let hook = home.join(CLAUDE_HOOK_DIR).join(CLAUDE_HOOK_FILE);
+        assert_eq!(fs::read_to_string(&hook).unwrap(), CLAUDE_HOOK_SOURCE);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_ne!(fs::metadata(&hook).unwrap().permissions().mode() & 0o111, 0);
+        }
+        let settings: serde_json::Value =
+            serde_json::from_str(&fs::read_to_string(home.join(".claude/settings.json")).unwrap())
+                .unwrap();
+        assert_eq!(settings["theme"], "dark");
+        assert_eq!(settings["statusLine"]["type"], "command");
+        assert_eq!(settings["statusLine"]["padding"], 0);
+        assert!(
+            settings["statusLine"]["command"]
+                .as_str()
+                .unwrap()
+                .contains(CLAUDE_HOOK_FILE)
+        );
+        let work: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.join(".claude-work/settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(work["statusLine"], settings["statusLine"]);
+        let custom: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(home.join(".claude-custom/settings.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(custom["statusLine"]["command"], "meu-hook");
+        let backups = |profile: &str| {
+            fs::read_dir(home.join(profile))
+                .unwrap()
+                .flatten()
+                .filter(|item| {
+                    item.file_name()
+                        .to_string_lossy()
+                        .starts_with("settings.json.bak-")
+                })
+                .count()
+        };
+        assert_eq!(backups(".claude"), 1);
+        assert_eq!(backups(".claude-work"), 0);
+        assert_eq!(backups(".claude-custom"), 0);
+
+        // Segunda chamada: nada muda e nenhuma copia nova.
+        let second = install_claude_hook(&home).unwrap();
+        assert_eq!(second.installed, 2);
+        assert_eq!(second.kept, [".claude-custom"]);
+        assert_eq!(backups(".claude"), 1);
+        fs::remove_dir_all(&home).unwrap();
     }
 
     #[test]

@@ -58,7 +58,21 @@ export default function Preferences({ open, onClose, appearance }) {
   const [appPaths, setAppPaths] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [installingHook, setInstallingHook] = useState(false);
   const [error, setError] = useState('');
+
+  // Linha de estado do Claude Code: copia o hook para ~/.cialai e aponta o
+  // statusLine de cada perfil para ele. O card das sessoes passa a ler o uso.
+  const installClaudeHook = async () => {
+    setInstallingHook(true);
+    try {
+      const result = await invoke('ai_install_claude_hook');
+      const count = Number(result?.installed) || 0;
+      notify(count > 0 ? translate('desktop.preferences.claudeHookDone', { count: count.toLocaleString(getLocale()) }) : translate('desktop.preferences.claudeHookNone'), count > 0 ? 'success' : 'warning');
+    } catch (hookError) {
+      notify(translate('desktop.preferences.claudeHookFailed', { error: hookError?.message || hookError }), 'warning');
+    } finally { setInstallingHook(false); }
+  };
 
   useEffect(() => {
     if (!open) return undefined;
@@ -163,6 +177,7 @@ export default function Preferences({ open, onClose, appearance }) {
         <Row title={translate('desktop.preferences.arguments')} description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.shellArguments')} /></Row>
         {hints.showLang ? <Row title={translate('language.label')} description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label={translate('desktop.preferences.terminalLanguage')} /></Row> : null}
         <Row title={translate('desktop.preferences.pathPrefixes')} description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.pathPrefixes')} /></Row>
+        {native ? <Row title={translate('desktop.preferences.claudeHook')} description={translate('desktop.preferences.claudeHookDescription')}><button type="button" className="btn btn-secondary btn-sm" disabled={installingHook} onClick={installClaudeHook}>{translate(installingHook ? 'desktop.preferences.claudeHookInstalling' : 'desktop.preferences.claudeHookInstall')}</button></Row> : null}
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.projects')}</h3>

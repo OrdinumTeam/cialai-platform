@@ -4,19 +4,28 @@
 // linguagem simples, um sinal de atencao quando houver e CPU e memoria
 // reais. O que nao foi observado nao aparece.
 //
+// Com um agente reconhecido e o hook de linha de estado instalado, o card
+// mostra tambem o modelo, o esforco de raciocinio, quanto da janela de
+// contexto ja foi usada, o custo estimado da sessao e o uso do plano. Sem o
+// hook, um botao instala a linha de estado nos perfis do Claude Code.
+//
 // O card assina so a atividade da propria sessao: a saida dos outros
 // terminais e as metricas dos outros cards nao o redesenham. As barras de
 // atividade so animam com um processo rodando de verdade.
 
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Bell, CheckCircle2, MoreHorizontal, Pin, XCircle } from 'lucide-react';
-import { fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, isWorking, runningLabel, sessionAccent, sessionModel } from '../runtime.js';
+import { Bell, CheckCircle2, MoreHorizontal, Pin, Sparkles, XCircle } from 'lucide-react';
+import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
+import { describe, isWorking, runningLabel, sessionAccent, sessionUsage } from '../runtime.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
+import { useToast } from '../../components/ui.jsx';
+import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+
+const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
 
 function AttentionIcon({ kind }) {
   if (kind === 'finished') return <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />;
@@ -88,6 +97,33 @@ function planTone(percent) {
   return 'ok';
 }
 
+function effortLabel(effort) {
+  return EFFORT_LEVELS.has(effort) ? translate(`terminal.session.effort.${effort}`) : effort;
+}
+
+// Botao que instala a linha de estado nos perfis do Claude Code, so no app
+// do computador: e onde os perfis moram e onde o comando existe.
+function InstallHook({ activity }) {
+  const notify = useToast();
+  const [busy, setBusy] = useState(false);
+  if (!isTauri()) return null;
+  const install = async (event) => {
+    event.stopPropagation();
+    if (busy) return;
+    setBusy(true);
+    try {
+      const result = await invoke('ai_install_claude_hook');
+      const count = Number(result?.installed) || 0;
+      notify(count > 0 ? translate('terminal.plan.installed', { count: count.toLocaleString(getLocale()) }) : translate('terminal.plan.installNone'), count > 0 ? 'success' : 'warning');
+    } catch (error) {
+      notify(translate('terminal.plan.installFailed', { error: error?.message || String(error) }), 'warning');
+    } finally { setBusy(false); }
+  };
+  return <button type="button" className="terminais-card__install" disabled={busy} title={`${translate('terminal.plan.installTitle')}\n${missingTitle(activity) || ''}`.trim()} onMouseDown={(event) => event.stopPropagation()} onClick={install}>
+    <Sparkles size={11} strokeWidth={2} aria-hidden="true" />{translate(busy ? 'terminal.plan.installing' : 'terminal.plan.install')}
+  </button>;
+}
+
 // Variaveis CSS com o tom atribuido a sessao.
 export function accentStyle(session) {
   const accent = sessionAccent(session);
@@ -126,8 +162,13 @@ function SessionCard({
   // rodando. A janela mais curta e a mostrada; as outras ficam na dica.
   const usage = activity?.agent && activity.usage?.windows?.length ? activity.usage : null;
   const planWindow = usage ? usage.windows[0] : null;
-  const model = usage ? sessionModel(activity) : null;
+  const detail = usage ? sessionUsage(activity) : null;
+  const model = detail?.model || null;
+  const effort = detail?.effort ? effortLabel(detail.effort) : null;
+  const context = detail?.contextUsedPercent != null ? fmtPlan(detail.contextUsedPercent) : null;
+  const cost = detail?.costUsd != null ? fmtCost(detail.costUsd) : null;
   const missing = Boolean(activity?.agent && activity.profile && !usage);
+  const showInstall = missing && activity.agent === 'Claude Code' && !touch && session.status === 'running';
   const showProfile = Boolean(usage && activity.profileName && usage.profile && !['claude', 'codex'].includes(usage.profile));
   const elapsed = session.jobStartedAt && session.status === 'running' ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
   const attention = session.attention;
@@ -160,7 +201,7 @@ function SessionCard({
       }}
       onContextMenu={touch ? undefined : (event) => { event.preventDefault(); onMenu(session, { x: event.clientX, y: event.clientY, align: 'left' }); }}
       onMouseDown={touch || renaming || !onDragStart ? undefined : (event) => {
-        if (event.target.closest?.('.terminais-card__menu, .terminais-card__rename')) return;
+        if (event.target.closest?.('.terminais-card__menu, .terminais-card__rename, .terminais-card__install')) return;
         onDragStart(event, session);
       }}
       title={shortPath(session.cwd)}
@@ -208,13 +249,17 @@ function SessionCard({
               {fmtPlan(planWindow.usedPercent)}
             </span>
           ) : null}
+          {running.agent && showInstall ? <InstallHook activity={activity} /> : null}
           {running.background ? <span className="terminais-card__running-note">{translate('terminal.session.background')}</span> : null}
           {elapsed && !running.background ? <span className="terminais-card__elapsed">{elapsed}</span> : null}
         </div>
       ) : null}
-      {running?.agent && (model || showProfile) ? (
+      {running?.agent && (model || effort || context || cost || showProfile) ? (
         <div className="terminais-card__agent-row">
           {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
+          {effort ? <span className="terminais-card__chip" title={translate('terminal.session.effortTitle', { effort })}>{effort}</span> : null}
+          {context ? <span className={`terminais-card__chip terminais-card__chip--${planTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
+          {cost ? <span className="terminais-card__chip" title={translate('terminal.session.costTitle', { amount: cost })}>{translate('terminal.session.cost', { amount: cost })}</span> : null}
           {showProfile ? <span className="terminais-card__profile" title={translate(usage.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage.configDir) })}>{activity.profileName}</span> : null}
         </div>
       ) : null}

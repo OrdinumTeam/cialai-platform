@@ -9,7 +9,7 @@ import re
 import sys
 import time
 
-FORMAT = 2
+FORMAT = 3
 MAX_SESSIONS = 12
 SESSION_TTL_MS = 24 * 60 * 60 * 1000
 PERCENT_KEYS = (
@@ -203,6 +203,7 @@ def publish(payload, windows, directory, slug):
         "model": model.get("display_name") or model.get("id"),
         "updatedAtMs": now_ms,
     }
+    session.update(session_details(payload))
     try:
         with exclusive_lock(os.path.join(out_dir, slug + ".lock")):
             previous = read_previous(out_file)
@@ -230,6 +231,29 @@ def publish(payload, windows, directory, slug):
         pass
 
 
+def session_details(payload):
+    """Esforco, contexto usado e custo da sessao, quando o Claude Code os manda."""
+    details = {}
+    effort = (payload.get("effort") or {}).get("level")
+    if isinstance(effort, str) and effort.strip():
+        details["effort"] = effort.strip().lower()
+    context = payload.get("context_window") or {}
+    used = as_number(pick(context, ("used_percentage", "usedPercentage")))
+    size = as_number(pick(context, ("context_window_size", "contextWindowSize")))
+    if used is None and size:
+        usage = context.get("current_usage") or {}
+        tokens = sum(as_number(usage.get(key)) or 0 for key in ("input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"))
+        used = round(tokens / size * 100, 1) if tokens else None
+    if used is not None:
+        details["contextUsedPercent"] = max(0.0, min(100.0, float(used)))
+    if size:
+        details["contextWindowSize"] = int(size)
+    cost = as_number((payload.get("cost") or {}).get("total_cost_usd"))
+    if cost is not None and cost >= 0:
+        details["costUsd"] = float(cost)
+    return details
+
+
 def status_text(payload, windows):
     parts = []
     profile = (os.environ.get("CLAUDE_PROFILE") or "").strip()
@@ -242,6 +266,11 @@ def status_text(payload, windows):
     model = (payload.get("model") or {}).get("display_name")
     if model:
         parts.append(model)
+    details = session_details(payload)
+    if details.get("effort"):
+        parts.append(details["effort"])
+    if details.get("contextUsedPercent") is not None:
+        parts.append("ctx %d%%" % round(details["contextUsedPercent"]))
     for window in windows[:2]:
         parts.append("%s %d%%" % (window["label"].lower(), round(window["usedPercent"])))
     return " · ".join(parts)

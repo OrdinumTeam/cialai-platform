@@ -13,13 +13,16 @@ const mockListeners = new Set();
 const mockPair = jest.fn();
 const mockInspect = jest.fn();
 
+const mockStop = jest.fn(async () => {});
+
 jest.mock('cialai-tunnel', () => ({
   addListener: handler => {
     mockListeners.add(handler);
     return { remove: () => mockListeners.delete(handler) };
   },
   inspectPairPayload: (...args) => mockInspect(...args),
-  pair: (...args) => mockPair(...args)
+  pair: (...args) => mockPair(...args),
+  stop: () => mockStop()
 }));
 jest.mock('expo-camera', () => ({
   CameraView: 'CameraView',
@@ -103,6 +106,36 @@ test('Pair shows the short fingerprint and the progress of each stage', async ()
   expect(onPaired).toHaveBeenCalledWith(result);
   await act(async () => tree.unmount());
   expect(mockListeners.size).toBe(0);
+  jest.useRealTimers();
+});
+
+test('Pair explains a slow backup, counts the time and lets the person cancel', async () => {
+  jest.useFakeTimers();
+  mockStop.mockClear();
+  mockInspect.mockResolvedValue({ v: 2, desktop: { id: desktopId, name: 'Mac de Foco', fingerprint: '0123456789abcdef' },
+    expiresAt: 1_800_000_000, candidates: 3, known: false, approvalCode: '' });
+  let rejectPair;
+  mockPair.mockImplementation(() => new Promise((_resolve, reject) => { rejectPair = reject; }));
+  let tree;
+  await act(async () => {
+    tree = create(<Pair device={{ name: 'iPhone', model: 'iPhone16,1', platform: 'ios', app: '1.0.0' }} onPaired={async () => {}} />);
+  });
+  await act(async () => { await pressable(tree, 'Colar código').props.onPress(); });
+  await act(async () => { pressable(tree, 'Vincular').props.onPress(); });
+  expect(text(tree)).toMatch(/Cancelar pareamento/);
+  expect(text(tree)).not.toMatch(/passa pela reserva/);
+  await act(async () => { jest.advanceTimersByTime(9_000); });
+  expect(text(tree)).toMatch(/passa pela reserva/);
+  expect(text(tree)).toMatch(/Tentando há \d+ s/);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  await act(async () => { await pressable(tree, 'Cancelar pareamento').props.onPress(); });
+  expect(mockStop).toHaveBeenCalledTimes(1);
+  await act(async () => { rejectPair(Object.assign(new Error('parado'), { code: 'stopped' })); });
+  // O código continua na tela, sem mensagem de erro, pronto para tentar de novo.
+  expect(text(tree)).toMatch(/Vincular a Mac de Foco\?/);
+  expect(text(tree)).not.toMatch(/parado/);
+  expect(pressable(tree, 'Vincular')).toBeDefined();
+  await act(async () => tree.unmount());
   jest.useRealTimers();
 });
 
@@ -226,6 +259,21 @@ test('Settings offers and persists the three supported languages', async () => {
   await act(async () => tree.unmount());
 });
 
+test('Settings offers the three appearance modes and reports the choice', async () => {
+  const onThemeMode = jest.fn();
+  let tree;
+  await act(async () => {
+    tree = create(<Settings desktopCount={0} tunnelStatus={null} appVersion="1.0.0" coreVersion="1.0.0" logLevel="info" themeMode="system"
+      onBack={() => {}} onLogLevel={() => {}} onThemeMode={onThemeMode} onRefreshStatus={() => {}} />);
+  });
+  expect(text(tree)).toMatch(/Aparência/);
+  expect(text(tree)).toMatch(/Sistema Claro Escuro/);
+  const dark = tree.root.findAll(node => node.props.accessibilityLabel === 'Escuro' && typeof node.props.onPress === 'function')[0];
+  await act(async () => { dark.props.onPress(); });
+  expect(onThemeMode).toHaveBeenCalledWith('dark');
+  await act(async () => tree.unmount());
+});
+
 test('Settings keeps connection details inside the advanced diagnostics', async () => {
   const onRefreshStatus = jest.fn();
   const tunnelStatus = {
@@ -263,6 +311,8 @@ test('Shell shows the transport dot and passes the selected locale to the mobile
   });
   const webView = tree.root.findAll(node => typeof node.props.injectedJavaScriptBeforeContentLoaded === 'string')[0];
   expect(webView.props.injectedJavaScriptBeforeContentLoaded).toContain('"locale":"es"');
+  expect(webView.props.injectedJavaScriptBeforeContentLoaded).toContain('"theme":"system"');
+  expect(webView.props.pullToRefreshEnabled).toBe(false);
   expect(text(tree)).toMatch(/Studio/);
   expect(text(tree)).toMatch(/Reserva/);
   expect(text(tree)).not.toMatch(forbiddenOnMainScreens);

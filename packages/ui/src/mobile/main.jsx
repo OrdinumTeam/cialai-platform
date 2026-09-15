@@ -11,6 +11,9 @@ import { installMobileLinks } from './links.js';
 import MobileApp from './MobileApp.jsx';
 
 const params = new URLSearchParams(location.search);
+// A camada visual da casca em shell.css ativa por este atributo; mobile.html
+// ja o traz, e a garantia aqui cobre qualquer pagina servida sem ele.
+if (!document.documentElement.dataset.platform) document.documentElement.dataset.platform = 'macos';
 if (params.get('motion') === '0' || matchMedia('(prefers-reduced-motion: reduce)').matches) document.documentElement.dataset.motion = 'none';
 const bridge = remoteBridgeUrl(location, params.get('bridge') || '');
 if (bridge) remote.configure({ url: bridge });

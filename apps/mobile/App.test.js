@@ -50,13 +50,20 @@ jest.mock('./src/desktops/store', () => {
     deleteDeviceToken: async desktopId => { mockStore.tokens.delete(desktopId); }
   };
 });
-jest.mock('./src/network/health', () => ({ checkControlHealth: url => mockHealth(url), HEALTH_POLL_INTERVAL_MS: 10_000 }));
+jest.mock('./src/network/health', () => ({ ...jest.requireActual('./src/network/health'), checkControlHealth: (url, ...rest) => mockHealth(url, ...rest) }));
 jest.mock('./src/config/env', () => ({ getAppVersion: () => '1.0.0' }));
 jest.mock('@react-native-community/netinfo', () => ({ addEventListener: () => () => {} }));
 jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
 jest.mock('react-native-webview', () => ({ WebView: 'WebView' }));
 jest.mock('expo-camera', () => ({ CameraView: 'CameraView', useCameraPermissions: () => [{ granted: false }, jest.fn()] }));
 jest.mock('expo-clipboard', () => ({ getStringAsync: jest.fn(async () => '') }));
+const mockSecure = new Map();
+jest.mock('expo-secure-store', () => ({
+  getItemAsync: async key => mockSecure.get(key) ?? null,
+  setItemAsync: async (key, value) => { mockSecure.set(key, value); },
+  deleteItemAsync: async key => { mockSecure.delete(key); },
+  WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'unlocked'
+}));
 
 const desktopId = 'd_AAAAAAAAAAAAAAAAAAAAAA';
 const token = `cdt1.dev_AAAAAAAAAAAAAAAAAAAAAA.${'s'.repeat(43)}`;
@@ -254,6 +261,49 @@ test('returning from the background keeps a proxy that still answers', async () 
   expect(text(tree)).toMatch(/Mac de Foco/);
   await act(async () => tree.unmount());
   appState.restore();
+});
+
+test('a single failed probe or a slow backup never reopens a proxy the core still holds', async () => {
+  const tree = await render();
+  const webView = () => tree.root.findAll(node => node.props.source?.uri)[0];
+  expect(mockTunnel.connect).toHaveBeenCalledTimes(1);
+  // Primeira sondagem sem resposta: só conta uma falha.
+  mockHealth.mockResolvedValueOnce(false);
+  await advance(10_000);
+  expect(mockTunnel.openDesktop).toHaveBeenCalledTimes(1);
+  // Segunda falha seguida: o núcleo diz que o caminho está ativo e a sondagem
+  // longa responde, então a página fica como está.
+  mockTunnel.status.mockResolvedValue({ state: 'connected', active: { desktopId, transport: 'tor', path: 'tor', since: 1 },
+    tor: { state: 'ready', progress: 100 }, desktops: 1 });
+  mockHealth.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await advance(10_000);
+  expect(mockHealth).toHaveBeenLastCalledWith(proxyUrl, expect.anything(), 20_000);
+  expect(mockTunnel.openDesktop).toHaveBeenCalledTimes(1);
+  expect(webView().props.source.uri).toBe(proxyUrl);
+  expect(text(tree)).toMatch(/Mac de Foco/);
+  // Duas falhas seguidas com a sondagem longa também sem resposta: reconecta.
+  mockHealth.mockResolvedValue(false);
+  mockTunnel.openDesktop.mockResolvedValue({ url: `http://127.0.0.1:47405/?k=${'P'.repeat(43)}`, port: 47405, nonce: 'P'.repeat(43) });
+  await advance(10_000);
+  await advance(10_000);
+  expect(mockTunnel.openDesktop).toHaveBeenCalledTimes(2);
+  expect(webView().props.source.uri).toContain('47405');
+  await act(async () => tree.unmount());
+});
+
+test('the appearance chosen in settings reaches the page and is remembered', async () => {
+  const tree = await render();
+  const webView = () => tree.root.findAll(node => typeof node.props.injectedJavaScriptBeforeContentLoaded === 'string')[0];
+  expect(webView().props.injectedJavaScriptBeforeContentLoaded).toContain('"theme":"system"');
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Mostrar computadores')[0].props.onPress(); });
+  await flush();
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Abrir ajustes')[0].props.onPress(); });
+  await flush();
+  const dark = tree.root.findAll(node => node.props.accessibilityLabel === 'Escuro' && typeof node.props.onPress === 'function')[0];
+  await act(async () => { dark.props.onPress(); });
+  await flush();
+  expect(mockSecure.get('cialai.theme')).toBe('dark');
+  await act(async () => tree.unmount());
 });
 
 test('the Android native reopening is awaited and then opens the new proxy', async () => {

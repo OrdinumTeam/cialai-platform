@@ -8,6 +8,7 @@ import { AppearanceContext, useAppearance } from '../desktop/appearance.js';
 import { installShellBridge } from '../desktop/shell-bridge.js';
 import { buildMacTheme } from '../desktop/theme.macos.js';
 import * as remote from '../lib/remote.js';
+import { isMobileShell, onShellTheme, shellTheme } from '../lib/shell.js';
 import { VIEW_COMPONENTS } from '../views/registry.js';
 import MobileHeader from './MobileHeader.jsx';
 import { translate } from './i18n.js';
@@ -28,7 +29,15 @@ export default function MobileApp() {
   const theme = useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
   const connection = useSyncExternalStore(remote.subscribeState, remote.state);
   const keyboard = useKeyboardBox(true);
+  const inShell = isMobileShell();
   useEffect(() => { installShellBridge({ navigate() {}, setSidebarHidden() {}, openPalette() {} }, { sidebarHidden: true }); }, []);
+  // A aparencia escolhida nos ajustes do aplicativo vale tambem na pagina:
+  // chega no bootstrap e em cada mensagem da casca.
+  useEffect(() => {
+    const initial = shellTheme();
+    if (initial) appearance.setMode(initial);
+    return onShellTheme((mode) => appearance.setMode(mode));
+  }, [appearance.setMode]);
   const desktopName = connection.desktop?.name || window.__CIALAI_SHELL__?.desktopName || translate('desktop.fallback');
-  return <AppearanceContext.Provider value={appearance}><ThemeProvider theme={theme}><CssBaseline enableColorScheme /><ToastProvider><ErrorNotice /><div className={`ios-shell ios-shell--terminal${keyboard ? ' ios-shell--keyboard' : ''}`} style={keyboard ? { '--ios-keyboard-top': `${keyboard.top}px`, '--ios-keyboard-height': `${keyboard.height}px` } : undefined}><MobileHeader desktopName={desktopName} connection={connection.status} /><main className="ios-content" id="content"><ContentArea ViewComponent={VIEW_COMPONENTS.terminais} viewId="terminais" /></main></div></ToastProvider></ThemeProvider></AppearanceContext.Provider>;
+  return <AppearanceContext.Provider value={appearance}><ThemeProvider theme={theme}><CssBaseline enableColorScheme /><ToastProvider><ErrorNotice /><div className={`ios-shell ios-shell--terminal${keyboard ? ' ios-shell--keyboard' : ''}${inShell ? ' ios-shell--native' : ''}`} style={keyboard ? { '--ios-keyboard-top': `${keyboard.top}px`, '--ios-keyboard-height': `${keyboard.height}px` } : undefined}><MobileHeader desktopName={desktopName} connection={connection.status} compact={inShell} /><main className="ios-content" id="content"><ContentArea ViewComponent={VIEW_COMPONENTS.terminais} viewId="terminais" /></main></div></ToastProvider></ThemeProvider></AppearanceContext.Provider>;
 }

@@ -17,6 +17,12 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 ### Fixed
 
+* The phone page served to the mobile apps was missing the shell design tokens: text fell back to the system serif font, buttons had no background and neither theme applied. The page now activates the same visual layer the desktop uses, follows the device font and the appearance chosen in the app, and no longer repeats the computer name and transport that the native bar already shows
+* The phone terminal keys row is wrapped so every key is visible, with a single scrolling row only while the software keyboard is open. Terminal, files and new session actions are labelled buttons with a visible background
+* The phone terminal no longer blinks: the WebGL renderer is off on the phone, the page is no longer reloaded by pull to refresh, losing the terminal lease dims the view instead of blanking it, and the desktop keeps a remote lease for 45 s instead of 15 s
+* The mobile app no longer drops a working connection because one health probe was slow over the backup: it needs two consecutive failures, confirms with the tunnel core and a longer probe before reopening the proxy, and pairing shows the elapsed time, explains the backup delay and can be cancelled
+* The pairing dialog kept resetting the ten minute validity at every code rotation. The window now starts once, each rotated code carries the remaining time, and the dialog says when it expired. The duplicated pairing shortcut in the Devices toolbar was removed
+* Session cards show the model, the reasoning effort, the context window used and the estimated cost of the Claude Code session, and offer to install the status line hook from the card or from Preferences when it is missing
 * The Linux AppImage no longer aborts on current distributions such as Arch Linux with Mesa 26 and recent Ubuntu. The system Mesa stack and its base libraries now come from the host, the WebKit helpers find the bundled libraries on their own, the bundled GLib ignores the host GIO modules and the launcher no longer exports `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` or `QT_PLUGIN_PATH`. The updater signature is made over the final AppImage
 
 ### Security

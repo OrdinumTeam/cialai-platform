@@ -18,6 +18,8 @@ export type ShellMessage = {
   version: string;
   desktopId: string;
   unlocked: boolean;
+  // Aparência escolhida nos ajustes; a página segue a mesma.
+  theme?: 'system' | 'light' | 'dark';
 };
 export type AuthResponse = { type: 'auth'; id: number; ok: boolean };
 

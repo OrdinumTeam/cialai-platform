@@ -14,7 +14,7 @@ import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 // Teclas da fileira. Shift Tab alterna o modo do Claude Code; Ctrl D encerra
 // a entrada; Ctrl L limpa a tela. Cada entrada: rotulo, sequencia e nome
-// acessivel.
+// acessivel. Enter fica em destaque: e a tecla mais usada com um agente.
 const ESC = String.fromCharCode(27);
 const control = (letter) => String.fromCharCode(letter.charCodeAt(0) - 64);
 const KEYS = [
@@ -24,7 +24,7 @@ const KEYS = [
   ['Ctrl C', control('C'), 'Ctrl C'],
   ['↑', `${ESC}[A`, 'terminal.phone.arrowUp'],
   ['↓', `${ESC}[B`, 'terminal.phone.arrowDown'],
-  ['Enter', '\r', 'Enter'],
+  ['Enter', '\r', 'Enter', 'is-accent'],
   ['Ctrl D', control('D'), 'Ctrl D'],
   ['Ctrl L', control('L'), 'Ctrl L'],
 ];
@@ -110,6 +110,11 @@ export default function PhoneWorkbench() {
   }
   const filtered = sessions.filter(session => [session.name, session.subtitle, session.cwd].some(value => value?.toLocaleLowerCase().includes(query.toLocaleLowerCase().trim())));
   const title = pane === 'list' ? translate('terminal.phone.terminals') : pane === 'files' ? translate('terminal.phone.files') : pane === 'preview' ? route.path.split('/').at(-1) : selected.name;
+  const status = pane === 'terminal' ? describe(selected) : null;
+  const subtitle = pane === 'list'
+    ? translate(sessions.length === 1 ? 'terminal.phone.sessionCountOne' : 'terminal.phone.sessionCountMany', { count: sessions.length.toLocaleString(getLocale()) })
+    : pane === 'terminal' ? status.label : selected.name;
+  const subtitleTone = status?.tone === 'busy' ? ' is-busy' : status?.tone === 'bad' ? ' is-bad' : '';
   async function endSession() {
     setClosing(true);
     try { await closeSession(selected.id); setConfirmClose(false); if (!getSession(selected.id)) navigate({ type: 'reset' }); }
@@ -118,13 +123,13 @@ export default function PhoneWorkbench() {
   }
   return <div className={`view active phone-terminal phone-terminal--${pane}`} id="view-terminais">
     <div className="phone-terminal__toolbar">
-      {pane !== 'list' && <button type="button" className="mac-tool" aria-label={translate(pane === 'terminal' ? 'terminal.phone.backSessions' : pane === 'files' ? 'terminal.phone.backTerminal' : 'terminal.phone.backFiles')} onClick={() => navigate({ type: 'back' })}><ChevronLeft size={22} /></button>}
-      <div className="phone-terminal__heading"><h1 tabIndex={-1} ref={heading}>{title}</h1><span>{pane === 'list' ? translate(sessions.length === 1 ? 'terminal.phone.sessionCountOne' : 'terminal.phone.sessionCountMany', { count: sessions.length.toLocaleString(getLocale()) }) : pane === 'terminal' ? describe(selected).label : selected.name}</span></div>
-      {pane === 'list' && <button type="button" className="mac-tool" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker(true)}><Plus size={21} /></button>}
-      {pane === 'terminal' && <>
-        <button type="button" className="mac-tool" disabled={!supported || selected.status !== 'running'} aria-label={translate('terminal.phone.sessionFiles')} onClick={() => navigate({ type: 'files' })}><FolderOpen size={20} /></button>
-        <button type="button" className="mac-tool" aria-label={translate('terminal.menu.closeSession')} onClick={() => setConfirmClose(true)}><Power size={19} /></button>
-      </>}
+      {pane !== 'list' && <button type="button" className="mac-tool phone-terminal__back" aria-label={translate(pane === 'terminal' ? 'terminal.phone.backSessions' : pane === 'files' ? 'terminal.phone.backTerminal' : 'terminal.phone.backFiles')} onClick={() => navigate({ type: 'back' })}><ChevronLeft size={22} /></button>}
+      <div className="phone-terminal__heading"><h1 tabIndex={-1} ref={heading}>{title}</h1><span className={subtitleTone.trim() || undefined}>{subtitle}</span></div>
+      {pane === 'list' && <button type="button" className="mac-tool mac-tool--label" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker(true)}><Plus size={20} /><span>{translate('terminal.phone.newShort')}</span></button>}
+      {pane === 'terminal' && <div className="phone-terminal__actions">
+        <button type="button" className="mac-tool mac-tool--label" disabled={!supported || selected.status !== 'running'} aria-label={translate('terminal.phone.sessionFiles')} onClick={() => navigate({ type: 'files' })}><FolderOpen size={20} /><span>{translate('terminal.phone.files')}</span></button>
+        <button type="button" className="mac-tool is-danger" aria-label={translate('terminal.menu.closeSession')} title={translate('terminal.menu.closeSession')} onClick={() => setConfirmClose(true)}><Power size={19} /></button>
+      </div>}
     </div>
     {!available && <p className="phone-terminal__notice">{translate('terminal.common.desktopOnly')}</p>}
     {pane === 'list' ? <>
@@ -138,10 +143,10 @@ export default function PhoneWorkbench() {
     </> : pane === 'terminal' ? <>
       {!supported && <p className="phone-terminal__notice" role="status">{translate('terminal.phone.updateDesktop')}</p>}
       {supported && <PhoneTerminal key={selected.id} session={selected} visible={terminalVisible} onPress={press} onTakeControl={() => requestTerminalControl(selected.id).catch(error => notify(error.message, 'warning'))} />}
-      {['exited', 'error', 'disconnected'].includes(selected.status) && <p className="phone-terminal__notice" role="status">{selected.error || describe(selected).label}</p>}
+      {['exited', 'error', 'disconnected'].includes(selected.status) && <p className={`phone-terminal__notice${selected.status === 'error' || (selected.status === 'exited' && selected.exitCode !== 0) ? ' is-bad' : ''}`} role="status">{selected.error || describe(selected).label}</p>}
       {['exited', 'error'].includes(selected.status) && <button type="button" className="btn btn-ghost" onClick={() => reopen(selected.id)}><RotateCcw size={16} />{translate('terminal.phone.reopenTerminal')}</button>}
       {supported && <div className="phone-terminal__keys" aria-label={translate('terminal.phone.terminalKeys')}>
-        {KEYS.map(([label, data, name]) => <button type="button" disabled={!interactive} key={label} aria-label={name.startsWith('terminal.') ? translate(name) : name} onPointerDown={press} onClick={() => sendAndRestore(data)}>{label}</button>)}
+        {KEYS.map(([label, data, name, className]) => <button type="button" className={className} disabled={!interactive} key={label} aria-label={name.startsWith('terminal.') ? translate(name) : name} onPointerDown={press} onClick={() => sendAndRestore(data)}>{label}</button>)}
         {canPaste() && <button type="button" disabled={!interactive} aria-label={translate('terminal.phone.pasteLabel')} onPointerDown={press} onClick={paste}><ClipboardPaste size={16} aria-hidden="true" />{translate('terminal.phone.paste')}</button>}
       </div>}
     </> : <PhoneFiles key={selected.id} session={selected} path={route.path} preview={pane === 'preview'} onPreview={path => navigate({ type: 'preview', path })} />}

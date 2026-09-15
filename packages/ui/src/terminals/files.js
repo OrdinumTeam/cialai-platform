@@ -236,6 +236,16 @@ export function fmtPlan(percent) {
   return `${Math.round(value)}%`;
 }
 
+// Custo estimado da sessao do agente em dolares, com centavos ate dez e
+// inteiro depois; abaixo de meio centavo mostra o menor valor legivel.
+export function fmtCost(amount) {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value < 0) return null;
+  if (value < 0.005) return (0).toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (value < 10) return value.toLocaleString(getLocale(), { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return value.toLocaleString(getLocale(), { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
 // Quando a janela do plano renova, em linguagem de relogio: hoje mostra a
 // hora, outro dia mostra dia e hora.
 export function fmtResetAt(ms) {

@@ -44,6 +44,34 @@ class StatuslineTest(unittest.TestCase):
             self.assertEqual(sorted(item["sessionId"] for item in record["sessions"]), ["a", "b"])
             self.assertIn("sessão 19%", result.stdout)
 
+    def test_publishes_effort_context_and_cost_of_the_session(self):
+        with tempfile.TemporaryDirectory(prefix="cialai-statusline-") as support:
+            env = dict(os.environ, CIALAI_APP_SUPPORT=support, CLAUDE_CONFIG_DIR="~/.claude")
+            rich = payload("s9", 3)
+            rich["effort"] = {"level": "max"}
+            rich["context_window"] = {"context_window_size": 200000, "used_percentage": 42.4, "remaining_percentage": 57.6}
+            rich["cost"] = {"total_cost_usd": 1.8349, "total_duration_ms": 45000}
+            result = subprocess.run(
+                [sys.executable, HOOK], input=json.dumps(rich), text=True, capture_output=True, check=True, env=env,
+            )
+            record = json.loads((pathlib.Path(support) / "ai-usage/claude/claude.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["format"], 3)
+            session = record["sessions"][0]
+            self.assertEqual(session["effort"], "max")
+            self.assertEqual(session["contextUsedPercent"], 42.4)
+            self.assertEqual(session["contextWindowSize"], 200000)
+            self.assertEqual(session["costUsd"], 1.8349)
+            self.assertIn("max", result.stdout)
+            self.assertIn("ctx 42%", result.stdout)
+            # Sem used_percentage o percentual sai dos tokens de entrada.
+            derived = payload("s10", 3)
+            derived["context_window"] = {"context_window_size": 200000, "current_usage": {"input_tokens": 8500, "output_tokens": 1200, "cache_creation_input_tokens": 5000, "cache_read_input_tokens": 2000}}
+            subprocess.run([sys.executable, HOOK], input=json.dumps(derived), text=True, capture_output=True, check=True, env=env)
+            record = json.loads((pathlib.Path(support) / "ai-usage/claude/claude.json").read_text(encoding="utf-8"))
+            self.assertEqual(record["sessions"][0]["contextUsedPercent"], 7.8)
+            self.assertNotIn("effort", record["sessions"][0])
+            self.assertNotIn("costUsd", record["sessions"][0])
+
     def test_garbage_is_silent(self):
         with tempfile.TemporaryDirectory(prefix="cialai-statusline-") as support:
             result = subprocess.run(

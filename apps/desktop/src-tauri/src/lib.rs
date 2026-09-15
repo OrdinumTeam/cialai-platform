@@ -97,6 +97,7 @@ pub fn run() {
             commands::fs_open_default,
             commands::fs_drag_out,
             commands::ai_usage,
+            commands::ai_install_claude_hook,
             commands::fs_read_bytes,
             commands::office_convert,
             commands::browser_start,

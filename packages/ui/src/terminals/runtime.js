@@ -820,6 +820,10 @@ function webglGpu(addon) {
 
 function loadWebgl(session) {
   if (session.webgl) return;
+  // No celular o WebView perde o contexto WebGL ao ir para segundo plano e
+  // ao trocar de dono do terminal, e a tela ficava em branco ate o proximo
+  // redesenho. Com poucas colunas o renderizador DOM basta e nao pisca.
+  if (isPhone()) return;
   try {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
@@ -1138,19 +1142,33 @@ export function usageFor(agent, profile) {
   return state.aiUsage.get(usageKey(agent, profile)) || null;
 }
 
-// Modelo em uso pela sessao do agente: a sessao do perfil cuja pasta bate
-// com a do processo, senao a mais recente do perfil.
-export function sessionModel(activity) {
+// Sessao do agente que roda nesta pasta: a sessao do perfil cuja pasta bate
+// com a do processo, senao a mais recente do perfil. Traz o modelo e, quando
+// o hook publica, o esforco, quanto da janela de contexto ja foi usado e o
+// custo estimado da sessao.
+export function sessionUsage(activity) {
   const usage = activity?.usage;
   if (!usage) return null;
   const cwd = activity.foreground?.cwd || activity.shellCwd || null;
-  const match = cwd && Array.isArray(usage.sessions) ? usage.sessions.find((session) => session.cwd === cwd) : null;
-  return match?.model || usage.model || null;
+  const sessions = Array.isArray(usage.sessions) ? usage.sessions : [];
+  const match = (cwd && sessions.find((session) => session.cwd === cwd)) || null;
+  const number = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  return {
+    model: match?.model || usage.model || null,
+    effort: typeof match?.effort === 'string' && match.effort ? match.effort : null,
+    contextUsedPercent: number(match?.contextUsedPercent),
+    costUsd: number(match?.costUsd),
+    matched: Boolean(match),
+  };
+}
+
+export function sessionModel(activity) {
+  return sessionUsage(activity)?.model || null;
 }
 
 function usageSignature(usage) {
   if (!usage) return '';
-  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.cwd}:${session.model}`).join(',') : '';
+  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.cwd}:${session.model}:${session.effort || ''}:${session.contextUsedPercent ?? ''}:${session.costUsd ?? ''}`).join(',') : '';
   return `${usage.windows.map((window) => `${window.id}:${window.usedPercent}`).join('|')}#${usage.model || ''}#${sessions}`;
 }
 
@@ -2058,7 +2076,7 @@ function seedDemo() {
       profileName: translate('terminal.demo.profileMain'),
       configDir: '/Users/exemplo/.claude-main',
       model: 'Fable 5.1',
-      sessions: [{ sessionId: 'demo', cwd: `${home}/cialai-platform`, model: 'Fable 5.1', updatedAtMs: Date.now() }],
+      sessions: [{ sessionId: 'demo', cwd: `${home}/cialai-platform`, model: 'Fable 5.1', effort: 'max', contextUsedPercent: 42, costUsd: 1.83, updatedAtMs: Date.now() }],
       plan: 'max',
       source: 'statusline',
       stale: false,

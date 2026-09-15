@@ -2,8 +2,7 @@
 // Desktop network status and paired device management.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
-import { Activity, ChevronRight, CircleAlert, CircleCheck, KeyRound, Link2, Pencil, RefreshCw, ShieldOff, Smartphone } from 'lucide-react';
+import { Activity, ChevronRight, CircleAlert, CircleCheck, KeyRound, Pencil, RefreshCw, ShieldOff, Smartphone } from 'lucide-react';
 import { AppModal, DataState, useToast } from '../components/ui.jsx';
 import { useTunnel, tunnelErrorMessage } from './TunnelContext.jsx';
 import AccessPanel, { ReserveValue, directLabel } from './AccessPanel.jsx';
@@ -18,12 +17,6 @@ const NETWORK_KEYS = Object.freeze({
 });
 const NETWORK_STATE_KEYS = Object.freeze({ active: 'desktop.access.networkActive', preparing: 'desktop.access.networkPreparing', off: 'desktop.access.networkOff', failed: 'desktop.access.networkFailed' });
 const NETWORK_STATE_TONES = Object.freeze({ active: 'ok', preparing: 'busy', off: 'idle', failed: 'bad' });
-
-function ToolbarActions({ children }) {
-  const [slot, setSlot] = useState(null);
-  useEffect(() => { setSlot(document.getElementById('mac-toolbar-slot')); }, []);
-  return slot ? createPortal(children, slot) : null;
-}
 
 function Detail({ label, value, mono = false, wrap = false }) {
   return <div className="mac-device-detail"><dt>{label}</dt><dd className={`${mono ? 'is-mono' : ''}${wrap ? ' is-wrap' : ''}`}>{value || translate('desktop.common.unavailable')}</dd></div>;
@@ -181,8 +174,9 @@ export default function Devices() {
     catch (revokeError) { setError(tunnelErrorMessage(revokeError)); throw revokeError; }
   };
 
+  // Um so botao de vincular, o do painel de acesso: o atalho repetido na
+  // toolbar confundia com o proprio painel.
   return <div className="view active page mac-devices" id="view-dispositivos">
-    <ToolbarActions><button type="button" className="mac-tool mac-tool--label" onClick={pair}><Link2 aria-hidden="true" /><span>{translate('desktop.action.pairPhone')}</span></button></ToolbarActions>
     <header className="mac-devices__head"><div><p className="mac-devices__eyebrow">{translate('desktop.access.title')}</p><h2>{translate('desktop.view.devices.label')}</h2><p>{translate('desktop.devices.description')}</p></div></header>
 
     <AccessPanel heading={false} onPair={pair} onDiagnostics={() => tunnel.setAdvancedOpen(true)} />

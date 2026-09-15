@@ -6,11 +6,21 @@ let nextId = 1;
 const pending = new Map();
 const lockListeners = new Set();
 const navigateBackListeners = new Set();
+const themeListeners = new Set();
+const THEME_MODES = ['system', 'light', 'dark'];
 export const isMobileShell = () => typeof window !== 'undefined' && Boolean(window.ReactNativeWebView || window.__CIALAI_SHELL__);
 export const isPhone = () => typeof document !== 'undefined' && document.documentElement.dataset.formFactor === 'phone';
 
+// Aparencia escolhida nos ajustes do aplicativo: chega no bootstrap da pagina
+// e, depois, em cada mensagem `shell`. Vazio quando a casca nao mandou nada.
+export const shellTheme = () => {
+  const value = typeof window !== 'undefined' ? window.__CIALAI_SHELL__?.theme : null;
+  return THEME_MODES.includes(value) ? value : null;
+};
+
 export function onShellLock(listener) { lockListeners.add(listener); return () => lockListeners.delete(listener); }
 export function onNavigateBack(listener) { navigateBackListeners.add(listener); return () => navigateBackListeners.delete(listener); }
+export function onShellTheme(listener) { themeListeners.add(listener); return () => themeListeners.delete(listener); }
 
 export function receiveShellMessage(message) {
   if (!message || typeof message !== 'object') return;
@@ -18,6 +28,7 @@ export function receiveShellMessage(message) {
     navigateBackListeners.forEach((listener) => listener());
     return;
   }
+  if (message.type === 'shell' && THEME_MODES.includes(message.theme)) themeListeners.forEach((listener) => listener(message.theme));
   if (message.type === 'shell' && message.unlocked === false) lockListeners.forEach((listener) => listener());
   if (message.type !== 'auth' || !pending.has(message.id)) return;
   const request = pending.get(message.id);

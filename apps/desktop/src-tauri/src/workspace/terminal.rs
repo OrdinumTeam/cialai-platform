@@ -422,7 +422,10 @@ type KillTarget = (
     Option<pty::ProcessTree>,
 );
 
-const VIEW_LEASE: Duration = Duration::from_secs(15);
+/// Prazo da posse remota do terminal sem renovacao. O celular renova a cada
+/// 5 s, mas pela reserva uma renovacao pode levar bem mais que isso; com 15 s
+/// a posse caia e voltava a toda hora, e o terminal do celular piscava.
+const VIEW_LEASE: Duration = Duration::from_secs(45);
 type ViewNotifier = Arc<dyn Fn(TerminalView) + Send + Sync>;
 
 impl Session {

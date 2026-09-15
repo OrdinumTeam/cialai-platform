@@ -1,4 +1,4 @@
-import { checkControlHealth, HEALTH_DETECTION_BUDGET_MS } from './health';
+import { checkControlHealth, HEALTH_DETECTION_BUDGET_MS, HEALTH_FAILURE_STRIKES, HEALTH_RECHECK_TIMEOUT_MS, HEALTH_TIMEOUT_MS } from './health';
 
 const URL = `http://127.0.0.1:47400/?k=${'A'.repeat(43)}`;
 
@@ -24,7 +24,12 @@ describe('Cialai health check', () => {
     await expect(checkControlHealth(URL, fetchFailed)).resolves.toBe(false);
   });
 
-  test('budgets loaded WebView loss detection below twenty seconds', () => {
-    expect(HEALTH_DETECTION_BUDGET_MS).toBeLessThanOrEqual(20_000);
+  test('tolerates the backup latency before declaring the WebView lost', () => {
+    // Pela reserva uma resposta demora; a perda só vale com duas falhas seguidas,
+    // e a confirmação antes de reconectar espera ainda mais.
+    expect(HEALTH_TIMEOUT_MS).toBeGreaterThanOrEqual(8_000);
+    expect(HEALTH_FAILURE_STRIKES).toBe(2);
+    expect(HEALTH_RECHECK_TIMEOUT_MS).toBeGreaterThan(HEALTH_TIMEOUT_MS);
+    expect(HEALTH_DETECTION_BUDGET_MS).toBeLessThanOrEqual(40_000);
   });
 });

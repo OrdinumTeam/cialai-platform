@@ -61,9 +61,10 @@ describe('page bridge messages', () => {
 
   test('serializes shell state as an inert JavaScript invocation', () => {
     const script = shellMessageScript({ type: 'shell', platform: 'ios', version: '1.0.0',
-      desktopId: 'd_test', unlocked: false });
+      desktopId: 'd_test', unlocked: false, theme: 'dark' });
     expect(script).toContain('window.__cialaiShellReceive');
     expect(script).toContain('"unlocked":false');
+    expect(script).toContain('"theme":"dark"');
     expect(script.endsWith('true;')).toBe(true);
   });
 

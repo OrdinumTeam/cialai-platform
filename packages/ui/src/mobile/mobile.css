@@ -1,17 +1,38 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+/* Pagina do celular. Os tokens e os componentes vem de shell.css, ativos pelo
+   data-platform que mobile.html marca; aqui ficam so a casca da pagina, as
+   fontes do aparelho e os alvos de toque maiores que os controles de 28 px
+   do desktop. */
+
+/* Fonte do aparelho: system-ui resolve a Roboto no Android e a San Francisco
+   no iPhone; a lista da casca comeca pela familia da Apple e cairia na Arial
+   no Android. */
+[data-form-factor="phone"] {
+  --mac-font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mac-font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "Cialai JetBrains Mono", monospace;
+  --font: var(--mac-font);
+  --font-mono: var(--mac-font-mono);
+  --phone-press-ease: cubic-bezier(.2, .7, .2, 1);
+}
 [data-form-factor="phone"] { -webkit-tap-highlight-color: transparent; }
-[data-form-factor="phone"] body { overflow: hidden; }
+[data-form-factor="phone"] body { overflow: hidden; -webkit-text-size-adjust: 100%; }
 [data-form-factor="phone"] .ios-shell { display: flex; flex-direction: column; height: 100dvh; background: var(--mac-bg); color: var(--mac-label); }
 [data-form-factor="phone"] .ios-header { flex: none; padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: var(--mac-toolbar-bg); border-bottom: 1px solid var(--mac-separator); }
 [data-form-factor="phone"] .ios-header__heading { display: flex; align-items: center; gap: 4px; }
 [data-form-factor="phone"] .ios-header--terminal { min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(env(safe-area-inset-top) + 8px) max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left)); }
 [data-form-factor="phone"] .ios-header--terminal h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; }
-[data-form-factor="phone"] .ios-header--terminal .ios-connection { flex: none; display: flex; align-items: center; gap: 6px; margin: 0; font-size: .75rem; }
-[data-form-factor="phone"] .ios-header--terminal .ios-connection span { width: 7px; height: 7px; border-radius: 50%; background: var(--mac-label-3); }
-[data-form-factor="phone"] .ios-header--terminal .ios-connection--connected span { background: #30d158; }
-[data-form-factor="phone"] .ios-header--terminal .ios-connection--connecting span { background: #ff9f0a; }
-[data-form-factor="phone"] .ios-header--terminal .ios-connection--removed span,
-[data-form-factor="phone"] .ios-header--terminal .ios-connection--incompatible span { background: #ff453a; }
+[data-form-factor="phone"] .ios-header .ios-connection { flex: none; display: flex; align-items: center; gap: 6px; margin: 0; font-size: .75rem; color: var(--mac-label-2); }
+[data-form-factor="phone"] .ios-header .ios-connection span { width: 7px; height: 7px; border-radius: 50%; background: var(--mac-label-3); transition: background var(--mac-normal) var(--mac-ease); }
+[data-form-factor="phone"] .ios-header .ios-connection--connected span { background: var(--mac-ok); }
+[data-form-factor="phone"] .ios-header .ios-connection--connecting span { background: var(--mac-warn); animation: macPulse 1.2s ease-in-out infinite; }
+[data-form-factor="phone"] .ios-header .ios-connection--removed span,
+[data-form-factor="phone"] .ios-header .ios-connection--incompatible span { background: var(--mac-bad); }
+/* Dentro do aplicativo o computador e o transporte ja estao na casca nativa:
+   a pagina so mostra uma faixa fina enquanto a ponte nao esta conectada. */
+[data-form-factor="phone"] .ios-header--strip { min-height: 0; padding: 6px max(14px, env(safe-area-inset-right)) 6px max(14px, env(safe-area-inset-left)); background: var(--mac-warn-bg); border-bottom: 0; animation: macFade var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .ios-header--strip .ios-connection { justify-content: center; font-weight: 600; color: var(--mac-label); }
+[data-form-factor="phone"] .ios-header--strip-removed,
+[data-form-factor="phone"] .ios-header--strip-incompatible { background: var(--mac-bad-bg); }
 [data-form-factor="phone"] .ios-shell--terminal .ios-content { overflow: hidden; padding: 0; }
 [data-form-factor="phone"] .ios-shell--terminal .ios-tabbar { position: static; flex: none; }
 /* Teclado aberto: o WebKit nao encolhe a pagina, so o visualViewport. A casca
@@ -29,8 +50,19 @@
 [data-form-factor="phone"] .ios-tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px max(4px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)); background: var(--mac-bg); border-top: 1px solid var(--mac-separator); z-index: 100; }
 [data-form-factor="phone"] .ios-tabbar button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; min-height: 49px; border: 0; background: transparent; color: var(--mac-label-2); font: inherit; font-size: .625rem; }
 [data-form-factor="phone"] [aria-current="page"] { color: var(--mac-accent) !important; }
+/* Alvos de toque: 44 px e um controle com fundo, para cada acao parecer um
+   botao. O desktop desenha .mac-tool com 28 px e sem fundo. */
 [data-form-factor="phone"] button, [data-form-factor="phone"] .btn { min-height: 44px; }
-[data-form-factor="phone"] .mac-tool { min-width: 44px; }
+[data-form-factor="phone"] .btn { height: auto; padding: 0 18px; border-radius: 12px; font-size: 15px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+[data-form-factor="phone"] .mac-tool { height: 40px; min-width: 40px; padding: 0 10px; border-radius: 12px; background: var(--mac-surface-2); color: var(--mac-accent-text); font-size: 14px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .mac-tool svg { width: 20px; height: 20px; stroke-width: 1.9; }
+[data-form-factor="phone"] .mac-tool--label { padding: 0 12px 0 10px; }
+[data-form-factor="phone"] .mac-tool--label span { display: inline; font-size: 14px; }
+[data-form-factor="phone"] .mac-tool.is-danger { color: var(--mac-bad); background: var(--mac-bad-bg); }
+[data-form-factor="phone"] .mac-tool:disabled, [data-form-factor="phone"] .btn:disabled { opacity: .45; }
+[data-form-factor="phone"] :is(.btn, .mac-tool):not(:disabled):active { transform: scale(.96); }
+[data-form-factor="phone"] .mac-tool:not(:disabled):active { background: var(--mac-surface-3); }
 [data-form-factor="phone"] input, [data-form-factor="phone"] select, [data-form-factor="phone"] textarea { font-size: 16px; }
 [data-form-factor="phone"] .page { padding: 20px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left)); }
 [data-form-factor="phone"] .page-grid--2, [data-form-factor="phone"] .page-grid--hero, [data-form-factor="phone"] .page-grid--charts { grid-template-columns: minmax(0, 1fr); }
@@ -42,4 +74,9 @@
 [data-form-factor="phone"] .ios-more nav button { display: flex; width: 100%; align-items: center; gap: 12px; padding: 12px 0; border: 0; border-bottom: 1px solid var(--mac-separator); background: transparent; color: inherit; font: inherit; text-align: left; }
 [data-form-factor="phone"] .ios-more nav button span { flex: 1; }
 [data-form-factor="phone"] :focus-visible { outline: 2px solid var(--mac-accent); outline-offset: 2px; }
+/* Dialogos do MUI no celular: folha colada embaixo, largura toda, raio de
+   painel e botoes de toque. */
+[data-form-factor="phone"] .MuiDialog-container { align-items: flex-end; }
+[data-form-factor="phone"] .MuiDialog-paper { width: 100% !important; max-width: none !important; margin: 0 !important; border-radius: 20px 20px 0 0 !important; padding-bottom: env(safe-area-inset-bottom); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
 @media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+[data-motion="none"][data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; }

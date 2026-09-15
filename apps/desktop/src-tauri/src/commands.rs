@@ -709,6 +709,15 @@ pub fn ai_usage(
     ai::cached(&cache, &home, &support, &terminals.codex_homes())
 }
 
+/// Instala a linha de estado do Claude Code nos perfis da pasta pessoal. E
+/// ela que publica o uso do plano, o modelo, o esforco, o contexto e o custo
+/// que `ai_usage` le para os cards.
+#[tauri::command(async)]
+pub fn ai_install_claude_hook(app: AppHandle) -> Result<ai::HookInstall, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    ai::install_claude_hook(&home)
+}
+
 /// Passa a observar um caminho; as mudancas chegam por `fs://change`.
 #[tauri::command]
 pub fn fs_watch(watcher: State<'_, Watcher>, path: String) -> Result<u64, String> {

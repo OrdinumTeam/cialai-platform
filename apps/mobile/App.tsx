@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as SecureStore from 'expo-secure-store';
 import { StatusBar } from 'expo-status-bar';
 
 import {
@@ -43,7 +44,7 @@ import {
   type DesktopStore
 } from './src/desktops/store';
 import { hydrateLocale, useI18n } from './src/i18n';
-import { checkControlHealth } from './src/network/health';
+import { checkControlHealth, HEALTH_RECHECK_TIMEOUT_MS } from './src/network/health';
 import { RequestGate } from './src/network/request-gate';
 import { Desktops } from './src/screens/Desktops';
 import { Offline } from './src/screens/Offline';
@@ -54,7 +55,7 @@ import { openConnection, outcomeForCode, type ConnectionOutcome, type Connection
 import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction } from './src/state/lifecycle';
 import { describeDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
 import { interpretTunnelEvent, parseTorProgress, reservePercent, type TunnelSignal } from './src/state/tunnel-events';
-import { usePalette } from './src/theme';
+import { normalizeThemeMode, resolveScheme, THEME_STORAGE_KEY, ThemeModeContext, usePalette, type ThemeMode } from './src/theme';
 
 type Translator = (key: string, values?: Record<string, string | number>) => string;
 
@@ -91,6 +92,7 @@ function AppContent() {
   const [failures, setFailures] = useState<ReadonlyMap<string, OfflineReason>>(() => new Map());
   const [lockSignal, setLockSignal] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
+  const [themeMode, setThemeMode] = useState<ThemeMode>('system');
   const [biometricSession] = useState(() => new BiometricSession(authenticateWithDevice));
   const [openGate] = useState(() => new RequestGate());
   const screenRef = useRef(screen);
@@ -219,11 +221,26 @@ function AppContent() {
     return attempt.promise;
   }, [applyOutcome, openGate]);
 
-  const reconnectShell = useCallback(() => {
+  // Antes de reabrir o proxy, que recarrega a página, confere com o núcleo:
+  // se o caminho continua ativo e o computador responde a uma sondagem mais
+  // longa, a conexão só estava lenta pela reserva e a tela fica como está.
+  const reconnectShell = useCallback(async () => {
     const current = screenRef.current;
     if (current.kind !== 'shell') return;
-    dispatch({ type: 'desktop-offline', desktopId: current.desktopId, reason: 'reconnecting' });
-    void openSelected(current.desktopId);
+    const { desktopId, url } = current;
+    let core: TunnelStatus | null = null;
+    try {
+      core = await status();
+    } catch {
+      core = null;
+    }
+    if (screenRef.current !== current) return;
+    if (core?.state === 'connected' && core.active?.desktopId === desktopId) {
+      if (await checkControlHealth(url, fetch, HEALTH_RECHECK_TIMEOUT_MS)) return;
+      if (screenRef.current !== current) return;
+    }
+    dispatch({ type: 'desktop-offline', desktopId, reason: 'reconnecting' });
+    void openSelected(desktopId);
   }, [dispatch, openSelected]);
 
   const verifyShell = useCallback(async (desktopId: string, url: string, waitForNative: boolean) => {
@@ -235,7 +252,7 @@ function AppContent() {
       dispatch({ type: 'desktop-offline', desktopId, reason: 'reconnecting' });
       return;
     }
-    reconnectShell();
+    await reconnectShell();
   }, [dispatch, reconnectShell]);
 
   const runForegroundAction = useCallback(async (action: ForegroundAction) => {
@@ -248,6 +265,12 @@ function AppContent() {
     let cancelled = false;
     const bootstrap = async () => {
       await hydrateLocale();
+      try {
+        const storedTheme = await SecureStore.getItemAsync(THEME_STORAGE_KEY);
+        if (!cancelled && storedTheme) setThemeMode(normalizeThemeMode(storedTheme));
+      } catch {
+        // Sem a escolha guardada, a aparência segue o sistema.
+      }
       let loaded;
       try {
         loaded = await loadDesktopStore();
@@ -329,7 +352,7 @@ function AppContent() {
         void revoke(signal.desktopId, showing(signal.desktopId));
         return;
       case 'core-offline':
-        reconnectShell();
+        void reconnectShell();
         return;
       case 'native-reopening':
         if (!showing(signal.desktopId)) return;
@@ -436,6 +459,14 @@ function AppContent() {
   const rename = useCallback((desktopId: string, name: string) => {
     void updateStore(current => renameDesktop(current, desktopId, name));
   }, [updateStore]);
+  const changeThemeMode = useCallback((mode: ThemeMode) => {
+    const next = normalizeThemeMode(mode);
+    setThemeMode(next);
+    SecureStore.setItemAsync(THEME_STORAGE_KEY, next).catch(() => undefined);
+  }, []);
+  const systemScheme = useColorScheme();
+  const scheme = resolveScheme(themeMode, systemScheme);
+  const connectionLost = useCallback(() => { void reconnectShell(); }, [reconnectShell]);
   const diagnosticsStatus = tunnelStatus && tor ? { ...tunnelStatus, tor } : tunnelStatus;
   const selected = screen.kind === 'shell' || screen.kind === 'offline' ? findDesktop(store, screen.desktopId) : null;
   const desktopList = <Desktops store={store} describe={describe} onForgetDesktop={forgetDesktop} onOpen={openFromList}
@@ -451,7 +482,7 @@ function AppContent() {
     content = <Settings appVersion={appVersion} coreVersion={nativeCoreVersion} desktopCount={store.desktops.length}
       logLevel={logLevel} onBack={() => dispatch({ type: 'show-desktops' })}
       onLogLevel={level => { setLogLevel(level); setNativeLogLevel(level); }}
-      onRefreshStatus={() => void refreshStatus()} tunnelStatus={diagnosticsStatus} />;
+      onRefreshStatus={() => void refreshStatus()} onThemeMode={changeThemeMode} themeMode={themeMode} tunnelStatus={diagnosticsStatus} />;
   } else if (screen.kind === 'desktops') {
     content = desktopList;
   } else if (screen.kind === 'offline') {
@@ -459,12 +490,12 @@ function AppContent() {
       onRetry={retry} reason={screen.reason} reserveProgress={reservePercent(tor)} />;
   } else {
     content = selected ? <Shell biometricSession={biometricSession} desktopId={screen.desktopId}
-      desktopName={selected.name} lockSignal={lockSignal} onConnectionLost={reconnectShell}
+      desktopName={selected.name} lockSignal={lockSignal} onConnectionLost={connectionLost}
       onDesktops={() => void showDesktops()} transport={screen.transport} url={screen.url} version={appVersion} />
       : desktopList;
   }
 
-  return <><StatusBar style="auto" />{content}</>;
+  return <ThemeModeContext.Provider value={themeMode}><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />{content}</ThemeModeContext.Provider>;
 }
 
 export default function App() {
