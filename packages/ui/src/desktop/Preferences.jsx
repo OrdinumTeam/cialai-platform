@@ -15,7 +15,9 @@ import {
   removePath,
   sanitizePreferences,
 } from './preferences-model.js';
-import NetworkSetup from './NetworkSetup.jsx';
+import AccessPanel from './AccessPanel.jsx';
+import { useTunnel } from './TunnelContext.jsx';
+import { DESKTOP_NAME_MAX } from './tunnel-model.js';
 import Updater from './Updater.jsx';
 import { getLocale, setLocale, translate } from './i18n.js';
 
@@ -48,6 +50,7 @@ const snapshotKey = (value) => JSON.stringify(sanitizePreferences(value));
 
 export default function Preferences({ open, onClose, appearance }) {
   const notify = useToast();
+  const tunnel = useTunnel();
   const native = isTauri();
   const [draft, setDraft] = useState(null);
   const [savedKey, setSavedKey] = useState('');
@@ -64,7 +67,7 @@ export default function Preferences({ open, onClose, appearance }) {
     setError('');
     const load = native
       ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null)])
-      : Promise.resolve([DEFAULT_PREFERENCES, null, null]);
+      : Promise.resolve([{ ...DEFAULT_PREFERENCES, network: tunnel.preferences }, null, null]);
     load.then(([value, shell, paths]) => {
       if (cancelled) return;
       const next = normalizePreferenceDraft({ ...(value || {}), appearance: appearance.mode });
@@ -86,6 +89,7 @@ export default function Preferences({ open, onClose, appearance }) {
   const currentKey = useMemo(() => draft ? snapshotKey(draft) : '', [draft]);
   const dirty = Boolean(draft && currentKey !== savedKey);
   const updateTerminal = (value) => setDraft((current) => ({ ...current, terminal: { ...current.terminal, ...value } }));
+  const updateNetwork = (value) => setDraft((current) => ({ ...current, network: { ...current.network, ...value } }));
 
   const changeAppearance = (mode) => {
     appearance.setMode(mode);
@@ -132,6 +136,11 @@ export default function Preferences({ open, onClose, appearance }) {
       setDraft(normalized);
       setSavedKey(snapshotKey(normalized));
       appearance.setMode(normalized.appearance);
+      // Nome e aprovação valem na hora: `net.start` é idempotente.
+      const previousNetwork = savedKey ? JSON.parse(savedKey).network : null;
+      if (JSON.stringify(sanitizePreferences(normalized).network) !== JSON.stringify(previousNetwork)) {
+        tunnel.applyNetworkPreferences(normalized.network).catch(() => { /* o painel mostra o erro da rede */ });
+      }
       notify(native ? translate('desktop.preferences.saved') : translate('desktop.preferences.previewUpdated'), 'success');
     } catch (saveError) {
       setError(translate('desktop.preferences.saveError', { error: saveError?.message || saveError }));
@@ -164,7 +173,10 @@ export default function Preferences({ open, onClose, appearance }) {
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.network')}</h3>
         <p className="mac-prefs__note">{translate('desktop.preferences.networkDescription')}</p>
-        <NetworkSetup value={draft.network} onChange={(network) => setDraft((current) => ({ ...current, network }))} />
+        <AccessPanel heading={false} onPair={() => { close(); window.dispatchEvent(new CustomEvent('cialai:pair-device')); }} onDiagnostics={() => { close(); window.dispatchEvent(new CustomEvent('cialai:network-diagnostics')); }} />
+        <Row title={translate('desktop.preferences.computerName')} description={translate('desktop.preferences.computerNameDescription')}><input className="field__control mac-prefs__input" value={draft.network.desktopName || ''} placeholder={tunnel.desktopName || translate('desktop.preferences.computerNamePlaceholder')} maxLength={DESKTOP_NAME_MAX} spellCheck="false" onChange={(event) => updateNetwork({ desktopName: event.target.value || null })} aria-label={translate('desktop.preferences.computerName')} /></Row>
+        <Row title={translate('desktop.preferences.confirmPhone')} description={translate('desktop.preferences.confirmPhoneDescription')}><input type="checkbox" className="mac-switch" checked={Boolean(draft.network.requireApproval)} onChange={(event) => updateNetwork({ requireApproval: event.target.checked })} aria-label={translate('desktop.preferences.confirmPhone')} /></Row>
+        <Row title={translate('desktop.preferences.keepAwake')} description={translate('desktop.preferences.keepAwakeDescription')}><input type="checkbox" className="mac-switch" checked={Boolean(draft.network.keepAwakeWhilePaired)} onChange={(event) => updateNetwork({ keepAwakeWhilePaired: event.target.checked })} aria-label={translate('desktop.preferences.keepAwake')} /></Row>
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>

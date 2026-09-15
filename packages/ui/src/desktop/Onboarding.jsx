@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
-// Primeiro uso do desktop: prepara o estúdio local e oferece a rede privada.
+// Primeiro uso do desktop: prepara o estúdio local e explica o acesso pelo
+// celular, que sobe sozinho sem nenhuma configuração de rede.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Check, ChevronLeft, FolderOpen, FolderPlus, Network, Terminal } from 'lucide-react';
+import { Check, ChevronLeft, FolderOpen, FolderPlus, Globe, ShieldCheck, Smartphone, Terminal, Wifi } from 'lucide-react';
 import { chooseDirectory, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
-import NetworkSetup from './NetworkSetup.jsx';
-import { networkIsConfigured } from './tunnel-model.js';
+import { useTunnel } from './TunnelContext.jsx';
 import { translate } from './i18n.js';
 
 export const ONBOARDING_KEY = 'cialai_onboarding_complete';
@@ -21,9 +21,6 @@ const DEFAULT_PREFS = {
   devBrowser: { chromiumPath: null },
   window: { backdrop: 'auto' },
   network: {
-    controlUrl: null,
-    userId: null,
-    userName: null,
     desktopName: null,
     requireApproval: false,
     keepAwakeWhilePaired: false,
@@ -129,18 +126,25 @@ function ShellStep({ shell, setShell, probe, test }) {
   </div>;
 }
 
-function NetworkStep({ network, onChange, expanded, onExpand }) {
-  if (expanded) return <div className="mac-onboarding__screen mac-onboarding__network"><NetworkSetup value={network} onChange={onChange} startExpanded /></div>;
+// Passo informativo: não há o que preencher, só o estado da rede que já sobe.
+function MobileStep() {
+  const tunnel = useTunnel();
   return <div className="mac-onboarding__screen">
-    <div className="mac-onboarding__icon" aria-hidden="true"><Network /></div>
-    <p className="mac-onboarding__eyebrow">{translate('desktop.devices.privateNetwork')}</p>
+    <div className="mac-onboarding__icon" aria-hidden="true"><Smartphone /></div>
+    <p className="mac-onboarding__eyebrow">{translate('desktop.access.title')}</p>
     <h1 id="onboarding-title">{translate('desktop.onboarding.mobileAccess')}</h1>
     <p className="mac-onboarding__lead">{translate('desktop.onboarding.networkDescription')}</p>
-    <button type="button" className="btn btn-primary" onClick={onExpand}>{translate('desktop.onboarding.configureNow')}</button>
+    <ul className="mac-onboarding__facts">
+      <li><Wifi aria-hidden="true" /><span><strong>{translate('desktop.onboarding.factLocal')}</strong><small>{translate('desktop.onboarding.factLocalDescription')}</small></span></li>
+      <li><Globe aria-hidden="true" /><span><strong>{translate('desktop.onboarding.factReserve')}</strong><small>{translate('desktop.onboarding.factReserveDescription')}</small></span></li>
+      <li><ShieldCheck aria-hidden="true" /><span><strong>{translate('desktop.onboarding.factPairing')}</strong><small>{translate('desktop.onboarding.factPairingDescription')}</small></span></li>
+    </ul>
+    <p className="mac-onboarding__access-state" role="status"><i className={`mac-dot is-${tunnel.status.tone}`} aria-hidden="true" />{tunnel.status.label}</p>
   </div>;
 }
 
-function Ready({ selected, shell, network, saving, error }) {
+function Ready({ selected, shell, saving, error }) {
+  const tunnel = useTunnel();
   return <div className="mac-onboarding__screen">
     <div className="mac-onboarding__ready-mark" aria-hidden="true"><Check /></div>
     <p className="mac-onboarding__eyebrow">{translate('desktop.onboarding.allSet')}</p>
@@ -150,7 +154,7 @@ function Ready({ selected, shell, network, saving, error }) {
       <div><dt>{translate('desktop.onboarding.initialFolder')}</dt><dd>{selected[0]}</dd></div>
       <div><dt>Shell</dt><dd>{shell}</dd></div>
       <div><dt>{translate('desktop.onboarding.mobileFiles')}</dt><dd>{translate(selected.length === 1 ? 'desktop.onboarding.rootOne' : 'desktop.onboarding.rootMany', { count: selected.length })}</dd></div>
-      <div><dt>{translate('desktop.preferences.network')}</dt><dd>{networkIsConfigured(network) ? translate('desktop.onboarding.networkAccessible', { name: network.desktopName }) : translate('desktop.onboarding.configureLater')}</dd></div>
+      <div><dt>{translate('desktop.access.title')}</dt><dd><i className={`mac-dot is-${tunnel.status.tone}`} aria-hidden="true" />{tunnel.status.label}</dd></div>
     </dl>
     {error ? <p className="mac-onboarding__error" role="alert">{error}</p> : null}
     {saving ? <p className="mac-onboarding__saving" role="status">{translate('desktop.preferences.saving')}</p> : null}
@@ -169,7 +173,6 @@ export default function Onboarding({ onComplete }) {
   const [selected, setSelected] = useState([]);
   const [shell, setShellValue] = useState('');
   const [probe, setProbe] = useState({ status: 'idle', shell: '', output: '' });
-  const [networkSetupOpen, setNetworkSetupOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -273,12 +276,12 @@ export default function Onboarding({ onComplete }) {
         {!loading && step === 0 ? <Welcome next={() => setStep(1)} /> : null}
         {!loading && step === 1 ? <Folders roots={roots} selected={selected} toggle={toggle} add={add} busy={busy} error={error} /> : null}
         {!loading && step === 2 ? <ShellStep shell={shell} setShell={setShell} probe={probe} test={testShell} /> : null}
-        {!loading && step === 3 ? <NetworkStep network={prefs.network} expanded={networkSetupOpen} onExpand={() => setNetworkSetupOpen(true)} onChange={(network) => setPrefs((current) => ({ ...current, network }))} /> : null}
-        {!loading && step === 4 ? <Ready selected={selected} shell={shell} network={prefs.network} saving={saving} error={error} /> : null}
+        {!loading && step === 3 ? <MobileStep /> : null}
+        {!loading && step === 4 ? <Ready selected={selected} shell={shell} saving={saving} error={error} /> : null}
       </div>
       {!loading && step > 0 ? <footer className="mac-onboarding__footer">
         <button type="button" className="btn btn-quiet" disabled={saving} onClick={() => { setError(''); setStep((current) => current - 1); }}><ChevronLeft size={15} />{translate('desktop.action.back')}</button>
-        {step < 4 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>{step === 3 && !networkIsConfigured(prefs.network) ? translate('desktop.onboarding.later') : translate('desktop.action.continue')}</button> : <div className="mac-onboarding__final-actions"><button type="button" className="btn btn-secondary" disabled={saving} onClick={() => { if (networkIsConfigured(prefs.network)) finish(true); else { setNetworkSetupOpen(true); setStep(3); } }}>{translate('desktop.action.pairPhone')}</button><button type="button" className="btn btn-primary" disabled={saving} onClick={() => finish(false)}>{saving ? translate('desktop.onboarding.opening') : translate('desktop.onboarding.openFirstSession')}</button></div>}
+        {step < 4 ? <button type="button" className="btn btn-primary" disabled={!canContinue} onClick={() => setStep((current) => current + 1)}>{translate('desktop.action.continue')}</button> : <div className="mac-onboarding__final-actions"><button type="button" className="btn btn-secondary" disabled={saving} onClick={() => finish(true)}>{translate('desktop.action.pairPhone')}</button><button type="button" className="btn btn-primary" disabled={saving} onClick={() => finish(false)}>{saving ? translate('desktop.onboarding.opening') : translate('desktop.onboarding.openFirstSession')}</button></div>}
       </footer> : null}
     </section>
   </div>;

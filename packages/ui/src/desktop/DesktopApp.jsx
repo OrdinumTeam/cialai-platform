@@ -168,13 +168,15 @@ function DesktopShell() {
     return () => { disposed = true; off?.(); };
   }, []);
 
+  const { setAdvancedOpen } = tunnel;
   useEffect(() => {
     const pair = () => setPairOpen(true);
-    const network = () => setPrefsOpen(true);
+    // Preferências e o painel de acesso levam ao diagnóstico avançado em Dispositivos.
+    const diagnostics = () => { setPrefsOpen(false); navigate('dispositivos'); setAdvancedOpen(true); };
     window.addEventListener('cialai:pair-device', pair);
-    window.addEventListener('cialai:network-preferences', network);
-    return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-preferences', network); };
-  }, []);
+    window.addEventListener('cialai:network-diagnostics', diagnostics);
+    return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-diagnostics', diagnostics); };
+  }, [navigate, setAdvancedOpen]);
 
   const active = getDesktopView(view, views);
   const ViewComponent = DESKTOP_VIEW_COMPONENTS[active.id];
@@ -191,7 +193,7 @@ function DesktopShell() {
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={views} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} onClose={() => setPrefsOpen(false)} appearance={appearance} />
-            <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} onConfigure={openPreferences} />
+            <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}
           </div>
