@@ -29,3 +29,5 @@ packages/tunnel-core/cialai-tunnel
 .local/
 *.log
 apps/desktop/src-tauri/tauri.release.conf.json
+_INTERNO_ORDINUM/
+_INTERNAL/
