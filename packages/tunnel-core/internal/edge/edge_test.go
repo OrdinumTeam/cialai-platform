@@ -49,6 +49,7 @@ func (clock *testClock) Advance(duration time.Duration) {
 type eventLog struct {
 	mu     sync.Mutex
 	events []recordedEvent
+	hook   func(name string, data any)
 }
 
 type recordedEvent struct {
@@ -58,8 +59,20 @@ type recordedEvent struct {
 
 func (log *eventLog) sink(name string, data any) {
 	log.mu.Lock()
-	defer log.mu.Unlock()
 	log.events = append(log.events, recordedEvent{name: name, data: data})
+	hook := log.hook
+	log.mu.Unlock()
+	if hook != nil {
+		hook(name, data)
+	}
+}
+
+// setHook makes hook see every event as the edge emits it, as the desktop
+// supervisor does.
+func (log *eventLog) setHook(hook func(name string, data any)) {
+	log.mu.Lock()
+	defer log.mu.Unlock()
+	log.hook = hook
 }
 
 // wait returns the data of the first event named name that matches.
@@ -607,13 +620,24 @@ func TestRevokeClosesTheKeyOnEveryListenerAndBlocksTheSession(t *testing.T) {
 		t.Fatal("direct session was not serving before the revocation")
 	}
 
+	// This bridge ignores the revocation, so the socket outlives the grace
+	// and is closed directly.
+	h.server.revokeGrace = 50 * time.Millisecond
+	started := time.Now()
 	result, err := h.server.Revoke(device.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Sessions != 2 || !torSession.closed() || !directSession.closed() || survivor.closed() {
+	if elapsed := time.Since(started); elapsed < h.server.revokeGrace || elapsed > time.Second {
+		t.Fatalf("revocation of a socket the bridge kept open took %s", elapsed)
+	}
+	if result.Sessions != 2 || result.Sockets != 1 || !torSession.closed() || !directSession.closed() || survivor.closed() {
 		t.Fatalf("revocation closed the wrong sessions: %+v", result)
 	}
+	h.events.wait(t, "devices.changed", func(data any) bool {
+		fields := data.(map[string]any)
+		return fields["deviceId"] == device.ID && fields["revoked"] == true
+	})
 	for _, listener := range []*fakeListener{direct, tor} {
 		if keys := listener.closedKeys(); len(keys) != 1 || keys[0] != key {
 			t.Fatalf("CloseKey did not reach every listener: %v", keys)

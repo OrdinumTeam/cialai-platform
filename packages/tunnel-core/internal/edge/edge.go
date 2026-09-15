@@ -40,6 +40,11 @@ const (
 	// pairFailureGrace lets the error response reach the phone before a
 	// failed pairing closes its restricted session.
 	pairFailureGrace = time.Second
+	// revokeGrace bounds how long a revocation waits for the bridge sockets
+	// of the device to end after the bridge closed them with 4401, so the
+	// whole revocation stays under one second even when the phone does not
+	// answer the close.
+	revokeGrace = 500 * time.Millisecond
 )
 
 // ApprovalRequest asks the desktop to confirm a pairing. Device.PublicKey is
@@ -89,7 +94,9 @@ type RevokeResult struct {
 	// Sessions is the number of transport sessions of the device key closed
 	// on every listener.
 	Sessions int
-	// Sockets is the number of bridge sockets of the device closed directly.
+	// Sockets is the number of bridge sockets of the device that were still
+	// open when the grace ended and were closed directly, without the 4401
+	// close reaching the phone for sure.
 	Sockets int
 }
 
@@ -106,6 +113,7 @@ type Server struct {
 	bridge           *url.URL
 	proxy            *httputil.ReverseProxy
 	pairFailureGrace time.Duration
+	revokeGrace      time.Duration
 
 	rateMu sync.Mutex
 	rates  map[string]rateWindow
@@ -113,6 +121,9 @@ type Server struct {
 	activeMu sync.Mutex
 	active   map[string]map[net.Conn]struct{}
 	total    int
+	// idle holds, per device, a channel closed when its last bridge socket
+	// ends; a revocation waits on it.
+	idle map[string]chan struct{}
 
 	serveMu    sync.Mutex
 	listener   transport.Listener
@@ -149,8 +160,8 @@ func New(config Config) (*Server, error) {
 		config.Now = time.Now
 	}
 	server := &Server{
-		config: config, staticRoot: root, bridge: bridge, pairFailureGrace: pairFailureGrace,
-		rates: make(map[string]rateWindow), active: make(map[string]map[net.Conn]struct{}),
+		config: config, staticRoot: root, bridge: bridge, pairFailureGrace: pairFailureGrace, revokeGrace: revokeGrace,
+		rates: make(map[string]rateWindow), active: make(map[string]map[net.Conn]struct{}), idle: make(map[string]chan struct{}),
 	}
 	server.proxy = server.newBridgeProxy()
 	return server, nil
@@ -732,6 +743,10 @@ func (server *Server) acquire(deviceID string, connection net.Conn) (func(), boo
 				delete(connections, connection)
 				if len(connections) == 0 {
 					delete(server.active, deviceID)
+					if idle := server.idle[deviceID]; idle != nil {
+						close(idle)
+						delete(server.idle, deviceID)
+					}
 				}
 			}
 			server.total--
@@ -740,11 +755,26 @@ func (server *Server) acquire(deviceID string, connection net.Conn) (func(), boo
 	}, true
 }
 
-// Revoke is the revocation hook for every transport (CON-061). It marks the
-// device revoked first, so new handshakes and requests of its key are refused,
-// then closes the sessions of the key on every listener, through
-// transport.Listener.CloseKey, and the bridge sockets still counted for the
-// device. The bridge itself closes the page with 4401.
+// Revoke revokes a device on every transport; the sidecar calls it for
+// devices.revoke and must not emit devices.changed for it again. In order:
+//
+//  1. The registry marks the device revoked, which removes its key from the
+//     accepted set: new handshakes of the key are refused outside pairing,
+//     new streams of its sessions are refused by the listeners and new
+//     requests and upgrades by the edge.
+//  2. devices.changed with revoked true tells the bridge, through the
+//     desktop supervisor, to close the WebSockets of the device with 4401.
+//  3. Revoke waits until those sockets end, both directions included, or
+//     revokeGrace passes. Closing a QUIC session discards the data the phone
+//     has not read yet, so cutting the transport first would lose the 4401
+//     close and the page would retry instead of showing "removido".
+//  4. transport.Listener.CloseKey closes the sessions of the key on every
+//     listener and the bridge sockets still counted for the device are
+//     closed directly.
+//
+// Revoke returns once the sessions are closed, at most revokeGrace plus the
+// closing itself after it starts. Revoking a device again repeats the closing
+// steps and keeps the first revocation time.
 func (server *Server) Revoke(deviceID string) (RevokeResult, error) {
 	device, found := server.config.Devices.Get(deviceID)
 	if !found {
@@ -753,12 +783,36 @@ func (server *Server) Revoke(deviceID string) (RevokeResult, error) {
 	if err := server.config.Devices.Revoke(deviceID); err != nil {
 		return RevokeResult{}, err
 	}
+	server.emit("devices.changed", map[string]any{"deviceId": deviceID, "revoked": true})
+	server.awaitDeviceSockets(deviceID, server.revokeGrace)
 	var result RevokeResult
 	if listener := server.currentListener(); listener != nil {
 		result.Sessions = listener.CloseKey(device.DeviceKey)
 	}
 	result.Sockets = server.closeDeviceSockets(deviceID)
 	return result, nil
+}
+
+// awaitDeviceSockets waits until the device has no bridge socket left or grace
+// passes.
+func (server *Server) awaitDeviceSockets(deviceID string, grace time.Duration) {
+	server.activeMu.Lock()
+	if len(server.active[deviceID]) == 0 {
+		server.activeMu.Unlock()
+		return
+	}
+	idle := server.idle[deviceID]
+	if idle == nil {
+		idle = make(chan struct{})
+		server.idle[deviceID] = idle
+	}
+	server.activeMu.Unlock()
+	timer := time.NewTimer(grace)
+	defer timer.Stop()
+	select {
+	case <-idle:
+	case <-timer.C:
+	}
 }
 
 func (server *Server) closeDeviceSockets(deviceID string) int {

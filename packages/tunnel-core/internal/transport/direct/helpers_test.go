@@ -20,11 +20,16 @@ import (
 const testTimeout = 10 * time.Second
 
 type fakeRegistry struct {
-	mu   sync.Mutex
-	keys map[string]string
+	mu      sync.Mutex
+	keys    map[string]string
+	revoked map[string]bool
 }
 
-func newFakeRegistry() *fakeRegistry { return &fakeRegistry{keys: make(map[string]string)} }
+var _ transport.RevocationList = (*fakeRegistry)(nil)
+
+func newFakeRegistry() *fakeRegistry {
+	return &fakeRegistry{keys: make(map[string]string), revoked: make(map[string]bool)}
+}
 
 func (registry *fakeRegistry) RegisteredKey(key string) (string, bool) {
 	registry.mu.Lock()
@@ -33,16 +38,26 @@ func (registry *fakeRegistry) RegisteredKey(key string) (string, bool) {
 	return id, ok
 }
 
+func (registry *fakeRegistry) RevokedKey(key string) bool {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	return registry.revoked[key]
+}
+
 func (registry *fakeRegistry) register(phone *identity.Identity) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	registry.keys[phone.PublicKeyString()] = phone.ID()
+	delete(registry.revoked, phone.PublicKeyString())
 }
 
+// revoke drops the key from the accepted set and remembers it as revoked, like
+// the pairing registry.
 func (registry *fakeRegistry) revoke(phone *identity.Identity) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	delete(registry.keys, phone.PublicKeyString())
+	registry.revoked[phone.PublicKeyString()] = true
 }
 
 type fakeGate struct{ active atomic.Bool }

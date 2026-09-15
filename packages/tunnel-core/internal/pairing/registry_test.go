@@ -112,11 +112,28 @@ func TestRegistryPairsByDeviceKeyAndRecordsTheLastTransport(t *testing.T) {
 		t.Fatal("reopened registry lost the device key")
 	}
 
+	if reopened.RevokedKey(input.DeviceKey) {
+		t.Fatal("an active device key is reported revoked")
+	}
 	if err := reopened.Revoke(device.ID); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := reopened.RegisteredKey(input.DeviceKey); ok {
 		t.Fatal("revoked device key is still registered")
+	}
+	if !reopened.RevokedKey(input.DeviceKey) || reopened.RevokedKey(identity.EncodePublicKey(testPublicKey(0x45))) {
+		t.Fatal("the transports cannot tell a revoked key from an unknown one")
+	}
+	revokedAt := clock
+	clock = clock.Add(time.Minute)
+	if err := reopened.Revoke(device.ID); err != nil {
+		t.Fatal(err)
+	}
+	if revoked, _ := reopened.Get(device.ID); !revoked.Revoked || revoked.RevokedAt == nil || !revoked.RevokedAt.Equal(revokedAt) {
+		t.Fatalf("revoking again moved the retention start: %#v", revoked)
+	}
+	if err := reopened.Revoke("dev_unknown"); err == nil {
+		t.Fatal("revoked an unknown device")
 	}
 	if _, ok := reopened.Authenticate(token); ok {
 		t.Fatal("revoked device token was accepted")
@@ -131,7 +148,7 @@ func TestRegistryPairsByDeviceKeyAndRecordsTheLastTransport(t *testing.T) {
 	if err != nil || again.ID != device.ID || again.Revoked || !again.PairedAt.Equal(testNow) || again.LastTransport != TransportTor || newToken == token {
 		t.Fatalf("pairing the same key again did not restore the device: %#v %v", again, err)
 	}
-	if _, ok := reopened.RegisteredKey(input.DeviceKey); !ok {
+	if _, ok := reopened.RegisteredKey(input.DeviceKey); !ok || reopened.RevokedKey(input.DeviceKey) {
 		t.Fatal("paired again device key is not registered")
 	}
 	if _, ok := reopened.Authenticate(token); ok {

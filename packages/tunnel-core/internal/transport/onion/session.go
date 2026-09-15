@@ -80,9 +80,10 @@ func (session *Session) OpenStream(context.Context) (transport.Stream, error) {
 }
 
 // AcceptStream returns the single stream of the session, then waits until the
-// session ends. A restricted session rechecks the pairing gate first.
+// session ends. A restricted session rechecks the pairing gate first and a
+// registered one checks that its key was not revoked since the handshake.
 func (session *Session) AcceptStream(ctx context.Context) (transport.Stream, error) {
-	if !session.Registered() && !session.listener.refreshRestricted(session) {
+	if !session.listener.admitStream(session) {
 		return nil, session.endError()
 	}
 	session.mu.Lock()

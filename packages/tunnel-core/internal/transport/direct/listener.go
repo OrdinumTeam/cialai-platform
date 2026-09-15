@@ -203,7 +203,8 @@ func (listener *Listener) admit(conn *quic.Conn) *Session {
 		}
 	} else {
 		if listener.pairing == nil || !listener.pairing.PairingActive() {
-			_ = conn.CloseWithError(codePairingInactive, "pairing is not active")
+			code, reason := listener.refusal(peer.Key)
+			_ = conn.CloseWithError(code, reason)
 			return nil
 		}
 		switch listener.trackRestricted(session) {
@@ -262,6 +263,30 @@ func (listener *Listener) promote(session *Session, deviceID string) bool {
 	}
 	endpoint.mu.Unlock()
 	return true
+}
+
+// refusal is the close code of an unregistered key outside pairing. A key the
+// registry remembers as revoked learns that it was removed; any other key
+// learns that pairing is not active. While pairing is active a revoked key
+// still gets the restricted entry, so the same phone can pair again.
+func (listener *Listener) refusal(key string) (quic.ApplicationErrorCode, string) {
+	if revocations, ok := listener.registry.(transport.RevocationList); ok && revocations.RevokedKey(key) {
+		return codeRevoked, "device key revoked"
+	}
+	return codePairingInactive, "pairing is not active"
+}
+
+// admitStream is called when an accepted session receives a stream. A
+// registered session whose key left the registry was revoked: its new streams
+// are refused, while the streams already open keep flowing until CloseKey ends
+// the session, so the 4401 close the bridge is still sending reaches the
+// phone. A restricted session is promoted or closed by refreshRestricted.
+func (listener *Listener) admitStream(session *Session) bool {
+	if !session.Registered() {
+		return listener.refreshRestricted(session)
+	}
+	_, ok := listener.registeredKey(session.peerKey)
+	return ok
 }
 
 // refreshRestricted is called when a restricted session receives a stream:

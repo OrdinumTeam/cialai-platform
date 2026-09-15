@@ -45,6 +45,15 @@ type PairingGate interface {
 	PairingActive() bool
 }
 
+// RevocationList is implemented by key registries that remember revoked keys,
+// such as the pairing registry. A listener whose Registry also implements it
+// refuses a revoked key outside pairing with ErrRevoked instead of
+// ErrPairingInactive where the transport carries a close code, so the phone
+// shows that it was removed and stops retrying.
+type RevocationList interface {
+	RevokedKey(key string) bool
+}
+
 // Session is one authenticated connection to a peer.
 type Session interface {
 	// PeerKey is the canonical base64url Ed25519 key proven by the handshake.
@@ -86,7 +95,10 @@ type Listener interface {
 	// key registry knows it, returning how many sessions were promoted.
 	Promote(key string) int
 	// CloseKey closes every session of key, as required by revocation,
-	// returning how many sessions were closed.
+	// returning how many sessions were closed. Once the registry dropped the
+	// key, a listener also refuses the new handshakes of the key outside
+	// pairing and the new streams of its registered sessions, even before
+	// CloseKey runs.
 	CloseKey(key string) int
 	Close() error
 }

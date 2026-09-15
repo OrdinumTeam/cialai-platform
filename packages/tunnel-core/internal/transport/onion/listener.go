@@ -362,6 +362,29 @@ func (listener *Listener) promote(session *Session, deviceID string) bool {
 	return true
 }
 
+// admitStream rechecks the key before the stream is handed out. A restricted
+// session is promoted or closed by refreshRestricted. A registered session
+// whose key left the registry while it waited for Accept was revoked and is
+// closed; every later onion connection of the key is refused at admission.
+// A stream already handed out is left to CloseKey, so the frames still in
+// flight, such as the 4401 close of the bridge, reach the phone.
+func (listener *Listener) admitStream(session *Session) bool {
+	if !session.Registered() {
+		return listener.refreshRestricted(session)
+	}
+	session.mu.Lock()
+	handed := session.handed
+	session.mu.Unlock()
+	if handed {
+		return true
+	}
+	if _, ok := listener.registeredKey(session.peerKey); ok {
+		return true
+	}
+	session.closeWith(transport.ErrRevoked, false)
+	return false
+}
+
 // refreshRestricted promotes a restricted session whose registration finished
 // and closes it when the pairing gate is no longer active. It reports whether
 // the session is alive.

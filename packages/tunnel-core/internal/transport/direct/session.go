@@ -284,12 +284,9 @@ func (session *Session) dispatch(ctx context.Context, quicStream *quic.Stream) {
 }
 
 // admitControl allows one control stream from the dialing side of a
-// registered session.
+// registered session whose key is still registered.
 func (session *Session) admitControl() bool {
-	if session.listener == nil {
-		return false
-	}
-	if !session.Registered() && !session.listener.refreshRestricted(session) {
+	if session.listener == nil || !session.listener.admitStream(session) {
 		return false
 	}
 	session.mu.Lock()
@@ -301,9 +298,10 @@ func (session *Session) admitControl() bool {
 	return true
 }
 
-// admitData allows a single data stream while the session is restricted.
+// admitData allows a single data stream while the session is restricted and
+// none once the key of an accepted session was revoked.
 func (session *Session) admitData() bool {
-	if session.listener != nil && !session.Registered() && !session.listener.refreshRestricted(session) {
+	if session.listener != nil && !session.listener.admitStream(session) {
 		return false
 	}
 	session.mu.Lock()

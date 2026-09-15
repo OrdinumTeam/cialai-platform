@@ -36,6 +36,12 @@ func (registry *fakeRegistry) register(phone *identity.Identity) {
 	registry.keys[phone.PublicKeyString()] = phone.ID()
 }
 
+func (registry *fakeRegistry) revoke(phone *identity.Identity) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	delete(registry.keys, phone.PublicKeyString())
+}
+
 type fakeGate struct{ active atomic.Bool }
 
 func (gate *fakeGate) PairingActive() bool { return gate.active.Load() }
@@ -302,6 +308,64 @@ func TestCloseKeyClosesEverySessionOfTheKey(t *testing.T) {
 	}
 	if closed := h.listener.CloseKey(phone.PublicKeyString()); closed != 0 {
 		t.Fatal("CloseKey counted closed sessions twice")
+	}
+}
+
+// Once the registry drops a key, a session of the key still waiting for its
+// stream is closed instead of served, the stream already handed out keeps
+// delivering, as the 4401 close of the bridge needs, CloseKey ends it on the
+// phone in under one second and a new onion connection of the key is refused
+// outside pairing.
+func TestRevokedKeyIsRefusedBeforeItsStreamAndOnReconnect(t *testing.T) {
+	h := newHarness(t, ListenConfig{})
+	phone := mustIdentity(t, identity.RolePhone)
+	h.registry.register(phone)
+	active := h.dial(t, phone)
+	activeSession := h.accept(t)
+	stream := acceptStream(t, activeSession)
+	go func() { _, _ = io.Copy(stream, stream) }()
+	waiting := h.dial(t, phone)
+	waitingSession := h.accept(t)
+	expectEchoed := func(message string) {
+		t.Helper()
+		_ = active.SetDeadline(time.Now().Add(testTimeout))
+		if _, err := active.Write([]byte(message)); err != nil {
+			t.Fatal(err)
+		}
+		echoed := make([]byte, len(message))
+		if _, err := io.ReadFull(active, echoed); err != nil || string(echoed) != message {
+			t.Fatalf("handed stream echoed %q: %v", echoed, err)
+		}
+	}
+	expectEchoed("before")
+
+	h.registry.revoke(phone)
+	if _, err := waitingSession.AcceptStream(context.Background()); !errors.Is(err, transport.ErrRevoked) {
+		t.Fatalf("a revoked key got its stream: %v", err)
+	}
+	expectDropped(t, waiting)
+	expectEchoed("in flight")
+
+	started := time.Now()
+	if closed := h.listener.CloseKey(phone.PublicKeyString()); closed != 1 {
+		t.Fatalf("closed %d sessions, want the one still serving", closed)
+	}
+	expectDropped(t, active)
+	elapsed := time.Since(started)
+	t.Logf("phone saw the onion connection close %s after CloseKey", elapsed)
+	if elapsed >= time.Second || !errors.Is(activeSession.Err(), transport.ErrRevoked) {
+		t.Fatalf("session closed after %s with %v", elapsed, activeSession.Err())
+	}
+
+	expectDropped(t, h.dial(t, phone))
+	h.expectNoSession(t)
+
+	// During a pairing the revoked key only gets the restricted entry, so the
+	// same phone can pair again.
+	h.gate.active.Store(true)
+	h.dial(t, phone)
+	if session := h.accept(t); session.Registered() {
+		t.Fatal("revoked key was admitted as registered")
 	}
 }
 

@@ -327,8 +327,78 @@ func TestCloseKeyClosesRevokedSessions(t *testing.T) {
 		waitDone(t, again)
 		err = again.Err()
 	}
-	if !errors.Is(err, transport.ErrPairingInactive) {
+	if !errors.Is(err, transport.ErrRevoked) {
 		t.Fatalf("revoked key reconnected: %v", err)
+	}
+}
+
+// Once the registry drops a key, the live session of the key refuses new
+// streams while its open stream keeps delivering, as the 4401 close of the
+// bridge needs; CloseKey then ends the session on the phone in under one
+// second and a new handshake is refused as revoked outside pairing.
+func TestRevokedKeyIsRefusedOnNewStreamsAndHandshakes(t *testing.T) {
+	h := newHarness(t, ListenConfig{})
+	phone := mustIdentity(t, identity.RolePhone)
+	h.registry.register(phone)
+	client := h.mustDial(t, phone)
+	server := h.accept(t)
+	accepted := serveEcho(server)
+	open := openStream(t, client)
+	expectEchoed := func(message string) {
+		t.Helper()
+		_ = open.SetDeadline(time.Now().Add(testTimeout))
+		if _, err := open.Write([]byte(message)); err != nil {
+			t.Fatal(err)
+		}
+		echoed := make([]byte, len(message))
+		if _, err := io.ReadFull(open, echoed); err != nil || string(echoed) != message {
+			t.Fatalf("open stream echoed %q: %v", echoed, err)
+		}
+	}
+	expectEchoed("before")
+
+	h.registry.revoke(phone)
+	expectRefused(t, openStream(t, client))
+	control, err := client.OpenControl(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectRefused(t, control)
+	expectEchoed("in flight")
+	if accepted.Load() != 1 || client.Err() != nil {
+		t.Fatalf("revoked key reached %d streams or lost its session early: %v", accepted.Load(), client.Err())
+	}
+
+	started := time.Now()
+	if closed := h.listener.CloseKey(phone.PublicKeyString()); closed != 1 {
+		t.Fatalf("closed %d sessions", closed)
+	}
+	waitDone(t, client)
+	elapsed := time.Since(started)
+	t.Logf("phone saw the QUIC session close %s after CloseKey", elapsed)
+	if elapsed >= time.Second || !errors.Is(client.Err(), transport.ErrRevoked) {
+		t.Fatalf("session closed after %s with %v", elapsed, client.Err())
+	}
+	if _, err := open.Read(make([]byte, 1)); !errors.Is(err, transport.ErrRevoked) {
+		t.Fatalf("open stream survived the revocation: %v", err)
+	}
+
+	again, err := h.dial(t, phone)
+	if err == nil {
+		waitDone(t, again)
+		err = again.Err()
+	}
+	if !errors.Is(err, transport.ErrRevoked) {
+		t.Fatalf("revoked key was not refused as revoked: %v", err)
+	}
+	h.expectNoSession(t)
+
+	// During a pairing the revoked key only gets the restricted entry, so the
+	// same phone can pair again.
+	h.gate.active.Store(true)
+	h.mustDial(t, phone)
+	if session := h.accept(t); session.Registered() {
+		t.Fatal("revoked key was admitted as registered")
 	}
 }
 

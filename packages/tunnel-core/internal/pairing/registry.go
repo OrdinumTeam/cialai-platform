@@ -313,6 +313,20 @@ func (registry *Registry) RegisteredKey(publicKey string) (string, bool) {
 	return "", false
 }
 
+// RevokedKey reports whether publicKey belongs to a revoked device that was not
+// paired again, so a transport can tell the phone that it was removed. It
+// implements transport.RevocationList; pruned devices are forgotten.
+func (registry *Registry) RevokedKey(publicKey string) bool {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	for _, device := range registry.file.Devices {
+		if device.DeviceKey == publicKey {
+			return device.Revoked
+		}
+	}
+	return false
+}
+
 func (registry *Registry) Authenticate(token string) (Device, bool) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || parts[0] != "cdt1" || !validEncodedID(parts[1], "dev_", 16) || !validRawURLBytes(parts[2], 32) {
@@ -399,8 +413,14 @@ func (registry *Registry) MarkSeen(deviceID, transport, remoteAddr string) error
 	})
 }
 
+// Revoke removes the device key from the accepted set. Revoking a device again
+// keeps the first revokedAt, so a repeated revocation does not extend the
+// retention.
 func (registry *Registry) Revoke(deviceID string) error {
 	return registry.update(deviceID, false, func(device *deviceRecord) {
+		if device.Revoked {
+			return
+		}
 		now := registry.now().UTC()
 		device.Revoked = true
 		device.RevokedAt = &now
