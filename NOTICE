@@ -39,6 +39,34 @@ SHA-256 at install time and nothing is committed to this repository:
 - OpenSSL 3.6.3: Apache-2.0, https://github.com/openssl/openssl/blob/master/LICENSE.txt
 - liblzma from XZ Utils 5.8.3: 0BSD, https://github.com/tukaani-project/xz/blob/master/COPYING
 
+Tor for Android 0.4.9.11, packaged in the Android app by
+apps/mobile/modules/cialai-tunnel as info.guardianproject:tor-android from
+Maven Central. Its libtor.so is loaded into the app process through JNI, not
+run as a separate program, so the GPL notice below needs a distribution review
+before Android builds reach users. Only the arm64-v8a and x86_64 libraries are
+packaged:
+
+- tor-android 0.4.9.11: BSD-3-Clause according to its POM; Copyright 2009-2010
+  Nathan Freitas, The Guardian Project; the repository LICENSE also carries the
+  notices of the bundled components
+  https://github.com/guardianproject/tor-android/blob/master/LICENSE
+- Tor 0.4.9.11 inside libtor.so: BSD-3-Clause source license; this build
+  reports that it is covered by the GNU General Public License version 3
+  https://gitlab.torproject.org/tpo/core/tor/-/blob/main/LICENSE
+  https://www.gnu.org/licenses/gpl-3.0.html
+- libevent 2.1.12-stable inside libtor.so: BSD-3-Clause,
+  https://github.com/libevent/libevent/blob/master/LICENSE
+- OpenSSL 3.5.7 inside libtor.so: Apache-2.0,
+  https://github.com/openssl/openssl/blob/master/LICENSE.txt
+- zlib 1.3.2 inside libtor.so: Zlib, https://zlib.net/zlib_license.html
+- zstd 1.5.7 inside libtor.so: BSD-3-Clause or GPL-2.0-only at the
+  distributor's choice, https://github.com/facebook/zstd/blob/dev/LICENSE
+- jtorctl 0.4.5.7, info.guardianproject:jtorctl: BSD-3-Clause according to its
+  POM; Copyright 2005 Nick Mathewson, Roger Dingledine
+  https://github.com/guardianproject/jtorctl/blob/master/LICENSE
+- AndroidX LocalBroadcastManager 1.1.0, required by tor-android: Apache-2.0,
+  https://developer.android.com/jetpack/androidx/releases/localbroadcastmanager
+
 Planned dependencies, not yet bundled:
 
 - xterm.js: MIT, https://github.com/xtermjs/xterm.js
