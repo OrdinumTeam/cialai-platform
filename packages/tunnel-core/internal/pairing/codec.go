@@ -189,6 +189,12 @@ func validatePayload(payload Payload) error {
 	return nil
 }
 
+// ValidDesktop, ValidOnion and ValidCandidate apply the QR rules to the reach
+// card, which renews the same fields after pairing without a second format.
+func ValidDesktop(desktop Desktop) bool       { return validDesktop(desktop) }
+func ValidOnion(address string) bool          { return validOnion(address) }
+func ValidCandidate(candidate Candidate) bool { return validCandidate(candidate) }
+
 func validDesktop(desktop Desktop) bool {
 	if !validEncodedID(desktop.ID, "d_", 16) || !validName(desktop.Name, 48) {
 		return false
