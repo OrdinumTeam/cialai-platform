@@ -95,7 +95,7 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Keystore de upload do Android, `upload-keystore.jks` | `secrets/` local e grupo `android_credentials` | `android-play` | Não gira sozinho; Play App Signing guarda a chave de assinatura |
 | Conta de serviço do Play, `google-play-service-account.json` | `secrets/` local e grupo `google_play` | `play_api.py`, publicação | Anual |
 | Token da API do Codemagic | `.env` local fora da árvore | `cm-*.sh` | Anual |
-| Chave da API do Headscale de cada pessoa | Keychain do desktop de quem instala | Sidecar | Rotação automática 14 dias antes de expirar |
+| Chave da API do Headscale gravada pelas prévias 0.1.x | Keychain do desktop de quem instalou essas prévias, se ainda existir | Ninguém desde a prévia 0.2.0; a conectividade automática não usa chave de servidor | Não gira mais; apagar nos diagnósticos avançados da tela Dispositivos |
 
 O repositório privado `ordinum-credentials` guarda referências, donos e procedimentos, nunca valores. No monorepo público existe só `tools/release/.env.example` com os nomes `CODEMAGIC_API_TOKEN`, `CODEMAGIC_APP_ID`, `CODEMAGIC_ASC_INTEGRATION_NAME`, `APPLE_TEAM_ID`, `IOS_BUNDLE_ID`, `APP_STORE_APP_ID`, `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_ID`, `APP_STORE_CONNECT_PRIVATE_KEY_PATH`, `GOOGLE_PLAY_ACCOUNT_ID`, `ANDROID_PACKAGE` e `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH`, com os caminhos apontando para fora do repositório. Auditoria antes de cada commit: `for f in secrets/*; do git check-ignore -q "$f" && echo "ok $f" || echo "EXPOSTO $f"; done`.
 
@@ -116,6 +116,6 @@ O repositório privado `ordinum-credentials` guarda referências, donos e proced
 1. `CHANGELOG.md` atualizado e docs desta pasta revisados para o que existe.
 2. `npm test` verde nos três sistemas.
 3. Tag `v<semver>` empurrada; `release.yml` publica os seis instaladores assinados, os cinco sidecars, `latest.json` e os artefatos móveis.
-4. Instalação limpa em cada sistema até um celular pareado, pelos roteiros manuais do documento 06.
+4. Instalação limpa em cada sistema até um celular pareado, pelo roteiro físico de conectividade em `docs/testes/roteiro-conectividade.md`.
 5. `cm-publish.sh` para `ios-testflight`; instalação pelo grupo interno; `play_api.py upload` na faixa interna.
 6. Submissões às lojas com os textos e as respostas de conformidade; registro das datas e dos números de build em `docs/12-decisoes.md`.

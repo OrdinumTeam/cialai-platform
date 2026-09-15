@@ -7,7 +7,7 @@
 | Workspaces e toolchains | Implementado | npm, Node, Rust, Go, Expo e versões centrais estão fixados no repositório |
 | Desktop, interface, protocolo e túnel | Implementado | Os quatro pacotes existem e passam na suíte local do macOS |
 | Aplicativo móvel | Preparado | TypeScript e checks passam; projetos nativos gerados, builds e aparelhos continuam externos |
-| Infraestrutura Headscale | Implementado | Receita e integração Docker local existem; implantação pública não ocorreu |
+| Infraestrutura Headscale | Implementado | Receita e integração Docker local existem só como histórico; desde a prévia 0.2.0 a conectividade automática não usa servidor e o produto não depende desta receita |
 | Ferramentas de check e self test | Implementado | Checks estruturais, suíte da interface e self test local estão versionados |
 | Ferramentas de release e lojas | Preparado | Scripts e guardas existem; credenciais, assinatura e chamadas de publicação não foram executadas |
 | Navegador automatizado multiplataforma | Pendente | Não há diretório `tools/browser` nem workflow nightly nesta linha |
@@ -33,9 +33,9 @@ cialai-platform/
   packages/
     ui/                              React: estúdio, casca desktop, casca do celular, tokens, fontes
     protocol/                        contrato da ponte e do pareamento, remote.js, native.js, sensitive.js, fixtures
-    tunnel-core/                     Go: tsnet, borda, proxy, pareamento, Headscale, sidecar, gomobile
+    tunnel-core/                     Go: identidade, transportes direto e Tor, rendezvous, DNS-SD, borda, proxy, pareamento, sidecar, gomobile; modo Headscale inerte até CON-070
   infra/
-    headscale/                       docker-compose.yml, config/, bootstrap.sh, README.md
+    headscale/                       histórico fora do produto: docker-compose.yml, config/, bootstrap.sh, README.md
   tools/
     check/                           checks estruturais e guardas da documentação
     selftest/                        selftest-app.js e fixtures
@@ -112,8 +112,8 @@ O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`,
 | Cenário | Passos |
 | --- | --- |
 | Desktop em desenvolvimento | `npm ci`, `npm run build:tunnel` para o triplo local, `npm run dev:desktop`; o app abre com `?cialai_selftest=1` quando `devUrl` aponta para isso |
-| Headscale local | `cd infra/headscale && docker compose up`, com `server_url` em `http://127.0.0.1:8080` só em desenvolvimento; `bootstrap.sh --dev` gera a chave da API |
-| Celular em desenvolvimento | `bash tools/build-tunnel-mobile.sh`, depois `npm exec --workspace @cialai/mobile -- expo prebuild` e `npm exec --workspace @cialai/mobile -- expo run:ios --device` ou `expo run:android --device`; simuladores não têm UDP confiável para o WireGuard, então rede só em aparelho real |
+| Headscale local, histórico | `cd infra/headscale && docker compose up`, com `server_url` em `http://127.0.0.1:8080` só em desenvolvimento; `bootstrap.sh --dev` gera a chave da API. O desktop e o celular não usam desde a prévia 0.2.0; serve só ao modo inerte até CON-070 |
+| Celular em desenvolvimento | `bash tools/build-tunnel-mobile.sh`, depois `npm exec --workspace @cialai/mobile -- expo prebuild` e `npm exec --workspace @cialai/mobile -- expo run:ios --device` ou `expo run:android --device`; simuladores não têm UDP confiável para o caminho direto, então rede só em aparelho real |
 | Página do celular no desktop | `http://127.0.0.1:1420/mobile.html?bridge=ws://127.0.0.1:3720/pty` com `--dev-open-bridge`, como o protótipo fazia com `?bridge=` em loopback |
 | Demo do estúdio | `http://127.0.0.1:1420/?terminais=demo&motion=0#terminais` |
 
@@ -124,7 +124,7 @@ O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`,
 | `packages/ui` | `terminal-restore`, `mobile-terminal-touch`, `mobile-terminal-route`, `mobile-keyboard-viewport` em Node; `check-file-kinds`, `check-terminal-sync` com 17 casos, `check-phone-terminal`, `check-phone-workbench`, `check-mobile` com 14 casos, `check-mobile-readonly-ui`; `check-studio-browser`, `check-explorer-drop-browser`, `check-terminal-drop-browser` por Playwright | `$CONTROL/backend/node/tests`, `$CONTROL/frontend/scripts` |
 | `packages/protocol` | Validação das fixtures contra o esquema; `remote.js` com 4401 sem retentativa e URL por `location.host` | Novo, mais `check-mobile.mjs` |
 | `apps/desktop` | A suíte Rust elegível do Control sem falhas e com ignores justificados, mais `TestShell` e `TestChild` por sistema, ponte com segredo da borda, supervisor do sidecar, `resume` por sabor, `files` por sistema, `watch` por backend, `journal` no Windows; `selftest-app.js` por `tauri-driver` no Linux e no Windows e por `tauri dev` no macOS | `$CONTROL/macos/src-tauri`, `$CONTROL/frontend/scripts/selftest-app.js` |
-| `packages/tunnel-core` | Unitários de `pairing`, `headscale`, `rpc`, `proxy`, `edge`, `node`; integração com Headscale em Docker | Novo |
+| `packages/tunnel-core` | Unitários de `identity`, `transport`, `tor`, `rendezvous`, `mdns`, `pathmgr`, `pairing`, `sidecar`, `proxy` e `edge`, com testes em processo contra a rede Tor real; os pacotes do modo Headscale seguem inertes e a integração com Headscale em Docker ficou histórica, sem compilar desde o sidecar v2 | Novo |
 | `apps/mobile` | Os 65 casos do Control mais QR, perfis, URL do proxy, saúde, transições, `navigate-back` | `$CONTROL/ios/app` |
 | `tools/release` | `cm-build-number.test.sh`, `cm-download.test.sh`, `cm-config.test.cjs` | `$CONTROL/scripts` |
 
@@ -144,4 +144,4 @@ O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`,
 
 ## Arquivos de abertura do repositório
 
-`README.md` com o que é, capturas, instalação por sistema, pareamento, auto hospedagem do Headscale, estado e licença; `CONTRIBUTING.md` com como rodar, testar, convenções e o processo de PR; `CODE_OF_CONDUCT.md` no padrão Contributor Covenant; `SECURITY.md` com o e-mail de contato para vulnerabilidades e o prazo de resposta; modelos de issue para bug, pedido e pergunta; modelo de PR com a lista de verificação de testes e texto.
+`README.md` com o que é, capturas, instalação por sistema, pareamento, conectividade automática sem servidor, estado e licença; `CONTRIBUTING.md` com como rodar, testar, convenções e o processo de PR; `CODE_OF_CONDUCT.md` no padrão Contributor Covenant; `SECURITY.md` com o e-mail de contato para vulnerabilidades e o prazo de resposta; modelos de issue para bug, pedido e pergunta; modelo de PR com a lista de verificação de testes e texto.

@@ -132,6 +132,12 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | 7.5 | Preparado | Prévias `v0.1.0` e `v0.1.1` publicadas em 14/09/2026; seis gates da versão 1 pendentes |
 | 7.6 | Pendente | Anúncio e página do projeto não foram produzidos |
 
+### Frente de conectividade
+
+| Frente | Estado | Limite atual |
+| --- | --- | --- |
+| CON | Preparado | Conectividade automática da prévia 0.2.0 pela decisão CON-D01, conduzida pelas tarefas CON do plano interno de conectividade. Identidade Ed25519, QUIC com TLS 1.3 mútuo, mapeamento de porta, STUN opcional, DNS-SD e serviço onion do Tor passam nas suítes automatizadas e em testes em processo contra a rede Tor real; o roteiro físico em `docs/testes/roteiro-conectividade.md` segue pendente em aparelhos reais e o modo Headscale fica inerte até CON-070 |
+
 As frentes paralelas alteram a ordem de autoria, mas não dispensam dependências de aceite. Em particular, a documentação e os materiais da Fase 7 podem estar preparados enquanto as Fases 5 e 6 e os testes externos continuam pendentes.
 
 ## Fase 0: fundação e spikes
@@ -178,6 +184,8 @@ Aceite: `cargo test` sem falhas e com cada ignore justificado, usando a contagem
 ## Fase 2: túnel e pareamento
 
 Objetivo: o desktop entra num Headscale auto hospedado, mostra o QR, aceita pareamentos e serve a página do celular pela borda, com a ponte exigindo o segredo da borda.
+
+Nota: desde a prévia 0.2.0 a conectividade automática da frente CON substituiu o Headscale no produto, sem servidor da pessoa, da Ordinum ou do projeto. As partes desta fase ligadas ao Headscale, como as tarefas 2.2, 2.10 e 2.11 e o assistente da 2.9, ficam como histórico; o restante evoluiu para o contrato v2 do documento 06, e o modo Headscale segue inerte até CON-070.
 
 | Tarefa | Tamanho | Depende | Raia | Documento |
 | --- | --- | --- | --- | --- |
