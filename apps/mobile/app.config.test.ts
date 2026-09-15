@@ -80,8 +80,10 @@ describe('Expo app config', () => {
     expect(binder).toContain('-target=android/arm64,android/amd64');
   });
 
-  test('pins the in-process Tor pod once for iOS', () => {
+  test('declares the local discovery service and pins the in-process Tor pod once for iOS', () => {
     const config = buildConfig(context);
+    expect(config.ios?.infoPlist?.NSBonjourServices).toEqual(['_cialai._udp']);
+    expect(config.ios?.infoPlist?.NSLocalNetworkUsageDescription).toBe(dictionaries['pt-BR']['mobile.permission.localNetwork']);
     const plugin = config.plugins?.find(
       entry => Array.isArray(entry) && entry[0] === 'expo-build-properties'
     ) as [string, { ios: { extraPods: { name: string; version: string; modular_headers: boolean }[] } }] | undefined;

@@ -5,6 +5,8 @@ type AppEnvironment = 'development' | 'preview' | 'production';
 
 // Versão do Tor.framework fixada em modules/cialai-tunnel/ios/CialaiTunnel.podspec.
 const IOS_TOR_POD_VERSION = '409.11.2';
+// Serviço DNS-SD anunciado pelo computador e procurado pelo NWBrowser do iOS.
+const LAN_DISCOVERY_SERVICE = '_cialai._udp';
 
 function resolveAppEnvironment(): AppEnvironment {
   const value = process.env.APP_ENV?.trim() || 'development';
@@ -60,6 +62,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         CFBundleDevelopmentRegion: DEFAULT_LOCALE,
         CFBundleLocalizations: [...SUPPORTED_LOCALES],
+        // Sem o tipo declarado o iOS 14 ou mais novo recusa a busca do NWBrowser.
+        NSBonjourServices: [LAN_DISCOVERY_SERVICE],
         ...permissions
       }
     },

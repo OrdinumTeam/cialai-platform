@@ -36,8 +36,12 @@ public final class CialaiTunnelModule: Module {
   private var startupError: Error?
   private var torListener: UUID?
   private var appliedTor: TorEndpoints?
+  private var discovery: LanDiscovery?
   private var logLevel = LogLevel.info
   private var backgrounded = false
+  // O iOS pode ter suspendido o app e recuperado os sockets: a próxima conexão pedida pelo
+  // App depois de voltar ao primeiro plano começa do zero.
+  private var freshStartPending = false
 
   public func definition() -> ModuleDefinition {
     Name("CialaiTunnel")
@@ -67,7 +71,7 @@ public final class CialaiTunnelModule: Module {
         promise.reject(Self.failure("device_invalid", "Informe nome, modelo, plataforma e versão do aparelho."))
         return
       }
-      self.call(promise) { tunnel in
+      self.call(promise, freshStart: true, then: { self.refreshDiscovery() }) { tunnel in
         try Self.decodeObject(Self.text {
           tunnel.pair(payload, deviceName: name, deviceModel: model, platform: platform, appVersion: app, error: $0)
         })
@@ -75,7 +79,7 @@ public final class CialaiTunnelModule: Module {
     }
 
     AsyncFunction("connect") { (desktopId: String, promise: Promise) in
-      self.call(promise) { tunnel in
+      self.call(promise, freshStart: true) { tunnel in
         try Self.decodeObject(Self.text { tunnel.connect(desktopId, error: $0) })
       }
     }
@@ -117,6 +121,7 @@ public final class CialaiTunnelModule: Module {
     Function("notifyNetworkChange") { (reachable: Bool) in
       self.queue.async {
         self.tunnel?.notifyNetworkChange(reachable)
+        if reachable { self.discovery?.refresh() }
       }
     }
 
@@ -125,7 +130,7 @@ public final class CialaiTunnelModule: Module {
     }
 
     AsyncFunction("forgetDesktop") { (desktopId: String, promise: Promise) in
-      self.call(promise) { tunnel in
+      self.call(promise, then: { self.refreshDiscovery() }) { tunnel in
         try tunnel.forgetDesktop(desktopId)
         return nil
       }
@@ -158,6 +163,12 @@ public final class CialaiTunnelModule: Module {
       return
     }
 
+    discovery = LanDiscovery { [weak self] desktopID, reportJSON in
+      self?.queue.async { self?.reportLan(desktopID, reportJSON) }
+    }
+    discovery?.setActive(!backgrounded)
+    refreshDiscovery()
+
     torListener = TorRuntime.shared.addListener { [weak self] snapshot in
       self?.queue.async { self?.applyTor(snapshot) }
     }
@@ -169,20 +180,29 @@ public final class CialaiTunnelModule: Module {
     // O Tor fica: ele não reinicia no mesmo processo e um módulo recriado reaproveita o mesmo.
     if let torListener { TorRuntime.shared.removeListener(torListener) }
     torListener = nil
+    discovery?.stop()
+    discovery = nil
     try? tunnel?.stop()
     tunnel = nil
     listener = nil
     appliedTor = nil
   }
 
-  /// Segundo plano pausa a rede do Tor, que não reinicia no mesmo processo; a volta retoma.
+  /// No iOS o sistema suspende o app quando decide, sem tempo garantido em segundo plano.
+  /// Ao sair, o núcleo pausa as melhorias de caminho, a busca local para e o Tor pausa a
+  /// rede. Ao voltar, tudo retoma e a próxima conexão pedida pelo App refaz `Connect` e
+  /// `OpenDesktop` do zero, porque as ligações e os sockets podem ter morrido na suspensão.
   private func setForeground(_ active: Bool) {
-    backgrounded = !active
     if active {
+      if backgrounded { freshStartPending = true }
+      backgrounded = false
       TorRuntime.shared.setNetworkEnabled(true)
+      discovery?.setActive(true)
       tunnel?.notifyForeground(true)
     } else {
+      backgrounded = true
       tunnel?.notifyForeground(false)
+      discovery?.setActive(false)
       TorRuntime.shared.setNetworkEnabled(false)
     }
   }
@@ -209,18 +229,53 @@ public final class CialaiTunnelModule: Module {
     ])
   }
 
+  // MARK: - Descoberta local
+
+  private func refreshDiscovery() {
+    guard let tunnel, let discovery else { return }
+    do {
+      let listed = try Self.decodeObject(Self.text { tunnel.desktopsJSON($0) })
+      let desktops = listed["desktops"] as? [[String: Any]] ?? []
+      discovery.update(known: Set(desktops.compactMap { $0["id"] as? String }))
+    } catch {
+      log(.error, "listing desktops for discovery failed: \(Self.code(of: error))")
+    }
+  }
+
+  private func reportLan(_ desktopID: String, _ reportJSON: String) {
+    guard let tunnel else { return }
+    do {
+      try tunnel.reportLanCandidates(desktopID, reportedJSON: reportJSON)
+      log(.debug, "local network report for \(desktopID)")
+    } catch {
+      log(.info, "local network report refused: \(Self.code(of: error))")
+    }
+  }
+
   // MARK: - Chamadas ao núcleo
 
-  private func call(_ promise: Promise, _ operation: @escaping (MobileTunnel) throws -> Any?) {
+  private func call(
+    _ promise: Promise,
+    freshStart: Bool = false,
+    then: (() -> Void)? = nil,
+    _ operation: @escaping (MobileTunnel) throws -> Any?
+  ) {
     queue.async {
       guard let tunnel = self.tunnel else {
         promise.reject(self.unavailable())
         return
       }
+      let restart = freshStart && self.freshStartPending
+      if restart { self.freshStartPending = false }
       self.calls.async {
         do {
+          if restart {
+            // Fecha proxy, caminho e socket QUIC antigos; a operação abre tudo de novo.
+            try? tunnel.stop()
+          }
           let value = try operation(tunnel)
           promise.resolve(value)
+          if let then { self.queue.async(execute: then) }
         } catch {
           promise.reject(Self.exception(from: error))
         }
