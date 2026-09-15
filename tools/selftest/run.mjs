@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { bridgeEnv, freePort, reportPath, targetDirProblem } from './common.mjs';
+import { bridgeEnv, DEFAULT_TIMEOUT_SECONDS, freePort, reportPath, targetDirProblem } from './common.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const targetProblem = targetDirProblem(process.env.CARGO_TARGET_DIR);
@@ -27,7 +27,8 @@ child.stdout.pipe(process.stdout);
 child.stderr.pipe(process.stderr);
 
 const started = Date.now();
-const timeoutMs = 180000;
+// O prazo inclui a compilação do app e a subida da rede automática com o Tor.
+const timeoutMs = DEFAULT_TIMEOUT_SECONDS * 1000;
 let exited = false;
 let exitCode = null;
 child.on('exit', (code) => { exited = true; exitCode = code; });

@@ -43,3 +43,24 @@ export function quotedTail(quoted) {
 
 // Mensagens de comando inexistente em POSIX, PowerShell e cmd.
 export const EXECUTED_PATH = /command not found|not found|is not recognized|não é reconhecido/i;
+
+// Rede automática: prazo para o ponto de estado chegar a pronto para parear ou
+// acessível, contando a primeira execução do Tor, e tolerância a um problema
+// passageiro antes de reprovar.
+export const NETWORK_READY_MS = 90000;
+export const NETWORK_PROBLEM_MS = 20000;
+export const NETWORK_READY_STATES = Object.freeze(['pairable', 'accessible']);
+// Únicos campos de rede nas preferências: nenhum servidor, usuário ou chave.
+export const NETWORK_FIELDS = Object.freeze(['desktopName', 'keepAwakeWhilePaired', 'requireApproval']);
+export const PAIR_QR_PREFIX = 'CIALAI2.';
+export const PAIR_QR_MS = 20000;
+// Ids de diagnostics.run no contrato v2 do sidecar.
+export const DIAGNOSTIC_CHECKS = 11;
+export const DIAGNOSTICS_MS = 30000;
+
+// Expressão para um texto traduzido com percentual, como "preparando {progress}%".
+export function progressPattern(render) {
+  const marker = '\u0001';
+  const escaped = String(render(marker)).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped.replace(marker, '\\d{1,3}')}$`);
+}

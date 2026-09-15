@@ -93,6 +93,8 @@ assert.equal(common.targetDirProblem('/Users/ana/.cache/cialai-target/target'), 
 assert.equal(common.targetDirProblem('/target/'), '');
 assert.match(common.targetDirProblem('/Users/ana/.cache/cialai-target'), /pasta chamada target/);
 assert.match(read('tools/selftest/run.mjs'), /targetDirProblem\(process\.env\.CARGO_TARGET_DIR\)/);
+// No macOS o prazo cobre a compilação e a rede automática, com o mesmo teto do driver.
+assert.match(read('tools/selftest/run.mjs'), /const timeoutMs = DEFAULT_TIMEOUT_SECONDS \* 1000;/);
 assert.match(read('tools/selftest/driver.mjs'), /targetDirProblem\(dirname\(dirname\(options\.app\)\)\)/);
 assert.match(read('tools/selftest/driver.mjs'), /\/screenshot`\)/, 'o runner precisa guardar capturas da janela como evidência');
 assert.equal(common.SCREENSHOT_INTERVAL_MS, 3000);

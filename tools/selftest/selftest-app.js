@@ -3,12 +3,36 @@
 // returned by Rust and writes the final report under app_log_dir. Commands,
 // quoting and system metadata follow the platform and the shell flavor, so the
 // same script runs on macOS, Linux and Windows.
+//
+// A rede automática usa o sidecar v2 real e a identidade do app: o roteiro não
+// preenche nenhum campo, só observa o ponto de estado, lê o QR do diálogo e
+// abre Dispositivos. O relatório nunca leva payload, onion ou endereço.
 
 import * as runtime from '../../packages/ui/src/terminals/runtime.js';
 import { fs, shellQuote } from '../../packages/ui/src/terminals/files.js';
 import { invoke } from '../../packages/ui/src/lib/native.js';
 import { platform } from '../../packages/ui/src/lib/platform.js';
-import { EXECUTED_PATH, noiseFixtures, PTY_ATTEMPTS, PTY_MARKER, PTY_OUTPUT_MS, ptyMarkerCommand, quotedTail, TERMINAL_READY_MS } from './portable.js';
+import { translate } from '../../packages/ui/src/desktop/i18n.js';
+import {
+  DIAGNOSTIC_CHECKS,
+  DIAGNOSTICS_MS,
+  EXECUTED_PATH,
+  NETWORK_FIELDS,
+  NETWORK_PROBLEM_MS,
+  NETWORK_READY_MS,
+  NETWORK_READY_STATES,
+  noiseFixtures,
+  PAIR_QR_MS,
+  PAIR_QR_PREFIX,
+  progressPattern,
+  PTY_ATTEMPTS,
+  PTY_MARKER,
+  PTY_OUTPUT_MS,
+  ptyMarkerCommand,
+  quotedTail,
+  TERMINAL_READY_MS,
+} from './portable.js';
+import { decodeImage } from './qr.js';
 
 const pause = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
 const results = [];
@@ -19,6 +43,52 @@ window.__CIALAI_SELFTEST_PROGRESS__ = progress;
 let sessionId = null;
 let shellFlavor = null;
 let paths = null;
+
+// Ponto de estado da toolbar desde a abertura do app. O observador fica só no
+// botão do ponto, então um estado curto como "Pronto para parear" antes do
+// bootstrap do Tor não se perde entre duas leituras. Com o documento inteiro
+// observado, o item do Dev Browser deixou de receber o primeiro quadro no macOS.
+const network = { states: [], startedAt: Date.now() };
+progress.diagnostics.network = network;
+const TUNNEL_LABELS = Object.freeze({
+  pairable: 'desktop.tunnel.pairable',
+  accessible: 'desktop.tunnel.accessible',
+  problem: 'desktop.tunnel.problem',
+  reconnecting: 'desktop.tunnel.reconnecting',
+  starting: 'desktop.tunnel.starting',
+  off: 'desktop.tunnel.off',
+});
+let tunnelLabel = null;
+
+function tunnelKind(label) {
+  for (const [kind, key] of Object.entries(TUNNEL_LABELS)) if (label === translate(key)) return kind;
+  if (progressPattern((value) => translate('desktop.tunnel.reservePreparing', { progress: value })).test(label)) return 'reserve';
+  return 'other';
+}
+
+function recordTunnel() {
+  const label = document.querySelector('.mac-tunnel-status')?.textContent?.trim() || '';
+  if (!label || label === tunnelLabel) return;
+  tunnelLabel = label;
+  const state = tunnelKind(label);
+  if (network.states.at(-1)?.state !== state) network.states.push({ state, ms: Date.now() - network.startedAt });
+}
+
+const tunnelObserver = new MutationObserver(recordTunnel);
+let observedStatus = null;
+// O botão nasce com a toolbar e o React pode recriá-lo; a verificação leve
+// liga o observador ao nó atual.
+function watchTunnel() {
+  const status = document.querySelector('.mac-tunnel-status');
+  if (status && status !== observedStatus) {
+    tunnelObserver.disconnect();
+    tunnelObserver.observe(status, { subtree: true, childList: true, characterData: true });
+    observedStatus = status;
+  }
+  recordTunnel();
+}
+const tunnelWatch = setInterval(watchTunnel, 100);
+watchTunnel();
 
 async function until(test, what, limit = 20000) {
   const deadline = Date.now() + limit;
@@ -110,6 +180,33 @@ function bufferText(session) {
     if (line) text += `${line.isWrapped ? '' : '\n'}${line.translateToString(true)}`;
   }
   return text.normalize('NFC');
+}
+
+// Resumo de net.status sem identidade, endereços nem onion.
+async function networkSummary() {
+  try {
+    const status = await invoke('tunnel_call', { command: 'net.status', args: {} });
+    const tor = status?.tor || {};
+    network.reserve = { state: tor.state, progress: tor.progress ?? 0, published: tor.published === true };
+    const error = status?.error?.code ? `, erro ${status.error.code}` : '';
+    return `rede ${status?.state}, direta ${status?.direct?.state}, reserva ${tor.state} em ${tor.progress ?? 0}% ${tor.published ? 'publicada' : 'sem publicar'}, mdns ${status?.mdns?.state}, borda ${status?.edge?.state}${error}`;
+  } catch (error) {
+    return `net.status falhou: ${error?.message || String(error)}`;
+  }
+}
+
+function readQr(canvas) {
+  try {
+    const image = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+    return decodeImage(image);
+  } catch (error) {
+    progress.diagnostics.qrError = error?.message || String(error);
+    return null;
+  }
+}
+
+function navItem(label) {
+  return [...document.querySelectorAll('.mac-nav-item')].find((item) => item.textContent.trim() === label);
 }
 
 async function prepare(root) {
@@ -262,6 +359,93 @@ async function run() {
     await browser.stopBrowser(sessionId);
     return `Chromium respondeu na porta ${port} e desenhou o quadro esperado`;
   });
+
+  await check('rede automática', async () => {
+    const preferences = await invoke('get_preferences');
+    const fields = Object.keys(preferences?.network || {}).sort();
+    if (fields.join() !== NETWORK_FIELDS.join()) throw new Error(`preferências de rede inesperadas: ${fields.join(', ') || 'nenhuma'}`);
+    let problemSince = null;
+    const deadline = Date.now() + NETWORK_READY_MS;
+    for (;;) {
+      recordTunnel();
+      const reached = network.states.find((item) => NETWORK_READY_STATES.includes(item.state));
+      const current = network.states.at(-1)?.state;
+      // Depois de "Pronto para parear", o bootstrap do Tor mostra a reserva
+      // preparando; um problema depois disso continua reprovando.
+      if (reached && (NETWORK_READY_STATES.includes(current) || current === 'reserve')) {
+        const summary = await networkSummary();
+        const path = network.states.map((item) => item.state).join(', ');
+        return `${translate(TUNNEL_LABELS[reached.state])} em ${(reached.ms / 1000).toFixed(1)} s sem campo preenchido; estados ${path}; ${summary}`;
+      }
+      problemSince = current === 'problem' ? problemSince ?? Date.now() : null;
+      if (Date.now() > deadline || (problemSince && Date.now() - problemSince > NETWORK_PROBLEM_MS)) {
+        throw new Error(`o ponto parou em ${tunnelLabel || 'nenhum estado'}; ${await networkSummary()}`);
+      }
+      await pause(250);
+    }
+  });
+
+  await check('QR de pareamento', async () => {
+    // O QR fica borrado na tela enquanto o roteiro roda, para as capturas do
+    // runner não levarem um código válido; getImageData lê o canvas sem o filtro.
+    const blur = document.createElement('style');
+    blur.textContent = '.mac-pair__qr canvas { filter: blur(14px); }';
+    document.head.append(blur);
+    try {
+      const status = document.querySelector('.mac-tunnel-status');
+      if (!status) throw new Error('a toolbar não tem o ponto de estado');
+      status.click();
+      const canvas = await until(() => document.querySelector('.mac-pair__qr canvas'), 'o QR do diálogo Vincular celular', PAIR_QR_MS);
+      const dialog = canvas.closest('[role="dialog"]');
+      if (!dialog?.textContent.includes(translate('desktop.action.pairPhone'))) throw new Error('o QR não está no diálogo Vincular celular');
+      const box = canvas.getBoundingClientRect();
+      if (box.width < 200 || box.height < 200 || getComputedStyle(canvas).visibility !== 'visible') throw new Error('o QR não ficou visível no diálogo');
+      const qr = await until(() => readQr(canvas), 'um QR legível no canvas', PAIR_QR_MS);
+      if (!qr.text.startsWith(PAIR_QR_PREFIX)) throw new Error(`o texto do QR não começa com ${PAIR_QR_PREFIX}`);
+      const reserveTitle = translate('desktop.access.reserve');
+      const row = [...dialog.querySelectorAll('.mac-pair__reserve > div')].find((item) => item.querySelector('dt')?.textContent.trim() === reserveTitle);
+      if (!row) throw new Error('a linha da conexão de reserva não apareceu');
+      const reserve = row.querySelector('dd')?.textContent.trim() || '';
+      const ready = reserve === translate('desktop.access.reserveReady');
+      const preparing = progressPattern((value) => translate('desktop.access.reservePreparing', { progress: value })).test(reserve);
+      if (!ready && !preparing) throw new Error(`a linha da reserva mostrou ${reserve || 'nada'}`);
+      const notice = Boolean(dialog.querySelector('.mac-pair__notice'));
+      if (notice === ready) throw new Error(ready ? 'o aviso da reserva continuou com a reserva pronta' : 'faltou o aviso de que outra rede espera a reserva');
+      if (dialog.querySelector('input, select, textarea')) throw new Error('o diálogo pediu dados');
+      return `QR versão ${qr.version} nível ${qr.level} com ${qr.text.length} caracteres começando com ${PAIR_QR_PREFIX}; ${reserveTitle}: ${reserve}`;
+    } finally {
+      document.querySelector(`[role="dialog"] button[aria-label="${translate('shared.action.close')}"]`)?.click();
+      await until(() => !document.querySelector('.mac-pair__qr'), 'o diálogo Vincular celular fechar', 5000).catch(() => {});
+      blur.remove();
+    }
+  });
+
+  await check('painel de dispositivos', async () => {
+    const item = navItem(translate('desktop.view.devices.label'));
+    if (!item) throw new Error('a barra lateral não tem Dispositivos');
+    item.click();
+    try {
+      const view = await until(() => document.querySelector('#view-dispositivos'), 'a tela Dispositivos abrir');
+      await until(() => view.querySelector('.mac-access') && view.querySelector('.mac-devices__list-section'), 'o painel de acesso e a lista de celulares');
+      await until(() => !view.querySelector('.mac-devices__list-section .mac-state--loading'), 'a lista de celulares carregar');
+      if (view.querySelector('input, select, textarea')) throw new Error('Dispositivos mostrou campo de servidor, endereço, porta ou chave');
+      const phones = view.querySelectorAll('.mac-device-row').length;
+      view.querySelector('.mac-access__link')?.click();
+      const advanced = await until(() => view.querySelector('.mac-advanced[open] .mac-advanced__body'), 'o diagnóstico avançado abrir');
+      const fingerprint = advanced.querySelector('[aria-labelledby="advanced-identity"]')?.querySelectorAll('dd')[1]?.textContent.trim();
+      if (!fingerprint || fingerprint === translate('desktop.common.unavailable')) throw new Error('a impressão digital do computador não apareceu');
+      advanced.querySelector('.mac-advanced__checks .btn-secondary')?.click();
+      await until(() => advanced.querySelector('.mac-advanced__check-list li') || view.querySelector('[role="alert"]'), 'o resultado de diagnostics.run', DIAGNOSTICS_MS);
+      const alerts = [...view.querySelectorAll('[role="alert"]')].map((node) => node.textContent.trim()).filter(Boolean);
+      if (alerts.length) throw new Error(`Dispositivos mostrou erro: ${alerts.join('; ')}`);
+      const checks = [...advanced.querySelectorAll('.mac-advanced__check-list li')];
+      if (checks.length !== DIAGNOSTIC_CHECKS) throw new Error(`diagnostics.run trouxe ${checks.length} verificações em vez de ${DIAGNOSTIC_CHECKS}`);
+      const passed = checks.filter((node) => node.classList.contains('is-ok')).length;
+      return `celulares vinculados: ${phones}; diagnóstico avançado aberto com ${passed} de ${checks.length} verificações em ordem`;
+    } finally {
+      navItem(translate('view.terminais.label'))?.click();
+    }
+  });
 }
 
 if (!window.__CIALAI_SELFTEST_RUNNING__) {
@@ -272,6 +456,8 @@ if (!window.__CIALAI_SELFTEST_RUNNING__) {
   } catch (error) {
     results.push({ name: 'roteiro', ok: false, detail: error?.message || String(error) });
   } finally {
+    clearInterval(tunnelWatch);
+    tunnelObserver.disconnect();
     if (sessionId != null) {
       try { runtime.closeSession(sessionId); } catch (_error) { /* best effort */ }
       await pause(400);
