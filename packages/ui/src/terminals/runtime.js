@@ -57,6 +57,7 @@ import { consumeOutput, beginReplay } from './replay.js';
 import { restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
+import { installImeInput } from './ime-input.js';
 
 // Cores que um card pode receber. `null` deixa o card transparente. Cada uma tem um
 // tom para o claro e outro para o escuro, como os tokens da camada macOS.
@@ -510,6 +511,8 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
   session.disposables.push(term.parser.registerOscHandler(777, oscNotify));
 
   term.open(parking());
+  // Teclado virtual rapido nao duplica nem perde texto; a conta esta em ime-input.js.
+  session.disposables.push(installImeInput(term));
   term.element?.addEventListener('pointerdown', () => {
     requestTerminalControl(session.id).catch((error) => dispatch({ type: 'error', message: messageOf(error) }));
   });
