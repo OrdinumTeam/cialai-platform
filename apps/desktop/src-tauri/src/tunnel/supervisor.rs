@@ -1287,6 +1287,7 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
             Arc::new(|_, _| {}),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("unused-key")),
+            Awake::disabled(),
         );
         supervisor.shutdown_blocking();
         // A nova tentativa agendada chama `start_once` direto, sem passar pela
@@ -1371,6 +1372,7 @@ exec sleep 600 </dev/null
             Arc::new(|_, _| {}),
             Arc::new(RecordingBridge::default()),
             ApiKeyStore::new(root.join("key")),
+            Awake::disabled(),
         )
     }
 
