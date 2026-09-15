@@ -40,6 +40,7 @@
     "test:selftest": "node tools/selftest/run.mjs",
     "test:selftest:driver": "node tools/selftest/driver.mjs",
     "test:integration:headscale": "node tools/run.mjs integration-headscale",
+    "test:netlab": "node tools/run.mjs netlab",
     "test:spike:headscale": "node tools/run.mjs spike-headscale",
     "check:source": "node tools/check/control-source.mjs"
   }

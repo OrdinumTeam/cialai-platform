@@ -33,6 +33,14 @@ const jobs = {
       ['go', 'test', '-mod=readonly', '-tags=integration', '-count=1', '-timeout=12m', '-v', './integration'],
     ],
   },
+  // Laboratório de NAT e reserva em Docker (tools/net-lab): sete cenários de CON-031 e proteções do pareamento.
+  netlab: {
+    cwd: 'packages/tunnel-core',
+    commands: [
+      ['go', 'vet', '-tags=netlab', './integration/...'],
+      ['go', 'test', '-mod=readonly', '-tags=netlab', '-count=1', '-timeout=25m', '-v', '-run', 'TestNetLab', './integration'],
+    ],
+  },
   'spike-headscale': {
     cwd: 'packages/tunnel-core',
     commands: [['go', 'test', '-mod=readonly', '-tags=integration', '-count=1', '-timeout=6m', '-v', './spikes/headscale']],

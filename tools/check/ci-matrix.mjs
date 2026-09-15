@@ -118,4 +118,36 @@ const binder = readFileSync(`${root}/tools/build-tunnel-mobile.sh`, 'utf8');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 Tunnelcore\.xcframework\.zip > Tunnelcore\.xcframework\.zip\.sha256/, 'o hash publicado não leva caminho do runner');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 tunnelcore\.aar > tunnelcore\.aar\.sha256/);
 
-console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, artifacts and mobile bindings');
+// Laboratório de NAT e reserva: PR que toque o núcleo ou o laboratório e disparo manual; agenda só em CON-072.
+const netLabSource = readFileSync(`${root}/.github/workflows/net-lab.yml`, 'utf8');
+const netLab = yaml.load(netLabSource);
+assert.deepEqual(Object.keys(netLab.on).sort(), ['pull_request', 'workflow_dispatch'], 'o laboratório roda só em PR e por disparo manual');
+assert.deepEqual(netLab.on.pull_request.paths, ['packages/tunnel-core/**', 'tools/net-lab/**', '.github/workflows/net-lab.yml']);
+assert.equal(netLab.permissions.contents, 'read');
+assert.ok(!netLabSource.includes('secrets.'), 'o laboratório não pode consumir segredos');
+const labJob = netLab.jobs['nat-and-fallback'];
+assert.equal(labJob['runs-on'], 'ubuntu-latest');
+assert.equal(labJob.if, "github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'", 'o PR do laboratório roda só no repositório público');
+assert.ok(labJob.steps.some((step) => step.uses === 'actions/setup-go@v5' && step.with?.['go-version-file'] === 'packages/tunnel-core/go.mod'));
+const labRun = labJob.steps.find((step) => step.run === 'npm run test:netlab');
+assert.ok(labRun, 'o workflow roda npm run test:netlab');
+assert.equal(labRun.env?.NETLAB_ARTIFACTS, '${{ runner.temp }}/net-lab', 'o relatório do laboratório vai para o artefato');
+assert.ok(labJob.steps.some((step) => step.uses === 'actions/upload-artifact@v4' && step.if === 'always()'), 'relatório e logs sobem mesmo com falha');
+const rootPackage = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'));
+assert.equal(rootPackage.scripts['test:netlab'], 'node tools/run.mjs netlab');
+const runJobs = readFileSync(`${root}/tools/run.mjs`, 'utf8');
+assert.match(runJobs, /netlab: \{\n\s+cwd: 'packages\/tunnel-core',/);
+assert.match(runJobs, /'go', 'test', '-mod=readonly', '-tags=netlab', '-count=1', '-timeout=25m', '-v', '-run', 'TestNetLab', '\.\/integration'/);
+const labCompose = yaml.load(readFileSync(`${root}/tools/net-lab/compose.yaml`, 'utf8'));
+assert.deepEqual(Object.keys(labCompose.services).sort(), ['desktop', 'phone', 'phone-lan', 'relay', 'router-desktop', 'router-phone', 'stun']);
+assert.match(labCompose.services.stun.image, /^coturn\/coturn:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}$/, 'o coturn do laboratório tem versão e digest fixos');
+assert.match(readFileSync(`${root}/tools/net-lab/Dockerfile`, 'utf8'), /^FROM alpine:\d+\.\d+@sha256:[0-9a-f]{64}$/m, 'a imagem base do laboratório tem digest fixo');
+for (const [name, network] of Object.entries(labCompose.networks)) {
+  assert.match(network.ipam?.config?.[0]?.subnet ?? '', /^\d+\.\d+\.\d+\.\d+\/24$/, `rede do laboratório sem sub-rede fixa: ${name}`);
+}
+const labRouter = readFileSync(`${root}/tools/net-lab/node/netlab-router`, 'utf8');
+assert.match(labRouter, /--random-fully/, 'o NAT simétrico sorteia a porta pública por destino');
+assert.match(labRouter, /-j DNAT --to-destination "\$LAN_HOST"/, 'o NAT cone encaminha o UDP de entrada ao host interno');
+assert.match(readFileSync(`${root}/packages/tunnel-core/integration/netlab_test.go`, 'utf8'), /^\/\/go:build netlab$/m, 'o laboratório fica fora do go test comum');
+
+console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, artifacts, mobile bindings and net lab');

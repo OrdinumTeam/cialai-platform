@@ -34,7 +34,7 @@ x-router-sysctls: &router-sysctls
 
 services:
   stun:
-    image: coturn/coturn:4.7.0
+    image: coturn/coturn:4.7.0@sha256:a00afb5b4890de4df22bbe70379c6b316685dffee297d53cac1271dcb91fab93
     command:
       - --stun-only
       - --no-auth

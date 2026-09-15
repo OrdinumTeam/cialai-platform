@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Net lab
+
+on:
+  pull_request:
+    paths:
+      - packages/tunnel-core/**
+      - tools/net-lab/**
+      - .github/workflows/net-lab.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: net-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nat-and-fallback:
+    name: NAT e reserva em Docker
+    # PR roda só no repositório público; o disparo manual vale nos dois. A agenda fica para CON-072.
+    if: github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache-dependency-path: packages/tunnel-core/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Laboratório de NAT, reserva e proteções do pareamento
+        env:
+          NETLAB_ARTIFACTS: ${{ runner.temp }}/net-lab
+        run: npm run test:netlab
+      - name: Relatório no resumo da execução
+        if: always()
+        run: |
+          report="$RUNNER_TEMP/net-lab/report.txt"
+          if [ -f "$report" ]; then
+            { echo '### Laboratório de NAT e reserva'; echo '```'; cat "$report"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: net-lab
+          path: ${{ runner.temp }}/net-lab
+          if-no-files-found: ignore
+          retention-days: 14
