@@ -113,6 +113,11 @@ func startPinnedEchoServer(t *testing.T, desktop *identity.Identity) (string, <-
 	if err != nil {
 		t.Fatal(err)
 	}
+	return startEchoServer(t, config)
+}
+
+func startEchoServer(t *testing.T, config *tls.Config) (string, <-chan string) {
+	t.Helper()
 	listener, err := tls.Listen("tcp", "127.0.0.1:0", config)
 	if err != nil {
 		t.Fatal(err)
@@ -245,6 +250,64 @@ func TestClientDialsOnionByNameWithPinnedTLS(t *testing.T) {
 	}
 	if _, err := client.DialTLS(ctx, onion, nil, desktop.PublicKey()); err == nil {
 		t.Fatal("DialTLS without a local identity succeeded")
+	}
+}
+
+func TestClientDialsControlConnectionsWithTheControlALPN(t *testing.T) {
+	desktop, err := identity.Generate(identity.RoleDesktop, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone, err := identity.Generate(identity.RolePhone, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	controlConfig, err := identity.ControlServerConfig(desktop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withControl, peers := startEchoServer(t, controlConfig)
+	edgeOnly, _ := startPinnedEchoServer(t, desktop)
+	onion, legacy := mustOnion(t), mustOnion(t)
+	socks := startFakeSOCKS(t, map[string]string{onion + ":443": withControl, legacy + ":443": edgeOnly}, false)
+	client := NewClient()
+	if err := client.SetTorEndpoints(Endpoints{SOCKS: socks.listener.Addr().String()}); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	control, err := client.DialControlTLS(ctx, onion, phone, desktop.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer control.Close()
+	if state := control.ConnectionState(); state.NegotiatedProtocol != identity.ControlALPN {
+		t.Fatalf("control connection negotiated %q", state.NegotiatedProtocol)
+	}
+	if _, err := control.Write([]byte("c\n")); err != nil {
+		t.Fatal(err)
+	}
+	if echo := make([]byte, 2); func() error { _, err := io.ReadFull(control, echo); return err }() != nil {
+		t.Fatal("control connection did not echo")
+	}
+	if peer := <-peers; peer != phone.PublicKeyString() {
+		t.Fatalf("server saw phone key %s", peer)
+	}
+	edge, err := client.DialTLS(ctx, onion, phone, desktop.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state := edge.ConnectionState(); state.NegotiatedProtocol != identity.ALPN {
+		t.Fatalf("edge connection negotiated %q beside the control protocol", state.NegotiatedProtocol)
+	}
+	_ = edge.Close()
+	if conn, err := client.DialControlTLS(ctx, legacy, phone, desktop.PublicKey()); err == nil {
+		_ = conn.Close()
+		t.Fatal("a listener without control connections completed a control handshake")
+	}
+	if _, err := client.DialControlTLS(ctx, onion, phone, nil); err == nil {
+		t.Fatal("DialControlTLS without a pin succeeded")
 	}
 }
 

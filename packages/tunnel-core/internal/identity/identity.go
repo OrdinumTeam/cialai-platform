@@ -24,6 +24,12 @@ import (
 // ALPN is negotiated by every Cialai transport, direct QUIC and TLS over Tor.
 const ALPN = "cialai/1"
 
+// ControlALPN marks a TLS connection over Tor dedicated to the rendezvous
+// control channel. The onion listener offers it beside ALPN and hands those
+// connections to the control channel instead of the edge; direct QUIC never
+// offers it, because a QUIC session carries its control stream inside.
+const ControlALPN = "cialai-control/1"
+
 // Role selects the id prefix: desktops use d_ and phones use dev_, matching the
 // identifiers already accepted by the pairing registry.
 type Role string

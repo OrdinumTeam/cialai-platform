@@ -313,6 +313,55 @@ func TestMutualTLSAcceptsPinnedDesktopAndMarksRegistration(t *testing.T) {
 	}
 }
 
+func TestControlALPNTellsControlConnectionsApart(t *testing.T) {
+	desktop := mustGenerate(t, RoleDesktop)
+	phone := mustGenerate(t, RolePhone)
+	registry := fakeRegistry{phone.PublicKeyString(): "dev_registered"}
+	controlClient, err := ControlClientConfig(phone, desktop.PublicKey())
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeClient, _ := ClientConfig(phone, desktop.PublicKey())
+	both, err := ControlServerConfig(desktop)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edgeOnly, _ := ServerConfig(desktop)
+
+	clientResult, serverResult := handshake(t, controlClient, both)
+	if clientResult.err != nil || serverResult.err != nil {
+		t.Fatalf("control handshake failed: client=%v server=%v", clientResult.err, serverResult.err)
+	}
+	peer, err := ServerPeer(serverResult.state, registry)
+	if err != nil || !peer.Control || !peer.Registered || clientResult.state.NegotiatedProtocol != ControlALPN {
+		t.Fatalf("control peer %#v %v, client negotiated %q", peer, err, clientResult.state.NegotiatedProtocol)
+	}
+	if key, err := PeerPublicKey(clientResult.state); err != nil || !bytes.Equal(key, desktop.PublicKey()) {
+		t.Fatalf("control client did not see the desktop key: %v", err)
+	}
+
+	clientResult, serverResult = handshake(t, edgeClient, both)
+	if clientResult.err != nil || serverResult.err != nil {
+		t.Fatalf("edge handshake on the control listener failed: client=%v server=%v", clientResult.err, serverResult.err)
+	}
+	if peer, err := ServerPeer(serverResult.state, registry); err != nil || peer.Control {
+		t.Fatalf("edge peer marked as control: %#v %v", peer, err)
+	}
+
+	// A listener that does not offer the control protocol never serves a
+	// control connection as an edge one.
+	clientResult, serverResult = handshake(t, controlClient, edgeOnly)
+	if clientResult.err == nil || serverResult.err == nil {
+		t.Fatal("control client completed a handshake with an edge only listener")
+	}
+	if _, err := ControlClientConfig(phone, nil); err == nil {
+		t.Fatal("control client config without pin was accepted")
+	}
+	if _, err := ControlServerConfig(nil); err == nil {
+		t.Fatal("control server config without identity was accepted")
+	}
+}
+
 func TestPhoneRejectsWrongDesktopKey(t *testing.T) {
 	desktop := mustGenerate(t, RoleDesktop)
 	impostor := mustGenerate(t, RoleDesktop)

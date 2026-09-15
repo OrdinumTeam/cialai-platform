@@ -119,6 +119,21 @@ func (client *Client) DialTLS(ctx context.Context, onion string, local *identity
 	if err != nil {
 		return nil, err
 	}
+	return client.dialTLS(ctx, onion, config)
+}
+
+// DialControlTLS is DialTLS for a connection dedicated to the rendezvous
+// control channel: it negotiates identity.ControlALPN, so the onion listener
+// of the desktop hands it to the control channel instead of the edge.
+func (client *Client) DialControlTLS(ctx context.Context, onion string, local *identity.Identity, pinned ed25519.PublicKey) (*tls.Conn, error) {
+	config, err := identity.ControlClientConfig(local, pinned)
+	if err != nil {
+		return nil, err
+	}
+	return client.dialTLS(ctx, onion, config)
+}
+
+func (client *Client) dialTLS(ctx context.Context, onion string, config *tls.Config) (*tls.Conn, error) {
 	raw, err := client.Dial(ctx, onion)
 	if err != nil {
 		return nil, err

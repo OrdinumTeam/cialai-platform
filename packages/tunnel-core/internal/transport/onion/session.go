@@ -12,7 +12,8 @@ import (
 )
 
 // Session is one TLS connection forwarded by the onion service. It carries a
-// single stream, handed out once by AcceptStream.
+// single stream, handed out once: by AcceptStream for an edge connection and
+// by AcceptControl for a control connection.
 type Session struct {
 	listener *Listener
 	conn     *tls.Conn
@@ -21,9 +22,12 @@ type Session struct {
 	stream   *stream
 	done     chan struct{}
 	once     sync.Once
+	// control is set before the session is shared and never changes.
+	control bool
 
-	// countedRestricted is guarded by listener.mu.
+	// countedRestricted and controlSeq are guarded by listener.mu.
 	countedRestricted bool
+	controlSeq        uint64
 
 	mu           sync.Mutex
 	registered   bool
@@ -36,7 +40,7 @@ type Session struct {
 	gateMisses   int
 }
 
-var _ transport.Session = (*Session)(nil)
+var _ transport.ControlSession = (*Session)(nil)
 
 func newSession(listener *Listener, conn *tls.Conn, raw net.Conn, peerKey string) *Session {
 	session := &Session{listener: listener, conn: conn, raw: raw, peerKey: peerKey, done: make(chan struct{})}
@@ -73,16 +77,43 @@ func (session *Session) Err() error {
 	return session.err
 }
 
+// Control reports whether the session carries the control channel.
+func (session *Session) Control() bool { return session.control }
+
 // OpenStream is refused: the desktop never opens streams over an onion
 // connection, the phone opens one connection per stream.
 func (session *Session) OpenStream(context.Context) (transport.Stream, error) {
 	return nil, transport.ErrStreamRefused
 }
 
-// AcceptStream returns the single stream of the session, then waits until the
-// session ends. A restricted session rechecks the pairing gate first and a
-// registered one checks that its key was not revoked since the handshake.
+// OpenControl is refused for the same reason: the phone dials a control
+// connection of its own.
+func (session *Session) OpenControl(context.Context) (transport.Stream, error) {
+	return nil, transport.ErrStreamRefused
+}
+
+// AcceptStream returns the single stream of an edge session, then waits until
+// the session ends. A restricted session rechecks the pairing gate first and a
+// registered one checks that its key was not revoked since the handshake. A
+// control session has no edge stream.
 func (session *Session) AcceptStream(ctx context.Context) (transport.Stream, error) {
+	if session.control {
+		return nil, transport.ErrStreamRefused
+	}
+	return session.handOut(ctx)
+}
+
+// AcceptControl returns the single stream of a control session, then waits
+// until the session ends, after checking that its key was not revoked since
+// the handshake. An edge session has no control stream.
+func (session *Session) AcceptControl(ctx context.Context) (transport.Stream, error) {
+	if !session.control {
+		return nil, transport.ErrStreamRefused
+	}
+	return session.handOut(ctx)
+}
+
+func (session *Session) handOut(ctx context.Context) (transport.Stream, error) {
 	if !session.listener.admitStream(session) {
 		return nil, session.endError()
 	}

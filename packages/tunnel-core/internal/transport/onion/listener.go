@@ -6,13 +6,26 @@
 // circuit. Authorization and the restricted pairing entry follow the direct
 // transport, so the edge serves both without knowing which one carried a
 // stream.
+//
+// # Control connections
+//
+// With ListenConfig.Control the listener also offers identity.ControlALPN. A
+// connection that negotiates it carries the rendezvous control channel instead
+// of an edge stream: Accept never returns it, AcceptControl does, and its
+// single stream comes from Session.AcceptControl. Only registered keys open
+// one; an unknown, revoked or still pairing key is refused at admission, a
+// revocation that races the handshake closes it before the stream is handed
+// out, and CloseKey closes it with the edge sessions of the key. A key keeps
+// at most MaxControlPerKey control connections, the newest ones.
 package onion
 
 import (
+	"cmp"
 	"context"
 	"crypto/tls"
 	"errors"
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -27,6 +40,9 @@ const (
 	// DefaultMaxHandshakes bounds concurrent handshakes; connections beyond
 	// it are closed at once.
 	DefaultMaxHandshakes = 32
+	// MaxControlPerKey bounds the control connections of one key; a newer
+	// one closes the oldest, whose circuit may already be dead.
+	MaxControlPerKey     = 2
 	defaultGateInterval  = time.Second
 	defaultAcceptBacklog = 32
 	maxAcceptBackoff     = time.Second
@@ -49,8 +65,12 @@ type ListenConfig struct {
 	HandshakeTimeout time.Duration
 	// MaxHandshakes defaults to DefaultMaxHandshakes.
 	MaxHandshakes int
-	// AcceptBacklog bounds sessions waiting for Accept; it defaults to 32.
+	// AcceptBacklog bounds sessions waiting for Accept, and control sessions
+	// waiting for AcceptControl; it defaults to 32.
 	AcceptBacklog int
+	// Control offers identity.ControlALPN and hands the connections that
+	// negotiate it to AcceptControl. Without it those handshakes fail.
+	Control bool
 }
 
 // Listener accepts onion sessions from a plain listener.
@@ -65,6 +85,8 @@ type Listener struct {
 	handshakeTimeout   time.Duration
 	handshakes         chan struct{}
 	accepted           chan *Session
+	control            bool
+	controls           chan *Session
 	ctx                context.Context
 	cancel             context.CancelFunc
 	closing            chan struct{}
@@ -78,13 +100,16 @@ type Listener struct {
 	closed     bool
 	sessions   map[string]map[*Session]struct{}
 	restricted int
+	// controlSeq orders the control sessions of a key, oldest first.
+	controlSeq uint64
 }
 
 var _ transport.Listener = (*Listener)(nil)
 
 var (
-	errListenerClosed = errors.New("onion listener closed")
-	errRestrictedFull = errors.New("restricted sessions full")
+	errListenerClosed  = errors.New("onion listener closed")
+	errRestrictedFull  = errors.New("restricted sessions full")
+	errControlReplaced = errors.New("control connection replaced by a newer one of the same key")
 )
 
 // Listen wraps raw with the desktop TLS identity and starts accepting. The
@@ -93,10 +118,15 @@ func Listen(raw net.Listener, local *identity.Identity, config ListenConfig) (*L
 	if raw == nil {
 		return nil, errors.New("onion listener needs the connections forwarded by Tor")
 	}
-	tlsConfig, err := identity.ServerConfig(local)
+	newConfig := identity.ServerConfig
+	if config.Control {
+		newConfig = identity.ControlServerConfig
+	}
+	tlsConfig, err := newConfig(local)
 	if err != nil {
 		return nil, err
 	}
+	backlog := positiveOr(config.AcceptBacklog, defaultAcceptBacklog)
 	ctx, cancel := context.WithCancel(context.Background())
 	listener := &Listener{
 		raw:                raw,
@@ -108,7 +138,9 @@ func Listen(raw net.Listener, local *identity.Identity, config ListenConfig) (*L
 		gateInterval:       orDefault(config.GateInterval, defaultGateInterval),
 		handshakeTimeout:   orDefault(config.HandshakeTimeout, DefaultHandshakeTimeout),
 		handshakes:         make(chan struct{}, positiveOr(config.MaxHandshakes, DefaultMaxHandshakes)),
-		accepted:           make(chan *Session, positiveOr(config.AcceptBacklog, defaultAcceptBacklog)),
+		accepted:           make(chan *Session, backlog),
+		control:            config.Control,
+		controls:           make(chan *Session, backlog),
 		ctx:                ctx,
 		cancel:             cancel,
 		closing:            make(chan struct{}),
@@ -138,6 +170,30 @@ func (listener *Listener) Accept(ctx context.Context) (transport.Session, error)
 	case <-listener.stopped:
 		select {
 		case session := <-listener.accepted:
+			return session, nil
+		default:
+			return nil, transport.ErrClosed
+		}
+	}
+}
+
+// AcceptControl returns the next control session of a registered key. It
+// fails with transport.ErrClosed after Close, once the raw listener stopped
+// and every handshake finished, or at once when ListenConfig.Control is off.
+func (listener *Listener) AcceptControl(ctx context.Context) (transport.ControlSession, error) {
+	if !listener.control {
+		return nil, transport.ErrClosed
+	}
+	select {
+	case session := <-listener.controls:
+		return session, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-listener.closing:
+		return nil, transport.ErrClosed
+	case <-listener.stopped:
+		select {
+		case session := <-listener.controls:
 			return session, nil
 		default:
 			return nil, transport.ErrClosed
@@ -254,8 +310,12 @@ func (listener *Listener) handshake(raw net.Conn) {
 	if session == nil {
 		return
 	}
+	queue := listener.accepted
+	if session.control {
+		queue = listener.controls
+	}
 	select {
-	case listener.accepted <- session:
+	case queue <- session:
 	case <-listener.closing:
 		session.closeWith(transport.ErrClosed, false)
 	}
@@ -269,6 +329,9 @@ func (listener *Listener) admit(conn *tls.Conn, raw net.Conn) *Session {
 	if err != nil {
 		_ = raw.Close()
 		return nil
+	}
+	if peer.Control {
+		return listener.admitControl(conn, raw, peer)
 	}
 	session := newSession(listener, conn, raw, peer.Key)
 	if peer.Registered {
@@ -301,6 +364,49 @@ func (listener *Listener) admit(conn *tls.Conn, raw net.Conn) *Session {
 	return session
 }
 
+// admitControl accepts a control connection only from a registered key; the
+// restricted pairing entry never carries one. It returns nil when refused.
+func (listener *Listener) admitControl(conn *tls.Conn, raw net.Conn, peer identity.Peer) *Session {
+	if !listener.control || !peer.Registered {
+		_ = raw.Close()
+		return nil
+	}
+	session := newSession(listener, conn, raw, peer.Key)
+	session.control = true
+	session.registered = true
+	session.deviceID = peer.DeviceID
+	if listener.track(session, false) != nil {
+		_ = raw.Close()
+		return nil
+	}
+	if _, ok := listener.registeredKey(peer.Key); !ok {
+		session.closeWith(transport.ErrRevoked, false)
+		return nil
+	}
+	for _, replaced := range listener.surplusControls(peer.Key) {
+		replaced.closeWith(errControlReplaced, false)
+	}
+	return session
+}
+
+// surplusControls returns the oldest control sessions of key beyond
+// MaxControlPerKey.
+func (listener *Listener) surplusControls(key string) []*Session {
+	listener.mu.Lock()
+	defer listener.mu.Unlock()
+	var controls []*Session
+	for session := range listener.sessions[key] {
+		if session.control {
+			controls = append(controls, session)
+		}
+	}
+	if len(controls) <= MaxControlPerKey {
+		return nil
+	}
+	slices.SortFunc(controls, func(a, b *Session) int { return cmp.Compare(a.controlSeq, b.controlSeq) })
+	return controls[:len(controls)-MaxControlPerKey]
+}
+
 func (listener *Listener) track(session *Session, restricted bool) error {
 	listener.mu.Lock()
 	defer listener.mu.Unlock()
@@ -313,6 +419,10 @@ func (listener *Listener) track(session *Session, restricted bool) error {
 		}
 		listener.restricted++
 		session.countedRestricted = true
+	}
+	if session.control {
+		listener.controlSeq++
+		session.controlSeq = listener.controlSeq
 	}
 	set := listener.sessions[session.peerKey]
 	if set == nil {
