@@ -15,6 +15,16 @@ assert.match(readme, /open source terminal studio/i);
 assert.match(readme, /Prepared code is not the same as verified distribution/);
 assert.doesNotMatch(readme, /Cialai é|Fase 0 aberta/);
 
+// A porta de entrada descreve a conectividade automática, sem Headscale como requisito.
+const githubReadme = read('.github/README.md');
+for (const stale of [/Connect your own Headscale server/, /coordinated by a Headscale server that you host/, /Self-host Headscale/]) {
+  assert.doesNotMatch(readme, stale);
+  assert.doesNotMatch(githubReadme, stale);
+}
+assert.match(readme, /## Connect your phone/);
+assert.match(githubReadme, /## Public networks and limits/);
+assert.match(githubReadme, /```mermaid\nsequenceDiagram[\s\S]*?CIALAI2/);
+
 for (const image of [
   'docs/evidence/task-1.11/cialai-desktop-dark.png',
   'docs/evidence/task-1.11/cialai-mobile-list.png',
@@ -28,6 +38,7 @@ assert.match(contributing, /npm run test:integration:headscale/);
 assert.match(contributing, /Prepared code|implemented code/i);
 assert.match(security, /TO BE CONFIRMED BEFORE PUBLICATION/g);
 assert.match(security, /private vulnerability reporting/i);
+assert.match(security, /## Connectivity threat model/);
 assert.match(conduct, /Contributor Covenant version 2\.1/);
 assert.match(conduct, /TO BE CONFIRMED BEFORE PUBLICATION/);
 
@@ -42,4 +53,4 @@ for (const template of [
   assert.match(source, /credential|credentials/i);
 }
 
-console.log('PASS public docs: English README, inspected captures, contribution and security policies, reviewed templates');
+console.log('PASS public docs: English README with automatic connectivity, inspected captures, contribution and security policies, reviewed templates');

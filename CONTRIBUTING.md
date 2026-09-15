@@ -13,7 +13,7 @@ Use these toolchains:
 - Node 22 and npm 10
 - Rust from `rust-toolchain.toml`
 - Go 1.26.5
-- Docker for Headscale integration tests
+- Docker only for the legacy Headscale integration test; the automatic connectivity needs no Docker and no server
 - Xcode and the Android SDK only for native mobile work
 
 Install dependencies with the locked versions:
@@ -38,7 +38,7 @@ npm run dev:mobile
 
 Expo Go is not supported because the mobile app includes a native Go tunnel module. A development client and the platform toolchain are required.
 
-If you run Cargo directly, build the local sidecar first and limit parallel Rust jobs on machines with constrained memory:
+The sidecar build also stages the pinned Tor Expert Bundle for the desktop after checking its SHA-256. If you run Cargo directly, build the local sidecar first and limit parallel Rust jobs on machines with constrained memory:
 
 ```sh
 npm run sidecar --workspace @cialai/desktop
@@ -62,10 +62,17 @@ Useful focused commands:
 | Bridge protocol | `npm run test:protocol` |
 | Go networking core | `npm run test:tunnel` |
 | Mobile JavaScript | `npm run test:mobile` |
-| Headscale integration | `npm run test:integration:headscale` |
+| Legacy Headscale mode, kept until its removal | `npm run test:integration:headscale` |
 | macOS application self test | `npm run test:selftest` |
 
-Hardware tests, remote CI, code signing, notarization and store review require evidence from the real environment. A local unit test cannot mark those steps complete.
+The tunnel core also has optional tests against the public Tor network. They run when `CIALAI_TOR_BIN` holds the absolute path of a `tor` binary, such as the one `node tools/fetch-tor.mjs` downloads, and take several minutes:
+
+```sh
+cd packages/tunnel-core
+CIALAI_TOR_BIN=/absolute/path/to/tor go test -count=1 -timeout 30m ./internal/tor ./internal/sidecar ./mobile
+```
+
+Hardware tests, remote CI, code signing, notarization and store review require evidence from the real environment. A local unit test cannot mark those steps complete. Connectivity on real phones, computers and networks follows the checklist in `docs/testes/roteiro-conectividade.md`.
 
 ## Changes and commits
 

@@ -1,5 +1,22 @@
 # Rede, Headscale e pareamento
 
+## Resumo em 15/09/2026
+
+Este documento descreve a conectividade automática da prévia 0.2.0, que substituiu o Headscale no fluxo do produto pela decisão CON-D01. Nenhum servidor da pessoa, da Ordinum ou do projeto participa. O nome do arquivo continua o mesmo até a remoção do modo Headscale.
+
+| Parte | Como funciona |
+| --- | --- |
+| Abertura do computador | A rede sobe sozinha: identidade por chaves Ed25519, ouvinte QUIC sobre UDP 4740 ou porta livre com TLS 1.3 mútuo, mapeamento de porta por UPnP, NAT-PMP ou PCP quando o roteador permite, STUN opcional pelos servidores públicos da Cloudflare e do Google, anúncio DNS-SD `_cialai._udp` na rede local e serviço onion do Tor embutido de salto único como ponto de encontro e reserva |
+| Tor | Tor Expert Bundle 15.0.22 com tor 0.4.9.12 no desktop, tor-android no Android e Tor.framework no iOS |
+| Caminho do celular | Rede local, depois direto pela internet, depois reserva pelo Tor; pela reserva, tenta subir para direto furando o NAT com coordenação pelo canal de controle. Badges Direta e Reserva |
+| Pareamento | Payload `CIALAI2.` com a chave do computador, o onion sempre presente e até seis candidatos, abaixo de 700 bytes; o QR gira a cada 90 s e expira em 600 s; a entrada restrita de uma chave não registrada só alcança `POST /pair`; aprovação opcional por código |
+| Credencial e revogação | Token `cdt1` por aparelho com rotação em 30 dias; a revogação fecha as sessões nos dois transportes e a ponte fecha com 4401 |
+| Redes públicas | Rede Tor, STUN opcional e DNS-SD na rede local |
+| Limites | Computador ligado e com o app aberto; redes que bloqueiam Tor e UDP ficam sem caminho; a reserva é mais lenta; pareamentos da 0.1.x não migram e é preciso parear de novo |
+| Validação | Suítes automatizadas e testes com Tor real em processo; o roteiro físico em `docs/testes/roteiro-conectividade.md` segue pendente em aparelhos reais |
+
+As seções Sidecar, Protocolo por stdio e a linha Desktop de Diretórios de estado e logs descrevem o contrato v2. As seções sobre o Headscale, o `tsnet`, o `ControlAdmin`, a borda com `WhoIs`, o payload `CIALAI1.`, o plano B com o app da Tailscale, a integração em Docker e os spikes da Fase 0 são históricas até CON-070. Pela decisão CON-D12, o código do modo Headscale continua no repositório, inerte, até a validação em aparelhos da Fase 7, e `infra/headscale` existe só como histórico.
+
 Este documento especifica a camada que liga o celular ao computador: o Headscale auto hospedado, o núcleo Go do túnel, a borda no desktop, o proxy no celular, o pareamento por QR, o registro de dispositivos, o modelo de ameaças, os testes e os spikes que precisam passar antes de qualquer outra fase.
 
 ## Estado em 13/09/2026

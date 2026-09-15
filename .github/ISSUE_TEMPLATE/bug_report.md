@@ -24,7 +24,7 @@ List the smallest set of steps that reproduces the problem with test data.
 - Operating system and version:
 - Desktop or mobile device:
 - Local or paired session:
-- Headscale version when relevant:
+- Connection badge when relevant, Direct or Backup:
 
 ## Evidence
 

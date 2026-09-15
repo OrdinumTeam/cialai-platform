@@ -180,6 +180,24 @@ O sidecar precisa ser compilado para o triplo de destino antes do Tauri. A CI de
 push e pull request prepara bundles sem credenciais; publicar, assinar e criar
 release pertencem a fluxos separados.
 
+## Conectividade com o celular
+
+A conectividade automática sobe igual nos três sistemas quando o app abre, sem
+servidor Headscale e sem Docker: identidade Ed25519, ouvinte QUIC em UDP 4740
+ou porta livre, mapeamento por UPnP, NAT-PMP ou PCP, STUN opcional, anúncio
+DNS-SD na rede local e serviço onion do Tor de salto único como encontro e
+reserva. O que muda por sistema é o Tor empacotado:
+
+| Alvo | Tor no desktop |
+| --- | --- |
+| macOS arm64 e x86_64 | Tor Expert Bundle 15.0.22 com tor 0.4.9.12, conferido por SHA-256 e assinado com Developer ID nas releases |
+| Linux x86_64 | Tor Expert Bundle 15.0.22 com tor 0.4.9.12, conferido por SHA-256 |
+| Linux arm64 | Sem pacote do Tor; o build sai sem a conexão de reserva e o caminho direto continua |
+| Windows x86_64 | Tor Expert Bundle 15.0.22 com tor 0.4.9.12, conferido por SHA-256 |
+
+O comportamento em redes e aparelhos reais segue pendente no roteiro
+`docs/testes/roteiro-conectividade.md`.
+
 ## Como validar
 
 Em qualquer sistema, gere o sidecar antes da suíte e limite Rust a dois jobs:

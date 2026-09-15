@@ -7,9 +7,9 @@
 | `apps/desktop` no macOS | Implementado | Tauri, estúdio, ponte e supervisor compilam e passam nas suítes locais |
 | `packages/ui` | Implementado | Entradas desktop e celular, marca e checks de sincronização estão integrados |
 | `packages/protocol` | Implementado | Esquema, fixtures e transporte remoto passam nos testes Node |
-| `packages/tunnel-core` | Implementado | Sidecar, borda, proxy, pareamento e cliente Headscale passam em Go e na integração Docker local |
+| `packages/tunnel-core` | Implementado | Em 15/09/2026: identidade, transportes direto e Tor, rendezvous, DNS-SD, borda, proxy, pareamento v2 e sidecar v2 passam em Go, com testes em processo contra a rede Tor real; o modo Headscale segue no repositório, inerte, até CON-070 |
 | `apps/mobile` | Preparado | Casca Expo e wrappers Swift e Kotlin existem; nenhum aparelho ou archive assinado foi executado |
-| `infra/headscale` | Implementado | Receita e política existem e a política foi exercitada localmente; implantação pública continua pendente |
+| `infra/headscale` | Implementado | Receita e política das prévias 0.1.x, exercitadas localmente; desde 15/09/2026 ficam só como histórico, fora do caminho do produto |
 | Linux e Windows desktop | Pendente | O desenho está especificado, mas a implementação da frente paralela não está integrada nesta linha |
 | Distribuição | Preparado | Workflows e updater existem; assinatura, artefatos publicados, instalações e lojas continuam pendentes |
 
@@ -18,26 +18,31 @@ O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda 
 ## Desenho alvo
 
 ```
-┌──────────────────────────── Desktop Cialai, Tauri 2 ────────────────────────────┐
+┌───────────────────────────── Desktop Cialai, Tauri 2 ────────────────────────────┐
 │ WebView: React, estúdio de terminais, onboarding, Vincular celular, Dispositivos │
 │ Rust: TerminalManager, procs por SO, journal, resume, files, git, watch          │
 │ Rust: ponte WebSocket em 127.0.0.1:3720, aceita só quem traz o segredo da borda  │
-│ Rust: tunnel.rs supervisiona o sidecar por stdio; chave da API no keychain       │
-│ Sidecar Go cialai-tunnel: nó tsnet registrado no Headscale; borda na tailnet     │
-│   :4740 servindo a página do celular, /api/health, /pair e o proxy de /pty para  │
-│   a ponte; cliente da API do Headscale; registro de dispositivos                 │
-└───────────────┬──────────────────────────────────────────────────────────────────┘
-                │ WireGuard ponta a ponta, direto ou pelo DERP embutido
-┌───────────────┴────────────────┐       ┌────────────────────────────────────────┐
-│ Headscale 0.29.3 auto hospedado│       │ Celular Cialai, Expo                    │
-│ HTTPS 443, DERP embutido com   │       │ Núcleo Go por gomobile: nó tsnet,       │
-│ verify_clients, STUN udp 3478, │       │   pareamento nativo por POST /pair,     │
-│ API /api/v1, um usuário por    │       │   proxy reverso em 127.0.0.1:47400 que  │
-│ pessoa, política autogroup:self│       │   injeta o token do dispositivo         │
-└────────────────────────────────┘       │ WebView em http://127.0.0.1:47400/      │
-                                         │ Leitor de QR, Face ID, Secure Store     │
-                                         └─────────────────────────────────────────┘
+│ Rust: tunnel.rs supervisiona o sidecar por stdio e entrega o tor empacotado      │
+│ Sidecar Go cialai-tunnel: identidade Ed25519; ouvinte QUIC em UDP 4740 com TLS   │
+│   1.3 mútuo; mapeamento UPnP, NAT-PMP ou PCP; STUN opcional; anúncio DNS-SD      │
+│   _cialai._udp; tor do Tor Expert Bundle com serviço onion de salto único; borda │
+│   que serve a página do celular, /api/health, /pair e o proxy de /pty à ponte    │
+└───────────────┬───────────────────────────────────────┬──────────────────────────┘
+                │ Direta: QUIC com TLS 1.3 mútuo        │ Reserva: TLS 1.3 mútuo
+                │ rede local, IPv6, porta mapeada       │ dentro da rede Tor
+                │ ou endereço refletido por STUN        │
+┌───────────────┴───────────────────────────────────────┴──────────────────────────┐
+│ Celular Cialai, Expo                                                             │
+│ Núcleo Go por gomobile: gerenciador de caminho, rede local, direto pela internet │
+│   e reserva pelo Tor, com furo de NAT coordenado pelo canal de controle;         │
+│   pareamento nativo por POST /pair; proxy reverso em 127.0.0.1:47400 que injeta  │
+│   o token do dispositivo                                                         │
+│ Tor do celular: tor-android no Android, Tor.framework no iOS                     │
+│ WebView em http://127.0.0.1:47400/, leitor de QR, Face ID, Secure Store          │
+└──────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+Nenhum servidor da pessoa, da Ordinum ou do projeto participa. As redes públicas usadas são a rede Tor, o STUN opcional e o DNS-SD na rede local.
 
 ## Componentes
 
@@ -46,9 +51,9 @@ O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda 
 | `apps/desktop` | Tauri 2.11, Rust 1.85 ou mais novo | `$CONTROL/macos/src-tauri` | Janela, PTY, processos, jornal, retomada, arquivos, Git, observador, prévias, Dev Browser, Office, uso do plano, ponte, supervisor do sidecar, pareamento e dispositivos na interface |
 | `packages/ui` | React 18, Vite 7, xterm.js 6, CodeMirror 6 | `$CONTROL/frontend/src` | Estúdio, casca desktop, casca do celular, tokens e componentes compartilhados |
 | `packages/protocol` | JavaScript e JSON | `$CONTROL/frontend/src/lib/remote.js`, `native.js`, `sensitive.js`, `ios/docs/ponte.md` | Contrato da ponte e do pareamento, cliente remoto, fixtures compartilhadas pelos testes Go, Rust e JS |
-| `packages/tunnel-core` | Go 1.26.5, `tailscale.com` 1.102.0 | Novo | Nó `tsnet`, borda, proxy, pareamento, cliente Headscale, sidecar e ligação `gomobile` |
-| `apps/mobile` | Expo SDK 57, React Native 0.86, módulo nativo em Swift e Kotlin | `$CONTROL/ios/app` | Casca com WebView, leitor de QR, perfis, biometria, proxy em loopback pelo núcleo Go |
-| `infra/headscale` | Docker Compose, Headscale 0.29.3 | Novo | Receita de auto hospedagem com DERP embutido, Let's Encrypt e política |
+| `packages/tunnel-core` | Go 1.26.5, `quic-go`, `bine`, `pion/mdns` e o mapeador de portas de `tailscale.com` 1.102.0 | Novo | Identidade, transportes direto e Tor, rendezvous e furo de NAT, DNS-SD, borda, gerenciador de caminho e proxy do celular, pareamento, sidecar e ligação `gomobile`; o modo Headscale fica inerte até CON-070 |
+| `apps/mobile` | Expo SDK 57, React Native 0.86, módulo nativo em Swift e Kotlin, tor-android e Tor.framework | `$CONTROL/ios/app` | Casca com WebView, leitor de QR, computadores pareados, badges Direta e Reserva, biometria, proxy em loopback pelo núcleo Go |
+| `infra/headscale` | Docker Compose, Headscale 0.29.3 | Novo | Histórico: receita de auto hospedagem das prévias 0.1.x, fora do caminho do produto |
 | `tools` | Node, Swift, Playwright | `$CONTROL/frontend/scripts`, `macos/tools`, `scripts/cm-*.sh` | Verificações, capturas, self test, disparo e acompanhamento de builds |
 
 ## Processos e portas
@@ -56,11 +61,13 @@ O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda 
 | Processo | Onde escuta | Quem conecta | Observação |
 | --- | --- | --- | --- |
 | Ponte Rust | `127.0.0.1:3720`, configurável por `CIALAI_BRIDGE_PORT`; sem a variável e com a porta ocupada por outro Cialai ou pelo Control, abre numa porta livre do loopback e o supervisor informa essa porta ao sidecar | Só a borda do sidecar, que apresenta `X-Cialai-Proxy-Secret` | Sem o segredo, 403. `--dev-open-bridge` libera para `websocat` em desenvolvimento |
-| Borda do sidecar | `:4740` no IP da tailnet, nunca em loopback | Celulares do mesmo usuário do Headscale | Serve a página do celular, `/api/health`, `/pair` e o upgrade de `/pty` |
+| Ouvinte direto | UDP `4740` em todas as interfaces; ocupada, porta livre | Sessões QUIC com TLS 1.3 mútuo | Chave não registrada recebe sessão restrita que só alcança `POST /pair` enquanto há pareamento ativo |
+| Serviço onion | Serviço onion de salto único do `tor` empacotado, com `SocksPort 0` | As mesmas sessões com TLS 1.3 mútuo pela rede Tor e o canal de controle de chaves registradas | O endereço deriva de `tor/onion.key` e vai sempre no QR |
+| Borda do sidecar | Sem socket próprio; atende os fluxos dos dois transportes | Celulares pareados | Serve a página do celular, `/api/health`, `/pair` e o upgrade de `/pty` |
 | Proxy do celular | `127.0.0.1:47400`, reserva de `47401` a `47409` | Só o WebView do próprio app, provado pelo cookie de nonce | Injeta o Bearer do dispositivo; porta fixa para a origem da página não mudar |
 | Vite em desenvolvimento | `127.0.0.1:1420` | WebView do Tauri | `devUrl` do `tauri.conf.json`, como no protótipo |
 | Dev Browser | `127.0.0.1:<porta aleatória>` por sessão | WebView do desktop por CDP | Preservado do protótipo; recusado no celular |
-| Headscale | `443` HTTPS, `80` para o HTTP-01, `3478` udp para STUN | Nós do desktop e dos celulares | Servidor com IP público que a pessoa hospeda |
+| Anúncio DNS-SD | mDNS na rede local | Celulares na mesma rede | `_cialai._udp` com nome derivado da impressão da chave, nunca o nome do computador |
 
 ## Fluxos
 
@@ -74,21 +81,25 @@ A página no WebView chama `pty_attach` pela ponte. A ponte cria um `Channel` em
 
 ### Pareamento
 
-Descrito passo a passo no documento 06. Em resumo: o desktop cria uma chave de pré-autenticação de uso único no Headscale e um segredo de pareamento, mostra o QR; o celular lê, entra na tailnet com a chave, disca a borda e faz `POST /pair` com o segredo; a borda valida com `WhoIs`, registra o dispositivo e devolve um token; dali em diante o proxy do celular injeta o token em cada upgrade do WebSocket.
+Descrito no documento 06. Em resumo: o desktop mostra um QR `CIALAI2.` com a chave pública do computador, o endereço onion, até seis candidatos e um segredo de uso único, abaixo de 700 bytes, que gira a cada 90 s e expira em 600 s; o celular lê, fixa a chave do computador e disca a rede local, o direto pela internet ou o onion com TLS 1.3 mútuo; a sessão de uma chave ainda não registrada só alcança `POST /pair`; com aprovação ligada, a pessoa confere o código no computador; a borda registra a chave do celular e devolve o token `cdt1` e o cartão de alcance; dali em diante o proxy do celular injeta o token em cada upgrade do WebSocket.
 
 ### Revogação
 
-A tela Dispositivos manda `devices.revoke` ao sidecar. A borda fecha os sockets do dispositivo com 4401 em menos de 1 s; a página mostra "removido" e não tenta de novo, porque `remote.js` já para nesse código. Com `network` ligado, o sidecar expira e apaga o nó no Headscale, e o celular perde a tailnet em menos de um minuto.
+A tela Dispositivos manda `devices.revoke` ao sidecar. A borda fecha os sockets do dispositivo com 4401 em menos de 1 s; a página mostra "removido" e não tenta de novo, porque `remote.js` já para nesse código. A revogação fecha as sessões do aparelho nos dois transportes, inclusive as conexões de controle pelo onion, e a chave passa a ser recusada.
 
 ### Reinício do desktop
 
-O Rust encerra os shells na saída, grava o jornal e mantém a conversa do agente. Ao reabrir, as sessões voltam desconectadas com nome, ordem e pastas; o histórico é injetado no xterm em segundo plano, uma por vez; `Reabrir` abre um shell novo na mesma pasta, espera o prompt e digita o comando de retomada do agente. O sidecar sobe de novo com o mesmo estado do `tsnet`, então o nó continua o mesmo e os tokens dos celulares continuam válidos.
+O Rust encerra os shells na saída, grava o jornal e mantém a conversa do agente. Ao reabrir, as sessões voltam desconectadas com nome, ordem e pastas; o histórico é injetado no xterm em segundo plano, uma por vez; `Reabrir` abre um shell novo na mesma pasta, espera o prompt e digita o comando de retomada do agente. O sidecar sobe de novo com a mesma identidade e a mesma chave do onion, então o computador continua o mesmo para os celulares e os tokens continuam válidos.
 
 ## Por que o Headscale funciona agora
+
+Histórico até CON-070: desde 15/09/2026 o produto não usa o Headscale. O raciocínio sobre o proxy em loopback continua valendo para a conectividade automática, em que o TLS 1.3 mútuo cifra ponta a ponta.
 
 O protótipo descartou o Headscale porque o `tailscale serve` em HTTPS depende de certificados no domínio `ts.net`, que só a Tailscale hospedada emite, e o WebView do iPhone recusava a conexão sem certificado válido. O Cialai não usa `tailscale serve` nem HTTPS na borda: o cliente Tailscale está embutido nos próprios apps, o WireGuard cifra ponta a ponta e o WebView fala com um proxy em loopback dentro do app. Dois fatos adicionais, verificados na revisão: o ATS do iOS não se aplica a endereços IP, então até `http://100.64.x.y:4740/` carregaria sem exceção, o que faz do proxy uma escolha de desenho e não uma necessidade; e o app oficial da Tailscale não aceita chave de pré-autenticação com servidor de coordenação próprio, o que enfraquece o plano B mas não o desenho principal.
 
 ## Decisões e alternativas descartadas
+
+As linhas sobre `tsnet`, usuário do Headscale, chave da API e DERP foram superadas ou emendadas em 15/09/2026 pelas decisões CON-D01 e CON-D02 e ficam como registro.
 
 | Decisão | Alternativa descartada | Motivo |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 # Mobile
 
-Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CONTROL/ios/app`, com quatro acréscimos: o alvo Android, o leitor de QR, os perfis de Headscale e um módulo nativo que embute o núcleo Go do túnel e expõe o proxy em loopback que o WebView usa. A interface continua sendo a página que o computador serve. Nada é reimplementado em React Native além das telas de casca.
+Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CONTROL/ios/app`, com quatro acréscimos: o alvo Android, o leitor de QR, a lista de computadores pareados e um módulo nativo que embute o núcleo Go do túnel e expõe o proxy em loopback que o WebView usa. Desde 15/09/2026 o celular alcança o computador pela conectividade automática: rede local, direto pela internet e reserva pelo Tor, com tor-android no Android e Tor.framework no iOS; não há servidor Headscale nem perfis. A interface continua sendo a página que o computador serve. Nada é reimplementado em React Native além das telas de casca.
 
 ## Estado em 13/09/2026
 
@@ -50,18 +50,18 @@ type AppScreen =
   | { kind: 'offline'; desktopId: string };
 ```
 
-Bootstrap: lê `profiles.json`; sem perfil, `pair`; com perfis, `StartProfile` do último usado, `OpenDesktop` do último desktop, `shell` com a URL devolvida; falha do túnel ou da saúde, `offline`. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente. Mudança de rede pelo NetInfo chama `NotifyNetworkChange`.
+Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincular de novo quando perfis antigos do Headscale foram apagados; com o último computador, `Connect` e `OpenDesktop`, `shell` com a URL devolvida; falha do caminho ou da saúde, `offline`. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente. Mudança de rede pelo NetInfo chama `NotifyNetworkChange`.
 
 ## Telas
 
 | Tela | Conteúdo |
 | --- | --- |
 | Pair | Leitor de QR em tela cheia por `CameraView` com `barcodeScannerSettings` só `qr` e `onBarcodeScanned` desligado após a primeira leitura; texto "Abra Vincular celular no computador"; botão de colar o texto do QR para quem prefere; permissão da câmera pedida aqui com o texto explicando o uso |
-| Confirmação | "Vincular a <nome do desktop>?", com o servidor e o usuário do payload; com aprovação exigida, mostra o código de 4 dígitos; progresso: entrando na rede, procurando o computador, pareando |
-| Desktops | Lista de desktops com nome, estado online, último acesso e perfil; tocar abre `shell`; menu com renomear, esquecer, e `Vincular outro`; trocar de perfil quando há mais de um Headscale, com aviso de 3 a 6 s |
+| Confirmação | "Vincular a <nome do desktop>?", com a impressão digital do computador para conferir com a exibida no computador; com aprovação exigida, a pessoa confere o código de 4 dígitos no computador; progresso: lendo código, procurando na rede local, conectando pela internet, conectando pela reserva, confirmando |
+| Desktops | Lista de computadores com nome, estado, último acesso e badge Direta ou Reserva; tocar abre `shell`; menu com renomear, esquecer, e `Vincular outro` |
 | Shell | WebView com a página do computador; toolbar nativa com nome do desktop, ponto do túnel, botão Desktops; teclado e fileira de teclas vêm da página |
-| Offline | Retentativas e `Tentar agora`; motivo visível: túnel, computador ou servidor |
-| Ajustes | Perfis com servidor e usuário, esquecer perfil, nível de log, versão do núcleo e da página, licenças |
+| Offline | Retentativas e `Tentar agora`; motivo visível: computador fora de alcance, reserva preparando, reserva indisponível ou celular removido |
+| Ajustes | Diagnóstico avançado com transporte e caminho ativos, conexão de reserva e redes públicas usadas; nível de log, versão do núcleo e da página, licenças |
 
 ## Módulo nativo `cialai-tunnel`
 
@@ -70,25 +70,27 @@ Módulo local do Expo Modules API em `apps/mobile/modules/cialai-tunnel`, com `e
 API em TypeScript, espelho da API `gomobile` do documento 06:
 
 ```ts
-export type TunnelEvent = { kind: 'state' | 'peer' | 'proxy' | 'pair' | 'log'; payload: unknown };
+export type Transport = 'direct' | 'tor';
+export type TunnelEvent = { kind: 'state' | 'path' | 'tor' | 'proxy' | 'pair' | 'log'; payload: unknown };
 export function version(): string;
 export function inspectPairPayload(payload: string): Promise<PairInspection>;
 export function pair(payload: string, device: { name: string; model: string; platform: 'ios' | 'android'; app: string }): Promise<PairResult>;
-export function startProfile(profileId: string): Promise<void>;
+export function connect(desktopId: string): Promise<ConnectResult>;
+export function openDesktop(desktopId: string, deviceToken: string, preferredPort?: number): Promise<{ url: string; port: number; nonce: string; warning?: string }>;
+export function closeDesktop(desktopId: string): Promise<void>;
 export function stop(): Promise<void>;
 export function status(): Promise<TunnelStatus>;
-export function openDesktop(desktopId: string, deviceToken: string, preferredPort?: number): Promise<{ url: string; port: number; nonce: string }>;
-export function closeDesktop(desktopId: string): Promise<void>;
+export function desktops(): Promise<DesktopRecord[]>;
 export function notifyNetworkChange(reachable: boolean): void;
 export function notifyForeground(active: boolean): void;
-export function forgetProfile(profileId: string): Promise<void>;
+export function forgetDesktop(desktopId: string): Promise<void>;
 export function setLogLevel(level: 'error' | 'info' | 'debug'): void;
 export function addListener(handler: (event: TunnelEvent) => void): { remove(): void };
 ```
 
 Integração de build: iOS por `Tunnelcore.xcframework` referenciado no podspec por `vendored_frameworks`, com o framework de dispositivo separado do de simulador para a submissão à loja; Android por `tunnelcore.aar` em `android/libs` com a dependência declarada no `build.gradle` do módulo. Os artefatos vêm do CI de `packages/tunnel-core`, com SHA-256, e um script `tools/build-tunnel-mobile.sh` gera os dois localmente com Go, `gomobile`, Xcode e NDK fixados. O diretório de estado passado a `NewTunnel` é o de dados do app, fora do backup.
 
-Tokens: `expo-secure-store` com chave `cialai.device.<desktopId>` e `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, como o protótipo faz com o endereço. `profiles.json` no diretório de documentos do app guarda `{profiles: [{id, controlUrl, userId, userName, lastUsedAt, desktops: [{id, name, port, nodeKey, deviceId, pairedAt, lastSeenAt}]}], lastProfileId, lastDesktopId}`, sem segredos.
+Tokens: `expo-secure-store` com chave `cialai.device.<desktopId>` e `WHEN_UNLOCKED_THIS_DEVICE_ONLY`, como o protótipo faz com o endereço. `desktops.json` no diretório de documentos do app guarda `{version: 2, desktops: [{id, name, fingerprint, deviceId, pairedAt, lastSeenAt, lastTransport}], lastDesktopId}`, sem segredos; os perfis do Headscale de versões anteriores são apagados na primeira abertura e o app pede para vincular de novo.
 
 ## WebView
 
@@ -106,7 +108,7 @@ Política de `ios/docs/arquitetura.md` preservada e igual no Android por `expo-l
 | Sessão | A casca | Ao abrir o app e de novo depois de 5 minutos em segundo plano; a página pergunta por `confirmSensitive('session')` e a casca responde sem prompt se a sessão está desbloqueada; `pty_spawn` |
 | Por ação | A casca, toda vez | `pty_kill`, primeira digitação por terminal e `pty_view_claim`, compartilhados até revogação |
 
-A ponte não sabe de biometria; a defesa contra página adulterada é o token por dispositivo e a tailnet.
+A ponte não sabe de biometria; a defesa contra página adulterada é o token por dispositivo e o TLS 1.3 mútuo com a chave do aparelho.
 
 ## Android
 
@@ -115,7 +117,7 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 | Projeto nativo | `expo prebuild --platform android` no CI, nunca versionado, como `ios/app/android` hoje |
 | Texto claro | Plugin de configuração que grava `res/xml/network_security_config.xml` com `base-config cleartextTrafficPermitted="false"` e `domain-config` liberando só `127.0.0.1`; nunca `usesCleartextTraffic` global |
 | Botão voltar | `BackHandler` na casca envia `navigate-back` à página, que volta do preview para arquivos, de arquivos para o terminal e do terminal para a lista; na lista, sai para Desktops |
-| Ciclo de vida | Em segundo plano o núcleo fica vivo 2 minutos e então `Stop()`; ao voltar, `StartProfile` e `OpenDesktop` em 2 a 4 s com a tela Offline mostrando "reconectando" |
+| Ciclo de vida | Em segundo plano o núcleo fica vivo 2 minutos e então `Stop()`; ao voltar, `Connect` e `OpenDesktop` em 2 a 4 s com a tela Offline mostrando "reconectando" |
 | Backup | `allowBackup` desligado ou `fullBackupContent` excluindo `cialai/`; tokens no Keystore pelo Secure Store |
 | Permissões | `CAMERA` para o QR; `USE_BIOMETRIC`; `INTERNET`; nada de VPN, localização ou notificações |
 | SDK | `targetSdk` 36 por `expo-build-properties`, exigência do Play para atualizações a partir de 31/08/2026, como o Advoris já faz; `minSdk` 26 pelo `gomobile` |
@@ -126,9 +128,9 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 
 | Tema | Decisão |
 | --- | --- |
-| Textos de permissão | `NSCameraUsageDescription` para ler o QR; `NSLocalNetworkUsageDescription` para o caminho direto na mesma rede, cuja recusa só força o DERP; `NSFaceIDUsageDescription` já existente; nada de VPN e nenhum NetworkExtension |
+| Textos de permissão | `NSCameraUsageDescription` para ler o QR; `NSLocalNetworkUsageDescription` para o DNS-SD e o caminho direto na mesma rede, cuja recusa leva ao direto pela internet ou à reserva pelo Tor; `NSFaceIDUsageDescription` já existente; nada de VPN e nenhum NetworkExtension |
 | Conformidade de exportação | `usesNonExemptEncryption: false` desde 14/09/2026: algoritmos padrão fora da App Store da França dispensam documentação na Apple. Mercado de massa e relatório anual continuam valendo; distribuir na França exige a declaração francesa, o código aprovado e o Info.plist verdadeiro. Confirmar com o jurídico |
-| Proteção de dados | Estado do `tsnet` sob `NSFileProtectionCompleteUntilFirstUserAuthentication` e `isExcludedFromBackup` |
+| Proteção de dados | Estado do núcleo e do Tor sob `NSFileProtectionCompleteUntilFirstUserAuthentication` e `isExcludedFromBackup` |
 | Mínimo | iOS 16.4, como o protótipo |
 | Segundo plano | Sem modos de segundo plano; 30 s depois de sair o iOS congela as threads do Go; ao voltar, `rebind` e `restun` e o proxy derruba upstreams mortos para a página religar |
 | Texto de revisão | "Encrypted link to your own computer"; nunca a palavra VPN em interface, metadados ou notas; desktop de demonstração e vídeo do pareamento nas notas de revisão; ensaio por TestFlight externo antes da submissão |
@@ -140,11 +142,11 @@ Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e 
 
 ## Testes
 
-Jest com `jest-expo`, herdando os 65 casos de `ios/app` e acrescentando: inspeção do QR em cada estado de erro; `validateControlUrl` aceitando só a URL do proxy em produção; saúde com serviço `cialai`; loja de perfis; transições de primeiro e segundo plano chamando o módulo nativo; `navigate-back`; renderização de Pair, Desktops e Offline. Verificações da página: `check-phone-terminal.mjs`, `check-phone-workbench.mjs`, `check-mobile.mjs` e `check-mobile-readonly-ui.mjs` portados. Roteiros manuais de rede no documento 06, com iPhone e Android reais, porque simuladores não têm UDP confiável para o WireGuard.
+Jest com `jest-expo`, herdando os 65 casos de `ios/app` e acrescentando: inspeção do QR em cada estado de erro; `validateControlUrl` aceitando só a URL do proxy em produção; saúde com serviço `cialai`; loja de perfis; transições de primeiro e segundo plano chamando o módulo nativo; `navigate-back`; renderização de Pair, Desktops e Offline. Verificações da página: `check-phone-terminal.mjs`, `check-phone-workbench.mjs`, `check-mobile.mjs` e `check-mobile-readonly-ui.mjs` portados. Roteiros manuais de rede no documento 06, com iPhone e Android reais, porque simuladores não têm UDP confiável para o caminho direto; o roteiro físico da conectividade está em `docs/testes/roteiro-conectividade.md`.
 
 ## Lojas
 
-Identificadores, credenciais por referência e workflows no documento 10. Exigências específicas: questionário de privacidade da App Store e Data safety do Play com "sem coleta", porque nada sai do aparelho além do túnel para o próprio computador; política de privacidade publicada; capturas por tamanho de tela; textos em inglês e português; ícone opaco de 1024 px conferido por `scripts/check-app-icon.swift`, herdado do Control. Textos das lojas e políticas em espanhol continuam pendentes por estarem fora da tarefa 6.6.
+Identificadores, credenciais por referência e workflows no documento 10. Exigências específicas: questionário de privacidade da App Store e Data safety do Play com "sem coleta", porque nada sai do aparelho além da conexão com o próprio computador, direta ou pela rede Tor, e das consultas opcionais de STUN; política de privacidade publicada; capturas por tamanho de tela; textos em inglês e português; ícone opaco de 1024 px conferido por `scripts/check-app-icon.swift`, herdado do Control. Textos das lojas e políticas em espanhol continuam pendentes por estarem fora da tarefa 6.6.
 
 ## Riscos
 
@@ -152,6 +154,6 @@ Identificadores, credenciais por referência e workflows no documento 10. Exigê
 | --- | --- |
 | Tamanho e memória do runtime Go no celular | Spike 1 com limites numéricos; só arm64 na loja |
 | Reconexão após troca de rede ou segundo plano | Spike 2; `NotifyNetworkChange` e `NotifyForeground`; prazo de 60 s no proxy |
-| Revisão da Apple lendo o túnel como VPN | Texto, notas e ensaio por TestFlight externo; plano B do documento 06 |
+| Revisão da Apple lendo o túnel como VPN | Texto, notas e ensaio por TestFlight externo |
 | Outro app ou página acessando o proxy em loopback no Android | Nonce, cookie estrito e `Origin` |
 | Expo Go inutilizável | Dev client; documentado no documento 09 |

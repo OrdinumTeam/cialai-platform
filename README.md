@@ -1,8 +1,8 @@
 # Cialai
 
-Cialai is an open source terminal studio for desktop and mobile. It keeps shells, files, Git context, previews and coding agent sessions together, then lets you reach the same terminal history from a paired phone through infrastructure you control.
+Cialai is an open source terminal studio for desktop and mobile. It keeps shells, files, Git context, previews and coding agent sessions together, then lets you reach the same terminal history from a paired phone. The computer and the phone connect on their own, directly whenever the network allows, with no server run by you, by Ordinum or by the project.
 
-> Cialai is preparing its first public release. Source code and local automated checks are available today. Signed installers, native mobile builds and store listings have not been published yet.
+> Cialai is in preview. Preview installers for macOS, Windows, Linux and Android are published on GitHub Releases. Version 1.0.0, the iOS app and store listings have not been published yet.
 
 ## A terminal workspace that travels with you
 
@@ -24,7 +24,7 @@ These captures use fictional projects and the reproducible demo mode. The comple
 - Browse and edit project files, inspect Git changes and open local previews.
 - Use the built in Dev Browser for web development workflows.
 - Pair iOS and Android devices with a short lived QR code.
-- Coordinate private device connectivity with your own Headscale server.
+- Reach the computer from the phone automatically, over a direct encrypted connection when possible and through an embedded Tor onion service as backup.
 - Keep project contents and credentials out of Cialai hosted services because there are none.
 
 ## Project status
@@ -32,10 +32,10 @@ These captures use fictional projects and the reproducible demo mode. The comple
 | Area | Status |
 | --- | --- |
 | Desktop studio | Implemented and verified locally on macOS |
-| Headscale integration | Implemented with local Docker integration coverage |
-| iOS and Android | Source prepared and JavaScript tests passing, native builds and real device checks pending |
-| Linux and Windows | Rust suite verified on Ubuntu 22.04, Windows cross checked only, native CI evidence pending |
-| Signed releases and stores | Pending certificates, accounts, external review and publication |
+| Automatic connectivity | Implemented with automated suites and in process tests against the real Tor network; the physical checklist on real devices is pending |
+| iOS and Android | Android preview APK published; iOS build, store review and real device checks pending |
+| Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; physical Windows machines and code signing pending |
+| Signed releases and stores | macOS Developer ID signing and notarization accepted locally; Windows signing, store accounts, external review and version 1.0.0 pending |
 
 Prepared code is not the same as verified distribution. See the [execution handoff](./docs/13-progresso-e-handoff.md) for exact evidence and remaining external work.
 
@@ -48,7 +48,7 @@ npm ci
 npm run dev:desktop
 ```
 
-The development command builds the local `cialai-tunnel` sidecar before starting Tauri. No private Headscale instance or project data is bundled with the repository.
+The development command builds the local `cialai-tunnel` sidecar before starting Tauri and stages the pinned Tor Expert Bundle after checking its SHA-256. When no Tor bundle exists for your target, the local build runs without the backup connection. No credentials or project data are bundled with the repository.
 
 Run the automated suites with:
 
@@ -99,11 +99,20 @@ npm run dev:desktop
 
 Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A physical Windows machine, WebView2 with a GPU, installing the packages and code signing have not been exercised. Behavior differences between systems are documented in [docs/14-diferencas-por-plataforma.md](./docs/14-diferencas-por-plataforma.md).
 
-## Connect your own Headscale server
+## Connect your phone
 
-The desktop setup assistant accepts a Headscale server you operate. A reproducible deployment recipe, security defaults and diagnostics live in [infra/headscale](./infra/headscale/README.md).
+There is nothing to set up. When the desktop app opens, the computer brings its connectivity up by itself:
 
-After the desktop joins your network, choose **Link phone**, scan the short lived QR code in the mobile app and confirm the pairing code when approval is enabled. Real device validation remains required before the first mobile release.
+- An Ed25519 key identifies the computer and each phone.
+- A direct QUIC listener on UDP port 4740, or a free port when that one is taken, accepts only mutual TLS 1.3 sessions.
+- The router maps the port through UPnP, NAT-PMP or PCP when it allows.
+- Optional STUN requests to public Cloudflare and Google servers find the public address.
+- A DNS-SD `_cialai._udp` announcement makes the computer visible on the local network.
+- An embedded single hop Tor onion service works as meeting point and backup.
+
+Choose **Pair phone**, scan the QR code in the mobile app and confirm the approval code when approval is enabled. The phone tries the local network first, then the direct path over the internet, then the backup through Tor. While on the backup, it keeps trying to upgrade to a direct path with a NAT punch coordinated over the control channel. The phone and the Devices screen show a **Direct** or **Backup** badge for each connection.
+
+Limits: the computer must be on with Cialai open; networks that block both Tor and UDP leave no path; the backup is slower than a direct connection. Pairings from 0.1.x previews do not carry over, so pair again after updating. Real device validation remains required before the first mobile release.
 
 ## Repository map
 
@@ -113,7 +122,7 @@ apps/mobile           Expo application and native tunnel modules
 packages/ui           Shared React terminal studio
 packages/protocol     Desktop and phone bridge protocol
 packages/tunnel-core  Go networking core and desktop sidecar
-infra/headscale       Self hosted coordination recipe
+infra/headscale       Historical Headscale recipe, no longer used by the product
 tools                 Checks, builds, browser tests and release helpers
 docs                  Architecture, decisions, evidence and handoff
 ```
@@ -122,7 +131,7 @@ Start with the [documentation index](./docs/README.md) for the architecture and 
 
 ## Privacy and security
 
-Cialai does not provide an account, analytics service or hosted relay. Project contents stay on devices you control and terminal traffic uses end to end encrypted links between paired devices. Operating a Headscale server still carries administrative responsibility. Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability. Legal documents for the first release live in `docs/legal`.
+Cialai does not provide an account, analytics service or hosted relay. Project contents stay on devices you control and terminal traffic uses mutual TLS 1.3 between paired devices, on the direct path and through Tor. The only public networks involved are the Tor network, optional STUN servers and DNS-SD on your local network. Read [SECURITY.md](./SECURITY.md) before reporting a vulnerability. Legal documents for the first release live in `docs/legal`.
 
 ## License
 

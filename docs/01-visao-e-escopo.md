@@ -7,7 +7,7 @@
 | Item | Estado | Evidência e limite |
 | --- | --- | --- |
 | Produto desktop e estúdio no macOS | Implementado | Extração, marca, onboarding, testes e capturas locais estão registrados no documento 13 |
-| Túnel, pareamento e Headscale | Implementado | Núcleo Go, sidecar, ponte, receita e integração local existem; servidor de produção e celular real continuam fora deste aceite |
+| Conectividade automática e pareamento | Implementado | Em 15/09/2026: identidade, transporte direto, Tor embutido, DNS-SD, pareamento v2 e revogação passam nas suítes automatizadas e em testes com Tor real em processo; o roteiro físico em `docs/testes/roteiro-conectividade.md` com aparelhos reais continua fora deste aceite |
 | Casca iOS e Android | Preparado | Interface, módulos nativos e workflows existem, mas não houve build assinado nem execução em aparelho |
 | Código e documentação públicos | Implementado | Licença, README, contribuição, segurança, modelos e documentação estão versionados |
 | Distribuição e lojas | Preparado | Atualizador, materiais, notas de revisão e procedimento da versão 1 existem; publicação e submissão não ocorreram |
@@ -17,7 +17,7 @@ Estado dos critérios de sucesso:
 | Critério | Estado | Evidência necessária para concluir |
 | --- | --- | --- |
 | 1. Primeira instalação e terminal em menos de 3 minutos | Pendente | Instalação limpa cronometrada em macOS, Linux e Windows por pessoa sem contexto prévio |
-| 2. Pareamento real em menos de 1 minuto | Pendente | Headscale externo, desktop empacotado e celular físico com histórico visível |
+| 2. Pareamento real em menos de 1 minuto | Pendente | Desktop empacotado e celular físico, na mesma rede e em outra rede, com histórico visível |
 | 3. Suítes elegíveis sem falhas | Implementado | As suítes locais do macOS estão registradas no documento 13; a matriz remota continua separada nos critérios 4 e no roadmap |
 | 4. Roteiros de rede nas cinco plataformas | Preparado | Folhas iOS e Android existem sem resultados; Linux e Windows ainda dependem da Fase 5 integrada |
 | 5. Cinco estados visuais iguais ao Control | Preparado | Comparação macOS com dados fictícios existe em `docs/evidence/task-1.11`; Linux e Windows não foram conferidos |
@@ -26,7 +26,7 @@ Estado dos critérios de sucesso:
 
 Cialai é um estúdio de terminais para quem trabalha com vários projetos e vários agentes de código ao mesmo tempo. No computador, cada sessão é um shell numa pasta, com um card que mostra o que está rodando, se precisa de atenção e quanto consome de CPU e memória. Trocar de card troca só o que está sendo exibido: processo, histórico, rolagem e arquivos abertos continuam onde estavam. Ao lado do terminal ficam o editor e a árvore do projeto. Fechar o app não apaga o que aconteceu: o histórico volta e as conversas de Claude Code e Codex são retomadas.
 
-No celular, a pessoa vê os mesmos cards, entra em qualquer sessão, lê a saída ao vivo, digita, encerra e consulta os arquivos do projeto. A comunicação é bidirecional e passa por um túnel cifrado ponta a ponta entre os dois aparelhos, coordenado por um Headscale que a própria pessoa hospeda. O vínculo entre computador e celular nasce de um QR code.
+No celular, a pessoa vê os mesmos cards, entra em qualquer sessão, lê a saída ao vivo, digita, encerra e consulta os arquivos do projeto. A comunicação é bidirecional e passa por uma conexão cifrada ponta a ponta entre os dois aparelhos, que sobe sozinha quando o app abre: direta sempre que a rede permite e pelo Tor embutido como ponto de encontro e reserva, sem servidor da pessoa, da Ordinum ou do projeto. O vínculo entre computador e celular nasce de um QR code.
 
 O produto é open source sob Apache 2.0, mantido pela Ordinum, com o código, a documentação, a infraestrutura de exemplo e as configurações de publicação neste monorepo.
 
@@ -36,7 +36,7 @@ O produto é open source sob Apache 2.0, mantido pela Ordinum, com o código, a 
 | --- | --- |
 | Desenvolvedora com vários agentes de código abertos em pastas diferentes | Saber qual sessão pede atenção, qual terminou, quanto do plano do agente já foi gasto, sem alternar janelas |
 | Quem deixa processos longos rodando e sai da mesa | Acompanhar e intervir pelo celular, com o computador acordado e o app aberto |
-| Equipes que não podem depender de um serviço de terceiros no meio do caminho | Túnel próprio, servidor de coordenação próprio, nada escutando fora do loopback |
+| Equipes que não podem depender de um serviço de terceiros no meio do caminho | Nenhum servidor para operar; TLS 1.3 mútuo entre os aparelhos no caminho direto e na reserva pelo Tor, que só transporta bytes cifrados |
 
 ## Princípios herdados do protótipo
 
@@ -44,7 +44,7 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 
 1. Tudo que o card afirma foi observado, nunca inferido. O estado vem do grupo de processos em primeiro plano, de bytes recebidos, do código de saída e dos sinais que o programa emite. O estúdio não diz que um agente "está pensando".
 2. O computador manda, o celular acompanha ou cai. Um celular com rádio ruim nunca trava um shell no computador.
-3. Nada escuta fora do loopback, exceto a borda do túnel, que só existe dentro da tailnet.
+3. Fora do loopback, só o ouvinte direto e o serviço onion recebem conexões, sempre com TLS 1.3 mútuo; uma chave não pareada só alcança o pareamento.
 4. Uma só implementação da interface. O celular recebe a mesma página que o computador empacota; não há segunda interface para manter.
 5. Selecionar outro card muda só o que é exibido. Processo, histórico, rolagem, comando digitado e abas continuam.
 6. O que foi gravado volta. Histórico bruto em disco, tamanho do terminal, conversa do agente, nome, cor, ordem, abas e pastas expandidas sobrevivem ao fechamento e à queda do app.
@@ -54,10 +54,10 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 | Área | Conteúdo |
 | --- | --- |
 | Desktop | App Tauri 2 em Rust com frontend React para macOS, Linux e Windows, com o estúdio completo: sessões, terminal, explorador, editor, Git, prévias de documentos, Dev Browser e uso do plano dos agentes |
-| Onboarding | Instalar, conceder permissões, escolher as pastas de projetos e o shell, criar o primeiro terminal; a rede é opcional e pode ser configurada depois |
+| Onboarding | Instalar, conceder permissões, escolher as pastas de projetos e o shell, criar o primeiro terminal; a rede sobe sozinha e o passo do acesso pelo celular é informativo |
 | Vincular celular | Botão sempre visível na barra lateral e no estado vazio da lista de sessões; QR code com rotação e expiração; tela Dispositivos com revogação |
-| Celular | Apps iOS e Android em Expo, com leitor de QR, perfis de Headscale, WebView da interface servida pelo computador, biometria para ações sensíveis, terminal ajustado à largura do telefone, arquivos somente leitura |
-| Rede | Núcleo Go sobre `tsnet`, embutido no desktop como sidecar e nos celulares como biblioteca; Headscale auto hospedado com receita pronta; DERP embutido; política de acesso; pareamento com token por dispositivo |
+| Celular | Apps iOS e Android em Expo, com leitor de QR, computadores pareados com badges Direta e Reserva, WebView da interface servida pelo computador, biometria para ações sensíveis, terminal ajustado à largura do telefone, arquivos somente leitura |
+| Rede | Núcleo Go embutido no desktop como sidecar e nos celulares como biblioteca: identidade Ed25519, QUIC direto com TLS 1.3 mútuo, mapeamento de porta por UPnP, NAT-PMP ou PCP, STUN opcional, DNS-SD na rede local e serviço onion do Tor embutido de salto único como encontro e reserva; pareamento `CIALAI2.` com token por dispositivo |
 | Monorepo | Código, documentação, infraestrutura de exemplo, scripts de verificação, CI para desktop e configurações de publicação nas lojas |
 
 ## O que fica de fora
@@ -67,7 +67,7 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 | Seções de negócio do Control: clientes, projetos, caixa, fatura, AWS, DLM, documentos, contratos, mapa | Não fazem parte de um produto de terminais |
 | Reuniões e VPN | Módulos do Control sem relação com o estúdio; a VPN do Control é OpenVPN corporativa |
 | Backend Node e Python, launcher `ordinum-control`, integrações n8n, S3, Asaas, OnConte | O estúdio nunca os usou; os terminais vivem em Rust |
-| Serviço hospedado pela Ordinum para coordenação ou pareamento | Fora da v1 por decisão do usuário; a interface `ControlAdmin` deixa a porta aberta |
+| Serviço hospedado pela Ordinum para coordenação ou pareamento | Fora do produto; a conectividade automática da decisão CON-D01 não depende de servidor da pessoa, da Ordinum ou do projeto |
 | Notificações push e Live Activities | Exigiriam um relé fora do computador; o celular acompanha em primeiro plano, como no protótipo |
 | Shells que sobrevivem ao fim do app | Item do roadmap do próprio Control; o Cialai preserva o comportamento atual de histórico e retomada |
 | iPad como layout próprio | O celular recebe a casca de telefone; o iPad recebe a mesma casca, como hoje |
@@ -78,14 +78,14 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 | Decisão | Valor |
 | --- | --- |
 | Nome | Cialai, apesar de o pedido original soletrar C-I-A-L-I-A. Pasta `cialai-platform`, marca `CIALAI`, bundle `br.com.ordinum.cialai`, esquema `cialai://` reservado para depois |
-| Hospedagem do Headscale | Auto hospedado como único caminho da v1, com receita pronta em `infra/headscale`; o app aceita qualquer URL de Headscale |
+| Hospedagem do Headscale | Auto hospedado como único caminho da v1, com receita pronta em `infra/headscale`. Superada em 15/09/2026 pela conectividade automática da decisão CON-D01; `infra/headscale` fica só como histórico |
 | Escopo da primeira versão pública | Estúdio completo, em paridade com o Control, construído em fases internas |
 | Licença | Apache 2.0, com `LICENSE`, cabeçalho curto nos arquivos novos e `NOTICE` com as licenças BSD e MIT das dependências |
 
 ## Critérios de sucesso
 
 1. Uma pessoa que nunca viu o Control instala o Cialai no seu sistema, escolhe as pastas e abre o primeiro terminal em menos de 3 minutos.
-2. Com um Headscale próprio já no ar, o pareamento do celular pelo QR leva menos de 1 minuto e a sessão aparece no telefone com histórico.
+2. Com o Cialai aberto no computador, o pareamento do celular pelo QR leva menos de 1 minuto e a sessão aparece no telefone com histórico.
 3. As suítes de verificação elegíveis do protótipo passam no Cialai sem falhas e com cada caso ignorado justificado: baseline Rust e contagens reais no documento 13, `check-terminal-sync.mjs` com 17 casos, `check-phone-*.mjs`, os testes Node de `terminal-*` e `mobile-*` e o `selftest-app.js` dentro do app.
 4. Os roteiros manuais de rede do documento 06 passam nos três sistemas desktop e nas duas plataformas móveis.
 5. Os cinco estados visuais da demo do estúdio ficam idênticos ao Control nas capturas de referência, exceto pela marca.

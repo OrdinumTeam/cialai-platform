@@ -1,8 +1,8 @@
 # Documentação do Cialai
 
-Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
+Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 15/09/2026, para a prévia 0.2.0, a conectividade automática substituiu o Headscale no fluxo do produto; a validação em aparelhos reais continua pendente. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
 
-Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão segura por Headscale.
+Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão automática entre os aparelhos, direta sempre que a rede permite e pelo Tor embutido como ponto de encontro e reserva, sem servidor da pessoa, da Ordinum ou do projeto.
 
 ## Ordem de leitura
 
@@ -13,7 +13,7 @@ Cialai é o estúdio de terminais do Ordinum Control transformado em produto ope
 | 3 | [03-arquitetura.md](./03-arquitetura.md) | O desenho alvo, os componentes, as portas, os fluxos e as alternativas descartadas |
 | 4 | [04-desktop.md](./04-desktop.md) | O app desktop: reaproveitamento arquivo a arquivo, matriz por sistema, janela, atalhos, onboarding |
 | 5 | [05-mobile.md](./05-mobile.md) | Os apps iOS e Android: casca Expo preservada, módulo nativo do túnel, leitor de QR, lojas |
-| 6 | [06-rede-headscale-e-pareamento.md](./06-rede-headscale-e-pareamento.md) | Headscale, núcleo do túnel, borda, proxy, pareamento, ameaças, testes e spikes |
+| 6 | [06-rede-headscale-e-pareamento.md](./06-rede-headscale-e-pareamento.md) | Conectividade automática, núcleo do túnel, borda, proxy, pareamento, ameaças e testes; as seções do Headscale são históricas até CON-070 |
 | 7 | [07-protocolo-da-ponte.md](./07-protocolo-da-ponte.md) | A ponte WebSocket entre a página do celular e o desktop, preservada e estendida |
 | 8 | [08-design-e-marca.md](./08-design-e-marca.md) | Identidade Cialai aplicada, tokens mantidos, paleta das sessões e tema do terminal |
 | 9 | [09-monorepo-e-ferramentas.md](./09-monorepo-e-ferramentas.md) | Estrutura de pastas, toolchains, scripts, testes por pacote e convenções |
@@ -48,17 +48,21 @@ Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `
 | Estúdio | A seção Terminais do Control: sessões, terminal, editor, explorador, Dev Browser e prévias |
 | Sessão | Um shell aberto numa pasta, com card, histórico, métricas e arquivos próprios |
 | Ponte | O servidor WebSocket em Rust, em loopback, que expõe os comandos de terminal à página do celular |
-| Borda | O listener do sidecar Go na tailnet, que serve a página do celular e encaminha a ponte |
+| Borda | O servidor HTTP do sidecar Go que atende os fluxos dos transportes direto e Tor, serve a página do celular e encaminha a ponte |
 | Proxy | O listener em loopback dentro do app do celular, que o WebView usa para chegar à borda |
-| Sidecar | O binário Go `cialai-tunnel`, empacotado com o desktop, que embute o nó Tailscale e fala com o Headscale |
+| Sidecar | O binário Go `cialai-tunnel`, empacotado com o desktop, que sobe a identidade, o ouvinte direto, o `tor` empacotado, o anúncio DNS-SD e a borda |
 | Núcleo do túnel | O pacote Go `packages/tunnel-core`, compilado como sidecar no desktop e como biblioteca nos celulares |
-| Tailnet | A rede privada formada pelos nós registrados no mesmo Headscale |
-| Headscale | Servidor de coordenação open source compatível com os clientes Tailscale |
-| DERP | Relé cifrado usado quando dois nós não conseguem conexão direta |
-| tsnet | Pacote Go que embute um nó Tailscale num programa, em espaço de usuário, sem daemon |
+| Conexão direta | Sessão QUIC sobre UDP com TLS 1.3 mútuo entre celular e computador, pela rede local, por IPv6, por porta mapeada ou por endereço refletido por STUN; badge Direta |
+| Reserva | A mesma sessão com TLS 1.3 mútuo levada pela rede Tor até o serviço onion de salto único do computador; badge Reserva |
+| Candidato | Endereço direto do computador levado no QR e no cartão de alcance |
+| Furo de NAT | Abertura do caminho direto coordenada pelo canal de controle quando nenhum lado aceita entrada |
+| Tailnet | Histórico: a rede privada dos nós registrados no mesmo Headscale, usada até as prévias 0.1.x |
+| Headscale | Histórico: servidor de coordenação compatível com os clientes Tailscale, usado até as prévias 0.1.x; o código do modo segue inerte até CON-070 |
+| DERP | Histórico: relé cifrado do Headscale, substituído pela reserva pelo Tor |
+| tsnet | Histórico: pacote Go que embutia um nó Tailscale; substituído pelo transporte próprio |
 | gomobile | Ferramenta que compila um pacote Go como `.xcframework` para iOS e `.aar` para Android |
-| Pareamento | O processo em que o desktop mostra um QR e o celular ganha identidade na tailnet e um token de dispositivo |
-| Perfil | No celular, um par de URL do Headscale e usuário, com um nó próprio e seus desktops |
+| Pareamento | O processo em que o desktop mostra um QR `CIALAI2.`, o celular registra sua chave Ed25519 e recebe um token de dispositivo `cdt1` |
+| Perfil | Histórico: no celular das prévias 0.1.x, um par de URL do Headscale e usuário; a conectividade automática guarda os computadores pareados |
 | Jornal | Os arquivos `<tag>.log` e `<tag>.json` que guardam o histórico bruto e o plano de retomada de cada sessão |
 | Retomada | A reabertura de uma conversa de Claude Code ou Codex depois que o app fechou |
 | Concessão de largura | O mecanismo que dá a um dispositivo o controle temporário das dimensões do PTY |
