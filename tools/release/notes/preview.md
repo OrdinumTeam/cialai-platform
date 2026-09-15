@@ -8,6 +8,13 @@ This is an early preview of Cialai for macOS, Windows, Linux and Android. It is 
 
 Your phone now reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
 
+### Fixed in 0.2.1
+
+* The Linux AppImage no longer aborts on recent distributions with an EGL display error, and terminals opened from it no longer inherit the variables of the AppImage, which broke Python, Git over HTTPS and curl.
+* On Linux the session card follows the folder and command of each shell after `cd` and `exec`, and the AI usage shows the right Claude Code or Codex profile behind launcher scripts.
+* The terminal blends into the light and dark themes without a black frame, and the search and copy buttons that did nothing were removed from the session header. Cmd F or Ctrl F still searches the output.
+* The macOS disk image is notarized and stapled by Apple, not only the app inside it.
+
 ### Pair your phone again
 
 Phones paired with a 0.1.x preview are not carried over. After updating the desktop and the Android app:
@@ -42,9 +49,9 @@ Cialai runs no server of its own, and neither does Ordinum. The connection uses 
 | macOS on Apple silicon | `Cialai_aarch64.dmg` |
 | macOS on Intel | `Cialai_x64.dmg` |
 | Windows 10 and 11 | `Cialai_x64-setup.exe` or `Cialai_x64.msi` |
-| Linux, any distribution | `Cialai_amd64.AppImage` |
-| Debian and Ubuntu | `Cialai_amd64.deb` |
-| Fedora and openSUSE | `Cialai_x86_64.rpm` |
+| Debian, Ubuntu and derivatives | `Cialai_amd64.deb` |
+| Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
+| Other Linux distributions | `Cialai_amd64.AppImage` |
 | Android 8 or newer | `Cialai_android_universal.apk` |
 
 iOS is coming soon through TestFlight.
@@ -62,7 +69,12 @@ iOS is coming soon through TestFlight.
 
 ### Install on Linux
 
-Make the AppImage executable with `chmod +x Cialai_amd64.AppImage` and run it, or install the DEB or RPM package with your package manager.
+The DEB and RPM packages use the libraries of your system and are the best choice where they apply. The app updates itself in all three formats.
+
+* Debian and Ubuntu: `sudo apt install ./Cialai_amd64.deb`
+* Fedora: `sudo dnf install ./Cialai_x86_64.rpm`
+* openSUSE: `sudo zypper install ./Cialai_x86_64.rpm`
+* Other distributions: make the AppImage executable with `chmod +x Cialai_amd64.AppImage` and run it.
 
 ### Install on Android
 

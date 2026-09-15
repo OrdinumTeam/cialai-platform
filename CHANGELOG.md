@@ -24,6 +24,24 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.1 preview
+
+Preview dated 2026-09-15 with Linux, interface and macOS packaging fixes on top of 0.2.0. The Android app is the same as in 0.2.0.
+
+### Fixed
+
+* The Linux AppImage aborted on recent distributions such as Arch and newer Ubuntu with `Could not create default EGL display`, because it bundled graphics libraries older than the Mesa of the system. The AppImage now leaves the graphics stack to the system, finds the WebKit helpers without `LD_LIBRARY_PATH` and starts without the classic AppRun variables
+* Terminals, Git, the Dev Browser, the Office conversion and the tunnel sidecar no longer inherit `PYTHONHOME`, `PYTHONPATH`, `LD_LIBRARY_PATH` and the other variables the AppImage sets for itself, which broke Python, Git over HTTPS, curl and pacman inside Cialai
+* On Linux the folder, command and environment of each process are read again on every sample, so the session card follows `cd` and `exec`
+* The AI usage follows the Claude Code or Codex process behind launcher scripts and finds Codex homes outside `~/.codex`
+* The terminal no longer shows a black frame around it in the light and dark themes, on the desktop and on the phone page
+* The search and copy buttons of the session header, which did nothing, were removed; the terminal search through Cmd F or Ctrl F now highlights results
+* The macOS DMG is notarized and stapled, not only the app inside it
+
+### Changed
+
+* Linux downloads recommend the DEB package for Debian and Ubuntu and the RPM package for Fedora and openSUSE, with the AppImage for other distributions
+
 ## 0.2.0 preview
 
 Preview dated 2026-09-15 for macOS, Windows, Linux and Android. It replaces the Headscale setup with automatic connectivity.
