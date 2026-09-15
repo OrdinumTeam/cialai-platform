@@ -23,15 +23,36 @@ class SocketFixture {
 globalThis.WebSocket = SocketFixture;
 const remote = await import('../remote.js');
 const { createNativeBridge, remoteBridgeUrl } = await import('../native.js');
+// Dedupe real da tela do terminal, para o replay ser conferido como a página o aplica.
+const { beginReplay, consumeOutput } = await import('../../ui/src/terminals/replay.js');
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+const WELCOME = { type: 'welcome', version: 1, auth: 'device', capabilities: ['pty'], features: ['terminal-mobile-v1'] };
 
 function connection(options = {}) {
   remote.configure({ url: 'ws://127.0.0.1:9999/pty', app: '1.4.0', ...options });
   const socket = SocketFixture.instances.at(-1);
   socket.open();
-  socket.receive({ type: 'welcome', version: 1, auth: 'device', capabilities: ['pty'], features: ['terminal-mobile-v1'] });
+  socket.receive(WELCOME);
   return socket;
 }
+
+// Espera a religação automática depois da queda e abre o socket do caminho novo.
+async function nextSocket(previous) {
+  await new Promise((resolve) => setTimeout(resolve, 530));
+  const socket = SocketFixture.instances.at(-1);
+  assert.notEqual(socket, previous);
+  socket.open();
+  return socket;
+}
+
+function channelFrame(channel, bytes) {
+  const frame = new Uint8Array(4 + bytes.byteLength);
+  new DataView(frame.buffer).setUint32(0, channel, false);
+  frame.set(bytes, 4);
+  return frame.buffer;
+}
+
+const sentCalls = (sockets, cmd) => sockets.flatMap((socket) => socket.sent).filter((message) => message.type === 'call' && message.cmd === cmd);
 
 after(() => remote.disconnect());
 
@@ -78,6 +99,116 @@ test('calls are rejected on disconnect and never replayed after reconnect', asyn
   assert.equal(replacement.sent.length, 1);
   assert.equal(replacement.sent[0].type, 'hello');
   assert.equal(sentBeforeClose, 2);
+  remote.disconnect();
+});
+
+// Troca de caminho: o proxy do celular fecha o upstream antigo e a página vê o
+// WebSocket cair com 1006. A chamada em voo pode ter chegado ou não ao
+// computador; o cliente nunca a repete, então ela executa uma vez ou nenhuma.
+test('a path switch during pty_write rejects the write and never sends it again', async () => {
+  const socket = connection();
+  const write = remote.invoke('pty_write', { id: 3, data: 'ls\n' });
+  const call = socket.sent.at(-1);
+  assert.equal(call.cmd, 'pty_write');
+  const failed = assert.rejects(write, { code: 'bridge_disconnected', message: /computador desconectada/ });
+  socket.close(1006);
+  await failed;
+  assert.equal(remote.state().status, 'disconnected');
+  assert.equal(remote.state().code, 1006);
+
+  const replacement = await nextSocket(socket);
+  // Digitação enquanto o caminho novo não recebeu welcome falha na hora, sem fila.
+  await assert.rejects(remote.invoke('pty_write', { id: 3, data: 'ls\n' }), { code: 'bridge_disconnected' });
+  replacement.receive(WELCOME);
+  assert.deepEqual(replacement.sent.map((message) => message.type), ['hello']);
+
+  const next = remote.invoke('pty_write', { id: 3, data: 'pwd\n' });
+  const nextCall = replacement.sent.at(-1);
+  assert.ok(nextCall.id > call.id, 'ids de chamada não voltam a ser usados depois de religar');
+  let settled = false;
+  next.then(() => { settled = true; }, () => { settled = true; });
+  // Resposta atrasada da chamada antiga, pelo socket antigo ou pelo novo, não resolve nada.
+  socket.receive({ type: 'result', id: call.id, ok: true, value: null });
+  replacement.receive({ type: 'result', id: call.id, ok: true, value: null });
+  await tick();
+  assert.equal(settled, false);
+  replacement.receive({ type: 'result', id: nextCall.id, ok: true, value: null });
+  assert.equal(await next, null);
+
+  assert.deepEqual(sentCalls([socket, replacement], 'pty_write').map((message) => message.args.data), ['ls\n', 'pwd\n']);
+  remote.disconnect();
+});
+
+test('a path switch during pty_spawn rejects the spawn, detaches its channel and never spawns again', async () => {
+  const socket = connection();
+  const received = [];
+  const channel = remote.createChannel((message) => received.push(message));
+  const spawn = remote.invoke('pty_spawn', { cwd: '/tmp/projeto', cols: 80, rows: 24, tag: 'sessao-1', onOutput: channel });
+  const call = socket.sent.at(-1);
+  assert.equal(call.cmd, 'pty_spawn');
+  assert.deepEqual(call.args.onOutput, { __channel__: channel.id });
+  const failed = assert.rejects(spawn, { code: 'bridge_disconnected' });
+  socket.close(1006);
+  await failed;
+  assert.deepEqual(received, [{ type: 'detached', reason: 'socket' }]);
+
+  const replacement = await nextSocket(socket);
+  replacement.receive(WELCOME);
+  assert.deepEqual(replacement.sent.map((message) => message.type), ['hello']);
+  // O terminal pode ter nascido no computador; o resultado e a saída dele
+  // chegando atrasados não ressuscitam a chamada nem o canal antigo.
+  socket.receive({ type: 'result', id: call.id, ok: true, value: { id: 9 } });
+  replacement.receive({ type: 'result', id: call.id, ok: true, value: { id: 9 } });
+  replacement.receive({ type: 'channel', channel: channel.id, message: { type: 'replay', offset: 0, length: 2 } });
+  replacement.receive(channelFrame(channel.id, new Uint8Array([104, 105])));
+  await tick();
+  assert.deepEqual(received, [{ type: 'detached', reason: 'socket' }]);
+  assert.equal(sentCalls([socket, replacement], 'pty_spawn').length, 1);
+  remote.disconnect();
+});
+
+test('pty_attach after a path switch resumes at the replay offset without duplicating screen bytes', async () => {
+  // Offsets contam bytes; "ç" e "ã" ocupam dois bytes cada.
+  const output = new TextEncoder().encode('$ ls\r\nREADME.md\r\n$ make\r\ncompilação\r\npronto\r\n$ ');
+  const screen = { outputOffset: 0, receivedOffset: 0, bytes: [] };
+  const show = (message) => {
+    if (message instanceof Uint8Array) screen.bytes.push(...consumeOutput(screen, message));
+    else if (message?.type === 'replay') beginReplay(screen, message);
+  };
+
+  const socket = connection();
+  const first = remote.createChannel(show);
+  const attach = remote.invoke('pty_attach', { id: 7, onOutput: first });
+  socket.receive({ type: 'channel', channel: first.id, message: { type: 'replay', offset: 0, length: 10 } });
+  socket.receive(channelFrame(first.id, output.subarray(0, 10)));
+  socket.receive({ type: 'result', id: socket.sent.at(-1).id, ok: true, value: { id: 7 } });
+  await attach;
+  // A saída ao vivo para no meio do "ç" quando o caminho cai.
+  socket.receive(channelFrame(first.id, output.subarray(10, 33)));
+  socket.close(1006);
+
+  const replacement = await nextSocket(socket);
+  replacement.receive(WELCOME);
+  const second = remote.createChannel(show);
+  const reattach = remote.invoke('pty_attach', { id: 7, onOutput: second });
+  const call = replacement.sent.at(-1);
+  assert.deepEqual(replacement.sent.map((message) => message.cmd ?? message.type), ['hello', 'pty_attach']);
+  assert.deepEqual(call.args, { id: 7, onOutput: { __channel__: second.id } });
+  // O anel já descartou os 4 primeiros bytes; o replay cobre 4..40, em dois quadros,
+  // incluindo o que o computador produziu enquanto o celular estava fora.
+  replacement.receive({ type: 'channel', channel: second.id, message: { type: 'replay', offset: 4, length: 36 } });
+  replacement.receive(channelFrame(second.id, output.subarray(4, 20)));
+  // Quadros atrasados do canal substituído, no meio do replay, nunca chegam à tela.
+  socket.receive(channelFrame(first.id, output.subarray(33, 40)));
+  replacement.receive(channelFrame(first.id, output.subarray(33, 40)));
+  replacement.receive(channelFrame(second.id, output.subarray(20, 40)));
+  replacement.receive({ type: 'result', id: call.id, ok: true, value: { id: 7 } });
+  await reattach;
+  replacement.receive(channelFrame(second.id, output.subarray(40)));
+
+  assert.deepEqual(Uint8Array.from(screen.bytes), output);
+  assert.equal(new TextDecoder().decode(Uint8Array.from(screen.bytes)), new TextDecoder().decode(output));
+  assert.equal(sentCalls([socket, replacement], 'pty_attach').length, 2);
   remote.disconnect();
 });
 

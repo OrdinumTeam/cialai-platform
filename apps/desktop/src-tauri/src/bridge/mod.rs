@@ -592,11 +592,31 @@ async fn serve(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
+    use tokio_tungstenite::{
+        MaybeTlsStream, connect_async, tungstenite::client::IntoClientRequest,
+    };
 
     async fn test_server(
         dispatch: Dispatch,
         token: Option<String>,
+    ) -> (String, tokio::task::JoinHandle<()>, BridgeControl) {
+        sequential_server(
+            dispatch,
+            token,
+            TerminalManager::with_notifier(Arc::new(|_| {})),
+            1,
+        )
+        .await
+    }
+
+    /// Atende `connections` sockets em sequência com o mesmo registro, o mesmo
+    /// despacho e os mesmos terminais, como o celular religando pelo caminho
+    /// novo depois de uma troca. A conexão `n` recebe o id `n`.
+    async fn sequential_server(
+        dispatch: Dispatch,
+        token: Option<String>,
+        terminals: TerminalManager,
+        connections: u64,
     ) -> (String, tokio::task::JoinHandle<()>, BridgeControl) {
         let listener = TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
@@ -610,29 +630,532 @@ mod tests {
             identities: identities.clone(),
         };
         let task = tokio::spawn(async move {
-            let (stream, _) = listener.accept().await.unwrap();
             let config = BridgeConfig {
                 port: None,
                 dev_open: token.is_none(),
                 proxy_secret: token,
                 fallback_to_free_port: false,
             };
-            if let Ok((socket, device_id)) = handshake(stream, &config, &identities).await {
-                serve(
-                    socket,
-                    device_id,
-                    1,
-                    ServeContext {
-                        registry,
-                        terminals: TerminalManager::with_notifier(Arc::new(|_| {})),
-                        dispatch,
-                        global_calls: Arc::new(Semaphore::new(128)),
-                    },
-                )
-                .await;
+            let global_calls = Arc::new(Semaphore::new(128));
+            for id in 1..=connections {
+                let (stream, _) = listener.accept().await.unwrap();
+                if let Ok((socket, device_id)) = handshake(stream, &config, &identities).await {
+                    serve(
+                        socket,
+                        device_id,
+                        id,
+                        ServeContext {
+                            registry: registry.clone(),
+                            terminals: terminals.clone(),
+                            dispatch: dispatch.clone(),
+                            global_calls: global_calls.clone(),
+                        },
+                    )
+                    .await;
+                }
             }
         });
         (address, task, control)
+    }
+
+    type PhoneSocket = WebSocketStream<MaybeTlsStream<TcpStream>>;
+
+    /// Socket do mesmo celular vindo da borda, já com `welcome`.
+    async fn phone_socket(url: &str) -> PhoneSocket {
+        let request = device_request(url, Some(("x-cialai-device-key", "device-key-fixture")));
+        let (mut socket, _) = connect_async(request).await.unwrap();
+        socket
+            .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
+            .await
+            .unwrap();
+        let welcome = socket.next().await.unwrap().unwrap().into_text().unwrap();
+        let welcome: Value = serde_json::from_str(&welcome).unwrap();
+        assert_eq!(welcome["auth"], "device");
+        assert_eq!(welcome["device"]["id"], "dev_fixture");
+        socket
+    }
+
+    async fn send_call(socket: &mut PhoneSocket, id: u64, cmd: &str, args: Value) {
+        socket
+            .send(Message::Text(
+                json!({"type":"call", "id":id, "cmd":cmd, "args":args})
+                    .to_string()
+                    .into(),
+            ))
+            .await
+            .unwrap();
+    }
+
+    async fn next_json(socket: &mut PhoneSocket) -> Value {
+        loop {
+            let frame = timeout(Duration::from_secs(10), socket.next())
+                .await
+                .expect("quadro dentro do prazo")
+                .expect("socket aberto")
+                .expect("quadro válido");
+            match frame {
+                Message::Text(text) => return serde_json::from_str(&text).unwrap(),
+                Message::Ping(_) | Message::Pong(_) => {}
+                other => panic!("quadro inesperado: {other:?}"),
+            }
+        }
+    }
+
+    async fn eventually(what: &str, condition: impl Fn() -> bool) {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while !condition() {
+            assert!(Instant::now() < deadline, "{what}");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+
+    /// Segura uma chamada dentro do despacho para a troca de caminho
+    /// acontecer com ela em voo: avisa que começou e espera uma liberação.
+    struct Gate {
+        permits: Mutex<usize>,
+        released: std::sync::Condvar,
+        started: mpsc::UnboundedSender<()>,
+    }
+
+    impl Gate {
+        fn new() -> (Arc<Self>, mpsc::UnboundedReceiver<()>) {
+            let (started, receiver) = mpsc::unbounded_channel();
+            let gate = Self {
+                permits: Mutex::new(0),
+                released: std::sync::Condvar::new(),
+                started,
+            };
+            (Arc::new(gate), receiver)
+        }
+
+        fn pass(&self) {
+            let _ = self.started.send(());
+            let (mut permits, _) = self
+                .released
+                .wait_timeout_while(lock(&self.permits), Duration::from_secs(10), |permits| {
+                    *permits == 0
+                })
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            *permits = permits.saturating_sub(1);
+        }
+
+        fn release(&self) {
+            *lock(&self.permits) += 1;
+            self.released.notify_all();
+        }
+    }
+
+    async fn wait_started(started: &mut mpsc::UnboundedReceiver<()>) {
+        timeout(Duration::from_secs(10), started.recv())
+            .await
+            .expect("a chamada precisa entrar no despacho")
+            .expect("porta viva");
+    }
+
+    #[tokio::test]
+    async fn pty_write_in_flight_during_a_path_switch_runs_at_most_once() {
+        let applied = Arc::new(Mutex::new(Vec::new()));
+        let (gate, mut started) = Gate::new();
+        let dispatch: Dispatch = {
+            let applied = applied.clone();
+            let gate = gate.clone();
+            Arc::new(move |conn, cmd, args| {
+                assert_eq!(cmd, "pty_write");
+                let data = args["data"].as_str().unwrap().to_owned();
+                if data == "primeiro\n" {
+                    gate.pass();
+                }
+                lock(&applied).push((conn.id, conn.device_id.clone(), data));
+                Ok(Value::Null)
+            })
+        };
+        let (url, task, control) = sequential_server(
+            dispatch,
+            Some("fixture-secret".into()),
+            TerminalManager::with_notifier(Arc::new(|_| {})),
+            2,
+        )
+        .await;
+
+        let mut first = phone_socket(&url).await;
+        send_call(
+            &mut first,
+            1,
+            "pty_write",
+            json!({"id":3, "data":"primeiro\n"}),
+        )
+        .await;
+        wait_started(&mut started).await;
+        send_call(
+            &mut first,
+            2,
+            "pty_write",
+            json!({"id":3, "data":"segundo\n"}),
+        )
+        .await;
+        let old = lock(&control.registry).get(&1).cloned().unwrap();
+        eventually(
+            "a segunda escrita precisa chegar à ponte antes da troca",
+            || lock(&old.pending).len() == 2,
+        )
+        .await;
+        // Troca de caminho: o proxy fecha o upstream sem handshake de fechamento.
+        drop(first);
+        eventually("a conexão antiga precisa sair do registro", || {
+            lock(&control.registry).is_empty()
+        })
+        .await;
+        gate.release();
+        eventually("as chamadas da conexão antiga precisam terminar", || {
+            lock(&old.pending).is_empty()
+        })
+        .await;
+
+        let mut second = phone_socket(&url).await;
+        send_call(
+            &mut second,
+            3,
+            "pty_write",
+            json!({"id":3, "data":"terceiro\n"}),
+        )
+        .await;
+        let reply = next_json(&mut second).await;
+        assert_eq!(
+            (
+                reply["type"].as_str(),
+                reply["id"].as_u64(),
+                reply["ok"].as_bool()
+            ),
+            (Some("result"), Some(3), Some(true)),
+            "a resposta da escrita antiga não pode chegar pelo socket novo"
+        );
+        second.close(None).await.unwrap();
+        task.await.unwrap();
+
+        // A escrita em voo terminou uma vez; a enfileirada atrás dela, já
+        // recebida pela ponte, não rodou depois da queda; nada foi repetido
+        // no socket novo.
+        let device = Some("dev_fixture".to_owned());
+        assert_eq!(
+            *lock(&applied),
+            vec![
+                (1, device.clone(), "primeiro\n".to_owned()),
+                (2, device, "terceiro\n".to_owned()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn pty_spawn_in_flight_during_a_path_switch_creates_a_single_terminal() {
+        // O `id` da chamada só correlaciona a resposta dentro de um socket. A
+        // ponte não guarda ids entre conexões nem tem chave de idempotência
+        // para `pty_spawn`: um id repetido só é barrado enquanto a primeira
+        // chamada ainda está pendente no mesmo socket. Entre sockets, quem
+        // garante a execução única é o cliente, que rejeita a chamada pendente
+        // na queda e nunca a reenvia, como conferem os testes de troca de
+        // caminho em `packages/protocol/tests/transport.test.mjs`.
+        let spawned = Arc::new(Mutex::new(Vec::<(u64, String)>::new()));
+        let (gate, mut started) = Gate::new();
+        let dispatch: Dispatch = {
+            let spawned = spawned.clone();
+            let gate = gate.clone();
+            Arc::new(move |conn, cmd, args| match cmd {
+                "pty_spawn" => {
+                    gate.pass();
+                    let mut spawned = lock(&spawned);
+                    spawned.push((conn.id, args["tag"].as_str().unwrap().to_owned()));
+                    Ok(json!({"id": spawned.len()}))
+                }
+                "pty_list" => Ok(Value::Array(
+                    lock(&spawned)
+                        .iter()
+                        .enumerate()
+                        .map(|(index, (_, tag))| json!({"id": index + 1, "tag": tag}))
+                        .collect(),
+                )),
+                _ => Err("comando inesperado".into()),
+            })
+        };
+        let (url, task, control) = sequential_server(
+            dispatch,
+            Some("fixture-secret".into()),
+            TerminalManager::with_notifier(Arc::new(|_| {})),
+            2,
+        )
+        .await;
+        let spawn = |tag: &str| json!({"cwd":"/tmp", "cols":80, "rows":24, "tag":tag, "onOutput":{"__channel__":1}});
+
+        let mut first = phone_socket(&url).await;
+        send_call(&mut first, 7, "pty_spawn", spawn("sessao-a")).await;
+        wait_started(&mut started).await;
+        let old = lock(&control.registry).get(&1).cloned().unwrap();
+        drop(first);
+        eventually("a conexão antiga precisa sair do registro", || {
+            lock(&control.registry).is_empty()
+        })
+        .await;
+        gate.release();
+        eventually("o spawn em voo precisa terminar", || {
+            lock(&old.pending).is_empty()
+        })
+        .await;
+        assert_eq!(*lock(&spawned), vec![(1, "sessao-a".to_owned())]);
+
+        let mut second = phone_socket(&url).await;
+        let current = lock(&control.registry).get(&2).cloned().unwrap();
+        send_call(&mut second, 8, "pty_list", json!({})).await;
+        let listing = next_json(&mut second).await;
+        assert_eq!(
+            listing["id"], 8,
+            "o resultado do spawn antigo não pode chegar pelo socket novo"
+        );
+        assert_eq!(listing["value"], json!([{"id":1, "tag":"sessao-a"}]));
+
+        send_call(&mut second, 9, "pty_spawn", spawn("sessao-b")).await;
+        wait_started(&mut started).await;
+        send_call(&mut second, 9, "pty_spawn", spawn("sessao-b")).await;
+        let closed = timeout(Duration::from_secs(10), async {
+            while let Some(Ok(frame)) = second.next().await {
+                if matches!(frame, Message::Close(_)) {
+                    break;
+                }
+            }
+        })
+        .await;
+        assert!(
+            closed.is_ok(),
+            "id repetido com a chamada pendente fecha o socket"
+        );
+        gate.release();
+        eventually("o spawn pendente precisa terminar", || {
+            lock(&current.pending).is_empty()
+        })
+        .await;
+        task.await.unwrap();
+        assert_eq!(
+            *lock(&spawned),
+            vec![(1, "sessao-a".to_owned()), (2, "sessao-b".to_owned())]
+        );
+    }
+
+    /// Saída de uma assinatura do celular: bytes na ordem do fio a partir do
+    /// offset que o `replay` anunciou.
+    struct PhoneChannel {
+        id: u32,
+        replay: Option<(usize, usize)>,
+        bytes: Vec<u8>,
+        results: Vec<Value>,
+    }
+
+    impl PhoneChannel {
+        fn new(id: u32) -> Self {
+            Self {
+                id,
+                replay: None,
+                bytes: Vec::new(),
+                results: Vec::new(),
+            }
+        }
+
+        fn printed(&self, text: &str) -> usize {
+            String::from_utf8_lossy(&self.bytes).matches(text).count()
+        }
+
+        async fn read_until(&mut self, socket: &mut PhoneSocket, done: impl Fn(&Self) -> bool) {
+            let deadline = Instant::now() + Duration::from_secs(20);
+            while !done(self) {
+                let frame = tokio::time::timeout_at(deadline, socket.next())
+                    .await
+                    .expect("saída do terminal dentro do prazo")
+                    .expect("socket aberto")
+                    .expect("quadro válido");
+                match frame {
+                    Message::Binary(frame) => {
+                        let channel = u32::from_be_bytes(frame[..4].try_into().unwrap());
+                        assert_eq!(channel, self.id, "quadro de outro canal");
+                        assert!(self.replay.is_some(), "saída antes do replay");
+                        self.bytes.extend_from_slice(&frame[4..]);
+                    }
+                    Message::Text(text) => {
+                        let value: Value = serde_json::from_str(&text).unwrap();
+                        if value["type"] != "channel" {
+                            self.results.push(value);
+                            continue;
+                        }
+                        assert_eq!(value["channel"], self.id, "mensagem de outro canal");
+                        if value["message"]["type"] == "replay" {
+                            assert!(self.replay.is_none(), "um replay por assinatura");
+                            let field = |name: &str| {
+                                usize::try_from(value["message"][name].as_u64().unwrap()).unwrap()
+                            };
+                            self.replay = Some((field("offset"), field("length")));
+                        }
+                    }
+                    Message::Ping(_) | Message::Pong(_) => {}
+                    other => panic!("quadro inesperado: {other:?}"),
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn replay_after_a_path_switch_resumes_exactly_at_the_client_offset() {
+        let terminals = TerminalManager::with_notifier(Arc::new(|_| {}));
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(terminals.clone());
+        let shell = crate::workspace::pty::TestShell::isolated();
+        // O desktop assina desde a abertura e vê o fluxo inteiro desde o byte zero.
+        let desktop = Arc::new(Mutex::new(Vec::new()));
+        let session = {
+            let desktop = desktop.clone();
+            terminals
+                .spawn_test_shell_for(
+                    &shell,
+                    "ponte-troca-de-caminho",
+                    SubscriberKey::Webview,
+                    tauri::ipc::Channel::new(move |body| {
+                        if let tauri::ipc::InvokeResponseBody::Raw(bytes) = body {
+                            lock(&desktop).extend_from_slice(&bytes);
+                        }
+                        Ok(())
+                    }),
+                )
+                .unwrap()
+                .id
+        };
+        // Canal real da ponte e as mesmas chamadas do `TerminalManager` que
+        // `dispatch` usa para assinar e escrever, sem depender de AppHandle.
+        let dispatch: Dispatch = {
+            let terminals = terminals.clone();
+            Arc::new(move |conn, cmd, args| {
+                let id = args["id"]
+                    .as_u64()
+                    .and_then(|id| u32::try_from(id).ok())
+                    .ok_or_else(|| "id inválido".to_owned())?;
+                match cmd {
+                    "pty_attach" => {
+                        let (_, channel) = super::dispatch::channel(conn, &args)?;
+                        let info = terminals.attach_for(id, conn.key(), channel)?;
+                        Ok(json!({"id": info.id}))
+                    }
+                    "pty_write" => {
+                        let data = args["data"].as_str().unwrap_or_default();
+                        terminals.write(id, data.as_bytes()).map(|()| Value::Null)
+                    }
+                    _ => Err("comando inesperado".into()),
+                }
+            })
+        };
+        let (url, task, control) = sequential_server(
+            dispatch,
+            Some("fixture-secret".into()),
+            terminals.clone(),
+            2,
+        )
+        .await;
+        let print = |text: &str| String::from_utf8(shell.print(text)).unwrap();
+
+        // Caminho antigo: assina, digita e lê só parte do que o shell produz.
+        let mut first = phone_socket(&url).await;
+        let mut old = PhoneChannel::new(11);
+        send_call(
+            &mut first,
+            1,
+            "pty_attach",
+            json!({"id":session, "onOutput":{"__channel__":11}}),
+        )
+        .await;
+        old.read_until(&mut first, |channel| !channel.results.is_empty())
+            .await;
+        assert_eq!(old.results[0]["ok"], true);
+        send_call(
+            &mut first,
+            2,
+            "pty_write",
+            json!({"id":session, "data":print("cialai-antes")}),
+        )
+        .await;
+        old.read_until(&mut first, |channel| channel.printed("cialai-antes") >= 2)
+            .await;
+        let (old_offset, _) = old.replay.unwrap();
+        assert_eq!(old_offset, 0);
+        let client_offset = old_offset + old.bytes.len();
+        drop(first);
+        eventually("a assinatura antiga precisa sair da sessão", || {
+            lock(&control.registry).is_empty()
+                && !terminals.has_subscriber(session, SubscriberKey::Remote(1))
+        })
+        .await;
+
+        // Com o celular fora, o computador continua produzindo saída.
+        terminals
+            .write(session, &shell.print("cialai-fora"))
+            .unwrap();
+        eventually("a saída feita fora precisa chegar ao desktop", || {
+            String::from_utf8_lossy(&lock(&desktop))
+                .matches("cialai-fora")
+                .count()
+                >= 2
+        })
+        .await;
+
+        // Caminho novo, mesmo celular: nova assinatura, novo canal, replay.
+        let mut second = phone_socket(&url).await;
+        let mut new = PhoneChannel::new(12);
+        send_call(
+            &mut second,
+            3,
+            "pty_attach",
+            json!({"id":session, "onOutput":{"__channel__":12}}),
+        )
+        .await;
+        new.read_until(&mut second, |channel| !channel.results.is_empty())
+            .await;
+        assert_eq!(new.results[0]["ok"], true);
+        let (offset, length) = new.replay.expect("replay na assinatura nova");
+        assert!(new.bytes.len() >= length, "o replay vem antes do resultado");
+        send_call(
+            &mut second,
+            4,
+            "pty_write",
+            json!({"id":session, "data":print("cialai-depois")}),
+        )
+        .await;
+        new.read_until(&mut second, |channel| channel.printed("cialai-depois") >= 2)
+            .await;
+        second.close(None).await.unwrap();
+        task.await.unwrap();
+
+        let end = offset + new.bytes.len();
+        eventually("o desktop precisa ter visto o mesmo trecho", || {
+            lock(&desktop).len() >= end
+        })
+        .await;
+        let desktop = lock(&desktop).clone();
+        assert_eq!(
+            desktop[offset..end],
+            new.bytes[..],
+            "replay e saída ao vivo são o fluxo exato a partir do offset anunciado"
+        );
+        assert!(
+            offset <= client_offset,
+            "o replay começa onde o celular parou ou antes, sem lacuna"
+        );
+        let missed = &new.bytes[client_offset - offset..length];
+        assert!(
+            String::from_utf8_lossy(missed).contains("cialai-fora"),
+            "o replay traz o que foi produzido com o celular fora"
+        );
+        // Tela do celular: o que ele já tinha, mais o replay cortado no offset
+        // que já recebeu. Nenhum byte duplicado e nenhum perdido.
+        let mut screen = old.bytes.clone();
+        screen.extend_from_slice(&new.bytes[client_offset - offset..]);
+        assert_eq!(screen[..], desktop[..end]);
     }
 
     #[test]

@@ -29,7 +29,7 @@ struct ChannelRef {
     __channel__: u32,
 }
 
-fn channel(conn: &Connection, args: &Value) -> Result<(u32, Channel), String> {
+pub(super) fn channel(conn: &Connection, args: &Value) -> Result<(u32, Channel), String> {
     let reference: ChannelRef = arg(args, "onOutput")?;
     let id = reference.__channel__;
     let tx = conn.tx.clone();

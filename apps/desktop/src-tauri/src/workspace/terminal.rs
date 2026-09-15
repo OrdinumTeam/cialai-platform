@@ -545,6 +545,29 @@ impl TerminalManager {
         Self::with_notifiers(notify_exit, Arc::new(|_| {}))
     }
 
+    /// Abre o shell isolado dos testes para outras camadas, como a ponte.
+    #[cfg(test)]
+    pub(crate) fn spawn_test_shell_for(
+        &self,
+        shell: &pty::TestShell,
+        tag: &str,
+        key: SubscriberKey,
+        channel: Channel,
+    ) -> Result<TerminalInfo, String> {
+        let prefs = self.prefs.get();
+        self.spawn_for_with_spec(
+            shell.cwd(),
+            80,
+            24,
+            CursorPosition::default(),
+            tag,
+            key,
+            channel,
+            shell.spec(),
+            &prefs,
+        )
+    }
+
     #[cfg(test)]
     fn with_notifiers(notify_exit: ExitNotifier, notify_view: ViewNotifier) -> Self {
         Self::with_environment(
