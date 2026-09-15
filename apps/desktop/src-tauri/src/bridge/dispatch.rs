@@ -196,7 +196,7 @@ pub(super) fn dispatch(
             result
         }
         "pty_metrics" => value(commands::pty_metrics(app.state())),
-        "ai_usage" => value(commands::ai_usage(app.clone(), app.state())),
+        "ai_usage" => value(commands::ai_usage(app.clone(), app.state(), app.state())),
         "pty_write" => value(commands::pty_write(
             app.state(),
             arg(&args, "id")?,

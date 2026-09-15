@@ -42,7 +42,7 @@ use crate::prefs::{Preferences, PrefsState};
 
 use super::EVENT_PTY_EXIT;
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
-use super::procs::{self, CommandCache, ProcSource, ProcState, SystemProcs};
+use super::procs::{self, CommandCache, CommandLine, ProcSource, ProcState, SystemProcs};
 use super::pty::{self, CursorPosition, ShellFlavor};
 use super::resume;
 
@@ -501,6 +501,9 @@ pub struct TerminalManager {
     /// Ultimo tempo de CPU por pid, para a proxima amostra virar percentual.
     samples: Arc<Mutex<HashMap<u32, (u64, Instant)>>>,
     commands: Arc<Mutex<CommandCache>>,
+    /// Homes do Codex das sessoes na ultima amostra, para o uso do plano
+    /// achar perfis fora de `~/.codex*`.
+    codex_homes: Arc<Mutex<Vec<PathBuf>>>,
     procs: Arc<dyn ProcSource>,
     /// Historico e estado em disco. `None` nos testes que nao pedem.
     journal: Option<Arc<JournalStore>>,
@@ -610,6 +613,7 @@ impl TerminalManager {
             notify_view: notify_view.clone(),
             samples: Arc::new(Mutex::new(HashMap::new())),
             commands: Arc::new(Mutex::new(CommandCache::default())),
+            codex_homes: Arc::new(Mutex::new(Vec::new())),
             procs,
             journal: None,
             closing: Arc::new(AtomicBool::new(false)),
@@ -1270,6 +1274,7 @@ impl TerminalManager {
         let mut commands = lock(&self.commands);
         let mut alive = Vec::new();
         let mut result = Vec::new();
+        let mut codex_homes = Vec::new();
         for (id, tag, pid, foreground_pgid) in targets {
             let Some(pid) = pid else {
                 result.push(SessionMetrics {
@@ -1323,6 +1328,7 @@ impl TerminalManager {
                     continue;
                 };
                 if let Some(found) = procs::agent_of(&command) {
+                    let command = agent_command(source, member, command, found, &mut commands);
                     agent = Some(found.to_string());
                     agent_profile = procs::agent_profile(&command, found, &home);
                     break;
@@ -1331,6 +1337,19 @@ impl TerminalManager {
             let foreground = foreground_pgid
                 .filter(|pgid| *pgid != pid)
                 .and_then(|pgid| describe_foreground(source, pgid, &tree, &mut commands, &home));
+            if agent.as_deref() == Some("Codex") {
+                codex_homes.extend(
+                    agent_profile
+                        .as_ref()
+                        .map(|profile| profile.config_dir.clone()),
+                );
+            }
+            if let Some(found) = foreground
+                .as_ref()
+                .filter(|found| found.agent.as_deref() == Some("Codex"))
+            {
+                codex_homes.extend(found.config_dir.clone());
+            }
 
             result.push(SessionMetrics {
                 id,
@@ -1354,8 +1373,20 @@ impl TerminalManager {
         }
         samples.retain(|member, _| alive.contains(member));
         commands.retain(&alive);
+        let mut codex_homes = codex_homes
+            .into_iter()
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+        codex_homes.sort();
+        codex_homes.dedup();
+        *lock(&self.codex_homes) = codex_homes;
         result.sort_by_key(|metrics| metrics.id);
         result
+    }
+
+    /// Homes do Codex em uso nas sessoes, pela ultima amostra de metricas.
+    pub fn codex_homes(&self) -> Vec<PathBuf> {
+        lock(&self.codex_homes).clone()
     }
 
     fn pump(
@@ -1533,14 +1564,15 @@ fn describe_foreground(
         return None;
     }
     let command = commands.get_from(source, candidate, info.start_sec);
-    let agent = command
-        .as_ref()
-        .and_then(procs::agent_of)
-        .map(str::to_string);
-    let profile = match (command.as_ref(), agent.as_deref()) {
-        (Some(line), Some(found)) => procs::agent_profile(line, found, home),
+    let found = command.as_ref().and_then(procs::agent_of);
+    let profile = match (command.clone(), found) {
+        (Some(line), Some(found)) => {
+            let line = agent_command(source, candidate, line, found, commands);
+            procs::agent_profile(&line, found, home)
+        }
         _ => None,
     };
+    let agent = found.map(str::to_string);
     let name = source.name(candidate).unwrap_or_else(|| info.comm.clone());
     let argv0 = command
         .as_ref()
@@ -1559,6 +1591,31 @@ fn describe_foreground(
         profile: profile.as_ref().map(|value| value.slug.clone()),
         profile_name: profile.as_ref().and_then(|value| value.name.clone()),
     })
+}
+
+/// Linha de comando de onde sai o perfil do agente achado em `pid`. Um
+/// lancador como `python3 wrai.py claude` ou `node codex.js` e reconhecido
+/// pelo argumento, mas o perfil so existe no ambiente do CLI que ele abre.
+/// Quando um descendente e o proprio agente, vale a linha dele.
+fn agent_command(
+    source: &dyn ProcSource,
+    pid: u32,
+    command: CommandLine,
+    agent: &str,
+    commands: &mut CommandCache,
+) -> CommandLine {
+    if procs::direct_agent_of(&command).is_some() {
+        return command;
+    }
+    source
+        .descendants(pid)
+        .into_iter()
+        .find_map(|member| {
+            let info = source.info(member)?;
+            let line = commands.get_from(source, member, info.start_sec)?;
+            (procs::direct_agent_of(&line) == Some(agent)).then_some(line)
+        })
+        .unwrap_or(command)
 }
 
 fn needs_lang() -> bool {
@@ -2634,5 +2691,298 @@ mod tests {
             second.shell_cwd.as_deref(),
             Some(project.to_string_lossy().as_ref())
         );
+    }
+
+    #[test]
+    fn metrics_take_the_agent_profile_from_the_cli_behind_a_launcher() {
+        use super::procs::{FakeProcs, ProcInfo, Usage};
+
+        let fake = Arc::new(FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), fake.clone());
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(manager.clone());
+        let test_shell = pty::TestShell::isolated();
+        let info = spawn_test_shell(
+            &manager,
+            &test_shell,
+            "lancador",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        let shell = info.pid.expect("pid do shell");
+        let launcher = shell.saturating_add(10_000);
+        let agent = shell.saturating_add(10_001);
+        fake.set_children(shell, vec![launcher]);
+        fake.set_children(launcher, vec![agent]);
+        for (pid, ppid, name) in [
+            (shell, std::process::id(), "sh"),
+            (launcher, shell, "python3"),
+            (agent, launcher, "codex"),
+        ] {
+            fake.set_info(ProcInfo {
+                pid,
+                ppid,
+                pgid: launcher,
+                comm: name.into(),
+                name: name.into(),
+                start_sec: 10,
+                ..Default::default()
+            });
+            fake.set_usages(
+                pid,
+                [Usage {
+                    cpu_nanos: 1,
+                    footprint: 1,
+                }],
+            );
+        }
+        // O lancador cita o agente no argumento, sem o perfil no ambiente.
+        fake.set_command(
+            launcher,
+            CommandLine {
+                exe: "/usr/bin/python3".into(),
+                argv: vec![
+                    "python3".into(),
+                    "/h/.local/lib/webrota-ai/wrai.py".into(),
+                    "codex".into(),
+                ],
+                ..Default::default()
+            },
+        );
+        fake.set_command(
+            agent,
+            CommandLine {
+                exe: "/h/.codex/packages/standalone/current/bin/codex".into(),
+                argv: vec!["codex".into()],
+                env: HashMap::from([(
+                    "CODEX_HOME".to_string(),
+                    "/h/.local/share/webrota-ai/codex/7".to_string(),
+                )]),
+            },
+        );
+
+        let sample = manager.metrics().remove(0);
+        assert_eq!(sample.processes, 3);
+        assert_eq!(sample.agent.as_deref(), Some("Codex"));
+        assert_eq!(sample.agent_profile.as_deref(), Some("7"));
+        let homes = manager.codex_homes();
+        assert_eq!(homes.len(), 1, "{homes:?}");
+        assert!(homes[0].to_string_lossy().ends_with("codex/7"), "{homes:?}");
+    }
+
+    /// Lancador do teste abaixo, como o `python3 wrai.py claude` de quem usa
+    /// perfis: abre o agente de `CIALAI_TEST_AGENT` com o perfil so no
+    /// ambiente do filho e espera por ele.
+    #[test]
+    fn metrics_launcher_helper_opens_the_agent() {
+        let Ok(agent) = std::env::var("CIALAI_TEST_AGENT") else {
+            return;
+        };
+        let mut child = std::process::Command::new(agent)
+            .args([
+                "--exact",
+                "workspace::terminal::tests::metrics_load_helper_holds_cpu_and_memory",
+                "--nocapture",
+            ])
+            .env(
+                "CLAUDE_CONFIG_DIR",
+                std::env::var("CIALAI_TEST_PROFILE").unwrap(),
+            )
+            .env("CIALAI_TEST_ALLOC_MB", "200")
+            .spawn()
+            .unwrap();
+        let _ = child.wait();
+    }
+
+    /// Carga do agente de teste: toca a memoria pedida e ocupa um nucleo ate o
+    /// teste principal encerrar a sessao.
+    #[test]
+    fn metrics_load_helper_holds_cpu_and_memory() {
+        let Ok(megabytes) = std::env::var("CIALAI_TEST_ALLOC_MB") else {
+            return;
+        };
+        let block = vec![1u8; megabytes.parse::<usize>().unwrap() * 1024 * 1024];
+        let deadline = Instant::now() + Duration::from_secs(45);
+        let mut spins = 0u64;
+        while Instant::now() < deadline {
+            spins = std::hint::black_box(spins.wrapping_add(1));
+        }
+        std::hint::black_box(&block);
+    }
+
+    /// Soma do PSS da arvore lida direto do `/proc`, a referencia do Linux.
+    #[cfg(target_os = "linux")]
+    fn proc_pss_of_tree(root: u32) -> u64 {
+        let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+        for entry in std::fs::read_dir("/proc").unwrap().flatten() {
+            let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+                continue;
+            };
+            let Ok(stat) = std::fs::read_to_string(entry.path().join("stat")) else {
+                continue;
+            };
+            let Some(close) = stat.rfind(')') else {
+                continue;
+            };
+            if let Some(ppid) = stat[close + 1..]
+                .split_ascii_whitespace()
+                .nth(1)
+                .and_then(|value| value.parse::<u32>().ok())
+            {
+                children.entry(ppid).or_default().push(pid);
+            }
+        }
+        let mut tree = vec![root];
+        let mut index = 0;
+        while index < tree.len() {
+            tree.extend(children.get(&tree[index]).cloned().unwrap_or_default());
+            index += 1;
+        }
+        tree.iter()
+            .filter_map(|pid| std::fs::read_to_string(format!("/proc/{pid}/smaps_rollup")).ok())
+            .filter_map(|rollup| {
+                rollup
+                    .lines()
+                    .find(|line| line.starts_with("Pss:"))
+                    .and_then(|line| line.split_ascii_whitespace().nth(1))
+                    .and_then(|value| value.parse::<u64>().ok())
+            })
+            .sum::<u64>()
+            * 1024
+    }
+
+    /// Ponta a ponta num PTY real: o shell troca de pasta, um lancador abre o
+    /// agente com o perfil so no ambiente do filho, e o agente ocupa um nucleo
+    /// e 200 MB. As metricas precisam seguir a pasta nova, achar o perfil do
+    /// agente e medir CPU e memoria na ordem de grandeza da carga.
+    #[cfg(unix)]
+    #[test]
+    fn metrics_follow_cwd_agent_profile_cpu_and_memory_of_a_launched_agent() {
+        let root =
+            std::env::temp_dir().join(format!("cialai-metricas-agente-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        // O kernel devolve a pasta resolvida, como /private/var no macOS.
+        let root = root.canonicalize().unwrap();
+        let bin = root.join("bin");
+        let profile = root.join("perfis").join("conta-7");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::create_dir_all(&profile).unwrap();
+        let exe = std::env::current_exe().unwrap();
+        for name in ["python3", "claude"] {
+            let _ = std::fs::remove_file(bin.join(name));
+            std::os::unix::fs::symlink(&exe, bin.join(name)).unwrap();
+        }
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let _cleanup = Cleanup(manager.clone(), root.clone());
+        let shell = pty::TestShell::isolated();
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let info = spawn_test_shell(&manager, &shell, "agente", SubscriberKey::Webview, sink);
+        let _reader = drain_until_exit_in_background(
+            rx,
+            LaterCursorQueries::new("agente", &manager, info.id),
+        );
+        let pid = info.pid.expect("pid do shell");
+
+        // A primeira leitura ve o shell na pasta inicial; a troca vem depois.
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while Instant::now() < deadline {
+            let sample = manager.metrics();
+            if sample.first().is_some_and(|sample| {
+                sample.available && sample.foreground.is_none() && sample.shell_cwd.is_some()
+            }) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        let quote = |path: &Path| format!("'{}'", path.display());
+        let command = format!(
+            "cd {}; unset CLAUDE_CONFIG_DIR CODEX_HOME; CIALAI_TEST_AGENT={} CIALAI_TEST_PROFILE={} {} --exact workspace::terminal::tests::metrics_launcher_helper_opens_the_agent claude\n",
+            quote(&root),
+            quote(&bin.join("claude")),
+            quote(&profile),
+            quote(&bin.join("python3")),
+        );
+        manager.write(info.id, command.as_bytes()).expect("write");
+
+        let expected_cwd = root.to_string_lossy().to_string();
+        let deadline = Instant::now() + Duration::from_secs(20);
+        let mut last = None;
+        let mut passed = false;
+        while Instant::now() < deadline {
+            thread::sleep(Duration::from_secs(1));
+            let sample = manager.metrics().remove(0);
+            let foreground = sample.foreground.clone();
+            let memory = sample.memory_bytes.unwrap_or(0);
+            let ok = sample.shell_cwd.as_deref() == Some(expected_cwd.as_str())
+                && foreground.as_ref().and_then(|value| value.agent.as_deref())
+                    == Some("Claude Code")
+                && foreground
+                    .as_ref()
+                    .and_then(|value| value.profile.as_deref())
+                    == Some("conta-7")
+                && sample.agent_profile.as_deref() == Some("conta-7")
+                && sample.cpu_percent.is_some_and(|cpu| cpu > 20.0)
+                && memory >= 150 * 1024 * 1024;
+            let _ = writeln!(
+                std::io::stderr(),
+                "[cialai-test] agente: cpu={:?} memoria={} MB processos={} pasta={:?} primeiro plano={:?} perfil={:?}/{:?}",
+                sample.cpu_percent,
+                memory / 1024 / 1024,
+                sample.processes,
+                sample.shell_cwd,
+                foreground
+                    .as_ref()
+                    .map(|value| (&value.command, &value.agent)),
+                foreground.as_ref().and_then(|value| value.profile.clone()),
+                sample.agent_profile,
+            );
+            last = Some(sample);
+            if ok {
+                passed = true;
+                break;
+            }
+        }
+        let sample = last.expect("amostra das metricas");
+        assert!(
+            passed,
+            "metricas do agente lancado fora do esperado: {sample:?}"
+        );
+        let cpu = sample.cpu_percent.unwrap();
+        let cores = thread::available_parallelism().map_or(1, |value| value.get()) as f32;
+        assert!(cpu < cores * 100.0 + 50.0, "cpu acima dos nucleos: {cpu}");
+        let memory = sample.memory_bytes.unwrap();
+        assert!(
+            memory < 2 * 1024 * 1024 * 1024,
+            "memoria fora da ordem da carga: {memory}"
+        );
+        #[cfg(target_os = "linux")]
+        {
+            let reference = proc_pss_of_tree(pid) as f64;
+            let measured = memory as f64;
+            assert!(
+                (measured - reference).abs() <= reference * 0.2,
+                "memoria {measured} longe do PSS do /proc {reference}"
+            );
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = pid;
+        manager.write(info.id, &[0x03]).expect("ctrl-c");
     }
 }

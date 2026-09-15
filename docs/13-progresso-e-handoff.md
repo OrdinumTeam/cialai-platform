@@ -1202,6 +1202,14 @@ A coordenação exige que a chave de cada oferta seja a mesma do peer autenticad
 
 Cinco testes com transporte falso provam o upgrade confirmado nos dois lados, exigem que o servidor abra o candidato STUN refletido do cliente, simulam NAT simétrico com fallback, recusam uma oferta cuja chave difere do peer Tor e cobrem schema e tamanho. `go test -race -count=50 ./spikes/rendezvous` e `go vet ./spikes/rendezvous` passaram. Isso prova o protocolo e a máquina de estados, não o furo de NAT. CON-012 continua em andamento até os adaptadores usarem o stream onion e o `quic.Transport` reais e as combinações físicas serem medidas.
 
+### 15/09/2026, métricas dos terminais e uso do plano no Linux
+
+Relato de usuário no Linux: CPU, memória e percentual da sessão de IA errados ou ausentes, com foto de shells ociosos em CPU 0% e Mem 4 MB. Num PTY real em Ubuntu 22.04 arm64 no Docker, como root e como usuário comum, com `yes` e 200 MB tocados na árvore, o código mediu CPU entre 99,3% e 100,4% contra 99,3% a 100,4% calculados do `/proc`, e 219 MB contra 219 MB de PSS somado. CPU e memória estavam certas; um bash de login ocioso tem 1,5 MB de PSS, então os 4 MB da foto são coerentes para um shell carregado.
+
+Causas reais encontradas. Primeiro, o backend Linux pedia ao `sysinfo` 0.36.1 `ProcessRefreshKind::everything()`, que usa `OnlyIfNotSet` para pasta atual, executável, argv e ambiente: o pid guardava a primeira leitura, e a pasta do shell ficava parada depois de `cd`, assim como a linha de comando depois de `exec`. Agora esses campos vêm do `/proc` a cada chamada e o snapshot só atualiza CPU e memória. Segundo, um lançador como o `wr-claude`, que roda `python3 wrai.py claude` e abre o `claude` com `CLAUDE_CONFIG_DIR` só no ambiente do filho, era tomado pelo agente, e o card buscava o uso do perfil padrão. `procs::direct_agent_of` separa o CLI de verdade do interpretador, e as métricas pegam o perfil do descendente que é o próprio agente. Terceiro, o uso do Codex só era procurado em `~/.codex*`; o `TerminalManager` guarda os `CODEX_HOME` das sessões e `ai_usage` lê também esses homes, como `$XDG_DATA_HOME/webrota-ai/codex/<conta>`. O teste de integração novo mediu, antes, pasta `/tmp` depois do `cd` e perfil `claude`; depois, a pasta nova, perfil `conta-7`, CPU de 99,6% e 229 MB.
+
+Fora deste escopo e ainda necessário: o AppImage vaza `PYTHONHOME` e `LD_LIBRARY_PATH` para os shells, o que derruba o `wr-claude` e o hook `claude-statusline.py`, sem o qual o Claude Code não publica o uso. Essa limpeza está na frente do ambiente dos processos filhos. No Windows, o `sysinfo` continua com a mesma leitura única da pasta atual.
+
 ## Arquivos para retomar
 
 | Arquivo | Uso |

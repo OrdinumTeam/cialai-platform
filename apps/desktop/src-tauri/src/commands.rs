@@ -695,14 +695,18 @@ pub async fn fs_drag_out(window: WebviewWindow, paths: Vec<String>) -> FsResult<
 /// hook de linha de estado, Codex pelo arquivo da propria sessao. Lista vazia
 /// quando nenhum dos dois deixou dado recente.
 #[tauri::command(async)]
-pub fn ai_usage(app: AppHandle, cache: State<'_, UsageCache>) -> Vec<AgentUsage> {
+pub fn ai_usage(
+    app: AppHandle,
+    cache: State<'_, UsageCache>,
+    terminals: State<'_, TerminalManager>,
+) -> Vec<AgentUsage> {
     let Ok(home) = app.path().home_dir() else {
         return Vec::new();
     };
     let Ok(support) = app.path().app_data_dir() else {
         return Vec::new();
     };
-    ai::cached(&cache, &home, &support)
+    ai::cached(&cache, &home, &support, &terminals.codex_homes())
 }
 
 /// Passa a observar um caminho; as mudancas chegam por `fs://change`.

@@ -11,6 +11,9 @@
 //!   `token_count` carrega `rate_limits` com `primary` e `secondary`, cada um
 //!   com `used_percent`, `window_minutes` e `resets_at`. Nada precisa ser
 //!   configurado: basta ler a cauda do arquivo mais recente de cada home.
+//!   Alem de `~/.codex*`, valem os homes que as sessoes abertas apontam por
+//!   `CODEX_HOME`, como o de um lancador que guarda cada conta em
+//!   `$XDG_DATA_HOME/<lancador>/codex/<conta>`.
 //! - **Claude Code** nao guarda isso em lugar nenhum do disco. O unico lugar
 //!   onde o numero aparece e a entrada do hook de linha de estado, que recebe
 //!   `rate_limits` a cada redesenho. O script `scripts/claude-statusline.py`
@@ -266,28 +269,40 @@ fn recent_day_dirs(sessions: &Path) -> Vec<PathBuf> {
 
 /// Homes do Codex na pasta do usuario. Alem de `.codex`, cada perfil vira um
 /// `.codex-alguma-coisa`, e cada um e uma conta: o numero vale por home.
+/// `extra` traz os homes das sessoes abertas, que podem morar fora dela.
 /// Devolve pares de home e pasta de sessoes.
-fn codex_homes(home: &Path) -> Vec<(PathBuf, PathBuf)> {
-    let Ok(read) = fs::read_dir(home) else {
-        return Vec::new();
-    };
-    let mut homes: Vec<(PathBuf, PathBuf)> = read
-        .flatten()
-        .filter(|item| {
-            let name = item.file_name();
-            let name = name.to_string_lossy();
-            name == ".codex" || name.starts_with(".codex-")
+fn codex_homes(home: &Path, extra: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
+    let mut homes: Vec<(PathBuf, PathBuf)> = fs::read_dir(home)
+        .map(|read| {
+            read.flatten()
+                .filter(|item| {
+                    let name = item.file_name();
+                    let name = name.to_string_lossy();
+                    name == ".codex" || name.starts_with(".codex-")
+                })
+                .map(|item| (item.path(), item.path().join("sessions")))
+                .collect()
         })
-        .map(|item| (item.path(), item.path().join("sessions")))
-        .filter(|(_, sessions)| sessions.is_dir())
+        .unwrap_or_default();
+    let mut seen: Vec<PathBuf> = homes
+        .iter()
+        .map(|(dir, _)| dir.canonicalize().unwrap_or_else(|_| dir.clone()))
         .collect();
+    for dir in extra {
+        let resolved = dir.canonicalize().unwrap_or_else(|_| dir.clone());
+        if !seen.contains(&resolved) {
+            seen.push(resolved);
+            homes.push((dir.clone(), dir.join("sessions")));
+        }
+    }
+    homes.retain(|(_, sessions)| sessions.is_dir());
     homes.sort();
     homes
 }
 
 /// O rollout mais recente de cada home do Codex.
-fn newest_rollouts(home: &Path) -> Vec<(PathBuf, PathBuf)> {
-    codex_homes(home)
+fn newest_rollouts(home: &Path, extra: &[PathBuf]) -> Vec<(PathBuf, PathBuf)> {
+    codex_homes(home, extra)
         .into_iter()
         .filter_map(|(home_dir, sessions)| newest_in(&sessions).map(|(_, path)| (home_dir, path)))
         .collect()
@@ -363,8 +378,8 @@ fn label_for(minutes: Option<u64>) -> String {
 
 /// Um item por home do Codex, cada um com o rollout mais recente daquele
 /// home.
-pub fn codex(home: &Path) -> Vec<AgentUsage> {
-    newest_rollouts(home)
+pub fn codex(home: &Path, extra: &[PathBuf]) -> Vec<AgentUsage> {
+    newest_rollouts(home, extra)
         .into_iter()
         .filter_map(|(home_dir, path)| codex_at(&path, &home_dir))
         .collect()
@@ -428,33 +443,39 @@ type RolloutList = Vec<(PathBuf, PathBuf)>;
 #[derive(Default)]
 pub struct UsageCache {
     inner: Mutex<Option<(Instant, Vec<AgentUsage>)>>,
-    rollouts: Mutex<Option<(Instant, RolloutList)>>,
+    /// Varredura guardada junto dos homes extras que ela considerou.
+    rollouts: Mutex<Option<(Instant, Vec<PathBuf>, RolloutList)>>,
 }
 
-pub fn read_all(home: &Path, app_support: &Path) -> Vec<AgentUsage> {
+pub fn read_all(home: &Path, app_support: &Path, codex_extra: &[PathBuf]) -> Vec<AgentUsage> {
     let mut found = claude(home, app_support);
-    found.extend(codex(home));
+    found.extend(codex(home, codex_extra));
     found
 }
 
 /// Rollout mais recente de cada home do Codex, revarrendo as pastas de
-/// tempos em tempos.
-fn rollout_paths(cache: &UsageCache, home: &Path) -> RolloutList {
+/// tempos em tempos ou quando uma sessao passa a usar outro home.
+fn rollout_paths(cache: &UsageCache, home: &Path, extra: &[PathBuf]) -> RolloutList {
     let mut guard = cache
         .rollouts
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if let Some((at, paths)) = guard.as_ref() {
-        if at.elapsed() < SCAN_TTL {
+    if let Some((at, known, paths)) = guard.as_ref() {
+        if at.elapsed() < SCAN_TTL && known.as_slice() == extra {
             return paths.clone();
         }
     }
-    let found = newest_rollouts(home);
-    *guard = Some((Instant::now(), found.clone()));
+    let found = newest_rollouts(home, extra);
+    *guard = Some((Instant::now(), extra.to_vec(), found.clone()));
     found
 }
 
-pub fn cached(cache: &UsageCache, home: &Path, app_support: &Path) -> Vec<AgentUsage> {
+pub fn cached(
+    cache: &UsageCache,
+    home: &Path,
+    app_support: &Path,
+    codex_extra: &[PathBuf],
+) -> Vec<AgentUsage> {
     let guard = cache
         .inner
         .lock()
@@ -466,7 +487,7 @@ pub fn cached(cache: &UsageCache, home: &Path, app_support: &Path) -> Vec<AgentU
     }
     drop(guard);
     let mut fresh = claude(home, app_support);
-    for (home_dir, path) in rollout_paths(cache, home) {
+    for (home_dir, path) in rollout_paths(cache, home, codex_extra) {
         if let Some(usage) = codex_at(&path, &home_dir) {
             fresh.push(usage);
         }
@@ -608,7 +629,7 @@ mod tests {
             format!("{}\n", lines.join("\n")),
         )
         .unwrap();
-        let list = codex(&dir);
+        let list = codex(&dir, &[]);
         assert_eq!(list.len(), 1);
         let usage = &list[0];
         assert_eq!(usage.agent, "Codex");
@@ -641,7 +662,7 @@ mod tests {
         fs::create_dir_all(&novo).unwrap();
         std::thread::sleep(Duration::from_millis(20));
         fs::write(novo.join("rollout-b.jsonl"), linha(4.0)).unwrap();
-        let list = codex(&dir);
+        let list = codex(&dir, &[]);
         assert_eq!(list.len(), 2, "{list:?}");
         let padrao = list
             .iter()
@@ -664,11 +685,56 @@ mod tests {
     }
 
     #[test]
+    fn reads_codex_homes_of_open_sessions_outside_the_user_folder() {
+        let dir = sandbox("xdg");
+        let linha = |percent: f64| {
+            format!(
+                "{{\"payload\":{{\"type\":\"token_count\",\"rate_limits\":{{\"primary\":{{\"used_percent\":{percent},\"window_minutes\":300,\"resets_at\":1}}}}}}}}\n"
+            )
+        };
+        let home = dir.join("home");
+        let padrao = home.join(".codex/sessions/2026/09/14");
+        fs::create_dir_all(&padrao).unwrap();
+        fs::write(padrao.join("rollout-a.jsonl"), linha(11.0)).unwrap();
+        // Conta de um lancador em $XDG_DATA_HOME, fora de ~/.codex*.
+        let conta = home.join(".local/share/webrota-ai/codex/7");
+        let dia = conta.join("sessions/2026/09/15");
+        fs::create_dir_all(&dia).unwrap();
+        fs::write(dia.join("rollout-b.jsonl"), linha(42.0)).unwrap();
+        assert_eq!(
+            codex(&home, &[]).len(),
+            1,
+            "sem a sessao aberta so o padrao"
+        );
+        // O home padrao repetido pela sessao nao duplica o item.
+        let extra = vec![conta.clone(), home.join(".codex")];
+        let list = codex(&home, &extra);
+        assert_eq!(list.len(), 2, "{list:?}");
+        let perfil = list
+            .iter()
+            .find(|usage| usage.profile == "7")
+            .expect("conta 7");
+        assert_eq!(perfil.windows[0].used_percent, 42.0);
+        assert!(
+            perfil
+                .config_dir
+                .as_deref()
+                .unwrap()
+                .ends_with("/webrota-ai/codex/7")
+        );
+        // O cache revarre quando os homes das sessoes mudam.
+        let cache = UsageCache::default();
+        assert_eq!(rollout_paths(&cache, &home, &[]).len(), 1);
+        assert_eq!(rollout_paths(&cache, &home, &extra[..1]).len(), 2);
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
     fn missing_sources_are_silent() {
         let dir = sandbox("vazio");
         assert!(claude(&dir, &dir).is_empty());
-        assert!(codex(&dir).is_empty());
-        assert!(read_all(&dir, &dir).is_empty());
+        assert!(codex(&dir, &[]).is_empty());
+        assert!(read_all(&dir, &dir, &[dir.join("inexistente")]).is_empty());
         fs::remove_dir_all(&dir).unwrap();
     }
 }

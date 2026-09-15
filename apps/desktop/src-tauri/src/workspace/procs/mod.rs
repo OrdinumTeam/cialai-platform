@@ -326,17 +326,28 @@ fn agent_for_segment(segment: &str) -> Option<&'static str> {
         .map(|(label, _)| *label)
 }
 
-pub fn agent_of(command: &CommandLine) -> Option<&'static str> {
+/// Agente reconhecido pelo proprio executavel ou pelo `argv[0]`. Um
+/// interpretador ou lancador, como `python3 wrai.py claude`, fica de fora:
+/// ele cita o agente num argumento, mas o CLI de verdade e o filho que ele
+/// abre, com o perfil no ambiente.
+pub fn direct_agent_of(command: &CommandLine) -> Option<&'static str> {
     let first = command
         .argv
         .first()
         .map(|value| basename(value))
         .unwrap_or_default();
-    if let Some(agent) =
-        agent_for_segment(&basename(&command.exe)).or_else(|| agent_for_segment(&first))
-    {
+    agent_for_segment(&basename(&command.exe)).or_else(|| agent_for_segment(&first))
+}
+
+pub fn agent_of(command: &CommandLine) -> Option<&'static str> {
+    if let Some(agent) = direct_agent_of(command) {
         return Some(agent);
     }
+    let first = command
+        .argv
+        .first()
+        .map(|value| basename(value))
+        .unwrap_or_default();
     let runtime = RUNTIMES.contains(&segment_key(&first).as_str())
         || RUNTIMES.contains(&segment_key(&basename(&command.exe)).as_str());
     if !runtime {
@@ -613,5 +624,24 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(agent_of(&python), Some("Aider"));
+        assert_eq!(direct_agent_of(&python), None);
+        let launcher = CommandLine {
+            exe: "/usr/bin/python3.12".into(),
+            argv: vec![
+                "python3".into(),
+                "/home/x/.local/lib/webrota-ai/wrai.py".into(),
+                "claude".into(),
+            ],
+            ..Default::default()
+        };
+        assert_eq!(agent_of(&launcher), Some("Claude Code"));
+        assert_eq!(direct_agent_of(&launcher), None);
+        // O Claude Code nativo no Linux roda de `versions/<versao>`; o argv[0] e que diz.
+        let native = CommandLine {
+            exe: "/home/x/.local/share/claude/versions/2.1.9".into(),
+            argv: vec!["/home/x/.local/bin/claude".into()],
+            ..Default::default()
+        };
+        assert_eq!(direct_agent_of(&native), Some("Claude Code"));
     }
 }

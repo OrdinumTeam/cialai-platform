@@ -50,6 +50,17 @@ nativas dos respectivos sistemas.
 | Encerramento | Sinal para o grupo e término forçado após o prazo | Sinal para o grupo e término forçado após o prazo | Interrupção graciosa e encerramento do Job Object após o prazo |
 | Retomada | Sintaxe POSIX | Sintaxe POSIX | Sintaxe PowerShell ou cmd conforme o shell |
 
+Os cards somam CPU e memória da árvore do shell nos três sistemas. A CPU é
+medida entre duas amostras e 100% equivale a um núcleo. A memória é o
+`ri_phys_footprint` no macOS, o PSS de `smaps_rollup` no Linux, com RSS como
+reserva, e o working set privado no Windows. No Linux, pasta atual,
+executável, argv e ambiente são relidos do `/proc` a cada amostra, porque o
+snapshot do `sysinfo` guarda esses campos da primeira leitura do pid e não
+acompanha `cd` nem `exec`. Um lançador que só cita o agente num argumento,
+como `python3 wrai.py claude`, não define o perfil: vale o ambiente do CLI
+que ele abre. O uso do plano do Codex também é lido dos homes que as sessões
+abertas indicam por `CODEX_HOME`, inclusive fora de `~/.codex*`.
+
 O Windows exige 10 21H2 ou mais novo. ConPTY pode refluir a saída durante o
 redimensionamento e PowerShell 5.1 não oferece todos os modos de colagem do
 PowerShell 7. A preferência Terminal guarda shell, argumentos, `LANG` e prefixos

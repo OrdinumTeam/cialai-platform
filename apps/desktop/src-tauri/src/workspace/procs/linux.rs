@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Backend Linux: `sysinfo` fornece o snapshot portavel e `/proc` completa
 //! filhos por thread, grupo do terminal, PSS e arquivos abertos.
+//!
+//! Do snapshot saem tempo de CPU, pai e inicio, alem das reservas de filhos,
+//! estado e RSS. O `sysinfo` le pasta atual, executavel, argv e ambiente uma
+//! unica vez por processo, e o pid mantem esses valores mesmo depois de um
+//! `cd` ou de um `exec`. Por isso esses campos vem do `/proc` a cada chamada.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -41,7 +46,7 @@ impl Backend {
         lock(&self.system).refresh_processes_specifics(
             ProcessesToUpdate::All,
             true,
-            ProcessRefreshKind::everything().without_tasks(),
+            ProcessRefreshKind::nothing().with_cpu().with_memory(),
         );
     }
 
@@ -81,6 +86,7 @@ impl Backend {
 
     pub(super) fn info(&self, pid: u32) -> Option<ProcInfo> {
         let stat = read_stat(&self.proc_root, pid);
+        let exe = read_exe(&self.proc_root, pid);
         let system = lock(&self.system);
         let process = system.process(Pid::from_u32(pid))?;
         let state = stat
@@ -91,7 +97,7 @@ impl Backend {
             .as_ref()
             .map(|value| value.comm.clone())
             .unwrap_or_else(|| process.name().to_string_lossy().to_string());
-        let name = preferred_name(process.exe(), process.name());
+        let name = preferred_name(exe.as_deref(), &comm);
         Some(ProcInfo {
             pid,
             ppid: process.parent().map(Pid::as_u32).unwrap_or_default(),
@@ -104,25 +110,20 @@ impl Backend {
     }
 
     pub(super) fn name(&self, pid: u32) -> Option<String> {
-        let system = lock(&self.system);
-        let process = system.process(Pid::from_u32(pid))?;
-        Some(preferred_name(process.exe(), process.name()))
+        let comm = read_stat(&self.proc_root, pid)?.comm;
+        Some(preferred_name(
+            read_exe(&self.proc_root, pid).as_deref(),
+            &comm,
+        ))
     }
 
     pub(super) fn exe_path(&self, pid: u32) -> Option<String> {
-        lock(&self.system)
-            .process(Pid::from_u32(pid))?
-            .exe()
-            .map(|path| path.to_string_lossy().to_string())
-            .filter(|path| !path.is_empty())
+        read_exe(&self.proc_root, pid).map(|path| path.to_string_lossy().to_string())
     }
 
     pub(super) fn cwd(&self, pid: u32) -> Option<String> {
-        lock(&self.system)
-            .process(Pid::from_u32(pid))?
-            .cwd()
+        read_link_path(&self.proc_root.join(pid.to_string()).join("cwd"))
             .map(|path| path.to_string_lossy().to_string())
-            .filter(|path| !path.is_empty())
     }
 
     pub(super) fn open_files(&self, pid: u32) -> Vec<String> {
@@ -141,21 +142,21 @@ impl Backend {
     }
 
     pub(super) fn command_line(&self, pid: u32) -> Option<CommandLine> {
-        let system = lock(&self.system);
-        let process = system.process(Pid::from_u32(pid))?;
-        let exe = process
-            .exe()
+        let dir = self.proc_root.join(pid.to_string());
+        let exe = read_exe(&self.proc_root, pid)
             .map(|path| path.to_string_lossy().to_string())
             .unwrap_or_default();
-        let argv = process
-            .cmd()
-            .iter()
-            .map(|value| value.to_string_lossy().to_string())
-            .collect::<Vec<_>>();
+        let argv = fs::read(dir.join("cmdline"))
+            .map(|raw| nul_separated(&raw))
+            .unwrap_or_default();
         if exe.is_empty() && argv.is_empty() {
             return None;
         }
-        let env = allowed_environment(process.environ());
+        // Sem permissao, como num processo nao despejavel, o ambiente fica vazio.
+        let environ = fs::read(dir.join("environ"))
+            .map(|raw| nul_separated(&raw))
+            .unwrap_or_default();
+        let env = allowed_environment(&environ);
         Some(CommandLine { exe, argv, env })
     }
 
@@ -249,12 +250,36 @@ fn state_from_sysinfo(status: ProcessStatus) -> ProcState {
     }
 }
 
-fn preferred_name(exe: Option<&Path>, comm: &std::ffi::OsStr) -> String {
+fn preferred_name(exe: Option<&Path>, comm: &str) -> String {
     exe.and_then(Path::file_name)
+        .map(|name| name.to_string_lossy().to_string())
         .filter(|name| !name.is_empty())
-        .unwrap_or(comm)
-        .to_string_lossy()
-        .to_string()
+        .unwrap_or_else(|| comm.to_string())
+}
+
+fn read_link_path(link: &Path) -> Option<PathBuf> {
+    let path = fs::read_link(link).ok()?;
+    (!path.as_os_str().is_empty()).then_some(path)
+}
+
+/// Executavel atual. Um binario trocado em disco com o processo vivo, como
+/// numa atualizacao do agente, vem com o sufixo ` (deleted)`, que sai aqui.
+fn read_exe(proc_root: &Path, pid: u32) -> Option<PathBuf> {
+    let path = read_link_path(&proc_root.join(pid.to_string()).join("exe"))?;
+    let text = path.to_string_lossy();
+    Some(match text.strip_suffix(" (deleted)") {
+        Some(stripped) => PathBuf::from(stripped),
+        None => path,
+    })
+}
+
+/// `cmdline` e `environ` separados por NUL. Quem reescreve o proprio titulo
+/// deixa NULs e espacos sobrando no fim, e essas sobras nao viram argumento.
+fn nul_separated(raw: &[u8]) -> Vec<String> {
+    raw.split(|byte| *byte == 0)
+        .map(|part| String::from_utf8_lossy(part).trim().to_string())
+        .filter(|part| !part.is_empty())
+        .collect()
 }
 
 fn pss_bytes(path: &Path) -> Option<u64> {
@@ -265,12 +290,11 @@ fn pss_bytes(path: &Path) -> Option<u64> {
     })
 }
 
-fn allowed_environment(values: &[std::ffi::OsString]) -> HashMap<String, String> {
+fn allowed_environment(values: &[String]) -> HashMap<String, String> {
     values
         .iter()
         .take(MAX_ENV_ENTRIES)
-        .filter_map(|value| {
-            let text = value.to_string_lossy();
+        .filter_map(|text| {
             let (name, value) = text.split_once('=')?;
             ENV_OF_INTEREST
                 .contains(&name)
@@ -315,6 +339,51 @@ mod tests {
         fs::write(process.join("task/43/children"), "8 9\n").unwrap();
         assert_eq!(pss_bytes(&process.join("smaps_rollup")), Some(17 * 1024));
         assert_eq!(task_children(&root, 42), Some(vec![7, 8, 9]));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn rereads_cwd_executable_argv_and_environment_of_the_same_pid() {
+        let root = sandbox("fresco");
+        let process = root.join("42");
+        fs::create_dir_all(&process).unwrap();
+        let link = |target: &str, name: &str| {
+            let _ = fs::remove_file(process.join(name));
+            std::os::unix::fs::symlink(target, process.join(name)).unwrap();
+        };
+        link("/projeto/antes", "cwd");
+        link("/usr/bin/bash", "exe");
+        fs::write(process.join("cmdline"), b"-bash\0").unwrap();
+        fs::write(process.join("environ"), b"HOME=/h\0").unwrap();
+        let backend = Backend::at(root.clone());
+        backend.refresh();
+        assert_eq!(backend.cwd(42).as_deref(), Some("/projeto/antes"));
+        assert_eq!(backend.command_line(42).unwrap().argv, vec!["-bash"]);
+
+        // `cd` no shell e `exec` do lancador mantem o pid; a leitura seguinte ve os dois.
+        link("/projeto/depois", "cwd");
+        link("/opt/codex/bin/codex (deleted)", "exe");
+        fs::write(process.join("cmdline"), b"codex\0resume\0\0  \0").unwrap();
+        fs::write(
+            process.join("environ"),
+            b"CODEX_HOME=/h/.local/share/webrota-ai/codex/7\0SEGREDO_QUALQUER=x\0",
+        )
+        .unwrap();
+        backend.refresh();
+        assert_eq!(backend.cwd(42).as_deref(), Some("/projeto/depois"));
+        assert_eq!(
+            backend.exe_path(42).as_deref(),
+            Some("/opt/codex/bin/codex")
+        );
+        let command = backend.command_line(42).unwrap();
+        assert_eq!(command.exe, "/opt/codex/bin/codex");
+        assert_eq!(command.argv, vec!["codex", "resume"]);
+        assert_eq!(
+            command.env.get("CODEX_HOME").map(String::as_str),
+            Some("/h/.local/share/webrota-ai/codex/7")
+        );
+        assert_eq!(command.env.len(), 1);
+        assert!(backend.command_line(43).is_none());
         let _ = fs::remove_dir_all(root);
     }
 
