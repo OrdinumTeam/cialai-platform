@@ -118,6 +118,26 @@ test('revocation and incompatible versions stop reconnecting', async () => {
   }
 });
 
+test('a revoked device stays removed when the page returns to the foreground', async () => {
+  const socket = connection();
+  const count = SocketFixture.instances.length;
+  socket.close(4401);
+  listeners.get('pageshow')({ persisted: true });
+  listeners.get('pageshow')({ persisted: false });
+  document.visibilityState = 'hidden';
+  listeners.get('visibilitychange')();
+  document.visibilityState = 'visible';
+  listeners.get('visibilitychange')();
+  remote.connect();
+  remote.resume();
+  await new Promise((resolve) => setTimeout(resolve, 530));
+  assert.equal(SocketFixture.instances.length, count);
+  assert.equal(remote.state().status, 'removed');
+  assert.equal(remote.state().code, 4401);
+  await assert.rejects(remote.invoke('pty_list'), { code: 'bridge_disconnected' });
+  remote.disconnect();
+});
+
 test('native adapter authorizes remote calls and bypasses authorization inside Tauri', async () => {
   const calls = [];
   let native = false;
