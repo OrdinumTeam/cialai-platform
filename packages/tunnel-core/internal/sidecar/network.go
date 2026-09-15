@@ -42,7 +42,7 @@ const (
 
 // DefaultSTUNServers are asked through the QUIC socket when the gateway maps
 // no port. net.start replaces them with its stun argument.
-var DefaultSTUNServers = []string{"stun.cloudflare.com:3478", "stun.l.google.com:19302"}
+var DefaultSTUNServers = candidates.DefaultSTUNServers
 
 // TorService is the supervised onion service; *tor.Desktop implements it.
 type TorService interface {
@@ -309,7 +309,9 @@ func (n *network) startTor() {
 		n.setTorState(TorStatus{State: torFailed, Onion: n.onionAddress, Error: "tor_unavailable"})
 		return
 	}
-	listener, err := onion.Listen(service.Listener(), n.config.identity, onion.ListenConfig{Registry: n.config.devices, Pairing: n.config.sessions})
+	listener, err := onion.Listen(service.Listener(), n.config.identity, onion.ListenConfig{
+		Registry: n.config.devices, Pairing: n.config.sessions, Control: true,
+	})
 	if err != nil {
 		n.config.logger.Warn("onion listener did not start", logx.Fields{"error": err.Error()})
 		_ = service.Close()
@@ -318,6 +320,7 @@ func (n *network) startTor() {
 	}
 	n.tor = service
 	n.onion = listener
+	go n.acceptOnionControls(listener)
 	// StartDesktop returns before the supervisor reports its first phase;
 	// the snapshot fills the status unless a callback already did.
 	initial := torStatus(service.State())
@@ -582,8 +585,23 @@ func (n *network) transportsOf(key string) []string {
 	return names
 }
 
-// acceptControl waits for the control stream of a direct session. Restricted
-// sessions never get one and end the wait when they close.
+// acceptOnionControls serves the control connections of the onion listener,
+// which negotiate identity.ControlALPN and come only from registered keys, so
+// a phone on the Tor fallback coordinates the NAT punch and receives the reach
+// card. They never reach the edge and are not counted as sessions.
+func (n *network) acceptOnionControls(listener *onion.Listener) {
+	for {
+		session, err := listener.AcceptControl(n.ctx)
+		if err != nil {
+			return
+		}
+		go n.acceptControl(session)
+	}
+}
+
+// acceptControl waits for the control stream of a direct session or an onion
+// control connection. Restricted direct sessions never get one and end the
+// wait when they close.
 func (n *network) acceptControl(session transport.ControlSession) {
 	conn, err := rendezvous.Accept(n.ctx, session, rendezvous.Config{
 		Role: identity.RoleDesktop, LocalKey: n.config.identity.PublicKeyString(), Puncher: n.endpoint,
@@ -626,8 +644,8 @@ func (n *network) pathReport(session transport.Session, report rendezvous.PathRe
 	})
 }
 
-// controlPeer keeps one control channel current: the latest candidates and
-// reach card are sent after hello, on every change and before the TTL ends.
+// controlPeer keeps one control channel current: the latest reach card and
+// candidates are sent after hello, on every change and before the TTL ends.
 type controlPeer struct {
 	network *network
 	conn    *rendezvous.Conn
@@ -658,23 +676,23 @@ func (peer *controlPeer) run() {
 	}
 }
 
+// send writes the reach card before the candidates: a phone that punches over
+// a short lived Tor control connection reads the card before the candidates
+// that start its punch, so closing the channel afterwards never loses it.
 func (peer *controlPeer) send() {
 	n := peer.network
 	ctx, cancel := context.WithTimeout(n.ctx, controlSendTimeout)
 	defer cancel()
 	list := n.collector.Snapshot().Pairing()
-	sent, err := peer.conn.SendCandidates(ctx, list, controlCandidateTTL)
-	if err != nil {
-		n.config.logger.Debug("control candidates not sent", logx.Fields{"error": err.Error()})
-		return
-	}
-	card, err := candidates.NewCard(n.currentDesktop(), n.qrOnion(), sent.Candidates, time.Now(), 0)
+	card, err := candidates.NewCard(n.currentDesktop(), n.qrOnion(), list, time.Now(), 0)
 	if err != nil {
 		n.config.logger.Debug("reach card not built", logx.Fields{"error": err.Error()})
+	} else if err := peer.conn.SendReachUpdate(ctx, card); err != nil {
+		n.config.logger.Debug("reach card not sent", logx.Fields{"error": err.Error()})
 		return
 	}
-	if err := peer.conn.SendReachUpdate(ctx, card); err != nil {
-		n.config.logger.Debug("reach card not sent", logx.Fields{"error": err.Error()})
+	if _, err := peer.conn.SendCandidates(ctx, list, controlCandidateTTL); err != nil {
+		n.config.logger.Debug("control candidates not sent", logx.Fields{"error": err.Error()})
 	}
 }
 

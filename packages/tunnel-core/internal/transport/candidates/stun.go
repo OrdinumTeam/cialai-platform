@@ -16,6 +16,10 @@ import (
 	"tailscale.com/net/stun"
 )
 
+// DefaultSTUNServers are the public STUN servers the desktop sidecar and the
+// phone ask through their QUIC socket when no gateway mapping exists.
+var DefaultSTUNServers = []string{"stun.cloudflare.com:3478", "stun.l.google.com:19302"}
+
 // STUN retransmits follow RFC 8489: the request goes out again after 500 ms
 // and then after twice the previous interval, until the round deadline.
 const stunInitialRetransmit = 500 * time.Millisecond

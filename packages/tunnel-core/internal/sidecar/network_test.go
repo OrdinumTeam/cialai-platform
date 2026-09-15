@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,8 +15,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -253,6 +256,140 @@ func TestNetStartPairsAPhoneOverQUICAndOpensThePTY(t *testing.T) {
 		case <-time.After(testTimeout):
 			t.Fatal("the listener kept a session of the revoked key")
 		}
+	}
+}
+
+// TestNetStartServesTheControlChannelOverTheOnion pairs a phone over QUIC and
+// then opens the rendezvous channel through the onion listener of a fake Tor,
+// with the control ALPN: the desktop renews the reach card and sends its
+// candidates on it, relays the path report, keeps it out of the sessions and
+// closes it on revocation, after which the key opens no control channel.
+func TestNetStartServesTheControlChannelOverTheOnion(t *testing.T) {
+	executable, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan *fakeTor, 1)
+	h := startHarness(t, harnessOptions{
+		torExecutable: executable,
+		startTor: func(config tor.DesktopConfig) (TorService, error) {
+			fake, err := startFakeTor(config)
+			if err == nil {
+				started <- fake
+			}
+			return fake, err
+		},
+	})
+	status := h.start(t, map[string]any{"stun": []string{}})
+	fake := <-started
+	payload := beginPairing(t, h)
+	pinned, err := identity.ParsePublicKey(payload.Desktop.PublicKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	phone, err := identity.Generate(identity.RolePhone, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket, err := net.ListenPacket("udp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := direct.New(direct.Config{PacketConn: socket, Identity: phone})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = endpoint.Close() })
+	ctx, cancel := context.WithTimeout(context.Background(), 2*testTimeout)
+	defer cancel()
+	session, err := endpoint.Dial(ctx, net.JoinHostPort("127.0.0.1", strconv.Itoa(status.Direct.Port)), pinned)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pairStream, err := session.OpenStream(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	paired := postPair(t, pairStream, payload, phone)
+	_ = pairStream.Close()
+	_ = session.Close()
+
+	onionAddress := fake.Listener().Addr().String()
+	openControl := func(handler rendezvous.Handler) (*rendezvous.Conn, error) {
+		config, err := identity.ControlClientConfig(phone, pinned)
+		if err != nil {
+			return nil, err
+		}
+		conn, err := (&tls.Dialer{Config: config}).DialContext(ctx, "tcp", onionAddress)
+		if err != nil {
+			return nil, err
+		}
+		return rendezvous.Establish(ctx, conn, rendezvous.Config{
+			Role: identity.RolePhone, LocalKey: phone.PublicKeyString(), PeerKey: payload.Desktop.PublicKey,
+			HelloTimeout: testTimeout, Handler: handler,
+		})
+	}
+	reach := make(chan candidates.Card, 4)
+	peerCandidates := make(chan rendezvous.CandidateSet, 4)
+	var order []string
+	var orderMu sync.Mutex
+	control, err := openControl(rendezvous.Handler{
+		ReachUpdate: func(card candidates.Card) {
+			orderMu.Lock()
+			order = append(order, "reach_update")
+			orderMu.Unlock()
+			reach <- card
+		},
+		Candidates: func(set rendezvous.CandidateSet) {
+			orderMu.Lock()
+			order = append(order, "candidates")
+			orderMu.Unlock()
+			peerCandidates <- set
+		},
+	})
+	if err != nil {
+		t.Fatalf("control channel over the onion: %v", err)
+	}
+	defer control.Close()
+	select {
+	case card := <-reach:
+		if card.Onion != payload.Onion || card.Desktop.ID != status.Desktop.ID || card.Desktop.PublicKey != payload.Desktop.PublicKey {
+			t.Fatalf("reach update over the onion: %+v", card)
+		}
+	case <-ctx.Done():
+		t.Fatal("no reach update over the onion")
+	}
+	select {
+	case <-peerCandidates:
+	case <-ctx.Done():
+		t.Fatal("no candidates over the onion")
+	}
+	orderMu.Lock()
+	if !slices.Equal(order[:2], []string{"reach_update", "candidates"}) {
+		t.Fatalf("control messages arrived as %v, want the card first", order)
+	}
+	orderMu.Unlock()
+	if err := control.ReportPath(ctx, rendezvous.PathReport{Path: transport.NameTor, Reason: "sem candidatos"}); err != nil {
+		t.Fatal(err)
+	}
+	h.waitEvent(t, "path.changed", 0, testTimeout, func(data json.RawMessage) bool {
+		return strings.Contains(string(data), paired.DeviceID) && strings.Contains(string(data), `"transport":"tor"`) && strings.Contains(string(data), `"path":"tor"`)
+	})
+	var live NetStatus
+	h.call(t, "net.status", map[string]any{}, &live)
+	if live.Sessions.Tor != 0 {
+		t.Fatalf("the control connection was counted as a session: %+v", live.Sessions)
+	}
+
+	h.call(t, "devices.revoke", map[string]any{"deviceId": paired.DeviceID}, nil)
+	select {
+	case <-control.Done():
+	case <-ctx.Done():
+		t.Fatal("revocation left the onion control channel open")
+	}
+	if again, err := openControl(rendezvous.Handler{}); err == nil {
+		_ = again.Close()
+		t.Fatal("a revoked phone opened a control channel over the onion")
 	}
 }
 
