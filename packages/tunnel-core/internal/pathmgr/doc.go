@@ -53,6 +53,18 @@
 //     attempt, and every call fails with ErrRevoked. Tor carries no close code,
 //     so over the fallback only the proxy can report revocation.
 //
+// # Control channel
+//
+// The rendezvous channel follows the active path. Over a direct session the
+// manager opens it on the QUIC control stream, reports the path and adopts
+// every reach card the desktop renews through UpdateCard until the path is
+// released. Over the fallback it exists only during step 4: RendezvousPuncher
+// dials a Tor connection dedicated to it, negotiated with
+// identity.ControlALPN so the onion listener of the desktop keeps it apart from
+// edge connections and accepts it only from a registered key. The desktop
+// sends its reach card right after hello, so each punch attempt also renews
+// the card. Config.OnCard hands every adopted card to the owner to persist.
+//
 // # Events
 //
 // Config.OnPath receives the EventPathChanged payload each time a path becomes

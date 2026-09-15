@@ -12,9 +12,10 @@
 // or a mutual TLS connection over Tor, through Establish. The transport
 // already proved both keys; hello only binds the channel to them. When the
 // stream belongs to a transport.Session, the peer key comes from that session.
-// Over Tor the stream is one onion connection dedicated to the channel; how
-// the desktop listener tells it apart from edge connections is left to the
-// integration of this package.
+// Over Tor the stream is one onion connection dedicated to the channel: the
+// phone negotiates identity.ControlALPN, and the onion listener of the desktop
+// hands such connections, from registered keys only, to AcceptControl instead
+// of the edge, so Accept serves them like the QUIC control stream.
 //
 // # Frames
 //
@@ -85,11 +86,12 @@
 //
 // The phone path manager opens the channel on the Tor fallback, sends fresh
 // candidates, calls Punch within its budget, reports the result with
-// ReportPath and stores the cards received through Handler.ReachUpdate. The
-// desktop sidecar accepts the channel, sends its candidates after hello and
-// whenever the collector reports a change, sends the reach card with
-// SendReachUpdate, serves punches with its QUIC endpoint as the puncher and
-// relays Handler.PathReport as session state.
+// ReportPath and stores the cards received through Handler.ReachUpdate; over
+// a direct session it keeps the channel open on the QUIC control stream for
+// the card renewals. The desktop sidecar accepts the channel on both carriers,
+// sends the reach card with SendReachUpdate and then its candidates after
+// hello and whenever the collector reports a change, serves punches with its
+// QUIC endpoint as the puncher and relays Handler.PathReport as session state.
 //
 // The tests use a fake transport and the real QUIC and onion TLS carriers over
 // loopback, which has no NAT. Punching through real gateways is not verified

@@ -18,6 +18,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/tor"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
 	"github.com/Cialai/cialai/packages/tunnel-core/testutil"
 )
 
@@ -219,4 +220,105 @@ func TestTunnelReachesDesktopThroughRealTor(t *testing.T) {
 	}
 	t.Logf("timings: pair %s, connect %d ms, page load %s, WebSocket open and echo %s, onion published at %s, total %s",
 		pairElapsed.Round(time.Millisecond), connected.ElapsedMillis, loadElapsed.Round(time.Millisecond), echoElapsed.Round(time.Millisecond), time.Duration(published.Load()), clock())
+}
+
+// TestTunnelPunchesThroughRealTor runs CON-032 through two real Tor processes:
+// the phone connects over the onion, opens the control channel with the
+// control ALPN through its Tor, receives the desktop candidates and punches to
+// the direct listener on loopback, where the proxy reopens the page. It needs
+// CIALAI_TOR_BIN and the public Tor network.
+func TestTunnelPunchesThroughRealTor(t *testing.T) {
+	executable := os.Getenv(realTorEnv)
+	if executable == "" || testing.Short() {
+		t.Skip(realTorEnv + " is not set")
+	}
+	ctx := testContext(t, 9*time.Minute)
+	began := time.Now()
+	clock := func() time.Duration { return time.Since(began).Round(100 * time.Millisecond) }
+
+	client := startPhoneTor(t, executable)
+	paths, err := statedir.Prepare(filepath.Join(t.TempDir(), "desktop"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceLog := &torLog{}
+	service, err := tor.StartDesktop(tor.DesktopConfig{Executable: executable, Dir: paths.Tor, OnionKeyPath: paths.OnionKey, Output: serviceLog})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = service.Close()
+		if t.Failed() {
+			t.Logf("desktop tor log:\n%s", serviceLog.tail(40))
+		}
+	})
+	desktop := testutil.StartDesktop(t, testutil.DesktopOptions{OnionListener: service.Listener(), Onion: service.Address() + ":443"})
+	desktop.SetReach([]pairing.Candidate{deadCandidate(t)})
+
+	events := &recorder{}
+	tunnel := newTestTunnel(t, t.TempDir(), events)
+	// A punch that misses its budget is tried again soon instead of in 5 min.
+	tunnel.timings = pathmgr.Timings{Retries: []time.Duration{}, Hysteresis: 15 * time.Second, UpgradeInterval: 15 * time.Second}
+	useLoopbackCandidates(tunnel)
+	if err := tunnel.SetTorEndpoints(client.socks, client.control, client.cookie); err != nil {
+		t.Fatal(err)
+	}
+	paired := pairWith(t, tunnel, desktop.BeginPair(t, []pairing.Candidate{desktop.LANCandidate()}, 10*time.Minute))
+	if _, err := service.WaitState(ctx, func(state tor.State) bool { return state.Published }); err != nil {
+		t.Fatalf("onion not published: %v", err)
+	}
+	t.Logf("onion published at %s", clock())
+
+	var connected pathmgr.Result
+	for attempt := 1; ; attempt++ {
+		raw, err := tunnel.Connect(paired.DesktopID)
+		if err == nil {
+			connected = decode[pathmgr.Result](t, raw)
+			break
+		}
+		t.Logf("connect attempt %d at %s: %v", attempt, clock(), err)
+		if attempt == 6 || ctx.Err() != nil {
+			t.Fatalf("connect over the fallback never succeeded: %v", err)
+		}
+	}
+	torAt := time.Now()
+	if connected.Transport != transport.NameTor {
+		t.Fatalf("connect %+v, want the fallback", connected)
+	}
+	t.Logf("connected over tor at %s in %d ms", clock(), connected.ElapsedMillis)
+
+	deadline := time.Now().Add(3 * time.Minute)
+	var directAt time.Time
+	for {
+		if active := decode[map[string]any](t, must(tunnel.StatusJSON()))["active"]; active != nil && active.(map[string]any)["path"] == "direct" {
+			directAt = time.Now()
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no punch succeeded; control channels %+v, path events %v", desktop.ControlChannels(), events.kinds(0, "path"))
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	punched := events.wait(t, 0, "path", field("reason", pathmgr.ReasonPunch))
+	punchElapsed := directAt.Sub(torAt)
+	if punched["transport"] != transport.NameDirect {
+		t.Fatalf("path event %v", punched)
+	}
+	first, found := firstControl(desktop.ControlChannels(), transport.NameTor, tunnel.local.PublicKeyString())
+	if !found {
+		t.Fatalf("no control channel over the onion: %+v", desktop.ControlChannels())
+	}
+	page := openPage(t, must(tunnel.OpenDesktop(paired.DesktopID, paired.Token, 0)))
+	page.echo(t, ctx, "after the punch through tor").CloseNow()
+	if upgrade := lastUpgrade(t, desktop); upgrade.Transport != transport.NameDirect {
+		t.Fatalf("socket after the punch arrived over %q", upgrade.Transport)
+	}
+	torChannels := 0
+	for _, channel := range desktop.ControlChannels() {
+		if channel.Transport == transport.NameTor {
+			torChannels++
+		}
+	}
+	t.Logf("timings: tor path to direct by punch %s, of which %s until the first onion control channel finished hello; %d onion control channels, total %s; path events %v",
+		punchElapsed.Round(time.Millisecond), first.At.Sub(torAt).Round(time.Millisecond), torChannels, clock(), events.kinds(0, "path"))
 }

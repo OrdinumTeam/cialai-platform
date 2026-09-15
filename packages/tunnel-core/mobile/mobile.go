@@ -3,8 +3,11 @@
 // The phone holds an Ed25519 identity, remembers the reach card of each paired
 // desktop and reaches it through the path manager: the local network and the
 // direct internet path over QUIC, or the Tor fallback through the SOCKS
-// listener of the Tor the native side runs. The loopback proxy serves the
-// desktop page over whichever path is active.
+// listener of the Tor the native side runs. On the fallback the manager tries
+// the NAT punch over a Tor control connection, with the phone candidates of
+// the QUIC socket, STUN included, and every reach card the desktop renews over
+// a control channel is stored again. The loopback proxy serves the desktop
+// page over whichever path is active.
 //
 // Only types accepted by gobind cross the boundary; structured values are
 // JSON. Errors read "code: message", and the native side hands the code to
@@ -28,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"maps"
 	"net"
 	"net/netip"
@@ -41,10 +45,14 @@ import (
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/mdns"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/rendezvous"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/tor"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/candidates"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/direct"
 )
 
@@ -89,11 +97,15 @@ type Tunnel struct {
 	listenPacket func() (net.PacketConn, error)
 	pairRetry    time.Duration
 	pairTorGrace time.Duration
+	stunServers  []string
+	// punchCandidates returns the phone candidates of endpoint for a punch.
+	punchCandidates func(ctx context.Context, endpoint *direct.Endpoint) ([]pairing.Candidate, error)
 
 	mu         sync.Mutex
 	desktops   map[string]storedDesktop
 	reported   map[string][]netip.AddrPort
 	endpoint   *direct.Endpoint
+	collector  *candidates.Collector
 	manager    *pathmgr.Manager
 	managerID  string
 	managerGen uint64
@@ -131,10 +143,11 @@ func NewTunnel(stateDir string, listener Listener) (*Tunnel, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	tunnel := &Tunnel{
 		paths: paths, listener: listener, local: local, tor: tor.NewClient(), now: time.Now,
-		listenPacket: listenUDP, pairRetry: pairTorRetry, pairTorGrace: pairTorGrace,
+		listenPacket: listenUDP, pairRetry: pairTorRetry, pairTorGrace: pairTorGrace, stunServers: candidates.DefaultSTUNServers,
 		desktops: desktops, reported: map[string][]netip.AddrPort{},
 		torStatus: pathmgr.TorStatus{State: pathmgr.TorDisabled}, ctx: ctx, cancel: cancel,
 	}
+	tunnel.punchCandidates = tunnel.collectCandidates
 	tunnel.logLevel.Store(levelInfo)
 	if legacy {
 		tunnel.emit("state", map[string]any{"legacyDiscarded": true})
@@ -286,10 +299,13 @@ func (tunnel *Tunnel) Stop() error {
 	defer tunnel.opMu.Unlock()
 	tunnel.mu.Lock()
 	manager, instance, proxyID := tunnel.detachLocked()
-	endpoint := tunnel.endpoint
-	tunnel.endpoint = nil
+	endpoint, collector := tunnel.endpoint, tunnel.collector
+	tunnel.endpoint, tunnel.collector = nil, nil
 	tunnel.mu.Unlock()
 	tunnel.release(manager, instance, proxyID)
+	if collector != nil {
+		_ = collector.Close()
+	}
 	var err error
 	if endpoint != nil {
 		if closeErr := endpoint.Close(); closeErr != nil {
@@ -337,6 +353,12 @@ func (tunnel *Tunnel) DesktopsJSON() (string, error) {
 // NotifyNetworkChange reports that the phone network changed: the active
 // direct session migrates, or the paths are evaluated again.
 func (tunnel *Tunnel) NotifyNetworkChange(reachable bool) {
+	tunnel.mu.Lock()
+	collector := tunnel.collector
+	tunnel.mu.Unlock()
+	if collector != nil && reachable {
+		collector.NetworkChanged()
+	}
 	if manager := tunnel.currentManager(); manager != nil {
 		manager.NotifyNetworkChange(reachable)
 	}
@@ -416,16 +438,27 @@ func (tunnel *Tunnel) managerForLocked(desktopID string) (*pathmgr.Manager, erro
 	generation := tunnel.managerGen
 	reported := slices.Clone(tunnel.reported[desktopID])
 	tunnel.mu.Unlock()
+	logf := func(format string, args ...any) { tunnel.log(levelDebug, fmt.Sprintf(format, args...)) }
+	puncher := &pathmgr.RendezvousPuncher{
+		Local: tunnel.local, Endpoint: endpoint,
+		OpenControl: func(ctx context.Context, target pathmgr.Desktop) (io.ReadWriteCloser, error) {
+			return tunnel.tor.DialControlTLS(ctx, target.Onion, tunnel.local, target.PublicKey)
+		},
+		Candidates: func(ctx context.Context) ([]pairing.Candidate, error) { return tunnel.punchCandidates(ctx, endpoint) },
+		Handler:    rendezvous.Handler{ReachUpdate: func(card candidates.Card) { tunnel.reachUpdate(generation, card) }},
+		Logf:       logf,
+	}
 	manager, err := pathmgr.New(pathmgr.Config{
-		Card: card, Local: tunnel.local, Direct: endpoint, Tor: tunnel.tor,
+		Card: card, Local: tunnel.local, Direct: endpoint, Tor: tunnel.tor, Puncher: puncher,
 		ListenPacket: tunnel.listenPacket, Timings: tunnel.timings,
 		OnPath: func(event pathmgr.PathEvent) { tunnel.onPath(generation, event) },
+		OnCard: func(card candidates.Card) { tunnel.storeCard(generation, card) },
 		OnTor: func(status pathmgr.TorStatus) {
 			if tunnel.currentGeneration() == generation {
 				tunnel.setTor(status)
 			}
 		},
-		Logf: func(format string, args ...any) { tunnel.log(levelDebug, fmt.Sprintf(format, args...)) },
+		Logf: logf,
 	})
 	if err != nil {
 		return nil, coded("path_setup_failed", err)
@@ -485,6 +518,77 @@ func (tunnel *Tunnel) ensureEndpoint() (*direct.Endpoint, error) {
 	}
 	tunnel.endpoint = endpoint
 	return endpoint, nil
+}
+
+// collectCandidates gathers the phone candidates of endpoint for a punch: the
+// interface addresses and the address STUN reflects through the QUIC socket.
+// The collector starts with the first punch, so a phone that never punches
+// sends no STUN request.
+func (tunnel *Tunnel) collectCandidates(ctx context.Context, endpoint *direct.Endpoint) ([]pairing.Candidate, error) {
+	tunnel.mu.Lock()
+	if tunnel.endpoint != endpoint {
+		tunnel.mu.Unlock()
+		return nil, transport.ErrClosed
+	}
+	collector := tunnel.collector
+	if collector == nil {
+		created, err := candidates.New(candidates.Config{
+			Socket: endpoint, STUNServers: tunnel.stunServers,
+			Logf: func(format string, args ...any) { tunnel.log(levelDebug, fmt.Sprintf(format, args...)) },
+		})
+		if err != nil {
+			tunnel.mu.Unlock()
+			return nil, err
+		}
+		tunnel.collector, collector = created, created
+	}
+	tunnel.mu.Unlock()
+	snapshot, err := collector.Collect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.Pairing(), nil
+}
+
+// reachUpdate hands a card renewed over the control channel of a punch to the
+// manager of generation, which stores it through storeCard.
+func (tunnel *Tunnel) reachUpdate(generation uint64, card candidates.Card) {
+	tunnel.mu.Lock()
+	manager := tunnel.manager
+	current := generation == tunnel.managerGen
+	tunnel.mu.Unlock()
+	if !current || manager == nil {
+		return
+	}
+	if err := manager.UpdateCard(card); err != nil {
+		tunnel.log(levelDebug, "renewed reach card refused: "+err.Error())
+	}
+}
+
+// storeCard remembers a reach card the manager of generation adopted: name,
+// onion, candidates and their issue time.
+func (tunnel *Tunnel) storeCard(generation uint64, card candidates.Card) {
+	tunnel.mu.Lock()
+	desktop, known := tunnel.desktops[card.Desktop.ID]
+	if generation != tunnel.managerGen || !known || desktop.PublicKey != card.Desktop.PublicKey {
+		tunnel.mu.Unlock()
+		return
+	}
+	renewed := desktop
+	renewed.Name, renewed.Onion = card.Desktop.Name, card.Onion
+	renewed.Candidates, renewed.CandidatesIssuedAt = slices.Clone(card.Candidates), card.IssuedAt.UTC()
+	if err := renewed.validate(); err != nil {
+		tunnel.mu.Unlock()
+		tunnel.log(levelDebug, "renewed reach card not stored: "+err.Error())
+		return
+	}
+	tunnel.desktops[card.Desktop.ID] = renewed
+	tunnel.mu.Unlock()
+	if err := tunnel.save(); err != nil {
+		tunnel.log(levelError, err.Error())
+		return
+	}
+	tunnel.log(levelDebug, fmt.Sprintf("reach card of %s renewed with %d candidates", card.Desktop.ID, len(card.Candidates)))
 }
 
 func (tunnel *Tunnel) onPath(generation uint64, event pathmgr.PathEvent) {

@@ -98,9 +98,13 @@ type Config struct {
 	Clock   Clock
 	Timings Timings
 	// OnPath receives EventPathChanged payloads and OnTor the fallback state.
-	// Callbacks run in order on one goroutine and must not call Close.
+	// OnCard receives each reach card adopted by UpdateCard, including the
+	// cards the desktop renews over the control channel of a direct session,
+	// so the owner can persist them. Callbacks run in order on one goroutine
+	// and must not call Close.
 	OnPath func(PathEvent)
 	OnTor  func(TorStatus)
+	OnCard func(candidates.Card)
 	// Logf receives diagnostics; nil discards them.
 	Logf func(format string, args ...any)
 }
@@ -146,6 +150,9 @@ type activePath struct {
 	session  transport.Session // nil over Tor
 	stop     chan struct{}
 	stopOnce sync.Once
+	// ctx ends when the path is released; it bounds the control channel.
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // run is one evaluation. Only the current run may change the active path.
@@ -463,7 +470,8 @@ func (m *Manager) SetReportedLAN(addresses []netip.AddrPort) {
 	m.mu.Unlock()
 }
 
-// UpdateCard replaces the reach card with a renewed one for the same desktop.
+// UpdateCard replaces the reach card with a renewed one for the same desktop
+// and hands it to Config.OnCard. Later evaluations dial its candidates.
 func (m *Manager) UpdateCard(card candidates.Card) error {
 	desktop, err := desktopOf(card)
 	if err != nil {
@@ -476,6 +484,9 @@ func (m *Manager) UpdateCard(card candidates.Card) error {
 	}
 	m.card = card
 	m.desktop = desktop
+	if handle := m.config.OnCard; handle != nil {
+		m.events.post(func() { handle(card) })
+	}
 	return nil
 }
 
@@ -590,6 +601,7 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 		path.Address = canonicalAddress(session.RemoteAddr())
 	}
 	next := &activePath{seq: m.pathSeq, path: path, session: session, stop: make(chan struct{})}
+	next.ctx, next.cancel = context.WithCancel(context.Background())
 	if m.hadPath {
 		m.lastSwitchAt = now
 	}
@@ -602,6 +614,10 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 	if session != nil {
 		m.wait.Add(1)
 		go m.watch(next)
+		if control, ok := session.(transport.ControlSession); ok && m.config.Local != nil {
+			m.wait.Add(1)
+			go m.keepControl(next, control)
+		}
 	}
 	m.broadcastLocked()
 	m.mu.Unlock()
@@ -742,7 +758,12 @@ func (m *Manager) release(active *activePath) {
 	if active == nil {
 		return
 	}
-	active.stopOnce.Do(func() { close(active.stop) })
+	active.stopOnce.Do(func() {
+		close(active.stop)
+		if active.cancel != nil {
+			active.cancel()
+		}
+	})
 	if active.session != nil {
 		_ = active.session.Close()
 	}

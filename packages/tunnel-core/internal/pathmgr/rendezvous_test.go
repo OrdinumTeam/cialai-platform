@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,46 @@ func TestRendezvousPuncherUpgradesTheFallbackOverRealCarriers(t *testing.T) {
 		}
 	case <-ctx.Done():
 		t.Fatal("the desktop did not receive the path report")
+	}
+}
+
+// The phone candidates, which may wait for STUN, are gathered while the
+// channel opens, and a punch that ends early stops and waits for the gathering.
+func TestRendezvousPuncherGathersCandidatesWhileTheChannelOpens(t *testing.T) {
+	ctx := loopbackContext(t)
+	phone := mustIdentity(t, identity.RolePhone)
+	desktop := mustIdentity(t, identity.RoleDesktop)
+	gathering := make(chan struct{})
+	gathered := make(chan error, 1)
+	puncher := &RendezvousPuncher{
+		Local:    phone,
+		Endpoint: newLoopbackEndpoint(t, phone),
+		OpenControl: func(ctx context.Context, _ Desktop) (io.ReadWriteCloser, error) {
+			select {
+			case <-gathering:
+				return nil, errors.New("desktop unreachable")
+			case <-ctx.Done():
+				return nil, errors.New("the candidates were not gathered while the channel opened")
+			}
+		},
+		Candidates: func(ctx context.Context) ([]pairing.Candidate, error) {
+			close(gathering)
+			<-ctx.Done()
+			gathered <- ctx.Err()
+			return nil, ctx.Err()
+		},
+	}
+	target := Desktop{ID: desktop.ID(), PublicKey: desktop.PublicKey()}
+	if _, err := puncher.Punch(ctx, target); err == nil || !strings.Contains(err.Error(), "desktop unreachable") {
+		t.Fatalf("Punch = %v", err)
+	}
+	select {
+	case err := <-gathered:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("gathering ended with %v", err)
+		}
+	default:
+		t.Fatal("Punch returned before the gathering ended")
 	}
 }
 
