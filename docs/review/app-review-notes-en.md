@@ -53,4 +53,4 @@ A pairing walkthrough video is attached in the review package. It shows the same
 - Generate no long lived QR payload or static device token.
 - Attach the final pairing video.
 - Revoke every device used during rehearsal and recording.
-- Record the submission date and build number in `docs/12-decisoes.md` after the real action.
+- Record the submission date and build number in `docs/produto/12-decisoes.md` after the real action.

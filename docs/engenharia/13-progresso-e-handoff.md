@@ -1,6 +1,6 @@
 # Progresso e passagem de contexto
 
-Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md).
+Atualizado em 13/09/2026. Este é o ponto de entrada para continuar a execução. O escopo e as dependências permanecem em [11-roadmap-de-execucao.md](../produto/11-roadmap-de-execucao.md).
 
 ## Regras de continuidade
 
@@ -1033,7 +1033,7 @@ Criado `docs/testes/roteiro-4.7-android.md` para uma execução por combinação
 
 ### 13/09/2026, procedimento da tarefa 7.5 preparado na frente C
 
-Criado `CHANGELOG.md` em inglês com o estado não publicado da primeira versão. `docs/release-v1.md` transforma os seis itens do documento 10 em etapas de congelamento, testes, assinatura, tag, conferência de artefatos, instalação limpa, distribuição interna, submissão e recuo. As responsabilidades por chaves, contas, aparelhos, contato, capturas e aprovação estão marcadas como dependências do usuário.
+Criado `CHANGELOG.md` em inglês com o estado não publicado da primeira versão. `docs/engenharia/release-v1.md` transforma os seis itens do documento 10 em etapas de congelamento, testes, assinatura, tag, conferência de artefatos, instalação limpa, distribuição interna, submissão e recuo. As responsabilidades por chaves, contas, aparelhos, contato, capturas e aprovação estão marcadas como dependências do usuário.
 
 `tools/release/check-release.mjs` valida a presença dos seis gates, dos seis formatos desktop, dos cinco sidecars, do atualizador e dos dois artefatos móveis. `npm run check:release` terminou com código 0 e informou seis gates documentados e seis pendentes. A execução com `--release` falhou como esperado antes de consultar versões e tag, porque nenhum gate tem evidência verificada. `git diff --check` passou. Nenhuma versão foi alterada, tag criada, chave gerada, ação remota disparada, release publicada, instalação feita ou loja acessada; a tarefa 7.5 permanece preparada, sem aceite de lançamento.
 

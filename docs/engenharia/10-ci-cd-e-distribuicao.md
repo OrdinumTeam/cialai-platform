@@ -14,7 +14,7 @@ Em 13/09/2026 o repositório público `Cialai/cialai` foi criado com histórico 
 Checklist original da exportação:
 
 1. Decidir se o público recebe o histórico completo ou um ponto de partida limpo. O histórico e os documentos internos citam caminhos locais, o Ordinum Control e o diário de execução.
-2. Revisar `docs/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
+2. Revisar `docs/engenharia/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
 3. Feito em 13/09/2026: o módulo Go, os imports, o endpoint do updater, o podspec e os links dos documentos já usam `github.com/Cialai/cialai`.
 4. Publicar a primeira release pelo repositório público `Cialai/cialai`. Apps instalados só procuram atualização na URL compilada neles.
 5. Definir onde ficam o app do Codemagic e os secrets de assinatura. Workflows disparados por PR de fork nunca recebem secrets.
@@ -121,4 +121,4 @@ O repositório privado `ordinum-credentials` guarda referências, donos e proced
 3. Tag `v<semver>` empurrada; `release.yml` publica os seis instaladores assinados, os cinco sidecars, `latest.json` e os artefatos móveis.
 4. Instalação limpa em cada sistema até um celular pareado, pelo roteiro físico de conectividade em `docs/testes/roteiro-conectividade.md`.
 5. `cm-publish.sh` para `ios-testflight`; instalação pelo grupo interno; `play_api.py upload` na faixa interna.
-6. Submissões às lojas com os textos e as respostas de conformidade; registro das datas e dos números de build em `docs/12-decisoes.md`.
+6. Submissões às lojas com os textos e as respostas de conformidade; registro das datas e dos números de build em `docs/produto/12-decisoes.md`.

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path) => readFileSync(`${root}/${path}`, 'utf8');
 const readme = read('README.md');
-const guide = read('docs/14-diferencas-por-plataforma.md');
+const guide = read('docs/arquitetura/14-diferencas-por-plataforma.md');
 const index = read('docs/README.md');
 const normalizedReadme = readme.replaceAll(/\s+/g, ' ');
 
@@ -18,7 +18,7 @@ for (const required of [
   'npm run sidecar --workspace @cialai/desktop',
   'npm test',
   'Windows runs the native Rust suite',
-  'docs/14-diferencas-por-plataforma.md',
+  'docs/arquitetura/14-diferencas-por-plataforma.md',
 ]) {
   assert.ok(
     normalizedReadme.includes(required),

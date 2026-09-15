@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Rendered by bootstrap.sh into config.yaml. Keep in sync with
-# docs/06-rede-headscale-e-pareamento.md.
+# docs/arquitetura/06-rede-e-pareamento.md.
 server_url: https://__HEADSCALE_DOMAIN__
 listen_addr: 0.0.0.0:443
 metrics_listen_addr: 127.0.0.1:9090

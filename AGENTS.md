@@ -1,6 +1,6 @@
 # Continuidade da execução
 
-Leia `docs/13-progresso-e-handoff.md` no início de cada sessão. Siga as tarefas e dependências de `docs/11-roadmap-de-execucao.md` e atualize o registro de progresso depois de cada entrega, teste relevante ou impedimento.
+Leia `docs/engenharia/13-progresso-e-handoff.md` no início de cada sessão. Siga as tarefas e dependências de `docs/produto/11-roadmap-de-execucao.md` e atualize o registro de progresso depois de cada entrega, teste relevante ou impedimento.
 
 O projeto irmão `ordinum-control` é fonte somente leitura. Preserve suas alterações sem commit. Não copie credenciais, estado de usuário ou conteúdo de projetos para este repositório.
 

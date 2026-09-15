@@ -37,7 +37,7 @@ These captures use fictional projects and the reproducible demo mode. The comple
 | Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; physical Windows machines and code signing pending |
 | Signed releases and stores | macOS Developer ID signing and notarization accepted locally; Windows signing, store accounts, external review and version 1.0.0 pending |
 
-Prepared code is not the same as verified distribution. See the [execution handoff](./docs/13-progresso-e-handoff.md) for exact evidence and remaining external work.
+Prepared code is not the same as verified distribution. See the [execution handoff](./docs/engenharia/13-progresso-e-handoff.md) for exact evidence and remaining external work.
 
 ## Run the desktop app from source
 
@@ -97,7 +97,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A physical Windows machine, WebView2 with a GPU, installing the packages and code signing have not been exercised. Behavior differences between systems are documented in [docs/14-diferencas-por-plataforma.md](./docs/14-diferencas-por-plataforma.md).
+Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A physical Windows machine, WebView2 with a GPU, installing the packages and code signing have not been exercised. Behavior differences between systems are documented in [docs/arquitetura/14-diferencas-por-plataforma.md](./docs/arquitetura/14-diferencas-por-plataforma.md).
 
 ## Connect your phone
 

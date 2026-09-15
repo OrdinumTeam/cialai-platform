@@ -90,7 +90,7 @@ Esta etapa é uma ação do usuário porque envia uma tag e aciona serviços ext
 4. Conferir o relatório de pré lançamento do Play e preencher o roteiro Android.
 5. Auditar os binários finais antes de confirmar as respostas de privacidade e Data safety.
 6. Fazer as capturas nativas conforme `docs/stores/screenshots.md` e revisar os textos nos dois idiomas.
-7. Registrar datas, versões e números de build em `docs/12-decisoes.md`.
+7. Registrar datas, versões e números de build em `docs/produto/12-decisoes.md`.
 8. Enviar App Store e Play para revisão somente após todos os gates verificados.
 
 ## Recuo

@@ -237,7 +237,7 @@ cialai-desktop
 
 No Fedora e no openSUSE, o equivalente é o `Cialai_x86_64.rpm`. O smoke de
 `appimage-smoke.yml` e a checagem de conflitos com o Mesa estão descritos em
-[10-ci-cd-e-distribuicao.md](./10-ci-cd-e-distribuicao.md).
+[10-ci-cd-e-distribuicao.md](../engenharia/10-ci-cd-e-distribuicao.md).
 
 ## Conectividade com o celular
 

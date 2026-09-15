@@ -1,28 +1,54 @@
 # Documentação do Cialai
 
-Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 15/09/2026, para a prévia 0.2.0, a conectividade automática substituiu o Headscale no fluxo do produto; a validação em aparelhos reais continua pendente. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
+Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 15/09/2026, para a prévia 0.2.0, a conectividade automática substituiu o Headscale no fluxo do produto; a validação em aparelhos reais continua pendente. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13 Progresso e handoff](./engenharia/13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
 
 Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão automática entre os aparelhos, direta sempre que a rede permite e pelo Tor embutido como ponto de encontro e reserva, sem servidor da pessoa, da Ordinum ou do projeto.
 
-## Ordem de leitura
+## Estrutura
 
-| Ordem | Documento | Responde |
+Os números dos documentos são identificadores estáveis, como os das tarefas: continuam os mesmos quando um documento muda de pasta. A ordem de leitura segue os números.
+
+| Pasta | Conteúdo |
+| --- | --- |
+| `produto/` | Visão, protótipo de origem, marca, roadmap e decisões |
+| `arquitetura/` | Desenho do sistema, desktop, mobile, rede, protocolo e diferenças entre sistemas |
+| `engenharia/` | Monorepo, CI e distribuição, progresso, credenciais e release da versão 1 |
+| `testes/` | Roteiros de validação em aparelhos e redes reais |
+| `stores/` | Textos e metadados das lojas |
+| `review/` | Material para a revisão das lojas |
+| `legal/` | Política de privacidade e termos de uso |
+| `evidence/` | Capturas e registros que comprovam cada entrega |
+
+## Produto
+
+| Nº | Documento | Responde |
 | --- | --- | --- |
-| 1 | [01-visao-e-escopo.md](./01-visao-e-escopo.md) | O que o produto é, para quem, o que entra e o que fica de fora, decisões confirmadas |
-| 2 | [02-analise-do-prototipo.md](./02-analise-do-prototipo.md) | O que existe no Ordinum Control, onde vive, como se comporta, o que precisa ser preservado |
-| 3 | [03-arquitetura.md](./03-arquitetura.md) | O desenho alvo, os componentes, as portas, os fluxos e as alternativas descartadas |
-| 4 | [04-desktop.md](./04-desktop.md) | O app desktop: reaproveitamento arquivo a arquivo, matriz por sistema, janela, atalhos, onboarding |
-| 5 | [05-mobile.md](./05-mobile.md) | Os apps iOS e Android: casca Expo preservada, módulo nativo do túnel, leitor de QR, lojas |
-| 6 | [06-rede-headscale-e-pareamento.md](./06-rede-headscale-e-pareamento.md) | Conectividade automática, núcleo do túnel, borda, proxy, pareamento, ameaças e testes; as seções do Headscale são históricas até CON-070 |
-| 7 | [07-protocolo-da-ponte.md](./07-protocolo-da-ponte.md) | A ponte WebSocket entre a página do celular e o desktop, preservada e estendida |
-| 8 | [08-design-e-marca.md](./08-design-e-marca.md) | Identidade Cialai aplicada, tokens mantidos, paleta das sessões e tema do terminal |
-| 9 | [09-monorepo-e-ferramentas.md](./09-monorepo-e-ferramentas.md) | Estrutura de pastas, toolchains, scripts, testes por pacote e convenções |
-| 10 | [10-ci-cd-e-distribuicao.md](./10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, identificadores, credenciais por referência, lojas e releases |
-| 11 | [11-roadmap-de-execucao.md](./11-roadmap-de-execucao.md) | Fases, tarefas numeradas, critérios de aceite, dependências e riscos |
-| 12 | [12-decisoes.md](./12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
-| Continuidade | [13-progresso-e-handoff.md](./13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
-| Referência | [14-diferencas-por-plataforma.md](./14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
-| Distribuição | [15-credenciais-de-build.md](./15-credenciais-de-build.md) | Onde ficam as credenciais do Codemagic para iOS e Android e como cadastrá-las |
+| 01 | [Visão e escopo](./produto/01-visao-e-escopo.md) | O que o produto é, para quem, o que entra e o que fica de fora, decisões confirmadas |
+| 02 | [Análise do protótipo](./produto/02-analise-do-prototipo.md) | O que existe no Ordinum Control, onde vive, como se comporta, o que precisa ser preservado |
+| 08 | [Design e marca](./produto/08-design-e-marca.md) | Identidade Cialai aplicada, tokens mantidos, paleta das sessões e tema do terminal |
+| 11 | [Roadmap de execução](./produto/11-roadmap-de-execucao.md) | Fases, tarefas numeradas, critérios de aceite, dependências e riscos |
+| 12 | [Decisões](./produto/12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
+
+## Arquitetura
+
+| Nº | Documento | Responde |
+| --- | --- | --- |
+| 03 | [Arquitetura](./arquitetura/03-arquitetura.md) | O desenho alvo, os componentes, as portas, os fluxos e as alternativas descartadas |
+| 04 | [Desktop](./arquitetura/04-desktop.md) | O app desktop: reaproveitamento arquivo a arquivo, matriz por sistema, janela, atalhos, onboarding |
+| 05 | [Mobile](./arquitetura/05-mobile.md) | Os apps iOS e Android: casca Expo preservada, módulo nativo do túnel, leitor de QR, lojas |
+| 06 | [Rede e pareamento](./arquitetura/06-rede-e-pareamento.md) | Conectividade automática, núcleo do túnel, borda, proxy, pareamento, ameaças e testes; as seções do Headscale são históricas até CON-070 |
+| 07 | [Protocolo da ponte](./arquitetura/07-protocolo-da-ponte.md) | A ponte WebSocket entre a página do celular e o desktop, preservada e estendida |
+| 14 | [Diferenças por plataforma](./arquitetura/14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
+
+## Engenharia
+
+| Nº | Documento | Responde |
+| --- | --- | --- |
+| 09 | [Monorepo e ferramentas](./engenharia/09-monorepo-e-ferramentas.md) | Estrutura de pastas, toolchains, scripts, testes por pacote e convenções |
+| 10 | [CI/CD e distribuição](./engenharia/10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, identificadores, credenciais por referência, lojas e releases |
+| 13 | [Progresso e handoff](./engenharia/13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
+| 15 | [Credenciais de build](./engenharia/15-credenciais-de-build.md) | Onde ficam as credenciais do Codemagic para iOS e Android e como cadastrá-las |
+| v1 | [Procedimento da versão 1](./engenharia/release-v1.md) | Portões e passos para publicar a primeira versão estável |
 
 Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `Implementado`, `Preparado` e `Pendente`. O roteiro não considera workflow escrito como workflow executado, binding gerado como aplicativo nativo compilado, nem material de loja como submissão.
 

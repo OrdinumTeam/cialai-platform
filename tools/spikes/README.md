@@ -1,7 +1,7 @@
 # Experimentos da Fase 0
 
 Estes experimentos não são o transporte de produção. Critérios de aceite completos
-em [rede e pareamento](../../docs/06-rede-headscale-e-pareamento.md).
+em [rede e pareamento](../../docs/arquitetura/06-rede-e-pareamento.md).
 
 ## Spike 3, política e expiração
 
@@ -59,7 +59,7 @@ Headscale existentes.
 
 Não substituir os resultados acima por build, simulador ou testes unitários. Registre
 data, aparelho, versão do sistema, versões dos componentes, medições e resultado
-em `docs/13-progresso-e-handoff.md` e em `docs/12-decisoes.md`.
+em `docs/engenharia/13-progresso-e-handoff.md` e em `docs/produto/12-decisoes.md`.
 
 ## Preparação do spike 1
 

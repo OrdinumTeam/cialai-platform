@@ -232,7 +232,7 @@ sequenceDiagram
 | Refused remotely | `fs_*`, `git_*`, `browser_*` |
 | Versioning | `version: 1` plus a `features` array such as `terminal-mobile-v1`, which grants the phone PTY width for 15 s, renewed every 5 s |
 
-Full specifications: [bridge protocol](../docs/07-protocolo-da-ponte.md) and [network and pairing](../docs/06-rede-headscale-e-pareamento.md).
+Full specifications: [bridge protocol](../docs/arquitetura/07-protocolo-da-ponte.md) and [network and pairing](../docs/arquitetura/06-rede-e-pareamento.md).
 
 ## How connectivity is built and validated
 
@@ -283,7 +283,7 @@ Please report vulnerabilities privately as described in [SECURITY.md](../SECURIT
 
 ## Status
 
-Snapshot of 15 September 2026. The live record with commands and results is [docs/13-progresso-e-handoff.md](../docs/13-progresso-e-handoff.md).
+Snapshot of 15 September 2026. The live record with commands and results is [docs/engenharia/13-progresso-e-handoff.md](../docs/engenharia/13-progresso-e-handoff.md).
 
 | Area | Verified | Pending |
 | --- | --- | --- |
@@ -337,7 +337,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows; on Linux the release fixes the AppImage after bundling so it runs with the graphics stack of recent distributions. Platform specific behavior is documented in [docs/14-diferencas-por-plataforma.md](https://github.com/Cialai/cialai/blob/main/docs/14-diferencas-por-plataforma.md).
+Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows; on Linux the release fixes the AppImage after bundling so it runs with the graphics stack of recent distributions. Platform specific behavior is documented in [docs/arquitetura/14-diferencas-por-plataforma.md](https://github.com/Cialai/cialai/blob/main/docs/arquitetura/14-diferencas-por-plataforma.md).
 
 ### Tests and checks
 
@@ -392,16 +392,16 @@ Design documents are written in Portuguese. Code identifiers and comments are in
 
 | Document | Covers |
 | --- | --- |
-| [01 Vision and scope](../docs/01-visao-e-escopo.md) | Product, audience, what is in and out |
-| [03 Architecture](../docs/03-arquitetura.md) | Target design, components, ports, flows and rejected alternatives |
-| [04 Desktop](../docs/04-desktop.md) | Rust core, per OS matrix, window, shortcuts and onboarding |
-| [05 Mobile](../docs/05-mobile.md) | Expo shell, native tunnel module, QR scanner and stores |
-| [06 Network and pairing](../docs/06-rede-headscale-e-pareamento.md) | Automatic connectivity, tunnel core, edge, proxy, pairing and threats; Headscale sections are historical |
-| [07 Bridge protocol](../docs/07-protocolo-da-ponte.md) | WebSocket contract between the phone page and the desktop |
-| [09 Monorepo and tooling](../docs/09-monorepo-e-ferramentas.md) | Layout, toolchains, scripts and conventions |
-| [10 CI/CD and distribution](../docs/10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, signing and releases |
-| [11 Roadmap](../docs/11-roadmap-de-execucao.md) | Phases, tasks and acceptance criteria |
-| [12 Decisions](../docs/12-decisoes.md) | Decision log with context and consequences |
+| [01 Vision and scope](../docs/produto/01-visao-e-escopo.md) | Product, audience, what is in and out |
+| [03 Architecture](../docs/arquitetura/03-arquitetura.md) | Target design, components, ports, flows and rejected alternatives |
+| [04 Desktop](../docs/arquitetura/04-desktop.md) | Rust core, per OS matrix, window, shortcuts and onboarding |
+| [05 Mobile](../docs/arquitetura/05-mobile.md) | Expo shell, native tunnel module, QR scanner and stores |
+| [06 Network and pairing](../docs/arquitetura/06-rede-e-pareamento.md) | Automatic connectivity, tunnel core, edge, proxy, pairing and threats; Headscale sections are historical |
+| [07 Bridge protocol](../docs/arquitetura/07-protocolo-da-ponte.md) | WebSocket contract between the phone page and the desktop |
+| [09 Monorepo and tooling](../docs/engenharia/09-monorepo-e-ferramentas.md) | Layout, toolchains, scripts and conventions |
+| [10 CI/CD and distribution](../docs/engenharia/10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, signing and releases |
+| [11 Roadmap](../docs/produto/11-roadmap-de-execucao.md) | Phases, tasks and acceptance criteria |
+| [12 Decisions](../docs/produto/12-decisoes.md) | Decision log with context and consequences |
 
 The full reading order is in [docs/README.md](../docs/README.md).
 

@@ -9,7 +9,7 @@ const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const releaseMode = process.argv.includes('--release');
 const expectedVersion = '1.0.0';
 
-const guide = read('docs/release-v1.md');
+const guide = read('docs/engenharia/release-v1.md');
 const changelog = read('CHANGELOG.md');
 const workflow = read('.github/workflows/release.yml');
 
@@ -27,7 +27,7 @@ for (const required of [
   'tunnelcore.aar',
   'TestFlight',
   'faixa interna do Play',
-  'docs/12-decisoes.md',
+  'docs/produto/12-decisoes.md',
 ]) {
   assert.ok(guide.includes(required), `Release guide is missing: ${required}`);
 }

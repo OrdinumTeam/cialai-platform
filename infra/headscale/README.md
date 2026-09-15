@@ -2,7 +2,7 @@
 
 Receita para colocar no ar, em cerca de 10 minutos, o servidor de coordenação que liga o celular ao computador. O tráfego dos terminais nunca passa pelo Headscale: ele só apresenta os aparelhos e, quando não há caminho direto, repassa pacotes já cifrados pelo relé DERP embutido.
 
-A especificação completa está em [docs/06-rede-headscale-e-pareamento.md](../../docs/06-rede-headscale-e-pareamento.md).
+A especificação completa está em [docs/arquitetura/06-rede-e-pareamento.md](../../docs/arquitetura/06-rede-e-pareamento.md).
 
 ## Requisitos
 

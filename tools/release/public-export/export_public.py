@@ -12,8 +12,8 @@ OUT = Path(sys.argv[1])
 
 EXCLUDE = {
     "AGENTS.md",
-    "docs/13-progresso-e-handoff.md",
-    "docs/15-credenciais-de-build.md",
+    "docs/engenharia/13-progresso-e-handoff.md",
+    "docs/engenharia/15-credenciais-de-build.md",
     "tools/check/control-source.mjs",
     "docs/evidence/control-source.json",
 }
@@ -51,37 +51,37 @@ pkg["scripts"].pop("check:source", None)
 (OUT / "package.json").write_text(json.dumps(pkg, indent=2, ensure_ascii=False) + "\n")
 
 edit("README.md", [(
-    "See the [execution handoff](./docs/13-progresso-e-handoff.md) for exact evidence and remaining external work.",
-    "See the [roadmap](./docs/11-roadmap-de-execucao.md) for the state of each task and the remaining external work.",
+    "See the [execution handoff](./docs/engenharia/13-progresso-e-handoff.md) for exact evidence and remaining external work.",
+    "See the [roadmap](./docs/produto/11-roadmap-de-execucao.md) for the state of each task and the remaining external work.",
 )])
 edit(".github/README.md", [(
-    "The live record with commands and results is [docs/13-progresso-e-handoff.md](../docs/13-progresso-e-handoff.md).",
-    "Task states are tracked in the [roadmap](../docs/11-roadmap-de-execucao.md).",
+    "The live record with commands and results is [docs/engenharia/13-progresso-e-handoff.md](../docs/engenharia/13-progresso-e-handoff.md).",
+    "Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md).",
 )])
 edit("CONTRIBUTING.md", [
-    ("Read the [execution handoff](docs/13-progresso-e-handoff.md) first. The [roadmap](docs/11-roadmap-de-execucao.md) records task dependencies and acceptance criteria.",
-     "Read the [roadmap](docs/11-roadmap-de-execucao.md) first. It records task dependencies and acceptance criteria."),
-    ("- Update `docs/13-progresso-e-handoff.md` after each delivery, relevant test or blocker.",
-     "- Update the task state in `docs/11-roadmap-de-execucao.md` when a delivery changes it."),
+    ("Read the [execution handoff](docs/engenharia/13-progresso-e-handoff.md) first. The [roadmap](docs/produto/11-roadmap-de-execucao.md) records task dependencies and acceptance criteria.",
+     "Read the [roadmap](docs/produto/11-roadmap-de-execucao.md) first. It records task dependencies and acceptance criteria."),
+    ("- Update `docs/engenharia/13-progresso-e-handoff.md` after each delivery, relevant test or blocker.",
+     "- Update the task state in `docs/produto/11-roadmap-de-execucao.md` when a delivery changes it."),
 ])
 edit("codemagic.yaml", [(
-    "# Grupos e credenciais estão descritos em docs/15-credenciais-de-build.md.",
+    "# Grupos e credenciais estão descritos em docs/engenharia/15-credenciais-de-build.md.",
     "# Grupos e credenciais são configurados no Codemagic por quem mantém a publicação dos apps.",
 )])
 edit("tools/spikes/README.md", [(
-    "em `docs/13-progresso-e-handoff.md` e em `docs/12-decisoes.md`",
-    "em `docs/12-decisoes.md`",
+    "em `docs/engenharia/13-progresso-e-handoff.md` e em `docs/produto/12-decisoes.md`",
+    "em `docs/produto/12-decisoes.md`",
 )])
 edit("docs/README.md", [
-    (" Para retomar o trabalho, leia primeiro [13-progresso-e-handoff.md](./13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.", ""),
-    (re.compile(r"^\| Continuidade \| \[13-progresso-e-handoff\.md\].*\n", re.M), ""),
-    (re.compile(r"^\| Distribuição \| \[15-credenciais-de-build\.md\].*\n", re.M), ""),
+    (" Para retomar o trabalho, leia primeiro [13 Progresso e handoff](./engenharia/13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.", ""),
+    (re.compile(r"^\| 13 \| \[Progresso e handoff\]\(\./engenharia/13-progresso-e-handoff\.md\).*\n", re.M), ""),
+    (re.compile(r"^\| 15 \| \[Credenciais de build\]\(\./engenharia/15-credenciais-de-build\.md\).*\n", re.M), ""),
     (re.compile(r"^\| `\$CONTROL` \|.*$", re.M), "| `$CONTROL` | Ordinum Control, o protótipo interno de onde o estúdio foi extraído; não é publicado |"),
     (re.compile(r"^\| `\$CIALAI` \|.*$", re.M), "| `$CIALAI` | Raiz deste repositório |"),
     (re.compile(r"^\| `\$ADVORIS` \|.*$", re.M), "| `$ADVORIS` | App interno da Ordinum usado como referência de publicação nas lojas; não é publicado |"),
     (re.compile(r"^\| `\$MARCA` \|.*$", re.M), "| `$MARCA` | Pasta `brand` deste repositório, com a identidade visual |"),
 ])
-edit("docs/10-ci-cd-e-distribuicao.md", [
+edit("docs/engenharia/10-ci-cd-e-distribuicao.md", [
     (re.compile(r"## Repositórios\n.*?(?=## Estado em)", re.S), ""),
     (re.compile(r"^\| App no Codemagic \|.*\n", re.M), ""),
     (re.compile(r"^\| Conta de serviço do Play \|.*\n", re.M), ""),
@@ -89,12 +89,12 @@ edit("docs/10-ci-cd-e-distribuicao.md", [
     (re.compile(r"Criado em 13/09/2026 na conta `\d+`, "), "Criado em 13/09/2026, "),
 ])
 
-edit("docs/10-ci-cd-e-distribuicao.md", [("idênticos aos do Advoris e do CowSynch", "idênticos aos de outros apps da Ordinum")])
-edit("docs/02-analise-do-prototipo.md", [
+edit("docs/engenharia/10-ci-cd-e-distribuicao.md", [("idênticos aos do Advoris e do CowSynch", "idênticos aos de outros apps da Ordinum")])
+edit("docs/produto/02-analise-do-prototipo.md", [
     ("Commit base e hashes dos oito arquivos modificados estão em `docs/evidence/control-source.json`", "Commit base e hashes dos oito arquivos modificados ficaram num inventário interno"),
     ("Raízes `Github Projects/OrdinumTeam` e `OrdinumCustomers`", "Raízes de projetos fixas do ambiente interno"),
 ])
-edit("docs/12-decisoes.md", [("em `docs/evidence/control-source.json`", "num inventário interno")])
+edit("docs/produto/12-decisoes.md", [("em `docs/evidence/control-source.json`", "num inventário interno")])
 edit("tools/release/.env.example", [(re.compile(r"^GOOGLE_PLAY_ACCOUNT_ID=\d+$", re.M), "GOOGLE_PLAY_ACCOUNT_ID=")])
 
 local = re.compile(r"/Users/[A-Za-z0-9._-]+/(?:Github Projects|Ordinum/Repos)/OrdinumTeam/(ordinum-control|cialai-platform|advoris-mobile|ordinum-marketing/projects/CIALAI)")
