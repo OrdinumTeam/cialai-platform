@@ -62,5 +62,5 @@ test('desktop toolbar renders the selected Spanish locale', async () => {
   }));
   assert.match(markup, /Mostrar u ocultar la barra lateral/);
   assert.match(markup, /Vincular teléfono/);
-  assert.match(markup, /Red no configurada/);
+  assert.match(markup, /Preparando el acceso/);
 });

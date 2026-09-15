@@ -84,9 +84,24 @@ for (const contract of [
   /invoke\('fs_reveal', \{ path \}\)/,
 ]) assert.match(preferences, contract, `contrato ausente em Preferences.jsx: ${contract}`);
 
+// Rede: sem servidor; nome do computador, aprovação por código e vigília.
+const network = sanitizePreferences({ network: { controlUrl: 'https://headscale.exemplo.com', userId: '42', userName: 'alice', desktopName: 'Mac', requireApproval: 1, keepAwakeWhilePaired: 'sim' } }).network;
+assert.deepEqual(network, { desktopName: 'Mac', requireApproval: true, keepAwakeWhilePaired: true });
+for (const contract of [
+  /network\.desktopName/,
+  /network\.requireApproval/,
+  /network\.keepAwakeWhilePaired/,
+  /maxLength=\{DESKTOP_NAME_MAX\}/,
+]) assert.match(preferences, contract, `contrato de rede ausente em Preferences.jsx: ${contract}`);
+assert.doesNotMatch(preferences, /controlUrl|userName|apiKey|NetworkSetup/);
+
 // Rust: fundo normalizado, aplicado ao salvar e caminhos por sistema.
 const prefs = read('apps/desktop/src-tauri/src/prefs.rs');
 assert.match(prefs, /pub fn backdrop\(&self\) -> &str/);
+assert.match(prefs, /pub struct NetworkPreferences \{\s*pub desktop_name: String,\s*pub require_approval: bool,\s*pub keep_awake_while_paired: bool,\s*\}/);
+assert.match(prefs, /from = "StoredNetworkPreferences"/);
+assert.match(prefs, /fn old_preferences_file_drops_headscale_fields\(\)/);
+assert.match(prefs, /pub fn computer_name\(\) -> String/);
 const commands = read('apps/desktop/src-tauri/src/commands.rs');
 assert.match(commands, /crate::window::apply_backdrop\(&window, next\.window\.backdrop\(\)\)/);
 assert.match(commands, /pub fn app_paths\(app: AppHandle\) -> Result<AppPaths, String>/);
@@ -97,4 +112,4 @@ assert.match(windowMod, /pub fn apply_backdrop\(window: &WebviewWindow, backdrop
 assert.match(windowMod, /fn wants_mica\(backdrop: &str, build: u32\) -> bool/);
 assert.match(read('apps/desktop/src-tauri/src/window/windows.rs'), /clear_mica/);
 
-console.log('PASS platform preferences: per-system terminal options, Windows window backdrop, app paths and live Mica update');
+console.log('PASS platform preferences: per-system terminal options, Windows window backdrop, app paths, live Mica update and network preferences without a server');

@@ -39,7 +39,7 @@ const original = {
   projectRoots: [' ~/Projects ', '~/Projects', ' /work '],
   devBrowser: { chromiumPath: '  /Applications/Chromium.app/Contents/MacOS/Chromium  ' },
   window: { backdrop: 'auto' },
-  network: { desktopName: 'Estúdio' },
+  network: { desktopName: ' Estúdio ', controlUrl: 'https://headscale.exemplo.com', userId: '42', userName: 'alice' },
 };
 const normalized = normalizePreferenceDraft(original);
 const sanitized = sanitizePreferences(normalized);
@@ -53,17 +53,20 @@ assert.deepEqual(sanitized.terminal, {
 assert.deepEqual(sanitized.projectRoots, ['~/Projects', '/work']);
 assert.equal(sanitized.devBrowser.chromiumPath, '/Applications/Chromium.app/Contents/MacOS/Chromium');
 assert.deepEqual(sanitized.network, {
-  controlUrl: null,
-  userId: null,
-  userName: null,
   desktopName: 'Estúdio',
   requireApproval: false,
   keepAwakeWhilePaired: false,
 });
+assert.deepEqual(Object.keys(normalized.network), ['desktopName', 'requireApproval', 'keepAwakeWhilePaired'], 'Headscale fields leave the draft');
+assert.equal(normalized.network.desktopName, ' Estúdio ', 'The draft keeps what is being typed');
+assert.equal(sanitizePreferences({ network: { desktopName: '   ' } }).network.desktopName, null, 'Empty name falls back to the computer name in Rust');
+assert.match(source, /<AccessPanel /, 'Preferences show the access panel');
+assert.doesNotMatch(source, /NetworkSetup|controlUrl|apiKey/, 'Preferences have no server fields');
+assert.match(source, /tunnel\.applyNetworkPreferences\(normalized\.network\)/, 'Saved name and approval reach net.start');
 assert.equal(original.terminal.shell, '  /bin/fish  ', 'Sanitizing must not mutate the loaded snapshot');
 
 assert.deepEqual(addUniquePath(['/a'], '/a'), ['/a']);
 assert.deepEqual(addUniquePath(['/a'], ' /b '), ['/a', '/b']);
 assert.deepEqual(removePath(['/a', '/b'], '/a'), ['/b']);
 
-console.log('PASS preferences: six sections, signed updater, network assistant, native pickers and normalized snapshots');
+console.log('PASS preferences: six sections, signed updater, phone access panel, native pickers and normalized snapshots');
