@@ -14,7 +14,7 @@ workflows:
         - appstore_credentials
       node: 22.23.2
       npm: 10.9.8
-      xcode: latest
+      xcode: "26.6"
       cocoapods: default
       vars:
         BUNDLE_ID: "br.com.ordinum.cialai"
@@ -109,7 +109,7 @@ workflows:
         - appstore_credentials
       node: 22.23.2
       npm: 10.9.8
-      xcode: latest
+      xcode: "26.6"
       cocoapods: default
       vars:
         BUNDLE_ID: "br.com.ordinum.cialai"

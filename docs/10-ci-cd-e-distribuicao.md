@@ -57,7 +57,7 @@ O workflow exige `TAURI_SIGNING_PRIVATE_KEY` e `TAURI_SIGNING_PRIVATE_KEY_PASSWO
 
 ## Codemagic
 
-Três workflows em `codemagic.yaml`, no padrão de `$CONTROL/codemagic.yaml` e `$ADVORIS/codemagic.yaml`: instância `mac_mini_m2`, 60 minutos, `node 22`, `xcode latest`, `cocoapods default`, sem bloco `triggering`, disparo pelos scripts ou pelo painel.
+Três workflows em `codemagic.yaml`, no padrão de `$CONTROL/codemagic.yaml` e `$ADVORIS/codemagic.yaml`: instância `mac_mini_m2`, 60 minutos, `node 22`, `xcode 26.6` nos dois workflows iOS, fixado no Xcode que gerou o build 2 da 0.2.0, e `latest` no Android, `cocoapods default`, sem bloco `triggering`, disparo pelos scripts ou pelo painel.
 
 | Workflow | Passos | Publicação |
 | --- | --- | --- |

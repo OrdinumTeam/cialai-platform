@@ -23,7 +23,7 @@ test('defines isolated iOS workflows with the documented toolchain', () => {
     assert.deepEqual(workflow.environment.groups, ['appstore_credentials']);
     assert.equal(workflow.environment.node, '22.23.2');
     assert.equal(workflow.environment.npm, '10.9.8');
-    assert.equal(workflow.environment.xcode, 'latest');
+    assert.equal(workflow.environment.xcode, '26.6');
     assert.equal(workflow.environment.cocoapods, 'default');
     assert.equal(workflow.environment.vars.BUNDLE_ID, 'br.com.ordinum.cialai');
     assert.equal(workflow.triggering, undefined);

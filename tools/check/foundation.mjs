@@ -17,6 +17,9 @@ for (const path of packages) {
   assert.equal(workspace.version, pkg.version, path);
   assert.ok(lock.packages[path], `Lockfile is missing ${path}`);
 }
+// The store builds read the version from the Expo config, not from package.json.
+const mobileConfig = readFileSync(`${root}/apps/mobile/app.config.ts`, 'utf8');
+assert.equal(mobileConfig.match(/^ {4}version: '([^']+)',$/m)?.[1], pkg.version, 'apps/mobile/app.config.ts version');
 
 const protectedPaths = [
   '.env', '.env.production', 'secrets/credential.json', 'secret.p8', 'secret.pem',
