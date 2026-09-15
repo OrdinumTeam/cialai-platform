@@ -245,6 +245,13 @@ workflows:
       - name: Gerar projeto Android
         script: |
           set -euo pipefail
+          # O AGP 8.12 instala a plataforma 37.0 no meio do build e depois não a encontra como alvo
+          # android-37. Com o pacote presente antes do Gradle, como no SDK local, o build passa.
+          sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/share/android-sdk}}"
+          sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          [[ -x "$sdkmanager_bin" ]] || sdkmanager_bin="$(command -v sdkmanager)"
+          (set +o pipefail; yes 2>/dev/null | "$sdkmanager_bin" --install "platforms;android-37.0" > /dev/null)
+          test -d "$sdk_root/platforms/android-37.0"
           cd apps/mobile
           npx expo prebuild --platform android --no-install
       - name: Configurar assinatura Android
