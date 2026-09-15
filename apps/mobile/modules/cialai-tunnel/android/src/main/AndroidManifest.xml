@@ -1,1 +1,6 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" />
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <!-- Tor em processo e QUIC do núcleo. -->
+  <uses-permission android:name="android.permission.INTERNET" />
+  <!-- MulticastLock enquanto a descoberta DNS-SD procura o computador. -->
+  <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+</manifest>

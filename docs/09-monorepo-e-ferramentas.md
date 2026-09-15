@@ -72,7 +72,7 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | Go | 1.26.5 | Núcleo do túnel; mínimo exigido pelo tsnet 1.102.0, decisão 022 |
 | `golang.org/x/mobile` | fixado no `go.mod` | `gomobile bind` |
 | Xcode | 16.1 ou mais novo | iOS e macOS |
-| Android SDK e NDK | `compileSdk` e `targetSdk` 36, NDK fixado pelo Expo | Android |
+| Android SDK e NDK | `compileSdk` 37, exigido pelo `tor-android`, `targetSdk` 36, NDK fixado pelo Expo | Android |
 | Expo | SDK 57, `expo-dev-client` | Celular |
 | Playwright | 1.63.0 fixado em `tools/browser/package.json` com lockfile próprio | Checks de navegador por `tools/browser/run-browser-checks.mjs`; o Dev Browser do app instala o Chromium por `npx playwright` |
 | Docker | qualquer recente | Headscale de integração |

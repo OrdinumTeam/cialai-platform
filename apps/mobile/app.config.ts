@@ -96,10 +96,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       ['expo-local-authentication', { faceIDPermission: permissions.NSFaceIDUsageDescription }],
       ['./plugins/with-loopback-network-security.cjs'],
       ['./plugins/with-android-release-signing.cjs'],
+      ['./plugins/with-android-data-extraction.cjs'],
       ['./plugins/with-android-locales.cjs', { locales: [...SUPPORTED_LOCALES] }],
       ['expo-build-properties', {
         android: {
-          compileSdkVersion: 36,
+          // O tor-android publica AAR com minCompileSdk 37; o comportamento segue o targetSdk 36.
+          compileSdkVersion: 37,
           targetSdkVersion: 36,
           minSdkVersion: 26,
           // Mesmas ABIs do tunnelcore.aar gerado pelo gomobile; outra ABI instalaria o app sem o núcleo do túnel.

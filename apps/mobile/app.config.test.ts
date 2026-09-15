@@ -36,6 +36,7 @@ describe('Expo app config', () => {
     expect(config.ios?.entitlements?.['com.apple.developer.default-data-protection'])
       .toBe('NSFileProtectionCompleteUntilFirstUserAuthentication');
     expect(config.android?.allowBackup).toBe(false);
+    expect(config.plugins).toContainEqual(['./plugins/with-android-data-extraction.cjs']);
     expect(JSON.stringify(config.plugins)).toContain('targetSdkVersion');
   });
 

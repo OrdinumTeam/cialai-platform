@@ -1,7 +1,7 @@
 apply plugin: 'com.android.library'
 
 group = 'br.com.ordinum.cialai.tunnel'
-version = '0.1.0'
+version = '0.2.0'
 
 def expoModulesCorePlugin = new File(project(':expo-modules-core').projectDir.absolutePath, 'ExpoModulesCorePlugin.gradle')
 apply from: expoModulesCorePlugin
@@ -13,12 +13,20 @@ android {
 
   defaultConfig {
     minSdkVersion 26
-    versionCode 1
-    versionName '0.1.0'
+    versionCode 2
+    versionName '0.2.0'
   }
 }
 
 dependencies {
   implementation project(':expo-modules-core')
   implementation files('libs/tunnelcore.aar')
+  // Tor em processo pelo TorService. O Maven Central publica até a 0.4.9.11; a
+  // 0.4.9.12 citada no README do tor-android ainda não tem artefato em
+  // repositório nenhum. As ABIs do app filtram o AAR para arm64-v8a e x86_64.
+  implementation 'info.guardianproject:tor-android:0.4.9.11'
+  implementation 'info.guardianproject:jtorctl:0.4.5.7'
+
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.json:json:20260814'
 }
