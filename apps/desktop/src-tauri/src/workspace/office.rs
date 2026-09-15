@@ -355,6 +355,7 @@ pub fn convert(
         .stderr(Stdio::null());
     #[cfg(unix)]
     command.env("HOME", home);
+    platform::child_env::sanitize(&mut command);
     platform::configure_background_command(&mut command);
     let spawned = command.spawn();
     let mut child = match spawned {

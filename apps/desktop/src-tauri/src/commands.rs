@@ -489,13 +489,17 @@ pub fn shell_probe(
     shell: String,
     cwd: String,
 ) -> Result<ShellProbe, String> {
-    let cwd = Path::new(cwd.trim());
-    if !cwd.is_dir() {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let Some(cwd) = platform::child_env::pty_cwd(
+        cwd.trim(),
+        &home,
+        platform::child_env::original_dir().as_deref(),
+    ) else {
         return Err(tf(
             "native.error.folderNotFoundPath",
-            &[("path", &cwd.display())],
+            &[("path", &cwd.trim())],
         ));
-    }
+    };
     let mut preferences = prefs.get();
     preferences.terminal.shell = Some(shell.trim().into());
     preferences.terminal.args.clear();
@@ -503,7 +507,6 @@ pub fn shell_probe(
     if shell.path.trim().is_empty() {
         return Err(t("native.error.shellPathRequired"));
     }
-    let home = app.path().home_dir().map_err(|error| error.to_string())?;
     let pair = native_pty_system()
         .openpty(PtySize {
             rows: 12,
@@ -516,7 +519,7 @@ pub fn shell_probe(
     for arg in &shell.args {
         command.arg(arg);
     }
-    command.cwd(cwd);
+    command.cwd(&cwd);
     command.env("TERM", "xterm-256color");
     command.env("COLORTERM", "truecolor");
     command.env("TERM_PROGRAM", "Cialai");
@@ -525,6 +528,7 @@ pub fn shell_probe(
     if let Some(lang) = platform::default_lang(&preferences) {
         command.env("LANG", lang);
     }
+    platform::child_env::sanitize(&mut command);
     let mut child = pair
         .slave
         .spawn_command(command)

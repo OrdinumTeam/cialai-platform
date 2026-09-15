@@ -441,6 +441,7 @@ fn run_install(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
+    platform::child_env::sanitize(&mut command);
     platform::configure_background_command(&mut command);
     let mut child = command
         .spawn()
@@ -842,6 +843,7 @@ impl BrowserManager {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
+        platform::child_env::sanitize(&mut command);
         platform::configure_background_command(&mut command);
         let mut child = command
             .spawn()

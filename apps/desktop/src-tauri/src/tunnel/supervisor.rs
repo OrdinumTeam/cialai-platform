@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::bridge::{BridgeControl, IdentityControl};
+use crate::platform::child_env;
 
 use super::awake::Awake;
 use super::credentials::ApiKeyStore;
@@ -260,6 +261,7 @@ impl Supervisor {
             .stdin(Stdio::null())
             .stderr(Stdio::null());
         self.inner.launch.append_tor(&mut command);
+        child_env::sanitize(&mut command);
         let output = command.output().map_err(|error| {
             RpcProblem::local(
                 "doctor_unavailable",
@@ -426,6 +428,9 @@ impl Inner {
             .arg("--parent-pid")
             .arg(self.launch.parent_pid.to_string());
         self.launch.append_tor(&mut command);
+        // O sidecar e o `tor` que ele abre acham as proprias bibliotecas pelo
+        // `$ORIGIN`; nada do ambiente do AppImage lhes serve.
+        child_env::sanitize(&mut command);
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())

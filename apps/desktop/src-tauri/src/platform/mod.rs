@@ -10,6 +10,7 @@ use serde::Serialize;
 
 use crate::prefs::Preferences;
 
+pub mod child_env;
 #[cfg(target_os = "windows")]
 pub mod win_job;
 

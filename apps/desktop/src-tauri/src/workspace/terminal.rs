@@ -733,10 +733,15 @@ impl TerminalManager {
         shell: &ShellSpec,
         prefs: &Preferences,
     ) -> Result<TerminalInfo, String> {
-        let dir = Path::new(cwd);
-        if !dir.is_dir() {
+        // Pasta sempre explicita: no AppImage a pasta herdada e `$APPDIR/usr`.
+        let Some(dir) = platform::child_env::pty_cwd(
+            cwd,
+            &self.home,
+            platform::child_env::original_dir().as_deref(),
+        ) else {
             return Err(tf("native.error.folderNotFoundPath", &[("path", &cwd)]));
-        }
+        };
+        let cwd = dir.to_string_lossy().into_owned();
         let cols = cols.max(2);
         let rows = rows.max(1);
 
@@ -744,7 +749,7 @@ impl TerminalManager {
         for arg in &shell.args {
             command.arg(arg);
         }
-        command.cwd(dir);
+        command.cwd(&dir);
         command.env("TERM", "xterm-256color");
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Cialai");
@@ -766,6 +771,7 @@ impl TerminalManager {
                 command.env("LANG", lang);
             }
         }
+        platform::child_env::sanitize(&mut command);
 
         let spawned = pty::spawn_shell(
             command,
@@ -801,7 +807,7 @@ impl TerminalManager {
         let info = TerminalInfo {
             id,
             tag: tag.to_string(),
-            cwd: cwd.to_string(),
+            cwd: cwd.clone(),
             shell: shell.path.clone(),
             shell_flavor: shell.flavor,
             pid,
@@ -886,7 +892,7 @@ impl TerminalManager {
             },
         );
         if let Some(store) = &self.journal {
-            store.write_meta(&SavedMeta::sample(tag, cwd, cols, rows, None), || true);
+            store.write_meta(&SavedMeta::sample(tag, &cwd, cols, rows, None), || true);
         }
         // Publish the session before the pump can observe a fast child exit.
         thread::spawn(move || manager.pump(id, rx, pump_link, journal));
@@ -2224,6 +2230,193 @@ mod tests {
             )
             .unwrap_err();
         assert!(error.contains("Pasta não encontrada"));
+    }
+
+    /// Marca o processo de teste que roda com o ambiente simulado de um AppImage.
+    #[cfg(unix)]
+    const APPIMAGE_TEST_CHILD: &str = "CIALAI_TEST_APPIMAGE_PTY";
+
+    /// Abre um PTY real num processo de teste próprio, com as variáveis que o `AppRun` e
+    /// o hook do GTK exportam e a pasta dentro do bundle, e confere pelo `env` do shell
+    /// que nenhuma variável aponta para o `APPDIR`. O ambiente simulado existe só nesse
+    /// processo; os outros testes seguem com o ambiente de sempre.
+    #[cfg(unix)]
+    #[test]
+    fn appimage_environment_never_reaches_the_shell() {
+        if std::env::var_os(APPIMAGE_TEST_CHILD).is_some() {
+            return appimage_shell_in_simulated_bundle();
+        }
+        let home = std::env::temp_dir().canonicalize().unwrap();
+        let appdir = home.join(format!(".mount_CialaiTeste{}", std::process::id()));
+        let usr = appdir.join("usr");
+        std::fs::create_dir_all(&usr).unwrap();
+        let bundle = |rest: &str| format!("{}{rest}", appdir.display());
+        let mut path = vec![bundle("/usr/bin/"), bundle("/usr/sbin/"), String::new()];
+        path.extend(
+            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                .map(|entry| entry.to_string_lossy().into_owned()),
+        );
+        path.push(String::new());
+
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "workspace::terminal::tests::appimage_environment_never_reaches_the_shell",
+                "--nocapture",
+            ])
+            .current_dir(&usr)
+            .env(APPIMAGE_TEST_CHILD, "1")
+            .env("HOME", &home)
+            .env("PWD", &usr)
+            .env("APPDIR", &appdir)
+            .env("APPIMAGE", home.join("Cialai_amd64.AppImage"))
+            .env("ARGV0", "./Cialai_amd64.AppImage")
+            .env("OWD", &home)
+            .env("PATH", path.join(":"))
+            .env(
+                "LD_LIBRARY_PATH",
+                format!(
+                    "{}:{}:",
+                    bundle("/usr/lib/"),
+                    bundle("/usr/lib/x86_64-linux-gnu/")
+                ),
+            )
+            .env("PYTHONHOME", bundle("/usr/"))
+            .env(
+                "PYTHONPATH",
+                format!(
+                    "{}:/opt/cialai-teste/python",
+                    bundle("/usr/share/pyshared/")
+                ),
+            )
+            .env("PYTHONDONTWRITEBYTECODE", "1")
+            .env("PERLLIB", format!("{}:", bundle("/usr/share/perl5/")))
+            .env(
+                "QT_PLUGIN_PATH",
+                format!("{}:", bundle("/usr/lib/qt5/plugins/")),
+            )
+            .env(
+                "GST_PLUGIN_SYSTEM_PATH_1_0",
+                format!("{}:", bundle("/usr/lib/gstreamer-1.0")),
+            )
+            .env("GDK_BACKEND", "x11")
+            .env("GTK_THEME", "Adwaita:light")
+            .env("GTK_PATH", bundle("//usr/lib/gtk-3.0"))
+            .env("GTK_EXE_PREFIX", bundle("//usr"))
+            .env("GTK_DATA_PREFIX", &appdir)
+            .env(
+                "GTK_IM_MODULE_FILE",
+                bundle("//usr/lib/gtk-3.0/3.0.0/immodules.cache"),
+            )
+            .env(
+                "GDK_PIXBUF_MODULE_FILE",
+                bundle("//usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"),
+            )
+            .env("GIO_EXTRA_MODULES", bundle("//usr/lib/gio/modules"))
+            .env(
+                "GSETTINGS_SCHEMA_DIR",
+                bundle("//usr/share/glib-2.0/schemas"),
+            )
+            .env(
+                "XDG_DATA_DIRS",
+                format!(
+                    "{}:{}:/usr/share:",
+                    bundle("/usr/share/"),
+                    bundle("/usr/share")
+                ),
+            )
+            .output()
+            .unwrap();
+        let _ = std::fs::remove_dir_all(&appdir);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        // Um filtro que não casasse rodaria zero testes e sairia com sucesso.
+        assert!(
+            output.status.success() && stdout.contains("test result: ok. 1 passed"),
+            "processo com ambiente de AppImage falhou:\n{stdout}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    #[cfg(unix)]
+    fn appimage_shell_in_simulated_bundle() {
+        let appdir = std::env::var("APPDIR").expect("APPDIR simulado");
+        let home = PathBuf::from(std::env::var_os("HOME").expect("HOME simulado"));
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
+        let (channel, rx) = sink();
+        let prefs = manager.prefs.get();
+        // Sem pasta pedida o shell abre na pasta pessoal, não na pasta herdada do bundle.
+        let info = manager
+            .spawn_for_with_spec(
+                "",
+                200,
+                24,
+                CursorPosition::default(),
+                "appimage",
+                SubscriberKey::Webview,
+                channel,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+        assert_eq!(Path::new(&info.cwd), home);
+        manager
+            .write(
+                info.id,
+                b"env; printf 'pasta=%s\\n' \"$(pwd -P)\"; exit 0\n",
+            )
+            .expect("write");
+        let mut queries = LaterCursorQueries::new("appimage", &manager, info.id);
+        let (output, exit) = collect_until_exit(&rx, &mut queries);
+        let output = String::from_utf8_lossy(&output).replace('\r', "");
+        assert!(exit.is_some(), "o shell não terminou: {output}");
+        let variable = |name: &str| {
+            output
+                .lines()
+                .find_map(|line| line.strip_prefix(&format!("{name}=")))
+                .map(str::to_string)
+        };
+        assert_eq!(
+            variable("TERM_PROGRAM").as_deref(),
+            Some("Cialai"),
+            "{output}"
+        );
+        assert!(
+            !output.contains(&appdir),
+            "o bundle vazou para o shell:\n{output}"
+        );
+        for name in [
+            "APPDIR",
+            "APPIMAGE",
+            "ARGV0",
+            "OWD",
+            "PYTHONHOME",
+            "PYTHONDONTWRITEBYTECODE",
+            "LD_LIBRARY_PATH",
+            "PERLLIB",
+            "QT_PLUGIN_PATH",
+            "GDK_BACKEND",
+            "GTK_THEME",
+            "GTK_PATH",
+            "GIO_EXTRA_MODULES",
+            "GSETTINGS_SCHEMA_DIR",
+        ] {
+            assert_eq!(variable(name), None, "{name} chegou ao shell:\n{output}");
+        }
+        assert_eq!(
+            variable("PYTHONPATH").as_deref(),
+            Some("/opt/cialai-teste/python")
+        );
+        assert_eq!(variable("XDG_DATA_DIRS").as_deref(), Some("/usr/share"));
+        let path = variable("PATH").expect("PATH no shell");
+        assert!(
+            !path.split(':').any(str::is_empty),
+            "PATH com entrada vazia: {path}"
+        );
+        assert!(
+            output.contains(&format!("pasta={}", home.display())),
+            "pasta do shell:\n{output}"
+        );
     }
 
     #[test]

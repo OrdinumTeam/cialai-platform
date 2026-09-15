@@ -11,6 +11,7 @@ use std::process::{Command, Stdio};
 use serde::Serialize;
 
 use crate::i18n::{t, tf};
+use crate::platform::child_env;
 
 /// Teto de entradas alteradas devolvidas; acima disso a lista vem cortada.
 const CHANGES_LIMIT: usize = 3_000;
@@ -72,6 +73,8 @@ fn git() -> Command {
         .stdin(Stdio::null())
         .stderr(Stdio::piped())
         .stdout(Stdio::piped());
+    // O git por HTTPS carrega libcurl, que quebra com o LD_LIBRARY_PATH do AppImage.
+    child_env::sanitize(&mut command);
     command
 }
 
