@@ -27,6 +27,18 @@ $RESOURCE/tor/docs:
 - OpenSSL 3.5: Apache-2.0, https://github.com/openssl/openssl/blob/master/LICENSE.txt
 - Build sources: https://gitlab.torproject.org/tpo/applications/tor-browser-build
 
+Tor.framework 409.11.2, linked into the iOS app through the CocoaPods pod Tor to
+run Tor in process; the pod downloads a prebuilt tor.xcframework checked by
+SHA-256 at install time and nothing is committed to this repository:
+
+- Tor.framework: MIT, Copyright (c) 2015-2026 The iCepa Contributors
+  https://github.com/iCepa/Tor.framework/blob/v409.11.2/LICENSE
+- Tor 0.4.9.11: BSD-3-Clause, built without --enable-gpl
+  https://gitlab.torproject.org/tpo/core/tor/-/blob/main/LICENSE
+- libevent 2.1.13: BSD-3-Clause, https://github.com/libevent/libevent/blob/master/LICENSE
+- OpenSSL 3.6.3: Apache-2.0, https://github.com/openssl/openssl/blob/master/LICENSE.txt
+- liblzma from XZ Utils 5.8.3: 0BSD, https://github.com/tukaani-project/xz/blob/master/COPYING
+
 Planned dependencies, not yet bundled:
 
 - xterm.js: MIT, https://github.com/xtermjs/xterm.js
