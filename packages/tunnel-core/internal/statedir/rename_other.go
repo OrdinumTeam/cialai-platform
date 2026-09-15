@@ -3,5 +3,6 @@
 
 package statedir
 
-// transientRenameError is always false: rename replaces open files atomically.
-func transientRenameError(error) bool { return false }
+// transientError is always false: rename replaces open files atomically and
+// readers never see the swap.
+func transientError(error) bool { return false }

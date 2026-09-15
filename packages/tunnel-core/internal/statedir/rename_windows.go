@@ -11,9 +11,9 @@ import (
 // errorSharingViolation is ERROR_SHARING_VIOLATION, which syscall does not name.
 const errorSharingViolation syscall.Errno = 32
 
-// transientRenameError reports the errors MoveFileEx returns while another
-// handle still holds the source or the target open.
-func transientRenameError(err error) bool {
+// transientError reports the errors Windows returns while another handle
+// holds a file open or a rename is replacing it.
+func transientError(err error) bool {
 	var errno syscall.Errno
 	return errors.As(err, &errno) && (errno == syscall.ERROR_ACCESS_DENIED || errno == errorSharingViolation)
 }

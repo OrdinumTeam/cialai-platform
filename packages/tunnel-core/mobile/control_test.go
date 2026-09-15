@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
-	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -17,6 +16,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/rendezvous"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/direct"
 	"github.com/Cialai/cialai/packages/tunnel-core/testutil"
@@ -48,10 +48,11 @@ func deadCandidate(t *testing.T) pairing.Candidate {
 	return pairing.Candidate{Type: pairing.CandidateLAN, Address: address}
 }
 
-// storedDesktopOnDisk reads the desktop from mobile-state.json.
+// storedDesktopOnDisk reads the desktop from mobile-state.json, which the
+// running tunnel may be replacing.
 func storedDesktopOnDisk(t *testing.T, stateDir, desktopID string) storedDesktop {
 	t.Helper()
-	raw, err := os.ReadFile(filepath.Join(stateDir, mobileStateFile))
+	raw, err := statedir.ReadFile(filepath.Join(stateDir, mobileStateFile))
 	if err != nil {
 		t.Fatal(err)
 	}

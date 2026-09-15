@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/testutil"
 )
 
@@ -131,7 +131,9 @@ func TestTunnelPairsConnectsAndOpensAgainstV2Desktop(t *testing.T) {
 	}
 	socket.CloseNow()
 	requireNoToken(t, stateDir, paired.Token)
-	if raw, err := os.ReadFile(filepath.Join(stateDir, mobileStateFile)); err != nil || !strings.Contains(string(raw), desktop.Onion) {
+	// The running tunnel may be replacing the file; statedir.ReadFile waits
+	// out the sharing violation Windows reports meanwhile.
+	if raw, err := statedir.ReadFile(filepath.Join(stateDir, mobileStateFile)); err != nil || !strings.Contains(string(raw), desktop.Onion) {
 		t.Fatalf("reach card not stored: %s, %v", raw, err)
 	}
 	if err := tunnel.Stop(); err != nil {

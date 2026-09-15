@@ -4,6 +4,7 @@ package mobile
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +19,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 const eventTimeout = 15 * time.Second
@@ -191,14 +193,22 @@ func testContext(t *testing.T, timeout time.Duration) context.Context {
 	return ctx
 }
 
-// requireNoToken fails when a device token was written under root.
+// requireNoToken fails when a device token was written under root. The tunnel
+// may still be writing: a temporary file can be renamed away between the walk
+// and the read, and statedir.ReadFile waits out a replacement in progress.
 func requireNoToken(t *testing.T, root string, tokens ...string) {
 	t.Helper()
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if path != root && errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		if err != nil || info.IsDir() {
 			return err
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := statedir.ReadFile(path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}

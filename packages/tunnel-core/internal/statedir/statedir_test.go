@@ -87,6 +87,43 @@ func TestRenameWaitsForAnOpenReader(t *testing.T) {
 	}
 }
 
+// Readers of a state file that is being replaced must always see a whole
+// version; on Windows ReadFile also waits out the sharing violations of the
+// replacement.
+func TestReadFileWhileWriteAtomicReplaces(t *testing.T) {
+	paths, err := Prepare(filepath.Join(t.TempDir(), "state"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	versions := []string{`{"version":"a"}`, `{"version":"b"}`}
+	if err := paths.WriteAtomic(paths.Devices, []byte(versions[0])); err != nil {
+		t.Fatal(err)
+	}
+	const rounds = 200
+	writeErr := make(chan error, 1)
+	go func() {
+		for index := range rounds {
+			if err := paths.WriteAtomic(paths.Devices, []byte(versions[index%2])); err != nil {
+				writeErr <- err
+				return
+			}
+		}
+		writeErr <- nil
+	}()
+	for range rounds {
+		data, err := ReadFile(paths.Devices)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(data) != versions[0] && string(data) != versions[1] {
+			t.Fatalf("read a partial state file: %q", data)
+		}
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestLockRejectsLiveOwnerAndReplacesStaleOwner(t *testing.T) {
 	paths, err := Prepare(filepath.Join(t.TempDir(), "state"))
 	if err != nil {
