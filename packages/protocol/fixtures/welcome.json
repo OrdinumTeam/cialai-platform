@@ -4,11 +4,11 @@
   "auth": "device",
   "user": null,
   "device": {
-    "id": "dev_example",
+    "id": "dev_q2Xl1vGf0mS8u3B7cY4dJw",
     "name": "iPhone de Exemplo"
   },
   "desktop": {
-    "id": "desktop_example",
+    "id": "d_7Hn3kRb9TzW2pQx5Lm0aVg",
     "name": "Computador de Exemplo"
   },
   "capabilities": ["pty"],

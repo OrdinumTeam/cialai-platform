@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::bridge::{BridgeControl, IdentityControl};
 
 use super::awake::Awake;
-use super::credentials::{ApiKeyStore, SecretStatus, api_key_prefix};
+use super::credentials::ApiKeyStore;
 use super::protocol::{
     EventFrame, Inbound, MAX_LINE_BYTES, PROTOCOL_VERSION, RpcProblem, encode_request,
     event_channel, parse_line,
@@ -28,6 +28,14 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RESTARTS: usize = 10;
+
+/// Comandos cujos argumentos de borda pertencem ao supervisor: `staticDir`,
+/// `bridgeUrl` e `proxySecret` são sempre injetados aqui e o que vier da
+/// interface nesses campos é descartado.
+const EDGE_COMMANDS: &[&str] = &["net.start"];
+
+/// Comandos que só o supervisor envia; a chamada genérica os recusa.
+const NATIVE_ONLY_COMMANDS: &[&str] = &["hello", "shutdown", "edge.serve", "edge.stop"];
 
 type EventSink = Arc<dyn Fn(&str, Value) + Send + Sync>;
 type PendingResult = Result<Value, RpcProblem>;
@@ -208,17 +216,10 @@ impl Supervisor {
     }
 
     pub fn call(&self, command: &str, args: Value) -> PendingResult {
-        if matches!(command, "control.configure" | "control.apikey.rotate") {
+        if NATIVE_ONLY_COMMANDS.contains(&command) {
             return Err(RpcProblem::local(
                 "command_sensitive",
-                "Use a operação segura dedicada para a chave da API.",
-                false,
-            ));
-        }
-        if command == "node.up" && args.get("authKey").is_some_and(Value::is_string) {
-            return Err(RpcProblem::local(
-                "command_sensitive",
-                "A chave de entrada do nó não pode atravessar a chamada genérica.",
+                "Este comando do túnel é reservado ao aplicativo.",
                 false,
             ));
         }
@@ -229,116 +230,18 @@ impl Supervisor {
             .inner
             .send_on(&process, command, args.clone(), CALL_TIMEOUT)?;
         self.inner.sync_bridge_call(command, &args, &result);
-        Ok(result)
-    }
-
-    pub fn configure_control(
-        &self,
-        url: String,
-        api_key: String,
-        ca_file: Option<String>,
-    ) -> PendingResult {
-        self.inner.ensure_started()?;
-        let process = self.inner.ready_process()?;
-        let result = self.inner.send_on(
-            &process,
-            "control.configure",
-            json!({"url":url, "apiKey":api_key, "caFile":ca_file.unwrap_or_default()}),
-            CALL_TIMEOUT,
-        )?;
-        let fallback = self
-            .inner
-            .secrets
-            .store(&api_key)
-            .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))?;
-        if fallback {
-            self.inner.emit_local(
-                "tunnel.credentialFallback",
-                json!({"state":"file", "permissions":"0600"}),
-            );
+        if command == "net.start" {
+            // A ponte precisa dos nomes dos celulares antes da primeira
+            // conexão, mesmo que a interface ainda não tenha listado.
+            if let Ok(devices) =
+                self.inner
+                    .send_on(&process, "devices.list", json!({}), CALL_TIMEOUT)
+            {
+                self.inner
+                    .sync_bridge_call("devices.list", &json!({}), &devices);
+            }
         }
         Ok(result)
-    }
-
-    pub fn configure_saved_control(&self, url: String, ca_file: Option<String>) -> PendingResult {
-        let (api_key, _) = self
-            .inner
-            .secrets
-            .load()
-            .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))?;
-        let api_key = api_key.ok_or_else(|| {
-            RpcProblem::local(
-                "control_unconfigured",
-                "Não há chave da API salva neste computador.",
-                false,
-            )
-        })?;
-        self.configure_control(url, api_key, ca_file)
-    }
-
-    pub fn rotate_api_key(&self, days: u16) -> PendingResult {
-        if days == 0 {
-            return Err(RpcProblem::local(
-                "args_invalid",
-                "A validade da chave precisa ser maior que zero.",
-                false,
-            ));
-        }
-        let (old_key, _) = self
-            .inner
-            .secrets
-            .load()
-            .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))?;
-        self.inner.ensure_started()?;
-        let process = self.inner.ready_process()?;
-        let mut result = self.inner.send_on(
-            &process,
-            "control.apikey.rotate",
-            json!({"days":days}),
-            CALL_TIMEOUT,
-        )?;
-        let new_key = result
-            .get("apiKey")
-            .and_then(Value::as_str)
-            .ok_or_else(|| {
-                RpcProblem::local(
-                    "control_protocol",
-                    "O sidecar não devolveu a nova chave da API.",
-                    false,
-                )
-            })?
-            .to_owned();
-        let fallback = self
-            .inner
-            .secrets
-            .store(&new_key)
-            .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))?;
-        let mut expired = false;
-        if let Some(old_key) = old_key {
-            let prefix = api_key_prefix(&old_key);
-            expired = self
-                .inner
-                .send_on(
-                    &process,
-                    "control.apikey.expireOld",
-                    json!({"prefix":prefix}),
-                    CALL_TIMEOUT,
-                )
-                .is_ok();
-        }
-        if let Some(object) = result.as_object_mut() {
-            object.remove("apiKey");
-            object.insert("oldKeyExpired".into(), Value::Bool(expired));
-            object.insert("fallback".into(), Value::Bool(fallback));
-        }
-        Ok(result)
-    }
-
-    pub fn secret_status(&self) -> Result<SecretStatus, RpcProblem> {
-        self.inner
-            .secrets
-            .status()
-            .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))
     }
 
     pub fn delete_api_key(&self) -> Result<(), RpcProblem> {
@@ -348,7 +251,7 @@ impl Supervisor {
             .map_err(|message| RpcProblem::local("keyring_unavailable", message, false))
     }
 
-    pub fn doctor(&self, control_url: Option<String>) -> PendingResult {
+    pub fn doctor(&self) -> PendingResult {
         let mut command = Command::new(&self.inner.launch.binary);
         command
             .arg("doctor")
@@ -357,9 +260,6 @@ impl Supervisor {
             .stdin(Stdio::null())
             .stderr(Stdio::null());
         self.inner.launch.append_tor(&mut command);
-        if let Some(url) = control_url.filter(|value| !value.trim().is_empty()) {
-            command.arg("--control-url").arg(url);
-        }
         let output = command.output().map_err(|error| {
             RpcProblem::local(
                 "doctor_unavailable",
@@ -397,16 +297,28 @@ impl Inner {
         self.awake.observe(event);
     }
 
-    fn sync_bridge_call(&self, command: &str, args: &Value, result: &Value) {
+    /// Mantém a ponte com o computador e os celulares do registro v2: nome e
+    /// id do computador pelo `NetStatus`, e `deviceKey` de cada celular.
+    fn sync_bridge_call(&self, command: &str, _args: &Value, result: &Value) {
         match command {
-            "edge.serve" => self.bridge.set_desktop(&args["desktop"]),
+            "net.start" | "net.status" | "net.refresh" => {
+                if let Some(desktop) = result.get("desktop") {
+                    self.bridge.set_desktop(desktop);
+                }
+            }
             "devices.list" => self.bridge.sync_devices(result),
+            "devices.rename" => self.bridge.upsert_device(result),
             _ => {}
         }
     }
 
     fn sync_bridge_event(&self, event: &EventFrame) {
         match event.name.as_str() {
+            "net.state" => {
+                if let Some(desktop) = event.data.get("desktop") {
+                    self.bridge.set_desktop(desktop);
+                }
+            }
             "pair.completed" => {
                 if let Some(device) = event.data.get("device") {
                     self.bridge.upsert_device(device);
@@ -434,7 +346,7 @@ impl Inner {
                 false,
             ));
         }
-        if command != "edge.serve" {
+        if !EDGE_COMMANDS.contains(&command) {
             return Ok(args);
         }
         let object = args.as_object_mut().expect("checked object");
@@ -984,8 +896,8 @@ mod tests {
         let args = supervisor
             .inner
             .prepare_args(
-                "edge.serve",
-                json!({"staticDir":"evil", "bridgeUrl":"http://evil", "proxySecret":"evil", "port":4740}),
+                "net.start",
+                json!({"desktopName":"MacBook", "requireApproval":false, "staticDir":"evil", "bridgeUrl":"http://evil", "proxySecret":"evil"}),
             )
             .unwrap();
         assert_eq!(
@@ -994,6 +906,36 @@ mod tests {
         );
         assert_eq!(args["bridgeUrl"], "http://127.0.0.1:3720");
         assert_eq!(args["proxySecret"], "native-secret");
+        assert_eq!(args["desktopName"], "MacBook");
+
+        // Os outros comandos passam sem os campos da borda.
+        let status = supervisor
+            .inner
+            .prepare_args("net.status", json!({}))
+            .unwrap();
+        assert_eq!(status, json!({}));
+    }
+
+    #[test]
+    fn native_only_and_removed_key_commands_never_cross_the_generic_call() {
+        let root = std::env::temp_dir();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                root.join("missing-sidecar"),
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("unused-key")),
+        );
+        for command in ["hello", "shutdown", "edge.serve", "edge.stop"] {
+            let problem = supervisor.call(command, json!({})).unwrap_err();
+            assert_eq!(problem.code, "command_sensitive", "{command}");
+        }
     }
 
     #[test]
@@ -1030,14 +972,14 @@ mod tests {
         );
 
         supervisor.inner.sync_bridge_call(
-            "edge.serve",
-            &json!({"desktop":{"id":"desktop_fixture", "name":"MacBook"}}),
-            &json!({"port":4740}),
+            "net.start",
+            &json!({"desktopName":"MacBook"}),
+            &json!({"state":"ready", "desktop":{"id":"d_fixture", "name":"MacBook", "publicKey":"key", "fingerprint":"fp"}}),
         );
         supervisor.inner.sync_bridge_call(
             "devices.list",
             &json!({}),
-            &json!({"devices":[{"id":"dev_fixture", "name":"iPhone", "nodeKey":"nodekey:fixture"}]}),
+            &json!({"devices":[{"id":"dev_fixture", "name":"iPhone", "deviceKey":"key-fixture"}]}),
         );
         supervisor.inner.sync_bridge_event(&EventFrame {
             name: "devices.changed".into(),
@@ -1051,18 +993,29 @@ mod tests {
         });
         supervisor.inner.sync_bridge_event(&EventFrame {
             name: "pair.completed".into(),
-            data: json!({"pairId":"pair_fixture", "device":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
+            data: json!({"pairId":"pair_fixture", "device":{"id":"dev_second", "name":"iPad", "deviceKey":"key-second"}}),
             ts: "2026-09-12T20:00:00Z".into(),
+        });
+        supervisor.inner.sync_bridge_event(&EventFrame {
+            name: "net.state".into(),
+            data: json!({"state":"ready", "desktop":{"id":"d_fixture", "name":"Mac renomeado"}}),
+            ts: "2026-09-12T20:00:02Z".into(),
+        });
+        supervisor.inner.sync_bridge_event(&EventFrame {
+            name: "tor.state".into(),
+            data: json!({"state":"ready", "progress":100}),
+            ts: "2026-09-12T20:00:03Z".into(),
         });
 
         assert_eq!(
             *lock(&bridge.updates),
             vec![
-                json!({"kind":"desktop", "value":{"id":"desktop_fixture", "name":"MacBook"}}),
-                json!({"kind":"sync", "value":{"devices":[{"id":"dev_fixture", "name":"iPhone", "nodeKey":"nodekey:fixture"}]}}),
+                json!({"kind":"desktop", "value":{"id":"d_fixture", "name":"MacBook", "publicKey":"key", "fingerprint":"fp"}}),
+                json!({"kind":"sync", "value":{"devices":[{"id":"dev_fixture", "name":"iPhone", "deviceKey":"key-fixture"}]}}),
                 json!({"kind":"rename", "deviceId":"dev_fixture", "name":"iPhone novo"}),
                 json!({"kind":"revoke", "deviceId":"dev_fixture"}),
-                json!({"kind":"upsert", "value":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
+                json!({"kind":"upsert", "value":{"id":"dev_second", "name":"iPad", "deviceKey":"key-second"}}),
+                json!({"kind":"desktop", "value":{"id":"d_fixture", "name":"Mac renomeado"}}),
             ]
         );
     }
@@ -1158,9 +1111,8 @@ mod tests {
             r#"#!/bin/sh
 [ "$1" = doctor ] || exit 8
 [ "$2" = --state-dir ] || exit 9
-[ "$4" = --control-url ] || exit 10
-[ "$5" = https://headscale.example ] || exit 11
-printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
+[ "$#" = 3 ] || exit 10
+printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true}}}'
 "#,
         )
         .unwrap();
@@ -1179,10 +1131,8 @@ printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
             ApiKeyStore::new(root.join("key")),
             Awake::disabled(),
         );
-        let result = supervisor
-            .doctor(Some("https://headscale.example".into()))
-            .unwrap();
-        assert_eq!(result["checks"]["control"]["ok"], true);
+        let result = supervisor.doctor().unwrap();
+        assert_eq!(result["checks"]["state"]["ok"], true);
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1201,7 +1151,7 @@ printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true},"control":{"ok":true}}}'
                     r#"#!/bin/sh
 printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":42},"ts":"2026-09-12T20:00:00Z"}'
 IFS= read -r hello
-printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["control","edge","pairing","devices"]}}'
+printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["direct","tor","pairing","devices"]}}'
 IFS= read -r request
 printf '%s\n' '{"id":2,"ok":true,"result":{"lines":[]}}'
 IFS= read -r shutdown
@@ -1219,7 +1169,7 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
                 let script = root.join("fake-sidecar.cmd");
                 fs::write(
                     &script,
-                    "@echo off\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"control\",\"edge\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"lines\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\n",
+                    "@echo off\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"direct\",\"tor\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"lines\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\n",
                 )
                 .unwrap();
                 Self {
@@ -1269,6 +1219,72 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
         assert!(lock(&events).iter().any(|(channel, value)| {
             channel == "tunnel://state" && value["data"]["state"] == "running"
         }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Sidecar falso que confere a injeção dos campos da borda em `net.start`
+    /// e responde à listagem de celulares que o supervisor faz em seguida.
+    #[cfg(unix)]
+    #[test]
+    fn net_start_injects_the_edge_and_syncs_the_bridge_with_the_registry() {
+        let root = cascade_root("net-start");
+        fs::create_dir_all(root.join("mobile")).unwrap();
+        let script = root.join("fake-net-sidecar.sh");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":42},"ts":"2026-09-12T20:00:00Z"}'
+IFS= read -r hello
+printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["direct","tor","pairing","devices"]}}'
+IFS= read -r start
+case "$start" in
+  *'"staticDir":"evil"'*) exit 7 ;;
+  *'"cmd":"net.start"'*'"bridgeUrl":"http://127.0.0.1:3720"'*'"desktopName":"MacBook"'*'"proxySecret":"fixture"'*) ;;
+  *) exit 8 ;;
+esac
+printf '%s\n' '{"id":2,"ok":true,"result":{"state":"ready","desktop":{"id":"d_fixture","name":"MacBook"}}}'
+IFS= read -r list
+case "$list" in
+  *'"cmd":"devices.list"'*) ;;
+  *) exit 9 ;;
+esac
+printf '%s\n' '{"id":3,"ok":true,"result":{"devices":[{"id":"dev_fixture","name":"iPhone","deviceKey":"device-key"}]}}'
+IFS= read -r shutdown
+printf '%s\n' '{"id":4,"ok":true,"result":{}}'
+"#,
+        )
+        .unwrap();
+        let bridge = RecordingBridge::default();
+        let mut launch = fixture(
+            &root,
+            PathBuf::from("/bin/sh"),
+            BridgeSession {
+                port: 3720,
+                secret: "fixture".into(),
+            },
+        );
+        launch.binary_args = vec![script.to_string_lossy().into_owned()];
+        let supervisor = Supervisor::new(
+            launch,
+            Arc::new(|_, _| {}),
+            Arc::new(bridge.clone()),
+            ApiKeyStore::new(root.join("key")),
+        );
+        let status = supervisor
+            .call(
+                "net.start",
+                json!({"desktopName":"MacBook", "requireApproval":false, "staticDir":"evil", "proxySecret":"evil"}),
+            )
+            .unwrap();
+        assert_eq!(status["state"], "ready");
+        supervisor.shutdown_blocking();
+        assert_eq!(
+            *lock(&bridge.updates),
+            vec![
+                json!({"kind":"desktop", "value":{"id":"d_fixture", "name":"MacBook"}}),
+                json!({"kind":"sync", "value":{"devices":[{"id":"dev_fixture", "name":"iPhone", "deviceKey":"device-key"}]}}),
+            ]
+        );
         fs::remove_dir_all(root).unwrap();
     }
 
@@ -1325,7 +1341,7 @@ owner=$$
 tor=$!
 printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":42},"ts":"2026-09-12T20:00:00Z"}'
 IFS= read -r hello || exit 0
-printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["control","edge","pairing","devices"]}}'
+printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["direct","tor","pairing","devices"]}}'
 IFS= read -r request || exit 0
 printf '{"id":2,"ok":true,"result":{"tree":[%s]}}\n' "$tor"
 IFS= read -r shutdown || exit 0
@@ -1345,7 +1361,7 @@ exec sleep 600 </dev/null
                 let script = root.join("fake-cascade-sidecar.cmd");
                 fs::write(
                     &script,
-                    "@echo off\r\nstart \"\" /b cmd /d /c \"ping -n 600 127.0.0.1 >nul\"\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"control\",\"edge\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"tree\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\nif \"%~1\"==\"hold\" ping -n 600 127.0.0.1 >nul\r\n",
+                    "@echo off\r\nstart \"\" /b cmd /d /c \"ping -n 600 127.0.0.1 >nul\"\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"direct\",\"tor\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"tree\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\nif \"%~1\"==\"hold\" ping -n 600 127.0.0.1 >nul\r\n",
                 )
                 .unwrap();
                 Self {

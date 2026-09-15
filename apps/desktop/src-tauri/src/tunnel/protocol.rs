@@ -86,6 +86,9 @@ pub fn encode_request(id: u64, command: &str, args: Value) -> Result<String, Str
     Ok(line)
 }
 
+/// Canal `tunnel://*` de cada evento do sidecar: pareamento em `pair`,
+/// celulares e sessões em `devices`, e `net.state`, `tor.state`,
+/// `path.changed` e o estado do próprio supervisor em `state`.
 pub fn event_channel(name: &str) -> &'static str {
     if name.starts_with("pair.") {
         "tunnel://pair"
@@ -113,9 +116,20 @@ mod tests {
         };
         assert_eq!(hello.name, "hello");
         assert_eq!(hello.data["protocol"], 1);
-        assert_eq!(event_channel("node.state"), "tunnel://state");
-        assert_eq!(event_channel("pair.completed"), "tunnel://pair");
-        assert_eq!(event_channel("devices.changed"), "tunnel://devices");
+        for (event, channel) in [
+            ("net.state", "tunnel://state"),
+            ("tor.state", "tunnel://state"),
+            ("path.changed", "tunnel://state"),
+            ("tunnel.state", "tunnel://state"),
+            ("pair.requested", "tunnel://pair"),
+            ("pair.completed", "tunnel://pair"),
+            ("pair.failed", "tunnel://pair"),
+            ("devices.changed", "tunnel://devices"),
+            ("session.opened", "tunnel://devices"),
+            ("session.closed", "tunnel://devices"),
+        ] {
+            assert_eq!(event_channel(event), channel, "{event}");
+        }
 
         let response = parse_line(r#"{"id":7,"ok":true,"result":{"state":"running"}}"#).unwrap();
         let Inbound::Response(response) = response else {

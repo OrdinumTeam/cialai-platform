@@ -144,6 +144,36 @@ mod tests {
             } if client == "cialai-ios"
         ));
 
+        let welcome: Value = serde_json::from_str(include_str!(
+            "../../../../../packages/protocol/fixtures/welcome.json"
+        ))
+        .unwrap();
+        let identity = |value: &Value| WelcomeIdentity {
+            id: value["id"].as_str().unwrap().into(),
+            name: value["name"].as_str().unwrap().into(),
+        };
+        assert!(
+            welcome["device"]["id"]
+                .as_str()
+                .unwrap()
+                .starts_with("dev_")
+        );
+        assert!(welcome["desktop"]["id"].as_str().unwrap().starts_with("d_"));
+        assert_eq!(
+            serde_json::to_value(Welcome {
+                r#type: "welcome",
+                version: 1,
+                auth: "device",
+                user: None,
+                device: Some(identity(&welcome["device"])),
+                desktop: Some(identity(&welcome["desktop"])),
+                capabilities: ["pty"],
+                features: ["terminal-mobile-v1"],
+            })
+            .unwrap(),
+            welcome
+        );
+
         let call: Incoming = serde_json::from_str(include_str!(
             "../../../../../packages/protocol/fixtures/call.json"
         ))

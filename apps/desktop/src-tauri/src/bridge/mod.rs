@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Bounded loopback transport. The Tailscale proxy supplies the perimeter.
+//! Bounded loopback transport. The edge of the tunnel sidecar supplies the
+//! perimeter: it authenticates each phone by its Ed25519 key and token and
+//! proves itself to the bridge with the per-launch proxy secret.
 mod dispatch;
 mod events;
 pub mod protocol;
@@ -168,10 +170,12 @@ struct IdentityState {
     devices: HashMap<String, DeviceIdentity>,
 }
 
+/// Celular do registro v2: nome para o `welcome` e a chave Ed25519 que a
+/// borda provou, conferida com `X-Cialai-Device-Key`.
 #[derive(Clone)]
 struct DeviceIdentity {
     display: protocol::WelcomeIdentity,
-    node_key: String,
+    device_key: String,
 }
 
 #[derive(Clone)]
@@ -193,19 +197,12 @@ impl BridgeControl {
     }
 
     pub(crate) fn upsert_device(&self, value: &Value) {
-        let Some(display) = value_identity(value) else {
+        let Some(device) = value_device(value) else {
             return;
         };
-        let Some(node_key) = value.get("nodeKey").and_then(Value::as_str) else {
-            return;
-        };
-        lock(&self.identities).devices.insert(
-            display.id.clone(),
-            DeviceIdentity {
-                display,
-                node_key: node_key.into(),
-            },
-        );
+        lock(&self.identities)
+            .devices
+            .insert(device.display.id.clone(), device);
     }
 
     pub(crate) fn sync_devices(&self, value: &Value) {
@@ -214,20 +211,8 @@ impl BridgeControl {
         };
         let mut identities = lock(&self.identities);
         identities.devices.clear();
-        for value in devices {
-            let Some(display) = value_identity(value) else {
-                continue;
-            };
-            let Some(node_key) = value.get("nodeKey").and_then(Value::as_str) else {
-                continue;
-            };
-            identities.devices.insert(
-                display.id.clone(),
-                DeviceIdentity {
-                    display,
-                    node_key: node_key.into(),
-                },
-            );
+        for device in devices.iter().filter_map(value_device) {
+            identities.devices.insert(device.display.id.clone(), device);
         }
     }
 
@@ -279,6 +264,22 @@ impl IdentityControl for BridgeControl {
     fn revoke_device(&self, device_id: &str) -> usize {
         BridgeControl::revoke_device(self, device_id)
     }
+}
+
+/// Celular ativo do registro v2; revogados ficam fora do mapa.
+fn value_device(value: &Value) -> Option<DeviceIdentity> {
+    if value.get("revoked").and_then(Value::as_bool) == Some(true) {
+        return None;
+    }
+    let display = value_identity(value)?;
+    let device_key = value.get("deviceKey")?.as_str()?.trim();
+    if device_key.is_empty() {
+        return None;
+    }
+    Some(DeviceIdentity {
+        display,
+        device_key: device_key.into(),
+    })
 }
 
 fn value_identity(value: &Value) -> Option<protocol::WelcomeIdentity> {
@@ -360,7 +361,7 @@ async fn handshake(
 ) -> Result<(WebSocketStream<TcpStream>, Option<String>), ()> {
     let mut bearer = None;
     let mut device_id = None;
-    let mut node_key = None;
+    let mut device_key = None;
     let mut auth = "open";
     // Tungstenite's callback requires this exact HTTP error response type.
     #[allow(clippy::result_large_err)]
@@ -410,13 +411,13 @@ async fn handshake(
                 .and_then(|value| value.to_str().ok())
                 .filter(|value| !value.is_empty())
                 .map(str::to_owned);
-            node_key = request
+            device_key = request
                 .headers()
-                .get("x-cialai-node-key")
+                .get("x-cialai-device-key")
                 .and_then(|value| value.to_str().ok())
                 .filter(|value| !value.is_empty())
                 .map(str::to_owned);
-            if device_id.is_none() || node_key.is_none() {
+            if device_id.is_none() || device_key.is_none() {
                 return Err(tauri::http::Response::builder()
                     .status(403)
                     .body(Some("Identidade da borda incompleta.".into()))
@@ -465,7 +466,7 @@ async fn handshake(
             identities
                 .devices
                 .get(id)
-                .filter(|device| Some(device.node_key.as_str()) == node_key.as_deref())
+                .filter(|device| Some(device.device_key.as_str()) == device_key.as_deref())
                 .map(|device| device.display.clone())
                 .unwrap_or_else(|| protocol::WelcomeIdentity {
                     id: id.into(),
@@ -819,11 +820,12 @@ mod tests {
             Some("fixture-secret".into()),
         )
         .await;
-        control.set_desktop(&json!({"id":"desktop_fixture", "name":"MacBook"}));
+        control
+            .set_desktop(&json!({"id":"d_fixture", "name":"MacBook", "publicKey":"desktop-key"}));
         control.upsert_device(&json!({
             "id":"dev_fixture",
             "name":"iPhone de Teste",
-            "nodeKey":"nodekey:fixture"
+            "deviceKey":"device-key-fixture"
         }));
         let mut request = url.into_client_request().unwrap();
         request
@@ -834,7 +836,7 @@ mod tests {
             .insert("x-cialai-device-id", "dev_fixture".parse().unwrap());
         request
             .headers_mut()
-            .insert("x-cialai-node-key", "nodekey:fixture".parse().unwrap());
+            .insert("x-cialai-device-key", "device-key-fixture".parse().unwrap());
         let (mut socket, _) = connect_async(request).await.unwrap();
         socket
             .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
@@ -861,6 +863,75 @@ mod tests {
         };
         assert_eq!(u16::from(frame.code), 4401);
         assert!(started.elapsed() < Duration::from_secs(1));
+        task.await.unwrap();
+    }
+
+    fn device_request(url: &str, device_key: Option<(&'static str, &str)>) -> Request {
+        let mut request = url.into_client_request().unwrap();
+        request
+            .headers_mut()
+            .insert("x-cialai-proxy-secret", "fixture-secret".parse().unwrap());
+        request
+            .headers_mut()
+            .insert("x-cialai-device-id", "dev_fixture".parse().unwrap());
+        if let Some((name, value)) = device_key {
+            request.headers_mut().insert(name, value.parse().unwrap());
+        }
+        request
+    }
+
+    #[tokio::test]
+    async fn edge_identity_requires_the_v2_device_key_header() {
+        for header in [None, Some(("x-cialai-node-key", "device-key-fixture"))] {
+            let (url, task, _) = test_server(
+                Arc::new(|_, _, _| Ok(Value::Null)),
+                Some("fixture-secret".into()),
+            )
+            .await;
+            let error = connect_async(device_request(&url, header))
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(error, tokio_tungstenite::tungstenite::Error::Http(ref response) if response.status() == 403),
+                "{header:?}: {error:?}"
+            );
+            task.await.unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn welcome_names_only_registered_devices_whose_key_matches() {
+        let (url, task, control) = test_server(
+            Arc::new(|_, _, _| Ok(Value::Null)),
+            Some("fixture-secret".into()),
+        )
+        .await;
+        control.set_desktop(&json!({"id":"d_fixture", "name":"MacBook"}));
+        control.sync_devices(&json!({"devices":[
+            {"id":"dev_fixture", "name":"iPhone de Teste", "deviceKey":"device-key-fixture"},
+            {"id":"dev_revoked", "name":"iPad antigo", "deviceKey":"device-key-revoked", "revoked":true}
+        ]}));
+        assert!(
+            !lock(&control.identities)
+                .devices
+                .contains_key("dev_revoked")
+        );
+        let request = device_request(&url, Some(("x-cialai-device-key", "another-key")));
+        let (mut socket, _) = connect_async(request).await.unwrap();
+        socket
+            .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
+            .await
+            .unwrap();
+        let welcome = socket.next().await.unwrap().unwrap().into_text().unwrap();
+        let welcome: Value = serde_json::from_str(&welcome).unwrap();
+        assert_eq!(welcome["auth"], "device");
+        assert_eq!(welcome["device"]["id"], "dev_fixture");
+        assert_eq!(
+            welcome["device"]["name"], "dev_fixture",
+            "a key that differs from the registry must not borrow the known name"
+        );
+        assert_eq!(welcome["desktop"]["name"], "MacBook");
+        socket.close(None).await.unwrap();
         task.await.unwrap();
     }
 

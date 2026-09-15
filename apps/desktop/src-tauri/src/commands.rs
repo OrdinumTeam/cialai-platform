@@ -16,7 +16,7 @@ use tauri_plugin_opener::OpenerExt;
 use crate::i18n::{t, tf};
 use crate::platform::{self, PlatformInfo, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
-use crate::tunnel::{Awake, RpcProblem, SecretStatus, Supervisor};
+use crate::tunnel::{Awake, RpcProblem, Supervisor};
 use crate::workspace::ai::{self, AgentUsage, UsageCache};
 use crate::workspace::browser::{BrowserInfo, BrowserManager};
 use crate::workspace::dragout;
@@ -119,54 +119,8 @@ pub async fn tunnel_call(
         .map_err(tunnel_join_error)?
 }
 
-#[tauri::command(async)]
-pub async fn tunnel_control_configure(
-    supervisor: State<'_, Supervisor>,
-    url: String,
-    api_key: String,
-    ca_file: Option<String>,
-) -> Result<serde_json::Value, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        supervisor.configure_control(url, api_key, ca_file)
-    })
-    .await
-    .map_err(tunnel_join_error)?
-}
-
-#[tauri::command(async)]
-pub async fn tunnel_control_configure_saved(
-    supervisor: State<'_, Supervisor>,
-    url: String,
-    ca_file: Option<String>,
-) -> Result<serde_json::Value, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || supervisor.configure_saved_control(url, ca_file))
-        .await
-        .map_err(tunnel_join_error)?
-}
-
-#[tauri::command(async)]
-pub async fn tunnel_control_rotate_api_key(
-    supervisor: State<'_, Supervisor>,
-    days: u16,
-) -> Result<serde_json::Value, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || supervisor.rotate_api_key(days))
-        .await
-        .map_err(tunnel_join_error)?
-}
-
-#[tauri::command(async)]
-pub async fn tunnel_api_key_status(
-    supervisor: State<'_, Supervisor>,
-) -> Result<SecretStatus, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || supervisor.secret_status())
-        .await
-        .map_err(tunnel_join_error)?
-}
-
+/// Apaga a chave da API do Headscale deixada por versões anteriores; a
+/// conectividade v2 não usa servidor de controle.
 #[tauri::command(async)]
 pub async fn tunnel_delete_api_key(supervisor: State<'_, Supervisor>) -> Result<(), RpcProblem> {
     let supervisor = supervisor.inner().clone();
@@ -178,10 +132,9 @@ pub async fn tunnel_delete_api_key(supervisor: State<'_, Supervisor>) -> Result<
 #[tauri::command(async)]
 pub async fn tunnel_doctor(
     supervisor: State<'_, Supervisor>,
-    control_url: Option<String>,
 ) -> Result<serde_json::Value, RpcProblem> {
     let supervisor = supervisor.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || supervisor.doctor(control_url))
+    tauri::async_runtime::spawn_blocking(move || supervisor.doctor())
         .await
         .map_err(tunnel_join_error)?
 }

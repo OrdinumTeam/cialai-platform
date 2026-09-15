@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Contratos compartilhados com o futuro supervisor do sidecar.
+//! Supervisor do sidecar `cialai-tunnel` e os recursos que ele entrega ao núcleo.
 
 use std::path::{Path, PathBuf};
 
@@ -11,7 +11,6 @@ mod protocol;
 mod supervisor;
 
 pub use awake::Awake;
-pub use credentials::SecretStatus;
 pub use protocol::RpcProblem;
 pub use supervisor::{BridgeSession, Supervisor};
 
@@ -34,9 +33,9 @@ impl MobileSite {
     }
 }
 
-/// Resolve o diretório estático que será enviado como `staticDir` em
-/// `edge.serve`. O supervisor ainda não existe, mas recebe daqui um caminho
-/// absoluto e já validado, sem tentar ler o `frontendDist` embutido.
+/// Resolve o diretório estático que o supervisor injeta como `staticDir` em
+/// `net.start`: um caminho absoluto e já validado, sem ler o `frontendDist`
+/// embutido.
 pub fn mobile_static_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
     let resources = app
         .path()
