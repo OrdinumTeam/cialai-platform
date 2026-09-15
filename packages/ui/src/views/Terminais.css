@@ -227,9 +227,16 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    ficaria escondida atras da borda. */
 .terminais-terminal__host{position:relative;flex:1;min-width:0;min-height:0}
 .terminais-terminal__host .xterm{height:100%;padding:8px 2px 6px 10px;touch-action:none}
-/* No xterm 6 o tema colore o scrollable interno; o viewport externo ainda
-   traz #000 do CSS da biblioteca, visivel ao redor do respiro do terminal. */
-.terminais-terminal__host .xterm-viewport{background-color:var(--mac-surface-2)}
+/* No xterm 6 o tema colore o scrollable interno; o viewport externo e a
+   caixa de composicao do IME ainda trazem #000 do CSS da biblioteca, que
+   aparecia como moldura preta no respiro e abaixo da ultima linha. No build
+   o CSS do xterm chega num chunk carregado depois deste, entao a regra vence
+   por especificidade, no desktop e no celular, e nao pela ordem. A pagina do
+   celular nao ativa os tokens da casca: as reservas sao as de theme.js. */
+:is(.terminais-terminal__host,.phone-terminal__host){--terminais-terminal-bg:var(--mac-surface-2,#f5f6f8);--terminais-terminal-ink:var(--mac-label,#1d1d1f)}
+[data-theme="dark"] :is(.terminais-terminal__host,.phone-terminal__host){--terminais-terminal-bg:var(--mac-surface-2,#26262a);--terminais-terminal-ink:var(--mac-label,#f5f5f7)}
+:is(.terminais-terminal__host,.phone-terminal__host) .xterm .xterm-viewport{background-color:var(--terminais-terminal-bg)}
+:is(.terminais-terminal__host,.phone-terminal__host) .xterm .composition-view{background:var(--terminais-terminal-bg);color:var(--terminais-terminal-ink);text-decoration:underline}
 .terminais-terminal__tobottom{position:absolute;right:16px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--mac-separator-strong);border-radius:7px;background:var(--mac-glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);color:var(--mac-label);font:inherit;font-size:11.5px;font-weight:500;box-shadow:var(--mac-shadow-popover);cursor:default;animation:macPop 160ms var(--mac-ease)}
 .terminais-terminal__tobottom:hover{background:var(--mac-surface)}
 .terminais-terminal__drop{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:var(--mac-accent-soft);color:var(--mac-accent-text);font-size:13px;font-weight:500;pointer-events:none}

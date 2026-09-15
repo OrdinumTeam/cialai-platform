@@ -86,6 +86,8 @@ Tokens do estúdio em `views/Terminais.css:13-39`, mantidos: `--terminais-editor
 
 Opções do xterm: 120 por 32 iniciais, altura de linha 1,15, pesos 400 e 600, 8000 linhas, sensibilidade 2 com aceleração de 2 a 8, cursor piscando, tamanho 12 no celular e de 10 a 20 no desktop. Padding do host `8px 2px 6px 10px`. Objeto de tema novo a cada chamada e observação de `data-theme`, como em `theme.js`.
 
+O terminal não tem moldura. O viewport do xterm, que aparece no respiro e abaixo da última linha, e a caixa de composição do IME usam o mesmo fundo do tema no desktop e no celular, em vez do preto do CSS da biblioteca. A regra vence por especificidade, porque o CSS do xterm chega depois no build. Onde os tokens da casca não existem, como na página do celular, as reservas são `#f5f6f8` no claro e `#26262a` no escuro, as mesmas de `theme.js`. As decorações da busca na saída recebem cores opacas em hex compostas sobre esse fundo, porque o xterm não aceita `var()` nem transparência nelas.
+
 ## Paleta das sessões
 
 Dezoito tons de `lib/organization-colors.js`, cada um com versão clara e escura, ids intocados para sessões gravadas manterem a cor. Sessão nova começa sem cor.

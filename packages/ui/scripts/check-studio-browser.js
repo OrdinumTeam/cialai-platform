@@ -78,6 +78,17 @@ async function assertImeTyping(term) {
   }
 }
 
+// O terminal se integra ao tema: o viewport do xterm, visivel no respiro e
+// abaixo da ultima linha, e a caixa de composicao do IME usam o fundo que o
+// tema pinta nas linhas, e nao o preto do CSS da biblioteca.
+function assertTerminalSurface(host) {
+  const color = (selector) => getComputedStyle(host.querySelector(selector)).backgroundColor;
+  const surface = color('.xterm-scrollable-element');
+  assert(!['rgb(0, 0, 0)', 'rgba(0, 0, 0, 0)'].includes(surface), `Terminal theme background missing, got ${surface}`);
+  assert(color('.xterm-viewport') === surface, `Terminal viewport must use the theme background ${surface}, got ${color('.xterm-viewport')}`);
+  assert(color('.composition-view') === surface, `IME composition box must use the theme background ${surface}, got ${color('.composition-view')}`);
+}
+
 // Cmd F no terminal abre a busca na saida, que precisa marcar os resultados
 // sem erro no parser de cores do xterm.
 async function assertTerminalFind(session) {
@@ -117,12 +128,14 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   assert(!document.querySelector('.ios-tabbar'), 'Cialai phone entry must expose only Terminais');
   document.querySelector('.phone-terminal__sessions .terminais-card').click();
   await until(() => document.querySelector('.phone-terminal__host .xterm'), 'phone terminal');
+  assertTerminalSurface(document.querySelector('.phone-terminal__host'));
   assert(document.querySelectorAll('.phone-terminal__host').length === 1, 'Phone must mount one terminal pane');
   assert(document.documentElement.scrollWidth === window.innerWidth, 'Phone page must not overflow horizontally');
   await assertImeTyping(runtime.getState().selected.term);
-  document.title = 'PASS: Cialai phone terminal list, single pane, responsive viewport and fast IME typing';
+  document.title = 'PASS: Cialai phone terminal list, single pane, themed terminal surface, responsive viewport and fast IME typing';
 } else {
   await until(() => document.querySelector('.terminais-terminal__host .xterm'), 'desktop terminal');
+  assertTerminalSurface(document.querySelector('.terminais-terminal__host'));
   assert(document.querySelector('.mac-sidebar__brand-name')?.textContent === 'Cialai', 'Cialai brand missing');
   await assertTransparentMark('.mac-sidebar__logo');
   const sidebarGradient = getComputedStyle(document.querySelector('.mac-sidebar')).backgroundImage;
@@ -152,5 +165,5 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   await until(() => document.querySelector('.mac-window').classList.contains('mac-window--sidebar-hidden'), 'sidebar hide');
   document.querySelector('[title="Mostrar ou ocultar barra lateral"]').click();
   await until(() => !document.querySelector('.mac-window').classList.contains('mac-window--sidebar-hidden'), 'sidebar restore');
-  document.title = 'PASS: Cialai desktop shell, terminal demo, palette, temporary file and sidebar';
+  document.title = 'PASS: Cialai desktop shell, terminal demo, themed terminal surface, output find, palette, temporary file and sidebar';
 }

@@ -3,7 +3,7 @@
 // separa em chunks anteriores o CSS compartilhado com a página do celular, e o
 // servidor de desenvolvimento não mostra essa ordem. Rode depois do build.
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -38,4 +38,15 @@ const contentRule = rules.findLast((rule) => rule.selector === '.mac-content');
 const studioRule = rules.findLast((rule) => rule.selector.includes('.mac-content:has(>.terminais-page)') || rule.selector.includes('.mac-content:has(> .terminais-page)'));
 assert.ok(contentRule && studioRule && studioRule.index > contentRule.index, 'Terminais.css precisa vir depois de shell.css');
 
-console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand and studio order in production`);
+// O CSS do xterm vem num chunk carregado depois das folhas da página e pinta
+// o viewport de preto. O fundo do terminal precisa vencer por especificidade
+// no desktop e no celular, não pela ordem.
+const assetCss = readdirSync(`${dist}/assets`).filter((name) => name.endsWith('.css')).map((name) => readFileSync(`${dist}/assets/${name}`, 'utf8')).join('\n');
+const xtermViewport = [...assetCss.matchAll(/([^{}@]+)\{([^{}]*)\}/g)]
+  .map((match) => ({ selector: match[1].trim(), body: match[2] }))
+  .filter((rule) => rule.selector.endsWith('.xterm .xterm-viewport') && /background-color:var\(--terminais-terminal-bg\)/.test(rule.body));
+for (const host of ['.terminais-terminal__host', '.phone-terminal__host']) {
+  assert.ok(xtermViewport.some((rule) => rule.selector.includes(host)), `fundo do viewport do xterm sem regra específica para ${host}`);
+}
+
+console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand and studio order in production, and the terminal viewport outranks the xterm black on desktop and phone`);
