@@ -24,7 +24,7 @@ var (
 
 // Endpoints are the local listeners of a Tor this package does not run: the
 // in-process Tor of the phone apps, handed over by the native side. Each
-// address is a loopback "host:port" or "unix:/absolute/path".
+// address is a loopback "host:port" or, outside Windows, "unix:/absolute/path".
 type Endpoints struct {
 	SOCKS string
 	// Control and CookiePath are optional; they only serve bootstrap status.

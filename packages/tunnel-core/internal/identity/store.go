@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 const (
@@ -129,12 +131,13 @@ func writeExclusive(path string, data []byte) (bool, error) {
 		return false, err
 	}
 	defer os.Remove(temporary)
-	if err := os.Link(temporary, path); err == nil {
+	if err := publishNew(temporary, path); err == nil {
 		return true, nil
 	} else if errors.Is(err, os.ErrExist) {
 		return false, nil
 	}
-	// Some filesystems refuse hard links; fall back to an exclusive create.
+	// Some filesystems refuse hard links or the move; fall back to an
+	// exclusive create.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if errors.Is(err, os.ErrExist) {
 		return false, nil
@@ -203,7 +206,7 @@ func syncRecord(identity *Identity, path, name string, now time.Time, created bo
 	if err != nil {
 		return Record{}, err
 	}
-	if err := os.Rename(temporary, path); err != nil {
+	if err := statedir.Rename(temporary, path); err != nil {
 		_ = os.Remove(temporary)
 		return Record{}, fmt.Errorf("replace identity record: %w", err)
 	}

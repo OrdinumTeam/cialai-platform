@@ -9,6 +9,8 @@ import (
 	"errors"
 	"io"
 	"net"
+	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -163,7 +165,12 @@ func TestClientEndpointsValidation(t *testing.T) {
 			t.Errorf("%s: accepted", name)
 		}
 	}
-	valid := Endpoints{SOCKS: "unix:/data/tor/socks", Control: "127.0.0.1:9051", CookiePath: "/data/tor/control_auth_cookie"}
+	socks := "unix:/data/tor/socks"
+	if runtime.GOOS == "windows" {
+		// Tor has no Unix socket listeners on Windows.
+		socks = "127.0.0.1:9050"
+	}
+	valid := Endpoints{SOCKS: socks, Control: "127.0.0.1:9051", CookiePath: filepath.Join(t.TempDir(), "control_auth_cookie")}
 	if err := client.SetTorEndpoints(valid); err != nil {
 		t.Fatal(err)
 	}

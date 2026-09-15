@@ -12,6 +12,7 @@ import (
 	"net/textproto"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -111,12 +112,19 @@ func TestOnionRequestCommand(t *testing.T) {
 }
 
 func TestSplitEndpoint(t *testing.T) {
-	for _, good := range []string{"127.0.0.1:9050", "[::1]:9051", "unix:/var/run/tor/socks"} {
+	good := []string{"127.0.0.1:9050", "[::1]:9051"}
+	bad := []string{"", "10.0.0.1:9050", "localhost:9050", "127.0.0.1:0", "127.0.0.1:99999", "unix:relative", "unix:"}
+	if runtime.GOOS == "windows" {
+		bad = append(bad, "unix:/var/run/tor/socks")
+	} else {
+		good = append(good, "unix:/var/run/tor/socks")
+	}
+	for _, good := range good {
 		if _, _, err := splitEndpoint(good); err != nil {
 			t.Errorf("splitEndpoint(%q) = %v", good, err)
 		}
 	}
-	for _, bad := range []string{"", "10.0.0.1:9050", "localhost:9050", "127.0.0.1:0", "127.0.0.1:99999", "unix:relative", "unix:"} {
+	for _, bad := range bad {
 		if _, _, err := splitEndpoint(bad); err == nil {
 			t.Errorf("splitEndpoint(%q) accepted", bad)
 		}

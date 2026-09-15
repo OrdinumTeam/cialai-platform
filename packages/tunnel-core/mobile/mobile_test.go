@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -73,11 +74,18 @@ func TestVersionIdentityAndIdleStatus(t *testing.T) {
 		t.Fatalf("phone identity id %q", tunnel.local.ID())
 	}
 	info, err := os.Stat(filepath.Join(stateDir, identity.KeyFileName))
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("identity key %v, %v", info, err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if info, err := os.Stat(stateDir); err != nil || info.Mode().Perm() != 0o700 {
-		t.Fatalf("state directory %v, %v", info, err)
+	// Windows reports only the read-only bit as a mode, so private files show
+	// as 0666; the mode check holds on the systems the phone apps run on.
+	if runtime.GOOS != "windows" {
+		if info.Mode().Perm() != 0o600 {
+			t.Fatalf("identity key mode %04o", info.Mode().Perm())
+		}
+		if info, err := os.Stat(stateDir); err != nil || info.Mode().Perm() != 0o700 {
+			t.Fatalf("state directory %v, %v", info, err)
+		}
 	}
 	status, err := tunnel.StatusJSON()
 	if err != nil || status != `{"state":"idle","tor":{"state":"disabled","progress":0},"desktops":0}` {
@@ -293,7 +301,7 @@ func TestSetTorEndpointsReportsTheFallbackState(t *testing.T) {
 	if err := tunnel.SetTorEndpoints("198.51.100.7:9050", "", ""); errorCode(err) != "tor_endpoints_invalid" {
 		t.Fatalf("non loopback SOCKS: %v", err)
 	}
-	if err := tunnel.SetTorEndpoints("127.0.0.1:9050", "127.0.0.1:9051", "/data/tor/control_auth_cookie"); err != nil {
+	if err := tunnel.SetTorEndpoints("127.0.0.1:9050", "127.0.0.1:9051", filepath.Join(t.TempDir(), "control_auth_cookie")); err != nil {
 		t.Fatal(err)
 	}
 	if err := tunnel.SetTorEndpoints("", "", ""); err != nil {

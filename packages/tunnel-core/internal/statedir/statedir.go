@@ -110,7 +110,7 @@ func (paths Paths) WriteAtomic(path string, data []byte) error {
 		_ = os.Remove(temporaryPath)
 		return fmt.Errorf("close temporary state file: %w", err)
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
+	if err := Rename(temporaryPath, path); err != nil {
 		_ = os.Remove(temporaryPath)
 		return fmt.Errorf("replace state file: %w", err)
 	}

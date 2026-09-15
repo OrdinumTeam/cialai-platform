@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 )
 
 func TestPrepareCreatesPrivateStablePaths(t *testing.T) {
@@ -48,6 +49,41 @@ func TestAtomicWriteStaysInsideRootAndUsesPrivateFileMode(t *testing.T) {
 	}
 	if err := paths.WriteAtomic(filepath.Join(paths.Root, "..", "escape"), []byte("no")); err == nil {
 		t.Fatal("write escaped state root")
+	}
+}
+
+// A reader holding the target open makes a Windows rename fail until its
+// handle closes; Rename waits for it instead of failing the write.
+func TestRenameWaitsForAnOpenReader(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "state.json")
+	source := filepath.Join(dir, ".next")
+	if err := os.WriteFile(target, []byte("old"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	reader, err := os.Open(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	released := make(chan struct{})
+	go func() {
+		defer close(released)
+		time.Sleep(100 * time.Millisecond)
+		_ = reader.Close()
+	}()
+	err = Rename(source, target)
+	<-released
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(target); err != nil || string(data) != "new" {
+		t.Fatalf("target holds %q, %v", data, err)
+	}
+	if _, err := os.Stat(source); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("source still exists: %v", err)
 	}
 }
 

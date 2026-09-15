@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/textproto"
 	"os"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -559,9 +560,14 @@ func (control *controlConn) addOnion(ctx context.Context, request onionRequest) 
 	return "", errors.New("ADD_ONION reply has no ServiceID")
 }
 
-// splitEndpoint accepts "host:port" on a loopback IP or "unix:/absolute/path".
+// splitEndpoint accepts "host:port" on a loopback IP or, outside Windows,
+// "unix:/absolute/path". Tor has no Unix socket listeners on Windows, where a
+// path starting with a slash is not absolute either.
 func splitEndpoint(address string) (string, string, error) {
 	if path, ok := strings.CutPrefix(address, "unix:"); ok {
+		if runtime.GOOS == "windows" {
+			return "", "", fmt.Errorf("unix endpoint %q is not supported on Windows", address)
+		}
 		if path == "" || !strings.HasPrefix(path, "/") {
 			return "", "", fmt.Errorf("unix endpoint %q must be an absolute path", address)
 		}

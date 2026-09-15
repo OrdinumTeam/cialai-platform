@@ -48,6 +48,11 @@ func only(iface net.Interface) func() ([]net.Interface, error) {
 func requireLoopbackMulticast(t *testing.T) net.Interface {
 	t.Helper()
 	iface := loopbackInterface(t)
+	// pion sizes its read buffer from the interface MTU and refuses to serve
+	// without a positive one; the Windows loopback pseudo-interface reports -1.
+	if iface.MTU <= 0 {
+		t.Skipf("loopback %s reports MTU %d, the mDNS responder needs a positive MTU", iface.Name, iface.MTU)
+	}
 	conn, err := net.ListenUDP("udp4", groupIPv4)
 	if err != nil {
 		t.Skipf("mDNS port unavailable: %v", err)

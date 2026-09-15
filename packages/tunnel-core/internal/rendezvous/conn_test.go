@@ -52,8 +52,9 @@ func TestChannelDeliversTypedMessagesInOrder(t *testing.T) {
 	if err := desktop.SendReachUpdate(ctx, testCard(t, keys.desktop, lan("192.168.1.20:4740"))); err != nil {
 		t.Fatal(err)
 	}
-	// The pong leaves after the phone handled every earlier frame.
-	if rtt, err := desktop.Ping(ctx); err != nil || rtt <= 0 {
+	// The pong leaves after the phone handled every earlier frame. A loopback
+	// round trip can measure zero with the coarser Windows clock.
+	if rtt, err := desktop.Ping(ctx); err != nil || rtt < 0 {
 		t.Fatalf("ping = %v, %v", rtt, err)
 	}
 	mu.Lock()

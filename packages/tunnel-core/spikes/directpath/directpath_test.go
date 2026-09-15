@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -105,7 +106,9 @@ func TestIdentityPersistsWithPrivatePermissions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o600 {
+	// Windows reports only the read-only bit as a mode, so a private file
+	// shows as 0666 there.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("identity mode is %04o, want 0600", info.Mode().Perm())
 	}
 }

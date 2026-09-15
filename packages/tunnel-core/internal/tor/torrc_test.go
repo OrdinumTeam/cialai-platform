@@ -31,9 +31,9 @@ func TestRenderTorrcServiceProfile(t *testing.T) {
 		"SocksPort 0",
 		"HiddenServiceNonAnonymousMode 1",
 		"HiddenServiceSingleHopMode 1",
-		`DataDirectory "` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(options.dataDir) + `"`,
-		`ControlPortWriteToFile "` + options.controlPortFile + `"`,
-		`CookieAuthFile "` + options.cookieFile + `"`,
+		"DataDirectory " + torrcQuoted(options.dataDir),
+		"ControlPortWriteToFile " + torrcQuoted(options.controlPortFile),
+		"CookieAuthFile " + torrcQuoted(options.cookieFile),
 	} {
 		if !slices.Contains(lines, want) {
 			t.Errorf("torrc lacks %q:\n%s", want, contents)
@@ -71,8 +71,14 @@ func TestRenderTorrcClientProfileAndGeoIP(t *testing.T) {
 	if !strings.Contains(text, "SocksPort auto\n") || strings.Contains(text, "HiddenService") {
 		t.Fatalf("client profile:\n%s", text)
 	}
-	if !strings.Contains(text, `GeoIPFile "`+filepath.Join(dir, "geoip")+`"`) || !strings.Contains(text, "GeoIPv6File ") {
-		t.Fatalf("GeoIP lines missing:\n%s", text)
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	for _, want := range []string{
+		"GeoIPFile " + torrcQuoted(filepath.Join(dir, "geoip")),
+		"GeoIPv6File " + torrcQuoted(filepath.Join(dir, "geoip6")),
+	} {
+		if !slices.Contains(lines, want) {
+			t.Fatalf("GeoIP line %q missing:\n%s", want, text)
+		}
 	}
 }
 
@@ -117,4 +123,10 @@ func TestBundleGeoIP(t *testing.T) {
 	if geoIP != filepath.Join(root, "data", "geoip") || geoIPv6 != "" {
 		t.Fatalf("bundleGeoIP = %q %q", geoIP, geoIPv6)
 	}
+}
+
+// torrcQuoted is the quoted torrc form of value. Windows paths carry
+// backslashes, which the torrc escapes like quotes.
+func torrcQuoted(value string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value) + `"`
 }
