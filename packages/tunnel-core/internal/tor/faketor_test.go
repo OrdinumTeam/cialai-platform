@@ -29,6 +29,8 @@ import (
 // child lifecycle are covered without the real binary.
 const fakeTorEnv = "CIALAI_FAKE_TOR"
 
+const fakeTorVersion = "Tor version 0.4.9.12-fake."
+
 func TestMain(m *testing.M) {
 	if os.Getenv(fakeTorEnv) == "1" {
 		os.Exit(runFakeTorProcess(os.Args[1:]))
@@ -37,6 +39,10 @@ func TestMain(m *testing.M) {
 }
 
 func runFakeTorProcess(args []string) int {
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Println(fakeTorVersion)
+		return 0
+	}
 	tor := newFakeTor(context.Background(), args, fakeBehavior{})
 	if err := tor.Start(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

@@ -30,6 +30,9 @@ for (const required of [
   'actions/setup-go@v5',
   'CARGO_BUILD_JOBS: 2',
   'npm ci',
+  'actions/cache@v4',
+  'path: packages/tunnel-core/build/tor/downloads',
+  "hashFiles('tools/fetch-tor.mjs')",
   'npm run sidecar --workspace @cialai/desktop',
   'npm test',
   'npm run check:text',
@@ -49,6 +52,10 @@ for (const required of [
   assert.ok(workflow.includes(required), `passo da matriz ausente: ${required}`);
 }
 
+assert.ok(
+  workflow.indexOf('path: packages/tunnel-core/build/tor/downloads') < workflow.indexOf('npm run sidecar --workspace @cialai/desktop'),
+  'o cache do Tor precisa vir antes do sidecar local, que prepara resources/tor',
+);
 assert.ok(
   workflow.indexOf('npm run sidecar --workspace @cialai/desktop') < workflow.indexOf('npm test'),
   'o sidecar deve ser compilado antes da suíte',

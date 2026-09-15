@@ -63,6 +63,13 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      # O sidecar local também prepara resources/tor; o arquivo fixado por hash fica em cache por sistema.
+      - name: Cache do Tor Expert Bundle
+        uses: actions/cache@v4
+        with:
+          path: packages/tunnel-core/build/tor/downloads
+          key: tor-expert-bundle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('tools/fetch-tor.mjs') }}
+
       - name: Compilar sidecar local
         run: npm run sidecar --workspace @cialai/desktop
 

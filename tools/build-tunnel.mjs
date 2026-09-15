@@ -3,7 +3,8 @@
 // Tauri's bundle.externalBin entry `binaries/cialai-tunnel`.
 //
 //   node tools/build-tunnel.mjs                 all five release targets
-//   node tools/build-tunnel.mjs --local         only the Rust host target
+//   node tools/build-tunnel.mjs --local         only the Rust host target, plus the host
+//                                               Tor Expert Bundle staged as resources/tor
 //   node tools/build-tunnel.mjs --target <t>    selected targets, repeatable
 //   node tools/build-tunnel.mjs --verify --target <t>
 //                                               check a downloaded binary against SHA256SUMS
@@ -11,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { stageLocalTorResource } from './fetch-tor.mjs';
 
 export const TARGETS = Object.freeze({
   'aarch64-apple-darwin': { goos: 'darwin', goarch: 'arm64' },
@@ -106,5 +108,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       console.log(`built ${binaryName(triple)} ${(built.bytes / 1048576).toFixed(1)} MiB`);
     }
     console.log(`wrote SHA256SUMS with ${writeChecksums()} entries`);
+    // Release jobs stage Tor per target with tools/fetch-tor.mjs --stage.
+    if (argv.includes('--local')) {
+      const tor = await stageLocalTorResource(targets[0]);
+      console.log(tor.unavailable ? `staged no Tor for ${tor.triple}` : `staged Tor ${tor.target} with ${tor.files} files`);
+    }
   }
 }

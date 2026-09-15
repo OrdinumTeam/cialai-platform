@@ -10,6 +10,18 @@ Phase 0 dependency inventory:
 - Headscale: BSD-3-Clause, used as a separate Docker test service
   https://github.com/juanfont/headscale/blob/v0.29.3/LICENSE
 
+Tor Expert Bundle 15.0.22, packaged with the desktop app as separate programs
+in $RESOURCE/tor by tools/fetch-tor.mjs; the upstream license texts ship in
+$RESOURCE/tor/docs:
+
+- Tor 0.4.9.12: BSD-3-Clause source license; this build reports that it is
+  covered by the GNU General Public License version 3
+  https://gitlab.torproject.org/tpo/core/tor/-/blob/main/LICENSE
+  https://www.gnu.org/licenses/gpl-3.0.html
+- libevent 2.1: BSD-3-Clause, https://github.com/libevent/libevent/blob/master/LICENSE
+- OpenSSL 3.5: Apache-2.0, https://github.com/openssl/openssl/blob/master/LICENSE.txt
+- Build sources: https://gitlab.torproject.org/tpo/applications/tor-browser-build
+
 Planned dependencies, not yet bundled:
 
 - xterm.js: MIT, https://github.com/xtermjs/xterm.js

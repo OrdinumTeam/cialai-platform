@@ -162,6 +162,12 @@ jobs:
         run: |
           node tools/build-tunnel.mjs --verify --target ${{ matrix.target }}
           chmod +x apps/desktop/src-tauri/binaries/cialai-tunnel-* || true
+      # Tauri packs resources/tor as $RESOURCE/tor; the pinned archive hash and the staged SHA256SUMS are both checked.
+      - name: Stage the pinned Tor Expert Bundle for this target
+        shell: bash
+        run: |
+          node tools/fetch-tor.mjs --stage --target ${{ matrix.target }}
+          node tools/fetch-tor.mjs --verify-resource --target ${{ matrix.target }}
       - run: npm ci
       - name: Choose platform signing
         id: signing
@@ -187,6 +193,32 @@ jobs:
       - name: Install the Windows signing tool
         if: steps.signing.outputs.windows == 'trusted-signing'
         run: cargo install trusted-signing-cli --locked
+      # Tauri signs externalBin but not resources, and notarization rejects any nested Mach-O without Developer ID.
+      - name: Sign the nested Tor binaries with Developer ID
+        if: steps.signing.outputs.macos == 'developer-id'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        run: |
+          keychain="$RUNNER_TEMP/tor-signing.keychain-db"
+          certificate="$RUNNER_TEMP/tor-signing.p12"
+          keychain_password="$(openssl rand -base64 32)"
+          cleanup() {
+            security delete-keychain "$keychain" >/dev/null 2>&1 || true
+            rm -f "$certificate"
+          }
+          trap cleanup EXIT
+          printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$certificate"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          security import "$certificate" -k "$keychain" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+          node tools/fetch-tor.mjs --sign --keychain "$keychain" --target ${{ matrix.target }}
+          node tools/fetch-tor.mjs --verify-resource --target ${{ matrix.target }}
       - name: Write the notarization key
         if: steps.signing.outputs.macos == 'developer-id'
         shell: bash

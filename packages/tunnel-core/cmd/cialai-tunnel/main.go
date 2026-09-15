@@ -20,6 +20,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/tor"
 	ps "github.com/mitchellh/go-ps"
 )
 
@@ -62,7 +63,12 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 	parentPID := flags.Int("parent-pid", 0, "PID do processo pai")
 	level := flags.String("log-level", "info", "nível info ou debug")
 	logFile := flags.String("log-file", "", "arquivo de log")
+	torBin := flags.String("tor-bin", "", "executável do Tor embutido")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *stateDir == "" || *parentPID <= 0 || alive == nil || !alive(*parentPID) {
+		return 2
+	}
+	if *torBin != "" && !filepath.IsAbs(*torBin) {
+		_, _ = fmt.Fprintln(stdio.err, "o caminho do Tor precisa ser absoluto")
 		return 2
 	}
 	paths, err := statedir.Prepare(*stateDir)
@@ -98,6 +104,7 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 	return sidecar.Serve(context.Background(), sidecar.Options{
 		Paths: paths, Input: stdio.in, Output: stdio.out, Logger: logger,
 		ParentPID: *parentPID, Alive: alive, HandshakeTimeout: 5 * time.Second,
+		TorExecutable: *torBin,
 	})
 }
 
@@ -106,6 +113,7 @@ func runDoctor(args []string, stdio streams) int {
 	flags.SetOutput(stdio.err)
 	stateDir := flags.String("state-dir", "", "diretório de estado")
 	controlURL := flags.String("control-url", "", "URL do Headscale")
+	torBin := flags.String("tor-bin", "", "executável do Tor embutido")
 	if err := flags.Parse(args); err != nil || flags.NArg() != 0 || *stateDir == "" {
 		return 2
 	}
@@ -123,6 +131,13 @@ func runDoctor(args []string, stdio streams) int {
 	if *controlURL != "" {
 		check, checkErr := checkControl(*controlURL)
 		checks["control"] = check
+		if checkErr != nil {
+			result["ok"] = false
+		}
+	}
+	if *torBin != "" {
+		check, checkErr := checkTor(*torBin)
+		checks["tor"] = check
 		if checkErr != nil {
 			result["ok"] = false
 		}
@@ -156,6 +171,18 @@ func checkControl(raw string) (map[string]any, error) {
 		return map[string]any{"ok": false, "message": "A saúde do Headscale respondeu com HTTP " + strconv.Itoa(response.StatusCode) + "."}, errors.New("unhealthy control server")
 	}
 	return map[string]any{"ok": true, "host": parsed.Hostname()}, nil
+}
+
+// checkTor runs the bundled tor with --version, which proves that the
+// installer placed the binary and its libraries where the supervisor looks.
+func checkTor(executable string) (map[string]any, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	version, err := tor.Version(ctx, executable)
+	if err != nil {
+		return map[string]any{"ok": false, "message": "O Tor embutido não foi encontrado ou não abriu."}, err
+	}
+	return map[string]any{"ok": true, "version": version}, nil
 }
 
 func processAlive(pid int) bool {

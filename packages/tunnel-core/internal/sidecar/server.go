@@ -33,6 +33,11 @@ type Options struct {
 	// AllowLoopbackHTTP accepts an http control URL on loopback in pairing
 	// payloads. Only development and the Docker integration suite set it.
 	AllowLoopbackHTTP bool
+	// TorExecutable is the tor binary the desktop bundles as $RESOURCE/tor,
+	// resolved by the native supervisor and passed as --tor-bin. It may be
+	// empty or name a missing file on a build without Tor; the network start
+	// hands it to tor.StartDesktop, which validates it.
+	TorExecutable string
 }
 
 type readResult struct {

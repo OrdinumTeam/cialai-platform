@@ -131,6 +131,16 @@ assert.match(keyStep, /"\$RUNNER_TEMP\/private_keys\/AuthKey_\$\{APPLE_API_KEY\}
 assert.match(keyStep, /echo "APPLE_API_KEY_PATH=\$key_path" >> "\$GITHUB_ENV"/);
 assert.match(defaultStep, /if: steps\.signing\.outputs\.macos != 'developer-id'/);
 assert.doesNotMatch(defaultStep, /APPLE_/, 'the ad hoc build must not receive Apple credentials');
+const torSignStart = workflow.indexOf('- name: Sign the nested Tor binaries with Developer ID');
+assert.ok(torSignStart > workflow.indexOf('node tools/fetch-tor.mjs --stage'), 'Tor is staged before its Developer ID signature');
+assert.ok(torSignStart < workflow.indexOf('- name: Write the notarization key'), 'nested Tor binaries are signed before the Tauri build');
+const torSignStep = workflow.slice(torSignStart, workflow.indexOf('- name: Write the notarization key'));
+assert.match(torSignStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);
+assert.deepEqual([...torSignStep.matchAll(/secrets\.([A-Z_]+)/g)].map((match) => match[1]), ['APPLE_CERTIFICATE', 'APPLE_CERTIFICATE_PASSWORD', 'APPLE_SIGNING_IDENTITY']);
+assert.match(torSignStep, /trap cleanup EXIT/);
+assert.match(torSignStep, /security delete-keychain "\$keychain"/);
+assert.match(torSignStep, /node tools\/fetch-tor\.mjs --sign --keychain "\$keychain" --target \$\{\{ matrix\.target \}\}/);
+assert.match(torSignStep, /node tools\/fetch-tor\.mjs --verify-resource --target \$\{\{ matrix\.target \}\}/);
 const publish = workflow.slice(workflow.indexOf('\n  publish:'));
 assert.match(publish, /needs: \[guard, desktop\]/);
 const order = ['release-assets.mjs updater-json', 'release-assets.mjs verify', 'release-assets.mjs checksums', 'release-assets.mjs publish'];

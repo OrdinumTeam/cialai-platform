@@ -16,12 +16,12 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::bridge::{BridgeControl, IdentityControl};
 
-use super::MobileSite;
 use super::credentials::{ApiKeyStore, SecretStatus, api_key_prefix};
 use super::protocol::{
     EventFrame, Inbound, MAX_LINE_BYTES, PROTOCOL_VERSION, RpcProblem, encode_request,
     event_channel, parse_line,
 };
+use super::{MobileSite, bundled_tor_executable};
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -81,10 +81,21 @@ impl BridgeSession {
 struct LaunchConfig {
     binary: PathBuf,
     binary_args: Vec<String>,
+    tor_binary: Option<PathBuf>,
     state_dir: PathBuf,
     static_dir: PathBuf,
     bridge: BridgeSession,
     parent_pid: u32,
+}
+
+impl LaunchConfig {
+    /// O sidecar descobre o Tor só por este argumento; ele nunca procura o
+    /// binário por conta própria.
+    fn append_tor(&self, command: &mut Command) {
+        if let Some(tor) = &self.tor_binary {
+            command.arg("--tor-bin").arg(tor);
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -122,6 +133,7 @@ impl Supervisor {
         bridge_control: BridgeControl,
     ) -> Result<Self, String> {
         let binary = resolve_binary(app)?;
+        let tor_binary = resolve_tor_binary(app)?;
         let state_dir = app
             .path()
             .app_local_data_dir()
@@ -132,6 +144,7 @@ impl Supervisor {
             LaunchConfig {
                 binary,
                 binary_args: Vec::new(),
+                tor_binary: Some(tor_binary),
                 state_dir: state_dir.clone(),
                 static_dir: mobile_site.static_dir().to_path_buf(),
                 bridge,
@@ -317,6 +330,7 @@ impl Supervisor {
             .arg(&self.inner.launch.state_dir)
             .stdin(Stdio::null())
             .stderr(Stdio::null());
+        self.inner.launch.append_tor(&mut command);
         if let Some(url) = control_url.filter(|value| !value.trim().is_empty()) {
             command.arg("--control-url").arg(url);
         }
@@ -448,13 +462,15 @@ impl Inner {
         let binary = validate_binary(&self.launch.binary)
             .map_err(|message| RpcProblem::local("tunnel_start", message, true))?;
         let mut command = Command::new(binary);
-        let mut child = command
+        command
             .args(&self.launch.binary_args)
             .arg("serve-stdio")
             .arg("--state-dir")
             .arg(&self.launch.state_dir)
             .arg("--parent-pid")
-            .arg(self.launch.parent_pid.to_string())
+            .arg(self.launch.parent_pid.to_string());
+        self.launch.append_tor(&mut command);
+        let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -817,6 +833,23 @@ fn resolve_binary(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(sibling)
 }
 
+/// `CIALAI_TOR_BIN` aponta para um `tor` de desenvolvimento, o mesmo nome do
+/// teste real de `internal/tor`; sem ele vale o recurso empacotado.
+fn resolve_tor_binary(app: &AppHandle) -> Result<PathBuf, String> {
+    if let Some(path) = std::env::var_os("CIALAI_TOR_BIN") {
+        let path = PathBuf::from(path);
+        if !path.is_absolute() {
+            return Err("CIALAI_TOR_BIN precisa ser absoluto".into());
+        }
+        return Ok(path);
+    }
+    let resources = app
+        .path()
+        .resource_dir()
+        .map_err(|error| format!("diretório de recursos indisponível: {error}"))?;
+    Ok(bundled_tor_executable(&resources))
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -855,6 +888,7 @@ mod tests {
         LaunchConfig {
             binary,
             binary_args: Vec::new(),
+            tor_binary: None,
             state_dir: root.join("state"),
             static_dir: root.join("mobile"),
             bridge,
@@ -965,6 +999,28 @@ mod tests {
                 json!({"kind":"revoke", "deviceId":"dev_fixture"}),
                 json!({"kind":"upsert", "value":{"id":"dev_second", "name":"iPad", "nodeKey":"nodekey:second"}}),
             ]
+        );
+    }
+
+    #[test]
+    fn bundled_tor_reaches_the_sidecar_only_as_an_explicit_argument() {
+        let root = std::env::temp_dir();
+        let bridge = BridgeSession {
+            port: 3720,
+            secret: "fixture".into(),
+        };
+        let mut launch = fixture(&root, root.join("sidecar"), bridge);
+        let mut without = Command::new("cialai-tunnel");
+        launch.append_tor(&mut without);
+        assert_eq!(without.get_args().count(), 0);
+
+        let tor = bundled_tor_executable(&root.join("resources"));
+        launch.tor_binary = Some(tor.clone());
+        let mut with = Command::new("cialai-tunnel");
+        launch.append_tor(&mut with);
+        assert_eq!(
+            with.get_args().collect::<Vec<_>>(),
+            [std::ffi::OsStr::new("--tor-bin"), tor.as_os_str()]
         );
     }
 

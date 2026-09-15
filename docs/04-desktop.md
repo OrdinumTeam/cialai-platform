@@ -15,6 +15,7 @@ Versões conferidas no `Cargo.lock` do Control: tauri 2.11.5, wry 0.55.1, tao 0.
 | Backend Linux | Pendente | Matriz e riscos estão especificados, sem integração nesta linha |
 | Backend Windows | Pendente | ConPTY, Job Objects, janela, atalhos e arquivos permanecem especificados, sem integração nesta linha |
 | Empacotamento desktop | Preparado | Sidecars e configuração Tauri existem; instaladores assinados e instalação limpa não foram produzidos |
+| Tor embutido | Preparado | Tor Expert Bundle 15.0.22 fixado por hash, preparado em `$RESOURCE/tor`, passado ao sidecar em `--tor-bin` e aberto pelo `doctor` no macOS arm64 local; instaladores dos três sistemas, assinatura Developer ID dos binários aninhados e instalação limpa seguem pendentes; Linux arm64 aguarda decisão de produto |
 | Atualizador | Preparado | Plugin, interface, endpoint e guarda existem; chave pública, assinatura e atualização real estão pendentes |
 | Testes multiplataforma | Pendente | Os testes locais macOS não substituem CI remota, IME, Wayland, WebView2 nem instalação nos outros sistemas |
 
@@ -236,7 +237,7 @@ Dispositivos: lista com nome, modelo, plataforma, última conexão, estado onlin
 
 Chaves do webview: `oc_terminals` vira `cialai_terminals`; `oc_terminals_phone` vira `cialai_terminals_phone`; `oc_terminals_layout` de `layout.js:8` vira `cialai_terminals_layout`; `oc_terminals_phone_route` vira `cialai_terminals_phone_route`; `oc_theme` de `appearance.js:13` e `36` vira `cialai_theme`; `oc_sidebar` de `DesktopApp.jsx:125` e `135` vira `cialai_sidebar`; `oc_view` de `useViewRoute.js:6` e `15` vira `cialai_view`; `oc_mac_groups_closed` de `Sidebar.jsx:12` vira `cialai_groups_closed`; flag `oc_selftest` vira `cialai_selftest`; `window.__ORDINUM_SHELL__` e `__ordinumShellReceive` de `shell.js:5` e `20` viram `__CIALAI_SHELL__` e `__cialaiShellReceive`; prefixos temporários `oc-*` viram `cialai-*`; `/tmp/oc-selftest.json` vira `<app_log_dir>/selftest.json`. Migração única: ler `oc_terminals`, `oc_terminals_layout` e `oc_theme` quando a chave nova está vazia e gravar a nova.
 
-Variáveis: `CIALAI_BRIDGE_PORT`, `CIALAI_SHELL`, `CIALAI_LANG`, `CIALAI_PATH_PREFIX`, `CIALAI_APP_SUPPORT` para o hook, `CIALAI_TUNNEL_BIN` para testes do supervisor; `ORDINUM_CONTROL_*` deixam de existir; não há `.env`. Nomes de eventos `pty://exit`, `pty://view`, `fs://change`, `browser://exit`, `browser://install` e `drag-out://end` não mudam.
+Variáveis: `CIALAI_BRIDGE_PORT`, `CIALAI_SHELL`, `CIALAI_LANG`, `CIALAI_PATH_PREFIX`, `CIALAI_APP_SUPPORT` para o hook, `CIALAI_TUNNEL_BIN` para testes do supervisor, `CIALAI_TOR_BIN` para um `tor` de desenvolvimento no lugar de `$RESOURCE/tor`; `ORDINUM_CONTROL_*` deixam de existir; não há `.env`. Nomes de eventos `pty://exit`, `pty://view`, `fs://change`, `browser://exit`, `browser://install` e `drag-out://end` não mudam.
 
 ## Empacotamento
 
@@ -245,6 +246,24 @@ Variáveis: `CIALAI_BRIDGE_PORT`, `CIALAI_SHELL`, `CIALAI_LANG`, `CIALAI_PATH_PR
 | macOS | `app` e `dmg`, `minimumSystemVersion 13.0`, universal ou arm64 e x86_64 separados | Developer ID com hardened runtime e notarização por `notarytool`; a identidade autoassinada `Ordinum Local Signing` de `macos/scripts/signing.sh` fica só para desenvolvimento local | O sidecar entra em `externalBin` com o triplo no nome, como `binaries/ordinum-audio-capture-aarch64-apple-darwin` hoje |
 | Windows | `nsis` e `msi` | Authenticode por Azure Trusted Signing; nightly sem assinatura | Prompt do firewall no primeiro uso do sidecar é esperado e documentado |
 | Linux | `appimage`, `deb` e `rpm`, compilados em Ubuntu 22.04 | Nenhuma | Recomendar deb e rpm; AppImage como alternativa; Flatpak adiado porque o shell do host exigiria `flatpak-spawn --host` |
+
+### Tor embutido
+
+O desktop leva o Tor Expert Bundle 15.0.22 como recurso do Tauri, sem download nem instalação pelo usuário. `tools/fetch-tor.mjs` baixa o arquivo do alvo, confere o SHA 256 fixado a partir do manifesto assinado do Tor Browser, extrai e copia para `apps/desktop/src-tauri/resources/tor/` o diretório `tor/` com as bibliotecas ao lado do executável, `data/geoip`, `data/geoip6` e as licenças de `docs/`. Transportes plugáveis e `torrc-defaults` ficam fora, porque o serviço onion de salto único não usa pontes. A cópia grava `tor-bundle.json` e `SHA256SUMS`, ajusta os modos para 755 no código e 644 nos dados e é conferida por `--verify-resource` antes do `tauri build`. `npm run sidecar` prepara o alvo do host; a release prepara cada alvo da matriz.
+
+| Sistema | Caminho instalado | Assinatura |
+| --- | --- | --- |
+| macOS | `Cialai.app/Contents/Resources/tor/tor/tor` e `libevent-2.1.7.dylib` | Ad hoc na extração; com Developer ID, `fetch-tor.mjs --sign` assina cada Mach-O com hardened runtime e carimbo de tempo antes do Tauri, que só assina `externalBin` |
+| Linux | `/usr/lib/Cialai/tor/tor/tor` no deb e no rpm; mesmo caminho dentro do AppImage | Nenhuma |
+| Windows | `tor\tor\tor.exe` ao lado de `Cialai.exe` na pasta de instalação | `tor.exe` vai sem Authenticode, como sai do Tor Project |
+
+Descoberta: o Rust resolve `resource_dir()/tor/tor/tor`, ou `tor.exe` no Windows, e passa o caminho absoluto ao sidecar em `--tor-bin` no `serve-stdio` e no `doctor`. `CIALAI_TOR_BIN` substitui o caminho em desenvolvimento. O sidecar nunca procura o binário sozinho; o `doctor` roda `tor --version` e devolve `checks.tor`. O sidecar guarda o caminho em `TorExecutable`, e o `net.start` da tarefa CON-029 ainda precisa entregá-lo a `tor.StartDesktop`. Linux arm64 não tem bundle oficial: `fetch-tor.mjs --stage` falha nesse alvo e `npm run sidecar` avisa e grava `resources/tor/UNAVAILABLE.txt`, sem escolher substituto.
+
+Firewall do Windows: o `tor` só escuta em 127.0.0.1 pela porta de controle, com `SocksPort 0`, e só faz conexões de saída aos relays. O Windows Defender Firewall pergunta quando um programa escuta em interface de rede, então o esperado é nenhum aviso para `tor.exe`. O aviso que pode aparecer no primeiro uso é do `cialai-tunnel.exe`, pelo caminho direto em UDP; recusar bloqueia só a entrada direta pela rede, e a conexão de reserva pelo Tor continua funcionando porque usa saída. Os instaladores não criam regra de firewall. A confirmação depende da instalação limpa no Windows.
+
+Rede local no macOS 15: a privacidade de rede local vale para apps fora da sandbox e atribui ao Cialai os sockets do sidecar e do `tor`, que são processos filhos. O `tor` usa loopback e endereços da internet, que não pedem essa permissão; o aviso vem do caminho direto quando o sidecar fala com endereços da rede local. Recusar em Ajustes do Sistema, Privacidade e Segurança, Rede Local desliga só o caminho direto na mesma rede; a conexão de reserva pelo Tor segue. O desktop ainda não declara `NSLocalNetworkUsageDescription`. A confirmação depende da instalação limpa em macOS 15.
+
+Licenças: esta build do Tor informa cobertura pela GPL versão 3 e traz libevent e OpenSSL. As licenças vão em `$RESOURCE/tor/docs` e o `NOTICE` registra os componentes; a oferta de código fonte correspondente ainda precisa de revisão antes da versão 1.
 
 Updater por `tauri-plugin-updater` com chave própria e `latest.json` nas releases do GitHub, a partir da Fase 7.
 

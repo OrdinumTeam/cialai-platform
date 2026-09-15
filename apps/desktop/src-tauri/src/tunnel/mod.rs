@@ -15,6 +15,7 @@ pub use supervisor::{BridgeSession, Supervisor};
 
 const MOBILE_RESOURCE_DIR: &str = "mobile";
 const MOBILE_ENTRY: &str = "mobile.html";
+const TOR_RESOURCE_DIR: &str = "tor";
 
 #[derive(Clone, Debug)]
 pub struct MobileSite {
@@ -40,6 +41,16 @@ pub fn mobile_static_dir<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, Stri
         .resource_dir()
         .map_err(|error| format!("diretório de recursos indisponível: {error}"))?;
     validate_mobile_static_dir(&resources)
+}
+
+/// Caminho do `tor` que `tools/fetch-tor.mjs --stage` coloca em `$RESOURCE/tor`,
+/// com o layout do Tor Expert Bundle: `tor/tor` ao lado das bibliotecas e de
+/// `data/geoip`. O supervisor passa esse caminho ao sidecar em `--tor-bin` sem
+/// exigir o arquivo: um build sem Tor continua abrindo o túnel, e o `doctor`
+/// e o `tor.StartDesktop` do sidecar conferem o executável.
+pub fn bundled_tor_executable(resources: &Path) -> PathBuf {
+    let name = if cfg!(windows) { "tor.exe" } else { "tor" };
+    resources.join(TOR_RESOURCE_DIR).join("tor").join(name)
 }
 
 fn validate_mobile_static_dir(resources: &Path) -> Result<PathBuf, String> {
@@ -79,6 +90,16 @@ mod tests {
             Some("mobile")
         );
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn bundled_tor_keeps_the_expert_bundle_layout_inside_resources() {
+        let resources = PathBuf::from("/Applications/Cialai.app/Contents/Resources");
+        let expected = if cfg!(windows) { "tor.exe" } else { "tor" };
+        assert_eq!(
+            bundled_tor_executable(&resources),
+            resources.join("tor").join("tor").join(expected)
+        );
     }
 
     #[test]

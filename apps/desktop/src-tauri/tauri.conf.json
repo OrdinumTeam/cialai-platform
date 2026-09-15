@@ -56,7 +56,8 @@
     "shortDescription": "Terminal studio for local and remote coding sessions",
     "longDescription": "Cialai keeps terminal sessions and project tools together on the desktop and makes them available to paired mobile devices.",
     "resources": {
-      "resources/mobile/": "mobile/"
+      "resources/mobile/": "mobile/",
+      "resources/tor/": "tor/"
     },
     "externalBin": ["binaries/cialai-tunnel"],
     "icon": [
