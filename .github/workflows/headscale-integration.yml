@@ -1,17 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Headscale integration
 
+# Histórico desde a conectividade automática: o sidecar v2 não tem mais o modo
+# Headscale no RPC, então este fluxo não compila e só fica disponível por disparo
+# manual até a remoção do modo em CON-070.
 on:
-  push:
-    paths:
-      - packages/tunnel-core/**
-      - .github/workflows/headscale-integration.yml
-  pull_request:
-    paths:
-      - packages/tunnel-core/**
-      - .github/workflows/headscale-integration.yml
-  schedule:
-    - cron: "17 6 * * *"
   workflow_dispatch:
 
 permissions:
@@ -24,8 +17,6 @@ concurrency:
 jobs:
   desktop-phone-flow:
     name: Desktop and phone through Headscale 0.29.3
-    # A agenda diária roda só no repositório público; push, PR e disparo manual valem nos dois.
-    if: github.event_name != 'schedule' || github.repository == 'Cialai/cialai'
     runs-on: ubuntu-22.04
     timeout-minutes: 20
     steps:

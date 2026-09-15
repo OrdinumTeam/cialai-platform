@@ -67,7 +67,9 @@ assert.ok(
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
 assert.match(workflow, /^on:\n {2}push:\n(?: {4}#.*\n)? {4}branches: \["\*\*"\]\n/m, 'tags de release não disparam a CI de novo');
 const integration = readFileSync(`${root}/.github/workflows/headscale-integration.yml`, 'utf8');
-assert.match(integration, /if: github\.event_name != 'schedule' \|\| github\.repository == 'Cialai\/cialai'/, 'a agenda da integração roda só no repositório público');
+// O modo Headscale saiu do RPC do sidecar v2: a integração antiga fica só manual até CON-070.
+assert.match(integration, /^on:\n {2}workflow_dispatch:\n/m, 'a integração do Headscale só roda por disparo manual');
+assert.doesNotMatch(integration, /^ {2}(push|pull_request|schedule):/m, 'a integração do Headscale não roda mais em push, PR ou agenda');
 assert.ok(
   workflow.indexOf('npm test') < workflow.indexOf('npm run test:browser'),
   'os checks de navegador rodam depois da suíte',
