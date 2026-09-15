@@ -200,44 +200,91 @@ func (t *Tunnel) SetLogLevel(level string)
 ### Sidecar
 
 ```
-cialai-tunnel serve-stdio --state-dir <dir> --parent-pid <pid> [--log-level info|debug] [--log-file <caminho>]
-cialai-tunnel doctor     --state-dir <dir> [--control-url <url>]
+cialai-tunnel serve-stdio --state-dir <dir> --parent-pid <pid> [--tor-bin <tor absoluto>] [--log-level info|debug] [--log-file <caminho>]
+cialai-tunnel doctor     --state-dir <dir> [--tor-bin <tor absoluto>]
 cialai-tunnel version
 ```
 
-Tudo mais chega por stdin: URL de controle, chave da API, portas, segredos. Nunca por argumentos nem variáveis de ambiente, que processos do mesmo usuário conseguem ler. O supervisor Rust em `apps/desktop/src-tauri/src/tunnel/` copia o padrão de `macos/src-tauri/src/meetings/helper.rs`: caminho ao lado do executável por `tauri::process::current_binary`, `CIALAI_TUNNEL_BIN` como sobreposição em testes, eventos por enum etiquetado, chamadas pendentes com prazo de 30 s, reinício com recuo de 1, 2, 4 até 30 s e desistência após 10 tentativas com `tunnel.state=failed`, `shutdown` seguido de kill após 5 s na saída do app. O sidecar sai sozinho quando o pai some, conferindo a cada 2 s, e recusa iniciar se o arquivo de trava do diretório de estado pertence a um pid vivo.
+Desde CON-029 o sidecar não recebe servidor de controle, chave de API, IP nem porta. O único caminho que chega por argumento é o `tor` empacotado em `--tor-bin`, resolvido pelo supervisor Rust; sem ele a reserva fica desligada e o caminho direto continua funcionando. Segredos, como o segredo da ponte, chegam só por stdin. O supervisor Rust em `apps/desktop/src-tauri/src/tunnel/` abre o binário ao lado do executável por `tauri::process::current_binary`, aceita `CIALAI_TUNNEL_BIN` e `CIALAI_TOR_BIN` como sobreposição em desenvolvimento, dá 30 s a cada chamada, reinicia com recuo de 1, 2, 4 até 30 s e desiste após 10 tentativas com `tunnel.state=failed`, e na saída do app manda `shutdown` e mata o processo após 5 s. O sidecar sai sozinho quando o pai some, conferindo a cada 2 s, trata SIGINT e SIGTERM como `shutdown` e recusa iniciar se a trava do diretório de estado pertence a um pid vivo. Toda saída do sidecar fecha a borda, os ouvintes, o mapeamento e o `tor` antes de terminar.
 
 ### Protocolo por stdio
 
-JSON por linha, UTF-8, um objeto por linha, máximo 256 KiB. Rust ao sidecar: `{"id":<u64>,"cmd":"<nome>","args":{...}}`. Sidecar ao Rust: `{"id":<u64>,"ok":true,"result":{...}}` ou `{"id":<u64>,"ok":false,"error":{"code":"<snake_case>","message":"<texto>","retryable":<bool>}}`; eventos `{"event":"<nome>","data":{...},"ts":"<RFC3339>"}`. Stderr só para logs. Ids únicos por processo; respostas podem chegar fora de ordem. Primeira linha do sidecar: `{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":1234}}`; o Rust responde `hello` em até 5 s ou o sidecar sai com código 2.
+Contrato v2 da conectividade, implementado em `packages/tunnel-core/internal/sidecar` e no supervisor Rust. JSON por linha, UTF-8, um objeto por linha, máximo 256 KiB. Rust ao sidecar: `{"id":<u64>,"cmd":"<nome>","args":{...}}`. Sidecar ao Rust: `{"id":<u64>,"ok":true,"result":{...}}` ou `{"id":<u64>,"ok":false,"error":{"code":"<snake_case>","message":"<texto>","retryable":<bool>}}`; eventos `{"event":"<nome>","data":{...},"ts":"<RFC3339>"}`. Stderr só para logs. Ids únicos por processo; respostas podem chegar fora de ordem. Primeira linha do sidecar: `{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":1234}}`, em que `tailscale` é a versão do módulo que fornece o mapeador de portas; o Rust responde `hello` em até 5 s ou o sidecar sai com código 2.
 
-| Comando | Argumentos | Resultado e eventos |
+| Comando | Argumentos | Resultado |
 | --- | --- | --- |
-| `hello` | `{protocol:1}` | `{protocol:1, capabilities:["control","edge","pairing","devices"]}` |
-| `control.configure` | `{url, apiKey, caFile?}` | `{health:{ok, serverVersion}, apiKey:{prefix, expiresAt}}`; erros `control_unreachable`, `control_unauthorized`, `control_tls`, `control_unsupported_version` |
-| `control.users.list` | `{}` | `{users:[{id, name, displayName}]}` |
-| `control.users.create` | `{name, displayName}` | `{user:{id, name}}`; `control_conflict` se existe |
-| `control.apikey.rotate` | `{days:365}` | `{apiKey, prefix, expiresAt}`; o Rust guarda e manda `control.apikey.expireOld {prefix}` |
-| `node.up` | `{controlUrl, userId, userName, hostname, authKey?, forceLogin:false}` | `{state, ip4, ip6, dnsName, nodeKey}`; evento `node.state` a cada mudança |
-| `node.down`, `node.status`, `node.logout` | `{}` | status `{state:"stopped"|"starting"|"needs-login"|"running"|"offline", ip4, ip6, dnsName, nodeKey, keyExpiry, health:[...], derp:{regionId, latencyMs}, peers:[{nodeKey, name, online, ip4, lastSeen}]}` |
-| `edge.serve` | `{port:4740, staticDir, bridgeUrl:"http://127.0.0.1:3720", proxySecret, desktop:{id, name}, csp?}` | `{port}`; eventos `edge.state`, `session.opened {deviceId, remoteAddr, nodeKey}`, `session.closed {deviceId, reason}` |
-| `edge.stop` | `{}` | `{}` |
-| `pair.begin` | `{ttlSeconds:600}` | `{pairId, payload:"CIALAI1....", expiresAt, preAuthKeyId}`; eventos `pair.completed {pairId, device}`, `pair.failed {pairId, code}` |
-| `pair.cancel` | `{pairId}` | `{}`; expira a chave de pré-autenticação |
-| `pair.approve`, `pair.deny` | `{pairId}` | Só com aprovação exigida; a resposta de `/pair` fica retida até 60 s |
-| `devices.list` | `{}` | `{devices:[...]}` sem hashes, com `online` |
-| `devices.revoke` | `{deviceId, network:bool}` | `{}`; evento `devices.changed`; com `network` expira e apaga o nó no Headscale |
-| `devices.rename`, `devices.rotateToken` | `{deviceId, name}`, `{deviceId}` | `{}` |
+| `hello` | `{protocol:1}` | `{protocol:1, capabilities:["direct","tor","pairing","devices"]}` |
+| `net.start` | Da interface: `desktopName` de 1 a 48 caracteres, `requireApproval`, `stun` opcional com lista de `host:porta` que substitui a padrão, lista vazia desliga o STUN, e `tor` opcional com padrão `true`. Injetados pelo Rust: `staticDir`, `bridgeUrl`, `proxySecret` | `NetStatus`. Idempotente: com a rede de pé, aplica nome e aprovação sem derrubar sessões e devolve o estado. Erros `edge_failed`, `direct_listen`, `identity_failed`, `registry_failed`, `onion_key` e `args_invalid` |
+| `net.stop` | `{}` | `{state:"stopped"}`; fecha borda, ouvintes, mDNS, mapeamento e Tor, nessa ordem |
+| `net.status` | `{}` | `NetStatus` |
+| `net.refresh` | `{}` | Recoleta candidatos, renova o mapeamento, roda STUN sem mapeamento, reanuncia mDNS e devolve `NetStatus` |
+| `tor.status` | `{}` | `TorStatus` |
+| `diagnostics.run` | `{}` | `{ok, checks:[{id, ok, detail}]}` com ids `identity`, `direct_listener`, `lan_candidates`, `ipv6`, `port_mapping`, `stun`, `tor_process`, `tor_bootstrap`, `onion_published`, `mdns`, `edge`, depois de uma coleta nova e de sondar o roteador. `ok` exige identidade, ouvinte direto e borda e, com Tor ligado, o onion publicado; os demais informam quais caminhos existem |
+| `pair.begin` | `ttlSeconds` opcional, padrão 600, de 1 a 600 | `{pairId, payload:"CIALAI2.…", expiresAt, rotateAfterSeconds:90, reserve:TorStatus}` com `expiresAt` em segundos Unix, onion sempre presente e até seis candidatos abaixo de 700 bytes; `net_not_ready` sem ouvinte direto |
+| `pair.cancel`, `pair.approve`, `pair.deny` | `{pairId}` | `{}`; aprovação só com `requireApproval`, a resposta de `/pair` fica retida até 60 s |
+| `devices.list` | `{}` | `{devices:[Device]}` do registro v2, sem hashes de token, com revogados antigos podados |
+| `devices.revoke` | `{deviceId}` | `{sessions, sockets}` por `edge.Server.Revoke`, que emite `devices.changed` uma vez; sem borda de pé só o registro muda |
+| `devices.rename` | `{deviceId, name}` | `Device`; evento `devices.changed` com `name` |
+| `devices.rotateToken` | `{deviceId}` | `{}`; o próximo upgrade devolve `X-Cialai-Token-Next` |
 | `logs.tail` | `{lines:200}` | `{lines:[...]}` |
-| `shutdown` | `{}` | Sai com 0 em até 3 s |
+| `shutdown` | `{}` | `{}` e sai com 0 depois de fechar tudo, inclusive `tor.Desktop.Close` |
 
-O Rust expõe `tunnel://state`, `tunnel://pair` e `tunnel://devices` ao webview. A mudança na ponte fica restrita a `BridgeConfig { proxy_secret, dev_open }`, ao `handshake()` de `bridge/mod.rs:141-232` e ao `device_id` na `Connection`.
+`control.*`, `node.*`, `edge.serve` e `edge.stop` saíram do RPC e respondem `command_unknown`; os pacotes `internal/control`, `internal/headscale`, `internal/node`, `internal/edge/edgev1` e `internal/pairing/pairingv1` ficam no repositório, inertes, até CON-070.
+
+```json
+NetStatus = {
+  "state": "stopped | starting | ready | degraded | failed",
+  "desktop": { "id": "d_…", "name": "…", "publicKey": "base64url", "fingerprint": "…" },
+  "direct": {
+    "state": "stopped | listening | failed",
+    "port": 4740,
+    "candidates": [ { "kind": "lan | ipv6 | mapped | reflexive", "addr": "ip:porta" } ],
+    "mapping": { "protocol": "pcp | natpmp | upnp | none", "external": "ip:porta" },
+    "stun": { "state": "disabled | ok | failed", "addr": "ip:porta" }
+  },
+  "tor": TorStatus,
+  "mdns": { "state": "disabled | announcing | failed" },
+  "edge": { "state": "stopped | running | failed" },
+  "sessions": { "direct": 0, "tor": 0 },
+  "error": { "code": "…", "message": "…" }
+}
+TorStatus = { "state": "disabled | starting | bootstrapping | ready | failed", "progress": 0, "onion": "….onion", "published": false, "error": "código opcional" }
+Device = { "id", "name", "model", "platform", "app", "deviceKey", "fingerprint", "pairedAt", "lastSeenAt", "lastTransport": "direct | tor | ''", "lastRemoteAddr", "revoked", "revokedAt", "connected", "transports": ["direct" | "tor"] }
+```
+
+Regras de estado:
+
+| Estado | Quando |
+| --- | --- |
+| `ready` | Ouvinte direto e borda de pé; o Tor pode ainda estar em bootstrap |
+| `degraded` | Pronto com uma peça falhando: Tor `failed`, Tor reiniciando com `error: "tor_restarting"` ou mDNS `failed` |
+| `failed` | Sem ouvinte direto, borda caída ou último `net.start` com erro, descrito em `error` |
+| `starting` | Entre abrir o ouvinte e a borda aceitar sessões |
+
+`sessions` conta sessões de transporte vivas, inclusive as restritas ao pareamento; `Device.connected` e `transports` vêm das mesmas sessões pela chave do celular. O onion aparece desde o primeiro início, porque deriva de `tor/onion.key`, criado mesmo com o Tor desligado. `TorStatus` traduz as fases de `tor.Desktop`: `starting` e `restarting` viram `starting`, este com `error: "tor_restarting"`; `bootstrapping` com progresso 100 vira `ready`; `published` vira `ready` com `published: true`; `failed` leva `tor_failed` ou `tor_address_mismatch`; sem `--tor-bin` ou com `tor:false`, `disabled`; binário que não abre, `failed` com `tor_unavailable`.
+
+O STUN padrão é `stun.cloudflare.com:3478` e `stun.l.google.com:19302`, com prazo de 2 s e pelo mesmo socket do QUIC, consultado só sem mapeamento no roteador; `stun.state` é `ok` com endereço refletido ou com mapeamento válido e `failed` sem nenhum dos dois. A porta direta preferida é UDP 4740 em todas as interfaces; ocupada, usa porta livre.
+
+`net.start` compõe, nessa ordem: identidade `identity.key` 0600 e `identity.json` v2 no diretório de estado, com o id `d_` derivado da chave; registro `devices.json` v2, com um `devices.json` v1 movido para `devices.json.v1-legacy`; chave do onion; borda v2 com `Reach` montado dos candidatos e do onion; socket UDP e ouvinte QUIC com `PairingGate` e `RevocationList` do registro; coletor de candidatos com STUN pelo `HandlePackets` do endpoint e `portmapper`; Tor desktop com `onion.Listen` sobre o ouvinte cru; `transport.NewMultiListener`; e o anunciador mDNS quando `NetworkConfig.NewAnnouncer` estiver ligado, com `mdns.state` em `disabled` até lá. Cada sessão direta aceita espera o canal de controle do rendezvous, que recebe candidatos com validade de 10 min renovados a cada 5 min e a cada mudança, o cartão de alcance e atende o furo de NAT com o próprio endpoint direto. O canal de controle pelo onion ainda não existe, porque a sessão onion carrega um único stream; fica pendente para a integração do rendezvous sobre Tor.
+
+| Evento | Carga |
+| --- | --- |
+| `net.state` | `NetStatus` a cada mudança relevante, no máximo um por 250 ms e nunca repetido; o último sai antes do encerramento |
+| `tor.state` | `TorStatus` a cada avanço de bootstrap ou mudança de estado |
+| `session.opened` | `{deviceId, transport, remoteAddr, deviceKey}` a cada socket da ponte aberto pela borda |
+| `session.closed` | `{deviceId, transport, reason}`, emitido por `defer` logo depois de `session.opened` |
+| `path.changed` | `{deviceId, transport, path, address, rttMs, reason}` quando o celular relata o caminho no canal de controle |
+| `pair.requested` | `{pairId, device, fingerprint, transport, code, until}` com código de 4 dígitos |
+| `pair.completed`, `pair.failed` | `{pairId, device, transport, promoted}` e `{pairId, code, transport}` |
+| `devices.changed` | `{deviceId}` com `name` na renomeação e `revoked: true` na revogação |
+
+O Rust expõe `tunnel://state` com `net.state`, `tor.state`, `path.changed` e `tunnel.state`, `tunnel://pair` com `pair.*` e `tunnel://devices` com `devices.*` e `session.*`. Os comandos Tauri são `tunnel_call`, `tunnel_doctor` sem argumentos e `tunnel_delete_api_key`, que só apaga a chave antiga do Headscale; `tunnel_control_configure`, `tunnel_control_configure_saved`, `tunnel_control_rotate_api_key` e `tunnel_api_key_status` saíram. `tunnel_call` recusa `hello`, `shutdown`, `edge.serve` e `edge.stop` com `command_sensitive`, e em `net.start` o supervisor sobrescreve `staticDir`, `bridgeUrl` e `proxySecret` com os valores nativos. Depois de um `net.start` bem sucedido o supervisor chama `devices.list` e entrega à ponte o computador e os celulares com `deviceKey`; `net.state` atualiza o nome do computador, `pair.completed` inclui o celular novo e `devices.changed` renomeia ou fecha com 4401.
 
 ### Diretórios de estado e logs
 
 | Plataforma | Raiz | Conteúdo |
 | --- | --- | --- |
-| Desktop | `tunnel/` no diretório de dados do app, documento 04 | `tsnet/` com `tailscaled.state` e a chave privada do nó em 0600, `devices.json`, `identity.json` com id, nome, usuário e URL de controle, `pair.lock`, `tunnel.log` com rotação de 5 arquivos de 2 MiB, `pid` |
+| Desktop | `tunnel/` no diretório de dados do app, documento 04 | `identity.key` 0600 com a semente Ed25519, `identity.json` v2 só com dados públicos, `devices.json` v2, `tor/` com `onion.key` 0600, `torrc` gerado, dados e cookie do Tor, `tunnel.log` com rotação de 5 arquivos de 2 MiB e `pid`; `tsnet/` e `devices.json.v1-legacy` sobram de versões anteriores |
 | iOS | `Application Support/cialai/profiles/<perfil>/tsnet/` com `NSFileProtectionCompleteUntilFirstUserAuthentication` e fora do backup | Estado do tsnet; `profiles.json` sem segredos; tokens no Keychain |
 | Android | `filesDir/cialai/profiles/<perfil>/tsnet/` | Igual; `allowBackup` desligado; tokens no Keystore |
 
@@ -291,9 +338,9 @@ Borda, só no listener da tailnet em `:4740`, nunca em loopback:
 | `GET /`, `/mobile.html`, `/assets/*` | Estáticos de `staticDir` com as regras de `backend/node/services/mobile-site.js`: `realpath` contido na raiz, recusa de dotfiles, `..`, barras invertidas e bytes nulos, fallback para `mobile.html`, `no-store` no documento, `immutable` em `/assets/*`, `nosniff`; CSP `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob:` |
 | `GET /api/health` | `{"status":"ok","service":"cialai","desktop":{"id","name"}}` |
 | `POST /pair` | Fluxo abaixo; limite de 5 por minuto por IP de origem; `pairId` bloqueado após 10 falhas |
-| Upgrade de `/pty` e `/` | Exige `Authorization: Bearer cdt1.<deviceId>.<segredo>` ou, no plano B, o mesmo valor como subprotocolo; comparação em tempo constante com `tokenHash` ou `tokenPrevHash`; `WhoIs(remoteAddr)` com chave de nó igual à do dispositivo; no máximo 2 sockets por dispositivo, dentro dos 8 da ponte; `httputil.ReverseProxy` para `bridgeUrl` acrescentando `X-Cialai-Proxy-Secret`, `X-Cialai-Device-Id` e `X-Cialai-Node-Key`, removendo qualquer cabeçalho com esse prefixo vindo de fora e preservando `Origin` |
+| Upgrade de `/pty` e `/` | Exige `Authorization: Bearer cdt1.<deviceId>.<segredo>` ou, no plano B, o mesmo valor como subprotocolo; comparação em tempo constante com `tokenHash` ou `tokenPrevHash`; `WhoIs(remoteAddr)` com chave de nó igual à do dispositivo; no máximo 2 sockets por dispositivo, dentro dos 8 da ponte; `httputil.ReverseProxy` para `bridgeUrl` acrescentando `X-Cialai-Proxy-Secret`, `X-Cialai-Device-Id`, `X-Cialai-Device-Key` e `X-Cialai-Transport` desde CON-045, removendo qualquer cabeçalho com esse prefixo vindo de fora e preservando `Origin` |
 
-O bundle da página do celular é empacotado como recurso do Tauri e o caminho absoluto vai em `edge.serve`, porque o Tauri embute `frontendDist` no binário e o sidecar não consegue lê-lo.
+O bundle da página do celular é empacotado como recurso do Tauri e o caminho absoluto vai em `staticDir` de `net.start`, porque o Tauri embute `frontendDist` no binário e o sidecar não consegue lê-lo.
 
 Proxy no celular, em `127.0.0.1:47400` por perfil, reserva de `47401` a `47409`, depois aleatória com aviso: a primeira requisição precisa trazer `?k=<nonce>`, recebe `Set-Cookie: cialai_k=<nonce>; HttpOnly; SameSite=Strict; Path=/` e `302 /`; as demais precisam do cookie ou recebem 403 sem nunca ganhar o Bearer; upgrades de `/pty` exigem `Origin` igual à origem do proxy ou ausente; `Host` reescrito para `cialai-desktop`; `Authorization: Bearer` injetado; `DialContext` do transporte é o `Dial` do nó ao IP do desktop resolvido pela lista de peers pela chave de nó a cada discagem; prazo de leitura de 60 s no lado do túnel, renovado pelos pings de 20 s da ponte, derrubando os dois lados em qualquer erro. Depois do upgrade o proxy é um cano de bytes.
 

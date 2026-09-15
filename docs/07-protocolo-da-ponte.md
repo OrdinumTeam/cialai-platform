@@ -7,7 +7,7 @@ A ponte é o servidor WebSocket em Rust, em `macos/src-tauri/src/bridge/` no Con
 | Parte | Estado | Situação atual |
 | --- | --- | --- |
 | Servidor e protocolo Rust | Implementado | Handshake, limites, lista permitida, ordem, replay e códigos de fechamento passam na suíte local |
-| Segredo da borda e identidade do dispositivo | Implementado | Cabeçalhos, autenticação e `welcome` estendido estão integrados e testados |
+| Segredo da borda e identidade do dispositivo | Implementado | Conferidos na conectividade v2 em CON-045: segredo da borda obrigatório, `X-Cialai-Device-Id` e `X-Cialai-Device-Key` do registro v2, `welcome` com nomes conhecidos e revogação com 4401, com testes Rust e 403 sem segredo verificado contra a ponte local |
 | Esquema e fixtures compartilhados | Implementado | `packages/protocol` valida mensagens e compatibilidade da versão 1 |
 | Transporte remoto JavaScript | Implementado | Delegação, canais, reconexão e recusa após revogação passam nos checks Node |
 | Extensão `terminal-mobile-v1` | Implementado | Apresentação, concessão e leitura restrita de arquivos têm testes locais |
@@ -38,7 +38,7 @@ A ponte é o servidor WebSocket em Rust, em `macos/src-tauri/src/bridge/` no Con
 
 1. Caminho do upgrade em `/`, `/pty` ou começando com `/pty/`. O `/` continua aceito porque a borda pode remover o prefixo.
 2. Cabeçalho `Origin`, quando presente, precisa ser uma origem HTTP válida em loopback. A aceitação de `.ts.net` do protótipo sai; em desenvolvimento a flag `--dev-open-bridge` libera outras origens. Recusa com 403 antes do upgrade.
-3. Cabeçalho `X-Cialai-Proxy-Secret` obrigatório, comparado em tempo constante com o segredo gerado pelo Rust a cada abertura do app e entregue ao sidecar em `edge.serve`. Sem ele, 403, salvo com `--dev-open-bridge`. Junto vêm `X-Cialai-Device-Id` e `X-Cialai-Node-Key`, que a ponte associa à conexão para exibição e revogação. Qualquer cabeçalho com esse prefixo vindo de fora da borda é removido pela própria borda antes do encaminhamento.
+3. Cabeçalho `X-Cialai-Proxy-Secret` obrigatório, comparado em tempo constante com o segredo gerado pelo Rust a cada abertura do app e injetado pelo supervisor em `net.start`. Sem ele, 403, salvo com `--dev-open-bridge`. Junto vêm `X-Cialai-Device-Id`, `X-Cialai-Device-Key` e `X-Cialai-Transport`, que a borda v2 preenche com o id e a chave Ed25519 do celular no registro v2 e com o transporte, `direct` ou `tor`. Com o segredo e sem `X-Cialai-Device-Id` ou `X-Cialai-Device-Key`, 403; o antigo `X-Cialai-Node-Key` não é mais aceito nem enviado. A ponte associa id e chave à conexão para exibição e revogação. Qualquer cabeçalho com esse prefixo vindo de fora da borda é removido pela própria borda antes do encaminhamento.
 4. `Authorization: Bearer` continua aceito para clientes que não são navegador, como `websocat` em desenvolvimento.
 5. Depois do upgrade, o primeiro quadro de texto em até 5 s deve ser `hello`.
 6. Fechamentos: 4400 para `hello` inválido ou `call` antes do `hello`; 4401 para credencial inválida ou dispositivo revogado; 4426 para versão incompatível.
@@ -58,7 +58,7 @@ Quadros de texto são JSON. Quadros binários carregam saída de PTY com cabeça
 | Desktop à página | canal JSON | `{"type":"channel","channel":5,"message":{"type":"exit",…}}` para `exit`, `replay` e `detached` |
 | Desktop à página | canal binário | `[u32 canal][bytes]` |
 
-Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há dispositivo; `token` quando a credencial veio como subprotocolo ou Bearer no plano B; `open` só com `--dev-open-bridge`. Campos novos são opcionais na desserialização, com `#[serde(default)]` como o protótipo já faz em `protocol.rs:10-16`, para a página do protótipo continuar funcionando em desenvolvimento.
+Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há dispositivo. Os ids seguem o registro v2, `dev_` para o celular e `d_` para o computador, e os nomes vêm do que o supervisor entregou à ponte: o computador pelo `NetStatus` de `net.start` e por `net.state`, os celulares por `devices.list` logo depois de `net.start`, por `pair.completed` e pela renomeação em `devices.changed`. O nome do celular só aparece quando a chave do cabeçalho confere com a do registro; celular revogado ou chave diferente mostra o id no lugar do nome; `token` quando a credencial veio como subprotocolo ou Bearer no plano B; `open` só com `--dev-open-bridge`. Campos novos são opcionais na desserialização, com `#[serde(default)]` como o protótipo já faz em `protocol.rs:10-16`, para a página do protótipo continuar funcionando em desenvolvimento.
 
 ## Mapa dos comandos
 
@@ -115,7 +115,7 @@ Não encaminhados: `fs://change`, `browser://install`, `drag-out://end`.
 
 ## Revogação
 
-A ponte guarda `device_id` por conexão. `devices.revoke` no sidecar fecha os sockets daquele dispositivo com 4401 em menos de 1 s. `remote.js` não tenta de novo em 4401 nem em 4426, então a página mostra o estado "removido" e a casca oferece parear de novo.
+A ponte guarda `device_id` por conexão. `devices.revoke` no sidecar chama `edge.Server.Revoke`, que marca o celular como revogado no registro v2 e emite `devices.changed` com `revoked: true` uma única vez; o supervisor Rust repassa à ponte, que tira o celular do mapa de identidades e fecha os sockets daquele dispositivo com 4401 em menos de 1 s. A borda espera esses sockets terminarem por até 500 ms e só então fecha as sessões QUIC e Tor da chave, para o fechamento 4401 chegar ao celular. `remote.js` não tenta de novo em 4401 nem em 4426, então a página mostra o estado "removido" e a casca oferece parear de novo.
 
 ## Transporte na página
 
@@ -132,7 +132,7 @@ A ponte guarda `device_id` por conexão. `devices.revoke` no sidecar fecha os so
 
 ## Verificação
 
-1. Suíte Rust da ponte: origem recusada antes do upgrade, `call` antes do `hello` com 4400, `welcome` e lista permitida sem tocar nos gerenciadores reais, ordem do fio preservada com primeira escrita lenta, prazo do `hello`, pongs perdidos em 40 s, códigos distintos para credencial e versão, quadro acima do limite nunca chega ao despacho, fila de saída cheia fecha a conexão, chamadas concorrentes acima do limite recusadas; novos casos: segredo da borda válido marca `auth: "device"` e associa o dispositivo, segredo ausente devolve 403 salvo `--dev-open-bridge`, subprotocolo com token no plano B, revogação fecha com 4401, `Welcome` serializa os campos novos.
-2. `websocat -H='Origin: https://evil.example' ws://127.0.0.1:3720/` recebe 403; `websocat` sem o segredo recebe 403; com `--dev-open-bridge` e `Origin` em loopback recebe `welcome` com `auth: "open"`.
+1. Suíte Rust da ponte: origem recusada antes do upgrade, `call` antes do `hello` com 4400, `welcome` e lista permitida sem tocar nos gerenciadores reais, ordem do fio preservada com primeira escrita lenta, prazo do `hello`, pongs perdidos em 40 s, códigos distintos para credencial e versão, quadro acima do limite nunca chega ao despacho, fila de saída cheia fecha a conexão, chamadas concorrentes acima do limite recusadas; novos casos: segredo da borda válido marca `auth: "device"` e associa o dispositivo, segredo ausente devolve 403 salvo `--dev-open-bridge`, segredo sem `X-Cialai-Device-Key` ou só com o antigo `X-Cialai-Node-Key` devolve 403, chave diferente do registro não herda o nome conhecido, celular revogado sai da sincronização, a fixture `welcome.json` com ids v2 bate com a serialização Rust, subprotocolo com token no plano B, revogação fecha com 4401, `Welcome` serializa os campos novos.
+2. `websocat -H='Origin: https://evil.example' ws://127.0.0.1:3720/` recebe 403; `websocat` sem o segredo recebe 403; com `--dev-open-bridge` e `Origin` em loopback recebe `welcome` com `auth: "open"`. Em 15/09/2026, durante CON-045, o app de desenvolvimento no macOS com `CIALAI_BRIDGE_PORT=38720` recusou com 403 o upgrade WebSocket por `curl` sem `X-Cialai-Proxy-Secret`, com segredo errado e com `Origin: https://evil.example`; `websocat` não estava instalado. O caso `--dev-open-bridge` não foi repetido.
 3. `check-mobile.mjs` do protótipo, portado: ordenação do handshake, delegação, quadros de canal, dedupe do replay, retomada em primeiro plano substituindo socket morto, prazo de conexão, recusa de mutação HTTP, política do navegador, prompt único na primeira digitação, revogação do bloqueio da casca, kill exigindo autorização nova, download e link externo.
 4. Pelo celular: sessão aberta no desktop aparece com histórico, saída ao vivo nos dois lados, `echo celular` digitado no telefone ecoa no desktop; `yes | head -c 50000000` mantém o desktop fluido e o telefone acompanha ou recebe `detached` e religa; modo avião por um minuto derruba a conexão no desktop em até 40 s, nenhum shell morre e o telefone religa sozinho.
