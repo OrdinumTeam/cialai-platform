@@ -280,7 +280,6 @@ export default Object.freeze({
   'terminal.plan.dateAt': '{date} at {time}',
 
   'terminal.work.findOutput': 'Find in output',
-  'terminal.work.findOutputShortcut': 'Find in output, {shortcut}',
   'terminal.work.findOutputLabel': 'Find in terminal output',
   'terminal.work.previous': 'Previous',
   'terminal.work.previousShortcut': 'Previous, ⇧Enter',
@@ -303,8 +302,6 @@ export default Object.freeze({
   'terminal.work.noChanges': 'No changes',
   'terminal.work.detachedHead': 'Detached HEAD',
   'terminal.work.maximizeTerminal': 'Maximize terminal',
-  'terminal.work.copySelectionTitle': 'Copy terminal selection',
-  'terminal.work.copySelection': 'Copy selection',
   'terminal.work.decreaseFont': 'Decrease font size',
   'terminal.work.decreaseFontShortcut': 'Decrease font size, {shortcut}',
   'terminal.work.increaseFont': 'Increase font size',

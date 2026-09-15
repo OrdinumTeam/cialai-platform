@@ -579,10 +579,8 @@ export default function Workbench() {
           onChangeDir={(session) => changeDirectory(session.id).catch((error) => notify(error.message, 'warning'))}
           onToggleFocus={toggleFocus}
           findOpen={findOpen}
-          onFindOpen={() => setFindOpen(true)}
           onFindClose={() => { setFindOpen(false); focusSelected(); }}
           editorFocusKey={editorFocusKey}
-          notify={notify}
         />
       ) : <section className="terminais-work" />}
       {!explorerCollapsed && selected ? (

@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ArrowDown, ChevronDown, ChevronUp, Copy, Eye, EyeOff, GitBranch, Globe, Maximize2, Minimize2, Minus, PanelBottomClose, PanelTopClose, Plus, RotateCcw, Search, X,
+  ArrowDown, ChevronDown, ChevronUp, Eye, EyeOff, GitBranch, Globe, Maximize2, Minimize2, Minus, PanelBottomClose, PanelTopClose, Plus, RotateCcw, Search, X,
 } from 'lucide-react';
 import EditorPane from './EditorPane.jsx';
 import Splitter from './Splitter.jsx';
@@ -22,7 +22,6 @@ import { fs, isPreviewable, shortPath } from '../files.js';
 import { openFile } from '../editor.js';
 import { inside, onDrag as subscribeDrag } from '../drag.js';
 import { onNativeDragDrop } from '../../lib/native.js';
-import { copyToClipboard } from '../../lib/helpers.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { openBrowserTab } from '../browser/runtime.js';
 import { shortcutLabel } from '../../lib/keys.js';
@@ -200,8 +199,7 @@ function TerminalPane({ session, onCloseSession, onChangeDir, findOpen, onFindCl
 }
 
 export default function WorkArea({
-  session, layout, tabs, activeTab, editorActions, onCloseSession, onChangeDir, onToggleFocus, findOpen, onFindOpen, onFindClose,
-  editorFocusKey, notify,
+  session, layout, tabs, activeTab, editorActions, onCloseSession, onChangeDir, onToggleFocus, findOpen, onFindClose, editorFocusKey,
 }) {
   useI18n();
   useRuntimeEvents(['activity', 'explorer', 'browser'], session.id);
@@ -229,13 +227,6 @@ export default function WorkArea({
     body.style.setProperty('--terminais-ratio', String(next));
   }, [session, layout.editorRatio]);
 
-  const copySelection = async () => {
-    const text = session.term.getSelection();
-    if (!text) { notify(translate('terminal.common.nothingSelected'), 'info'); return; }
-    const ok = await copyToClipboard(text);
-    notify(translate(ok ? 'terminal.common.selectionCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning');
-    session.term.focus();
-  };
   const changeFont = (delta) => {
     const current = getLayout().fontSize;
     setLayout({ fontSize: Math.min(LAYOUT_LIMITS.fontSize.max, Math.max(LAYOUT_LIMITS.fontSize.min, current + delta)) });
@@ -315,8 +306,6 @@ export default function WorkArea({
               <span className="terminais-work__sep" aria-hidden="true" />
             </>
           ) : null}
-          <button type="button" className={`terminais-pane__tool${findOpen ? ' is-on' : ''}`} onClick={findOpen ? onFindClose : onFindOpen} aria-pressed={findOpen} title={translate('terminal.work.findOutputShortcut', { shortcut: shortcutLabel('Mod+F') })} aria-label={translate('terminal.work.findOutput')}><Search size={14} strokeWidth={1.75} /></button>
-          <button type="button" className="terminais-pane__tool" onClick={copySelection} title={translate('terminal.work.copySelectionTitle')} aria-label={translate('terminal.work.copySelection')}><Copy size={14} strokeWidth={1.75} /></button>
           <button type="button" className="terminais-pane__tool" onClick={() => changeFont(-1)} title={translate('terminal.work.decreaseFontShortcut', { shortcut: shortcutLabel('Mod+Minus') })} aria-label={translate('terminal.work.decreaseFont')}><Minus size={14} strokeWidth={1.75} /></button>
           <span className="terminais-work__font" aria-live="polite">{layout.fontSize.toLocaleString(getLocale())}</span>
           <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title={translate('terminal.work.increaseFontShortcut', { shortcut: shortcutLabel('Mod+Equal') })} aria-label={translate('terminal.work.increaseFont')}><Plus size={14} strokeWidth={1.75} /></button>
