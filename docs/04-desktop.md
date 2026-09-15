@@ -16,6 +16,7 @@ Versões conferidas no `Cargo.lock` do Control: tauri 2.11.5, wry 0.55.1, tao 0.
 | Backend Windows | Pendente | ConPTY, Job Objects, janela, atalhos e arquivos permanecem especificados, sem integração nesta linha |
 | Empacotamento desktop | Preparado | Sidecars e configuração Tauri existem; instaladores assinados e instalação limpa não foram produzidos |
 | Tor embutido | Preparado | Tor Expert Bundle 15.0.22 fixado por hash, preparado em `$RESOURCE/tor`, passado ao sidecar em `--tor-bin` e aberto pelo `doctor` no macOS arm64 local; instaladores dos três sistemas, assinatura Developer ID dos binários aninhados e instalação limpa seguem pendentes; Linux arm64 aguarda decisão de produto |
+| Encerramento em cascata | Preparado | Supervisor com espera do início em andamento e Job Object no Windows, testes com sidecar falso e `tor` real medido no macOS arm64; o roteiro manual com o app nos três sistemas segue pendente |
 | Atualizador | Preparado | Plugin, interface, endpoint e guarda existem; chave pública, assinatura e atualização real estão pendentes |
 | Testes multiplataforma | Pendente | Os testes locais macOS não substituem CI remota, IME, Wayland, WebView2 nem instalação nos outros sistemas |
 
@@ -266,6 +267,24 @@ Rede local no macOS 15: a privacidade de rede local vale para apps fora da sandb
 Licenças: esta build do Tor informa cobertura pela GPL versão 3 e traz libevent e OpenSSL. As licenças vão em `$RESOURCE/tor/docs` e o `NOTICE` registra os componentes; a oferta de código fonte correspondente ainda precisa de revisão antes da versão 1.
 
 Updater por `tauri-plugin-updater` com chave própria e `latest.json` nas releases do GitHub, a partir da Fase 7.
+
+### Encerramento do túnel
+
+Sair pelo menu e fechar a janela chegam a `RunEvent::Exit`, que chama `Supervisor::shutdown_blocking`. O supervisor espera um início em andamento registrar o processo, para que nenhum sidecar nasça depois do encerramento, envia `shutdown`, dá 5 s para o sidecar sair e então o mata. O sidecar fecha a borda e os ouvintes; o `tor` fecha por `tor.Desktop.Close`, com `SIGNAL SHUTDOWN` e morte do processo que não sair em 3 s. Nesta linha o sidecar ainda não abre o `tor`: o `net.start` da CON-029 precisa fechar o `Desktop` no encerramento do runtime.
+
+Quando o app morre sem esse caminho, o sidecar sai pelo fim do stdin ou pela ausência do pai, conferida a cada 2 s. O `tor` sai assim que fecha a conexão de controle que enviou `TAKEOWNERSHIP` e, como reserva, em até 15 s por `__OwningControllerProcess`, que aponta para o sidecar. No Windows o supervisor coloca o sidecar num Job Object com `KILL_ON_JOB_CLOSE`, herdado pelo `tor`: o sistema fecha o handle quando o app morre e leva a árvore inteira, e o supervisor termina o job depois de cada saída, falha de início ou morte forçada do sidecar.
+
+Testes: `tunnel::supervisor::tests::sidecar_tree_ends_after_shutdown`, `sidecar_tree_ends_when_shutdown_is_ignored` e `sidecar_tree_ends_when_the_app_dies` usam um sidecar falso que abre um filho e conferem o fim dos dois; no Windows o filho ignora o dono e só o Job Object o encerra. `TestRealTorFollowsItsOwner`, em `internal/tor`, roda com `CIALAI_TOR_BIN` e mede o `tor` real depois de `Close`, com o dono morto e só com `__OwningControllerProcess`.
+
+Roteiro manual, repetido em macOS, Linux e Windows com o app instalado e o Tor Browser fechado, porque o `tor` dele entra na mesma lista:
+
+1. Abrir o Cialai, esperar o túnel em execução e listar a árvore. No macOS e no Linux: `pgrep -l cialai-tunnel; pgrep -lx tor`. No Windows, no PowerShell: `Get-Process cialai-tunnel, tor -ErrorAction SilentlyContinue`.
+2. Sair pelo menu e repetir a listagem depois de 10 s.
+3. Abrir de novo, fechar a janela e repetir a listagem depois de 10 s.
+4. Abrir de novo e matar o app sem encerramento. No macOS e no Linux: `kill -9 $(ps -o ppid= -p $(pgrep -x cialai-tunnel))`. No Windows: `Stop-Process -Force -Id (Get-CimInstance Win32_Process -Filter "Name='cialai-tunnel.exe'").ParentProcessId`. Repetir a listagem depois de 20 s.
+5. Registrar sistema, versão do app e a saída de cada listagem. O critério é nenhuma linha nos passos 2, 3 e 4.
+
+Resultado físico do roteiro: pendente nos três sistemas.
 
 ## Testes e CI
 

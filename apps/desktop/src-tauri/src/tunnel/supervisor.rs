@@ -104,6 +104,26 @@ struct ProcessHandle {
     ready: Arc<AtomicBool>,
     stdin: Arc<Mutex<ChildStdin>>,
     child: Arc<Mutex<Child>>,
+    /// No Windows o sidecar e o `tor` que ele abre vivem neste Job Object com
+    /// `KILL_ON_JOB_CLOSE`: se o app morre, o sistema fecha o handle e leva a
+    /// árvore inteira. Nos outros sistemas o sidecar sai no fim do stdin e o
+    /// `tor` sai sozinho ao perder o controle que o possui.
+    #[cfg(target_os = "windows")]
+    job: crate::platform::win_job::JobHandle,
+}
+
+impl ProcessHandle {
+    /// Recolhe o que restou da árvore depois que o sidecar saiu ou foi morto.
+    fn collect_tree(&self) {
+        #[cfg(target_os = "windows")]
+        let _ = self.job.terminate();
+    }
+
+    fn kill(&self) {
+        let _ = lock(&self.child).kill();
+        let _ = lock(&self.child).wait();
+        self.collect_tree();
+    }
 }
 
 struct Inner {
@@ -444,13 +464,24 @@ impl Inner {
         match self.start_once() {
             Ok(()) => Ok(()),
             Err(problem) => {
-                self.schedule_restart();
+                if !self.stopping.load(Ordering::SeqCst) {
+                    self.schedule_restart();
+                }
                 Err(problem)
             }
         }
     }
 
+    /// Chamado sempre com `start_gate`. O `shutdown` também passa pelo portão,
+    /// então nenhum sidecar nasce depois dele, nem por uma nova tentativa.
     fn start_once(self: &Arc<Self>) -> Result<(), RpcProblem> {
+        if self.stopping.load(Ordering::SeqCst) {
+            return Err(RpcProblem::local(
+                "tunnel_stopping",
+                "O núcleo do túnel está encerrando.",
+                true,
+            ));
+        }
         fs::create_dir_all(&self.launch.state_dir).map_err(|error| {
             RpcProblem::local(
                 "tunnel_state",
@@ -482,6 +513,18 @@ impl Inner {
                     true,
                 )
             })?;
+        // O sidecar só abre o `tor` depois do handshake, então atribuir logo
+        // após o spawn já cobre a árvore toda.
+        #[cfg(target_os = "windows")]
+        let job = crate::platform::win_job::assign(child.id()).map_err(|error| {
+            let _ = child.kill();
+            let _ = child.wait();
+            RpcProblem::local(
+                "tunnel_start",
+                format!("Não foi possível isolar o núcleo do túnel: {error}"),
+                true,
+            )
+        })?;
         let stdin = child.stdin.take().ok_or_else(|| {
             RpcProblem::local("tunnel_start", "O sidecar não abriu a entrada stdio.", true)
         })?;
@@ -494,6 +537,8 @@ impl Inner {
             ready: Arc::new(AtomicBool::new(false)),
             stdin: Arc::new(Mutex::new(stdin)),
             child: Arc::new(Mutex::new(child)),
+            #[cfg(target_os = "windows")]
+            job,
         };
         *lock(&self.process) = Some(process.clone());
         let (hello_tx, hello_rx) = mpsc::sync_channel(1);
@@ -589,8 +634,7 @@ impl Inner {
     }
 
     fn fail_start(&self, process: &ProcessHandle) {
-        let _ = lock(&process.child).kill();
-        let _ = lock(&process.child).wait();
+        process.kill();
         let mut current = lock(&self.process);
         if current
             .as_ref()
@@ -607,15 +651,15 @@ impl Inner {
                 .as_ref()
                 .is_some_and(|current| current.generation == generation)
             {
-                process.take();
-                true
+                process.take()
             } else {
-                false
+                None
             }
         };
-        if !removed {
+        let Some(removed) = removed else {
             return;
-        }
+        };
+        removed.collect_tree();
         self.fail_pending(RpcProblem::local(
             "tunnel_disconnected",
             "O núcleo do túnel foi desconectado.",
@@ -666,7 +710,12 @@ impl Inner {
         if self.stopping.swap(true, Ordering::SeqCst) {
             return;
         }
+        // Espera um início em andamento registrar o processo, para encerrá-lo
+        // em vez de deixá-lo nascer depois do encerramento.
+        let _gate = lock(&self.start_gate);
         if let Some(process) = lock(&self.process).clone() {
+            // O sidecar fecha a borda e o `tor` antes de sair; o `tor` tem 3 s
+            // depois de `SIGNAL SHUTDOWN`, dentro deste prazo.
             let _ = self.send_on(&process, "shutdown", json!({}), Duration::from_secs(3));
             let started = Instant::now();
             while started.elapsed() < SHUTDOWN_TIMEOUT {
@@ -676,10 +725,7 @@ impl Inner {
                     Err(_) => break,
                 }
             }
-            if lock(&process.child).try_wait().ok().flatten().is_none() {
-                let _ = lock(&process.child).kill();
-            }
-            let _ = lock(&process.child).wait();
+            process.kill();
         }
         *lock(&self.process) = None;
         self.fail_pending(RpcProblem::local(
@@ -1154,6 +1200,231 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
         assert!(lock(&events).iter().any(|(channel, value)| {
             channel == "tunnel://state" && value["data"]["state"] == "running"
         }));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn no_sidecar_starts_after_shutdown() {
+        let root = std::env::temp_dir();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                root.join("sidecar"),
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("unused-key")),
+        );
+        supervisor.shutdown_blocking();
+        // A nova tentativa agendada chama `start_once` direto, sem passar pela
+        // checagem de `ensure_started`.
+        let problem = supervisor.inner.start_once().unwrap_err();
+        assert_eq!(problem.code, "tunnel_stopping");
+        assert!(lock(&supervisor.inner.process).is_none());
+    }
+
+    const CASCADE_APP_ENV: &str = "CIALAI_SUPERVISOR_CASCADE_APP";
+
+    fn cascade_root(name: &str) -> PathBuf {
+        let root =
+            std::env::temp_dir().join(format!("cialai-supervisor-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    impl TestChild {
+        /// Sidecar falso que abre um `tor` falso antes do handshake e, depois
+        /// de responder ao `shutdown`, sai com `exit` ou trava com `hold`, que
+        /// ignora até o fim do stdin. Em nenhum dos modos ele encerra o filho.
+        /// No Unix o filho segue o dono como o `__OwningControllerProcess` do
+        /// Tor real; no Windows ele ignora o dono e só o Job Object o encerra.
+        fn cascade(root: &Path, mode: &str) -> Self {
+            #[cfg(unix)]
+            {
+                let script = root.join("fake-cascade-sidecar.sh");
+                fs::write(
+                    &script,
+                    r#"#!/bin/sh
+owner=$$
+(while kill -0 "$owner" 2>/dev/null; do sleep 0.1; done) </dev/null >/dev/null 2>&1 &
+tor=$!
+printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"1.102.0","pid":42},"ts":"2026-09-12T20:00:00Z"}'
+IFS= read -r hello || exit 0
+printf '%s\n' '{"id":1,"ok":true,"result":{"protocol":1,"capabilities":["control","edge","pairing","devices"]}}'
+IFS= read -r request || exit 0
+printf '{"id":2,"ok":true,"result":{"tree":[%s]}}\n' "$tor"
+IFS= read -r shutdown || exit 0
+printf '%s\n' '{"id":3,"ok":true,"result":{}}'
+[ "$1" = hold ] || exit 0
+exec sleep 600 </dev/null
+"#,
+                )
+                .unwrap();
+                Self {
+                    binary: PathBuf::from("/bin/sh"),
+                    args: vec![script.to_string_lossy().into_owned(), mode.into()],
+                }
+            }
+            #[cfg(target_os = "windows")]
+            {
+                let script = root.join("fake-cascade-sidecar.cmd");
+                fs::write(
+                    &script,
+                    "@echo off\r\nstart \"\" /b cmd /d /c \"ping -n 600 127.0.0.1 >nul\"\r\necho {\"event\":\"hello\",\"data\":{\"protocol\":1,\"version\":\"0.1.0\",\"tailscale\":\"1.102.0\",\"pid\":42},\"ts\":\"2026-09-12T20:00:00Z\"}\r\nset /p hello=\r\necho {\"id\":1,\"ok\":true,\"result\":{\"protocol\":1,\"capabilities\":[\"control\",\"edge\",\"pairing\",\"devices\"]}}\r\nset /p request=\r\necho {\"id\":2,\"ok\":true,\"result\":{\"tree\":[]}}\r\nset /p shutdown=\r\necho {\"id\":3,\"ok\":true,\"result\":{}}\r\nif \"%~1\"==\"hold\" ping -n 600 127.0.0.1 >nul\r\n",
+                )
+                .unwrap();
+                Self {
+                    binary: script,
+                    args: vec![mode.into()],
+                }
+            }
+        }
+    }
+
+    fn cascade_supervisor(root: &Path, mode: &str) -> Supervisor {
+        let child = TestChild::cascade(root, mode);
+        let mut launch = fixture(
+            root,
+            child.binary,
+            BridgeSession {
+                port: 3720,
+                secret: "fixture".into(),
+            },
+        );
+        launch.binary_args = child.args;
+        Supervisor::new(
+            launch,
+            Arc::new(|_, _| {}),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("key")),
+        )
+    }
+
+    /// Inicia o sidecar falso e devolve o pid dele e os do `tor` falso. No
+    /// Windows os filhos vêm da lista de membros do Job Object.
+    fn start_tree(supervisor: &Supervisor) -> (u32, Vec<u32>) {
+        let reported = supervisor.call("logs.tail", json!({"lines":1})).unwrap();
+        let sidecar = lock(&supervisor.inner.ready_process().unwrap().child).id();
+        #[cfg(unix)]
+        let tree = reported["tree"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|pid| u32::try_from(pid.as_u64().unwrap()).unwrap())
+            .collect::<Vec<_>>();
+        #[cfg(target_os = "windows")]
+        let tree = {
+            let _ = reported;
+            crate::platform::win_job::members_for(sidecar)
+                .into_iter()
+                .filter(|pid| *pid != sidecar)
+                .collect::<Vec<_>>()
+        };
+        assert!(!tree.is_empty(), "o sidecar falso não abriu o filho");
+        assert!(tree.iter().all(|pid| crate::platform::process_alive(*pid)));
+        (sidecar, tree)
+    }
+
+    fn survivors(pids: &[u32], limit: Duration) -> Vec<u32> {
+        let started = Instant::now();
+        loop {
+            let alive = pids
+                .iter()
+                .copied()
+                .filter(|pid| crate::platform::process_alive(*pid))
+                .collect::<Vec<_>>();
+            if alive.is_empty() || started.elapsed() >= limit {
+                return alive;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+    }
+
+    #[test]
+    fn sidecar_tree_ends_after_shutdown() {
+        let root = cascade_root("cascade-exit");
+        let supervisor = cascade_supervisor(&root, "exit");
+        let (sidecar, mut pids) = start_tree(&supervisor);
+        pids.push(sidecar);
+        supervisor.shutdown_blocking();
+        assert_eq!(survivors(&pids, Duration::from_secs(10)), Vec::<u32>::new());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn sidecar_tree_ends_when_shutdown_is_ignored() {
+        let root = cascade_root("cascade-hold");
+        let supervisor = cascade_supervisor(&root, "hold");
+        let (sidecar, mut pids) = start_tree(&supervisor);
+        pids.push(sidecar);
+        let started = Instant::now();
+        supervisor.shutdown_blocking();
+        assert!(started.elapsed() >= SHUTDOWN_TIMEOUT);
+        assert_eq!(survivors(&pids, Duration::from_secs(10)), Vec::<u32>::new());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Papel do app no teste abaixo: só age quando ele reexecuta o binário de
+    /// testes com `CIALAI_SUPERVISOR_CASCADE_APP`, e fica vivo até ser morto.
+    #[test]
+    fn cascade_app_process() {
+        let Some(root) = std::env::var_os(CASCADE_APP_ENV).map(PathBuf::from) else {
+            return;
+        };
+        let supervisor = cascade_supervisor(&root, "exit");
+        let (sidecar, tree) = start_tree(&supervisor);
+        let pids = std::iter::once(sidecar)
+            .chain(tree)
+            .map(|pid| pid.to_string())
+            .collect::<Vec<_>>()
+            .join(" ");
+        fs::write(root.join("pids.tmp"), pids).unwrap();
+        fs::rename(root.join("pids.tmp"), root.join("pids")).unwrap();
+        thread::sleep(Duration::from_secs(60));
+    }
+
+    #[test]
+    fn sidecar_tree_ends_when_the_app_dies() {
+        let root = cascade_root("cascade-app");
+        let mut app = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "tunnel::supervisor::tests::cascade_app_process",
+                "--exact",
+                "--nocapture",
+                "--test-threads=1",
+            ])
+            .env(CASCADE_APP_ENV, &root)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+        let started = Instant::now();
+        let pids = loop {
+            if let Ok(text) = fs::read_to_string(root.join("pids")) {
+                break text
+                    .split_whitespace()
+                    .map(|pid| pid.parse::<u32>().unwrap())
+                    .collect::<Vec<_>>();
+            }
+            if started.elapsed() > Duration::from_secs(20) || app.try_wait().unwrap().is_some() {
+                let _ = app.kill();
+                let _ = app.wait();
+                panic!("o app de teste não iniciou o sidecar falso");
+            }
+            thread::sleep(Duration::from_millis(50));
+        };
+        assert!(pids.len() >= 2);
+        // Morte abrupta, sem `shutdown`: SIGKILL no Unix e TerminateProcess
+        // no Windows.
+        app.kill().unwrap();
+        app.wait().unwrap();
+        assert_eq!(survivors(&pids, Duration::from_secs(10)), Vec::<u32>::new());
         fs::remove_dir_all(root).unwrap();
     }
 }

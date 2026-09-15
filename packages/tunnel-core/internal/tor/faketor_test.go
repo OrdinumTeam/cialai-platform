@@ -35,6 +35,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv(fakeTorEnv) == "1" {
 		os.Exit(runFakeTorProcess(os.Args[1:]))
 	}
+	if mode := os.Getenv(ownerEnv); mode != "" {
+		os.Exit(runOwnerProcess(mode))
+	}
 	os.Exit(m.Run())
 }
 
