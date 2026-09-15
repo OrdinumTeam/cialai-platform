@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
-// Package edge serves the mobile site and authenticates tailnet requests before
-// forwarding WebSocket upgrades to the desktop bridge on loopback.
+// Package edge serves the mobile site over the streams of every Cialai
+// transport and forwards authenticated WebSocket upgrades to the desktop bridge
+// on loopback. The peer identity is the Ed25519 key the transport session
+// proved over mutual TLS. A session whose key is not registered only reaches
+// POST /pair; every other route answers 401 pair_required until the pairing
+// registers the key and the session is promoted.
 package edge
 
 import (
@@ -20,32 +24,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
-	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
 )
 
 const (
-	DefaultPort       = 4740
+	PairVersion       = 2
 	MaxPairBodyBytes  = 16 * 1024
 	MaxPairingsPerMin = 5
 	MaxDeviceSockets  = 2
 	MaxBridgeSockets  = 8
 	defaultCSP        = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws://127.0.0.1:*; worker-src 'self' blob:; frame-src 'self' blob:"
+	approvalTimeout   = time.Minute
+	// pairFailureGrace lets the error response reach the phone before a
+	// failed pairing closes its restricted session.
+	pairFailureGrace = time.Second
 )
 
-type IdentityResolver interface {
-	WhoIs(context.Context, string) (node.Identity, error)
-}
-
-type KeyExpirer interface {
-	ExpirePreAuthKey(context.Context, uint64) error
-}
-
+// ApprovalRequest asks the desktop to confirm a pairing. Device.PublicKey is
+// the key proven by the transport session.
 type ApprovalRequest struct {
-	PairID string        `json:"pairId"`
-	Device PairDevice    `json:"device"`
-	Peer   node.Identity `json:"peer"`
-	Until  time.Time     `json:"until"`
+	PairID    string     `json:"pairId"`
+	Device    PairDevice `json:"device"`
+	Transport string     `json:"transport"`
+	Until     time.Time  `json:"until"`
 }
 
 type Approver interface {
@@ -54,21 +57,40 @@ type Approver interface {
 
 type EventSink func(name string, data any)
 
+// ReachCard tells a paired phone how to reach this desktop again: the onion
+// address, the desktop public key to pin and the direct candidates.
+type ReachCard struct {
+	Onion      string              `json:"onion"`
+	PublicKey  string              `json:"publicKey"`
+	Candidates []pairing.Candidate `json:"candidates"`
+}
+
+// Config wires the edge. The transport listeners are handed to Serve.
 type Config struct {
-	StaticDir       string
-	BridgeURL       string
-	ProxySecret     string
-	Desktop         pairing.DesktopIdentity
-	Port            int
+	StaticDir   string
+	BridgeURL   string
+	ProxySecret string
+	// Desktop is the identity phones pin: id, name and public key.
+	Desktop pairing.Desktop
+	// Reach returns the current onion address and direct candidates; the edge
+	// fills the public key from Desktop.
+	Reach           func() ReachCard
 	CSP             string
 	Sessions        *pairing.Sessions
 	Devices         *pairing.Registry
-	WhoIs           IdentityResolver
-	KeyExpirer      KeyExpirer
 	RequireApproval bool
 	Approver        Approver
 	OnEvent         EventSink
 	Now             func() time.Time
+}
+
+// RevokeResult counts what a revocation closed.
+type RevokeResult struct {
+	// Sessions is the number of transport sessions of the device key closed
+	// on every listener.
+	Sessions int
+	// Sockets is the number of bridge sockets of the device closed directly.
+	Sockets int
 }
 
 type rateWindow struct {
@@ -76,21 +98,26 @@ type rateWindow struct {
 	count   int
 }
 
-type connectionContextKey struct{}
+type streamContextKey struct{}
 
 type Server struct {
-	config     Config
-	staticRoot string
-	bridge     *url.URL
-	proxy      *httputil.ReverseProxy
-	rateMu     sync.Mutex
-	rates      map[string]rateWindow
-	activeMu   sync.Mutex
-	active     map[string]map[net.Conn]struct{}
-	activeAnon map[string]int
-	total      int
-	httpMu     sync.Mutex
+	config           Config
+	staticRoot       string
+	bridge           *url.URL
+	proxy            *httputil.ReverseProxy
+	pairFailureGrace time.Duration
+
+	rateMu sync.Mutex
+	rates  map[string]rateWindow
+
+	activeMu sync.Mutex
+	active   map[string]map[net.Conn]struct{}
+	total    int
+
+	serveMu    sync.Mutex
+	listener   transport.Listener
 	httpServer *http.Server
+	closed     bool
 }
 
 func New(config Config) (*Server, error) {
@@ -106,14 +133,14 @@ func New(config Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(config.ProxySecret) == "" || config.Sessions == nil || config.Devices == nil || config.WhoIs == nil || config.Desktop.ID == "" || config.Desktop.Name == "" {
-		return nil, errors.New("edge dependencies and desktop identity are required")
+	if strings.TrimSpace(config.ProxySecret) == "" || config.Sessions == nil || config.Devices == nil || config.Reach == nil {
+		return nil, errors.New("edge dependencies are required")
 	}
-	if config.Port == 0 {
-		config.Port = DefaultPort
+	if config.Desktop.ID == "" || config.Desktop.Name == "" {
+		return nil, errors.New("desktop identity is required")
 	}
-	if config.Port < 1 || config.Port > 65535 {
-		return nil, errors.New("edge port is invalid")
+	if _, err := identity.ParsePublicKey(config.Desktop.PublicKey); err != nil {
+		return nil, fmt.Errorf("desktop public key: %w", err)
 	}
 	if config.CSP == "" {
 		config.CSP = defaultCSP
@@ -122,8 +149,8 @@ func New(config Config) (*Server, error) {
 		config.Now = time.Now
 	}
 	server := &Server{
-		config: config, staticRoot: root, bridge: bridge, rates: make(map[string]rateWindow),
-		active: make(map[string]map[net.Conn]struct{}), activeAnon: make(map[string]int),
+		config: config, staticRoot: root, bridge: bridge, pairFailureGrace: pairFailureGrace,
+		rates: make(map[string]rateWindow), active: make(map[string]map[net.Conn]struct{}),
 	}
 	server.proxy = server.newBridgeProxy()
 	return server, nil
@@ -141,18 +168,26 @@ func parseBridgeURL(raw string) (*url.URL, error) {
 	return parsed, nil
 }
 
+// ServeHTTP routes one request by the registration of its transport session.
+// A request that did not arrive on a transport stream has no peer identity
+// and is treated as unregistered.
 func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	server.securityHeaders(response)
+	session := sessionOf(request)
+	if session == nil || !server.registered(session) {
+		server.serveRestricted(response, request, session)
+		return
+	}
 	switch request.URL.Path {
 	case "/api/health":
 		server.serveHealth(response, request)
 	case "/pair":
-		server.servePair(response, request)
+		server.servePair(response, request, session)
 	case "/pty":
-		server.serveUpgrade(response, request)
+		server.serveUpgrade(response, request, session)
 	case "/":
 		if isUpgrade(request) {
-			server.serveUpgrade(response, request)
+			server.serveUpgrade(response, request, session)
 			return
 		}
 		server.serveStatic(response, request)
@@ -163,6 +198,61 @@ func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Requ
 		}
 		server.serveStatic(response, request)
 	}
+}
+
+// serveRestricted is the router of unregistered sessions: only POST /pair
+// exists.
+func (server *Server) serveRestricted(response http.ResponseWriter, request *http.Request, session transport.Session) {
+	if session != nil && request.URL.Path == "/pair" && request.Method == http.MethodPost {
+		server.servePair(response, request, session)
+		return
+	}
+	server.writeProblem(response, http.StatusUnauthorized, "pair_required", "Pareie este celular com o computador antes de continuar.")
+}
+
+// registered reports whether the session may use the normal routes: the key
+// must still be in the registry and the transport must have promoted the
+// session. A key registered through another session is promoted here.
+func (server *Server) registered(session transport.Session) bool {
+	if _, ok := server.config.Devices.RegisteredKey(session.PeerKey()); !ok {
+		return false
+	}
+	if session.Registered() {
+		return true
+	}
+	if listener := server.currentListener(); listener != nil {
+		listener.Promote(session.PeerKey())
+	}
+	return session.Registered()
+}
+
+func sessionOf(request *http.Request) transport.Session {
+	stream, ok := request.Context().Value(streamContextKey{}).(transport.Stream)
+	if !ok || stream == nil {
+		return nil
+	}
+	return stream.Session()
+}
+
+func streamOf(request *http.Request) net.Conn {
+	stream, _ := request.Context().Value(streamContextKey{}).(transport.Stream)
+	if stream == nil {
+		return nil
+	}
+	return stream
+}
+
+// sessionRemoteAddr is the phone address recorded in the registry. Sessions
+// from the local Tor process carry no useful address, so it stays empty.
+func sessionRemoteAddr(session transport.Session) string {
+	if session.Transport() == transport.NameTor {
+		return ""
+	}
+	address := session.RemoteAddr()
+	if address == nil {
+		return ""
+	}
+	return address.String()
 }
 
 func (server *Server) securityHeaders(response http.ResponseWriter) {
@@ -292,12 +382,14 @@ func (server *Server) resolveStatic(target string) (string, os.FileInfo, bool) {
 	return resolved, info, true
 }
 
+// PairDevice is the phone identity sent to POST /pair. PublicKey must be the
+// canonical key proven by the transport session.
 type PairDevice struct {
-	Name     string `json:"name"`
-	Model    string `json:"model"`
-	Platform string `json:"platform"`
-	App      string `json:"app"`
-	NodeKey  string `json:"nodeKey"`
+	Name      string `json:"name"`
+	Model     string `json:"model"`
+	Platform  string `json:"platform"`
+	App       string `json:"app"`
+	PublicKey string `json:"publicKey"`
 }
 
 type pairRequest struct {
@@ -307,47 +399,49 @@ type pairRequest struct {
 	Device  PairDevice `json:"device"`
 }
 
-func (server *Server) servePair(response http.ResponseWriter, request *http.Request) {
+func (server *Server) servePair(response http.ResponseWriter, request *http.Request, session transport.Session) {
 	if request.Method != http.MethodPost {
 		response.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 	response.Header().Set("Cache-Control", "no-store")
-	remoteIP := addressHost(request.RemoteAddr)
-	if !server.allowPair(remoteIP) {
-		server.writeProblem(response, http.StatusTooManyRequests, "pair_rate_limited", "Muitas tentativas de pareamento. Gere um novo código e tente novamente.")
+	fail := func(pairID string, status int, code, message string) {
+		server.failPair(response, session, pairID, status, code, message)
+	}
+	if !server.allowPair(pairOrigin(session)) {
+		fail("", http.StatusTooManyRequests, "pair_rate_limited", "Muitas tentativas de pareamento. Gere um novo código e tente novamente.")
 		return
 	}
 	var input pairRequest
 	request.Body = http.MaxBytesReader(response, request.Body, MaxPairBodyBytes)
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&input); err != nil || input.Version != 1 || input.PairID == "" || input.Secret == "" || input.Device.NodeKey == "" {
-		server.writeProblem(response, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento é inválida.")
+	if err := decoder.Decode(&input); err != nil || input.Version != PairVersion || input.PairID == "" || input.Secret == "" || input.Device.PublicKey == "" {
+		fail(input.PairID, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento é inválida.")
 		return
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		server.writeProblem(response, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento contém dados adicionais.")
+		fail(input.PairID, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento contém dados adicionais.")
 		return
 	}
-	verified, err := server.config.Sessions.Verify(input.PairID, input.Secret)
-	if err != nil {
-		server.writePairingError(response, err)
+	// Both sides are canonical base64url, so a different spelling of the
+	// same key is also refused.
+	if input.Device.PublicKey != session.PeerKey() {
+		fail(input.PairID, http.StatusForbidden, "pair_key_mismatch", "A chave do aparelho não confere com a conexão segura.")
 		return
 	}
-	identity, err := server.config.WhoIs.WhoIs(request.Context(), request.RemoteAddr)
-	if err != nil || identity.NodeKey == "" || identity.NodeKey != input.Device.NodeKey || identity.UserID != verified.UserID {
-		server.writeProblem(response, http.StatusForbidden, "pair_node_mismatch", "A identidade do dispositivo não confere com a conexão segura.")
-		server.emit("pair.failed", map[string]string{"pairId": input.PairID, "code": "pair_node_mismatch"})
+	if _, err := server.config.Sessions.Verify(input.PairID, input.Secret); err != nil {
+		status, code := pairingErrorStatus(err)
+		fail(input.PairID, status, code, err.Error())
 		return
 	}
 	if server.config.RequireApproval {
 		if server.config.Approver == nil {
-			server.writeProblem(response, http.StatusServiceUnavailable, "pair_timeout", "O computador não respondeu ao pedido de pareamento.")
+			fail(input.PairID, http.StatusServiceUnavailable, "pair_timeout", "O computador não respondeu ao pedido de pareamento.")
 			return
 		}
-		approval := ApprovalRequest{PairID: input.PairID, Device: input.Device, Peer: identity, Until: server.config.Now().Add(time.Minute)}
-		approvalContext, cancel := context.WithTimeout(request.Context(), time.Minute)
+		approval := ApprovalRequest{PairID: input.PairID, Device: input.Device, Transport: session.Transport(), Until: server.config.Now().Add(approvalTimeout)}
+		approvalContext, cancel := context.WithTimeout(request.Context(), approvalTimeout)
 		err := server.config.Approver.Await(approvalContext, approval)
 		cancel()
 		if err != nil {
@@ -355,42 +449,78 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 			if code != "pair_timeout" {
 				code = "pair_denied"
 			}
-			server.writeProblem(response, http.StatusForbidden, code, "O computador não aprovou este pareamento.")
+			fail(input.PairID, http.StatusForbidden, code, "O computador não aprovou este pareamento.")
 			return
 		}
 	}
-	consumed, err := server.config.Sessions.Consume(input.PairID, input.Secret)
-	if err != nil {
-		server.writePairingError(response, err)
+	// The restricted session may have expired during the approval; the QR
+	// stays usable for a new connection instead of registering a phone that
+	// can no longer receive its token.
+	select {
+	case <-session.Done():
+		fail(input.PairID, http.StatusGone, "pair_session_closed", "A conexão de pareamento foi encerrada.")
 		return
+	default:
 	}
-	ip := identity.IP
-	if ip == "" {
-		ip = remoteIP
+	if _, err := server.config.Sessions.Consume(input.PairID, input.Secret); err != nil {
+		status, code := pairingErrorStatus(err)
+		fail(input.PairID, status, code, err.Error())
+		return
 	}
 	device, token, err := server.config.Devices.Pair(pairing.DeviceInput{
 		Name: input.Device.Name, Model: input.Device.Model, Platform: input.Device.Platform, App: input.Device.App,
-		NodeKey: input.Device.NodeKey, NodeID: identity.NodeID, UserID: identity.UserID, IP4: ip, RemoteAddr: request.RemoteAddr,
+		DeviceKey: session.PeerKey(), Transport: session.Transport(), RemoteAddr: sessionRemoteAddr(session),
 	})
 	if err != nil {
-		server.writeProblem(response, http.StatusInternalServerError, "pair_internal", "Não foi possível salvar o dispositivo pareado.")
+		fail(input.PairID, http.StatusInternalServerError, "pair_internal", "Não foi possível salvar o dispositivo pareado.")
 		return
 	}
-	issuedAt := server.config.Now().UTC()
+	promoted := 0
+	if listener := server.currentListener(); listener != nil {
+		promoted = listener.Promote(session.PeerKey())
+	}
+	card := server.config.Reach()
+	card.PublicKey = server.config.Desktop.PublicKey
+	if card.Candidates == nil {
+		card.Candidates = []pairing.Candidate{}
+	}
 	response.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(response).Encode(map[string]any{
 		"deviceId": device.ID, "token": token,
-		"desktop":  map[string]any{"id": server.config.Desktop.ID, "name": server.config.Desktop.Name, "port": server.config.Port},
-		"issuedAt": issuedAt.Format(time.RFC3339),
+		"desktop":  map[string]string{"id": server.config.Desktop.ID, "name": server.config.Desktop.Name, "publicKey": server.config.Desktop.PublicKey},
+		"reach":    card,
+		"issuedAt": server.config.Now().UTC().Format(time.RFC3339),
 	})
-	server.emit("pair.completed", map[string]any{"pairId": input.PairID, "device": device})
-	if server.config.KeyExpirer != nil {
-		go func(keyID uint64) {
-			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-			defer cancel()
-			_ = server.config.KeyExpirer.ExpirePreAuthKey(ctx, keyID)
-		}(consumed.PreAuthKeyID)
+	server.emit("pair.completed", map[string]any{"pairId": input.PairID, "device": device, "transport": session.Transport(), "promoted": promoted > 0})
+}
+
+// failPair answers a failed pairing. A failure closes an unregistered
+// session: the HTTP connection ends after the response and the transport
+// session shortly after, once the response had time to leave.
+func (server *Server) failPair(response http.ResponseWriter, session transport.Session, pairID string, status int, code, message string) {
+	if !session.Registered() {
+		response.Header().Set("Connection", "close")
+		time.AfterFunc(server.pairFailureGrace, func() {
+			if !session.Registered() {
+				_ = session.Close()
+			}
+		})
 	}
+	server.writeProblem(response, status, code, message)
+	server.emit("pair.failed", map[string]string{"pairId": pairID, "code": code, "transport": session.Transport()})
+}
+
+// pairOrigin keys the pairing rate limit. Every onion session comes from the
+// local Tor process, so Tor pairings share one window.
+func pairOrigin(session transport.Session) string {
+	if session.Transport() == transport.NameTor {
+		return transport.NameTor
+	}
+	address := session.RemoteAddr()
+	if address == nil {
+		return session.Transport()
+	}
+	return session.Transport() + "|" + addressHost(address.String())
 }
 
 func addressHost(remoteAddr string) string {
@@ -401,35 +531,36 @@ func addressHost(remoteAddr string) string {
 	return remoteAddr
 }
 
-func (server *Server) allowPair(ip string) bool {
+func (server *Server) allowPair(origin string) bool {
 	now := server.config.Now()
 	server.rateMu.Lock()
 	defer server.rateMu.Unlock()
-	window := server.rates[ip]
+	window := server.rates[origin]
 	if window.started.IsZero() || now.Sub(window.started) >= time.Minute || now.Before(window.started) {
 		window = rateWindow{started: now}
 	}
 	if window.count >= MaxPairingsPerMin {
-		server.rates[ip] = window
+		server.rates[origin] = window
 		return false
 	}
 	window.count++
-	server.rates[ip] = window
+	server.rates[origin] = window
 	return true
 }
 
-func (server *Server) writePairingError(response http.ResponseWriter, err error) {
+func pairingErrorStatus(err error) (int, string) {
 	code := pairing.Code(err)
-	status := http.StatusBadRequest
 	switch code {
 	case "pair_unknown":
-		status = http.StatusNotFound
+		return http.StatusNotFound, code
 	case "pair_secret_mismatch":
-		status = http.StatusUnauthorized
+		return http.StatusUnauthorized, code
 	case "pair_consumed", "pair_expired":
-		status = http.StatusGone
+		return http.StatusGone, code
+	case "":
+		return http.StatusBadRequest, "pair_internal"
 	}
-	server.writeProblem(response, status, code, err.Error())
+	return http.StatusBadRequest, code
 }
 
 func (server *Server) writeProblem(response http.ResponseWriter, status int, code, message string) {
@@ -452,7 +583,7 @@ func headerContainsToken(value, token string) bool {
 	return false
 }
 
-func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.Request) {
+func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.Request, session transport.Session) {
 	if request.Method != http.MethodGet || !isUpgrade(request) {
 		server.writeProblem(response, http.StatusBadRequest, "upgrade_required", "Esta rota exige uma conexão WebSocket.")
 		return
@@ -466,17 +597,16 @@ func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.R
 		server.writeProblem(response, http.StatusUnauthorized, "device_unauthorized", "O token deste dispositivo não foi aceito.")
 		return
 	}
-	identity, err := server.config.WhoIs.WhoIs(request.Context(), request.RemoteAddr)
-	if err != nil || identity.NodeKey != device.NodeKey || identity.UserID != device.UserID {
+	if device.DeviceKey != session.PeerKey() {
 		server.writeProblem(response, http.StatusForbidden, "device_identity_mismatch", "A identidade desta conexão não corresponde ao dispositivo.")
 		return
 	}
-	if err := server.config.Devices.MarkSeen(device.ID, request.RemoteAddr); err != nil {
+	remoteAddr := sessionRemoteAddr(session)
+	if err := server.config.Devices.MarkSeen(device.ID, session.Transport(), remoteAddr); err != nil {
 		server.writeProblem(response, http.StatusInternalServerError, "device_state", "Não foi possível atualizar o estado deste dispositivo.")
 		return
 	}
-	connection, _ := request.Context().Value(connectionContextKey{}).(net.Conn)
-	release, ok := server.acquire(device.ID, connection)
+	release, ok := server.acquire(device.ID, streamOf(request))
 	if !ok {
 		server.writeProblem(response, http.StatusTooManyRequests, "socket_limit", "Este computador atingiu o limite de conexões móveis.")
 		return
@@ -484,10 +614,14 @@ func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.R
 	defer release()
 	request.Header.Del("Authorization")
 	removeTokenProtocol(request.Header, token)
-	request = request.WithContext(context.WithValue(request.Context(), bridgeIdentityKey{}, bridgeIdentity{Device: device, Peer: identity}))
-	server.emit("session.opened", map[string]string{"deviceId": device.ID, "remoteAddr": request.RemoteAddr, "nodeKey": identity.NodeKey})
+	request = request.WithContext(context.WithValue(request.Context(), bridgeIdentityKey{}, bridgeIdentity{Device: device, Transport: session.Transport()}))
+	server.emit("session.opened", map[string]string{"deviceId": device.ID, "transport": session.Transport(), "remoteAddr": remoteAddr, "deviceKey": device.DeviceKey})
 	server.proxy.ServeHTTP(response, request)
-	server.emit("session.closed", map[string]string{"deviceId": device.ID, "reason": "closed"})
+	reason := "closed"
+	if _, registered := server.config.Devices.RegisteredKey(device.DeviceKey); !registered {
+		reason = "revoked"
+	}
+	server.emit("session.closed", map[string]string{"deviceId": device.ID, "transport": session.Transport(), "reason": reason})
 }
 
 func bearerToken(value string) string {
@@ -529,10 +663,13 @@ func removeTokenProtocol(headers http.Header, token string) {
 type bridgeIdentityKey struct{}
 
 type bridgeIdentity struct {
-	Device pairing.Device
-	Peer   node.Identity
+	Device    pairing.Device
+	Transport string
 }
 
+// newBridgeProxy forwards to the bridge with the trusted identity headers.
+// X-Cialai-Node-Key repeats the device key until the bridge reads
+// X-Cialai-Device-Key (CON-045).
 func (server *Server) newBridgeProxy() *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Rewrite: func(request *httputil.ProxyRequest) {
@@ -547,7 +684,9 @@ func (server *Server) newBridgeProxy() *httputil.ReverseProxy {
 			request.Out.Header.Del("Authorization")
 			request.Out.Header.Set("X-Cialai-Proxy-Secret", server.config.ProxySecret)
 			request.Out.Header.Set("X-Cialai-Device-Id", identity.Device.ID)
-			request.Out.Header.Set("X-Cialai-Node-Key", identity.Peer.NodeKey)
+			request.Out.Header.Set("X-Cialai-Device-Key", identity.Device.DeviceKey)
+			request.Out.Header.Set("X-Cialai-Node-Key", identity.Device.DeviceKey)
+			request.Out.Header.Set("X-Cialai-Transport", identity.Transport)
 		},
 		ModifyResponse: func(response *http.Response) error {
 			if response.StatusCode != http.StatusSwitchingProtocols {
@@ -571,31 +710,25 @@ func (server *Server) newBridgeProxy() *httputil.ReverseProxy {
 }
 
 func (server *Server) acquire(deviceID string, connection net.Conn) (func(), bool) {
+	if connection == nil {
+		return nil, false
+	}
 	server.activeMu.Lock()
-	if server.total >= MaxBridgeSockets || server.activeCountLocked(deviceID) >= MaxDeviceSockets {
+	if server.total >= MaxBridgeSockets || len(server.active[deviceID]) >= MaxDeviceSockets {
 		server.activeMu.Unlock()
 		return nil, false
 	}
-	if connection == nil {
-		server.activeAnon[deviceID]++
-	} else {
-		if server.active[deviceID] == nil {
-			server.active[deviceID] = make(map[net.Conn]struct{})
-		}
-		server.active[deviceID][connection] = struct{}{}
+	if server.active[deviceID] == nil {
+		server.active[deviceID] = make(map[net.Conn]struct{})
 	}
+	server.active[deviceID][connection] = struct{}{}
 	server.total++
 	server.activeMu.Unlock()
 	var once sync.Once
 	return func() {
 		once.Do(func() {
 			server.activeMu.Lock()
-			if connection == nil {
-				server.activeAnon[deviceID]--
-				if server.activeAnon[deviceID] == 0 {
-					delete(server.activeAnon, deviceID)
-				}
-			} else if connections := server.active[deviceID]; connections != nil {
+			if connections := server.active[deviceID]; connections != nil {
 				delete(connections, connection)
 				if len(connections) == 0 {
 					delete(server.active, deviceID)
@@ -607,11 +740,28 @@ func (server *Server) acquire(deviceID string, connection net.Conn) (func(), boo
 	}, true
 }
 
-func (server *Server) activeCountLocked(deviceID string) int {
-	return len(server.active[deviceID]) + server.activeAnon[deviceID]
+// Revoke is the revocation hook for every transport (CON-061). It marks the
+// device revoked first, so new handshakes and requests of its key are refused,
+// then closes the sessions of the key on every listener, through
+// transport.Listener.CloseKey, and the bridge sockets still counted for the
+// device. The bridge itself closes the page with 4401.
+func (server *Server) Revoke(deviceID string) (RevokeResult, error) {
+	device, found := server.config.Devices.Get(deviceID)
+	if !found {
+		return RevokeResult{}, errors.New("device not found")
+	}
+	if err := server.config.Devices.Revoke(deviceID); err != nil {
+		return RevokeResult{}, err
+	}
+	var result RevokeResult
+	if listener := server.currentListener(); listener != nil {
+		result.Sessions = listener.CloseKey(device.DeviceKey)
+	}
+	result.Sockets = server.closeDeviceSockets(deviceID)
+	return result, nil
 }
 
-func (server *Server) RevokeConnections(deviceID string) int {
+func (server *Server) closeDeviceSockets(deviceID string) int {
 	server.activeMu.Lock()
 	connections := make([]net.Conn, 0, len(server.active[deviceID]))
 	for connection := range server.active[deviceID] {
@@ -630,35 +780,128 @@ func (server *Server) emit(name string, data any) {
 	}
 }
 
-func (server *Server) Serve(listener net.Listener) error {
+func (server *Server) currentListener() transport.Listener {
+	server.serveMu.Lock()
+	defer server.serveMu.Unlock()
+	return server.listener
+}
+
+// Serve accepts sessions from listener and serves HTTP on their streams until
+// Close. The listener is usually a transport.MultiListener joining the direct
+// and onion listeners. Serve owns it: Close closes it. Serve returns nil after
+// Close and an error when the listener stops by itself.
+func (server *Server) Serve(listener transport.Listener) error {
+	if listener == nil {
+		return errors.New("edge needs a transport listener")
+	}
+	streams := newStreamListener(listener.Addr())
 	httpServer := &http.Server{
 		Handler:           server,
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       65 * time.Second,
 		ConnContext: func(ctx context.Context, connection net.Conn) context.Context {
-			return context.WithValue(ctx, connectionContextKey{}, connection)
+			return context.WithValue(ctx, streamContextKey{}, connection)
 		},
 	}
-	server.httpMu.Lock()
+	server.serveMu.Lock()
+	if server.closed {
+		server.serveMu.Unlock()
+		return errors.New("edge server is closed")
+	}
 	if server.httpServer != nil {
-		server.httpMu.Unlock()
+		server.serveMu.Unlock()
 		return errors.New("edge server is already running")
 	}
 	server.httpServer = httpServer
-	server.httpMu.Unlock()
-	err := httpServer.Serve(listener)
+	server.listener = listener
+	server.serveMu.Unlock()
+	go server.acceptSessions(listener, streams)
+	err := httpServer.Serve(streams)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
 	return err
 }
 
-func (server *Server) Close(ctx context.Context) error {
-	server.httpMu.Lock()
-	httpServer := server.httpServer
-	server.httpMu.Unlock()
-	if httpServer == nil {
-		return nil
+func (server *Server) acceptSessions(listener transport.Listener, streams *streamListener) {
+	for {
+		session, err := listener.Accept(streams.ctx)
+		if err != nil {
+			streams.stop(fmt.Errorf("edge transport listener stopped: %w", err))
+			return
+		}
+		go acceptStreams(session, streams)
 	}
-	return httpServer.Shutdown(ctx)
 }
+
+func acceptStreams(session transport.Session, streams *streamListener) {
+	for {
+		stream, err := session.AcceptStream(streams.ctx)
+		if err != nil {
+			return
+		}
+		if !streams.deliver(stream) {
+			_ = stream.Close()
+			return
+		}
+	}
+}
+
+// Close shuts the HTTP server down gracefully, then closes the transport
+// listener and with it every session.
+func (server *Server) Close(ctx context.Context) error {
+	server.serveMu.Lock()
+	server.closed = true
+	httpServer, listener := server.httpServer, server.listener
+	server.serveMu.Unlock()
+	var err error
+	if httpServer != nil {
+		err = httpServer.Shutdown(ctx)
+	}
+	if listener != nil {
+		if closeErr := listener.Close(); closeErr != nil && !errors.Is(closeErr, transport.ErrClosed) {
+			err = errors.Join(err, closeErr)
+		}
+	}
+	return err
+}
+
+// streamListener hands transport streams to net/http as connections.
+type streamListener struct {
+	addr    net.Addr
+	streams chan net.Conn
+	ctx     context.Context
+	cancel  context.CancelCauseFunc
+}
+
+func newStreamListener(addr net.Addr) *streamListener {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	return &streamListener{addr: addr, streams: make(chan net.Conn), ctx: ctx, cancel: cancel}
+}
+
+func (listener *streamListener) Accept() (net.Conn, error) {
+	select {
+	case stream := <-listener.streams:
+		return stream, nil
+	case <-listener.ctx.Done():
+		return nil, context.Cause(listener.ctx)
+	}
+}
+
+func (listener *streamListener) deliver(stream net.Conn) bool {
+	select {
+	case listener.streams <- stream:
+		return true
+	case <-listener.ctx.Done():
+		return false
+	}
+}
+
+func (listener *streamListener) stop(err error) { listener.cancel(err) }
+
+func (listener *streamListener) Close() error {
+	listener.cancel(net.ErrClosed)
+	return nil
+}
+
+func (listener *streamListener) Addr() net.Addr { return listener.addr }

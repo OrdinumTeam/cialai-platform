@@ -8,7 +8,7 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
+	edge "github.com/Cialai/cialai/packages/tunnel-core/internal/edge/edgev1"
 	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
 )
 

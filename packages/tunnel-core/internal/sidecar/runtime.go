@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
+	edge "github.com/Cialai/cialai/packages/tunnel-core/internal/edge/edgev1"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/headscale"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
