@@ -13,20 +13,35 @@ import (
 	"io"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 
 const (
+	RegistryVersion       = 2
 	TokenRotationInterval = 30 * 24 * time.Hour
 	PreviousTokenWindow   = 24 * time.Hour
 	RevokedRetention      = 30 * 24 * time.Hour
 	maxRegistryBytes      = 1 << 20
+	legacyRegistryVersion = 1
 )
+
+// Transports a device session can arrive through, recorded as lastTransport.
+const (
+	TransportDirect = "direct"
+	TransportTor    = "tor"
+)
+
+// ErrLegacyRegistry marks a devices.json written by the Headscale-era v1
+// registry. Its devices are not migrated: the phones must pair again.
+var ErrLegacyRegistry = errors.New("devices.json v1 is not supported; pair the phones again")
+
+// The TLS layer asks the registry whether a phone key is registered.
+var _ identity.KeyRegistry = (*Registry)(nil)
 
 type DesktopIdentity struct {
 	ID        string    `json:"id"`
@@ -39,27 +54,25 @@ type DeviceInput struct {
 	Model      string
 	Platform   string
 	App        string
-	NodeKey    string
-	NodeID     string
-	UserID     string
-	IP4        string
+	DeviceKey  string
+	Transport  string
 	RemoteAddr string
 }
 
+// Device is the public view of a paired phone. Its id is derived from
+// DeviceKey, the canonical base64url Ed25519 public key proven over TLS.
 type Device struct {
 	ID             string     `json:"id"`
 	Name           string     `json:"name"`
 	Model          string     `json:"model"`
 	Platform       string     `json:"platform"`
 	App            string     `json:"app"`
-	NodeKey        string     `json:"nodeKey"`
-	NodeID         string     `json:"nodeId"`
-	UserID         string     `json:"userId"`
-	IP4            string     `json:"ip4"`
+	DeviceKey      string     `json:"deviceKey"`
 	TokenIssuedAt  time.Time  `json:"tokenIssuedAt"`
 	TokenRotatedAt *time.Time `json:"tokenRotatedAt,omitempty"`
 	PairedAt       time.Time  `json:"pairedAt"`
 	LastSeenAt     time.Time  `json:"lastSeenAt"`
+	LastTransport  string     `json:"lastTransport"`
 	LastRemoteAddr string     `json:"lastRemoteAddr"`
 	Revoked        bool       `json:"revoked"`
 	RevokedAt      *time.Time `json:"revokedAt,omitempty"`
@@ -86,8 +99,8 @@ type Registry struct {
 	file   registryFile
 }
 
-func OpenRegistry(paths statedir.Paths, identity DesktopIdentity, now func() time.Time, random io.Reader) (*Registry, error) {
-	if !validEncodedID(identity.ID, "d_", 16) || !validName(identity.Name, 48) || identity.CreatedAt.IsZero() {
+func OpenRegistry(paths statedir.Paths, desktop DesktopIdentity, now func() time.Time, random io.Reader) (*Registry, error) {
+	if !validEncodedID(desktop.ID, "d_", 16) || !validName(desktop.Name, 48) || desktop.CreatedAt.IsZero() {
 		return nil, errors.New("valid desktop identity is required")
 	}
 	if now == nil {
@@ -96,7 +109,7 @@ func OpenRegistry(paths statedir.Paths, identity DesktopIdentity, now func() tim
 	if random == nil {
 		random = rand.Reader
 	}
-	registry := &Registry{paths: paths, now: now, random: random, file: registryFile{Version: 1, Desktop: identity, Devices: []deviceRecord{}}}
+	registry := &Registry{paths: paths, now: now, random: random, file: registryFile{Version: RegistryVersion, Desktop: desktop, Devices: []deviceRecord{}}}
 	raw, err := os.ReadFile(paths.Devices)
 	if errors.Is(err, os.ErrNotExist) {
 		return registry, nil
@@ -107,6 +120,18 @@ func OpenRegistry(paths statedir.Paths, identity DesktopIdentity, now func() tim
 	if len(raw) > maxRegistryBytes {
 		return nil, errors.New("device registry exceeds 1 MiB")
 	}
+	var header struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(raw, &header); err != nil {
+		return nil, fmt.Errorf("decode device registry: %w", err)
+	}
+	if header.Version == legacyRegistryVersion {
+		return nil, wrapError("registry_legacy", "Os celulares vinculados em uma versão anterior do Cialai precisam ser pareados de novo.", ErrLegacyRegistry)
+	}
+	if header.Version != RegistryVersion {
+		return nil, fmt.Errorf("device registry version %d is not supported", header.Version)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&registry.file); err != nil {
@@ -115,10 +140,10 @@ func OpenRegistry(paths statedir.Paths, identity DesktopIdentity, now func() tim
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, errors.New("device registry contains trailing data")
 	}
-	if registry.file.Version != 1 || registry.file.Desktop.ID != identity.ID || registry.file.Devices == nil {
-		return nil, errors.New("device registry version or desktop identity does not match")
+	if registry.file.Desktop.ID != desktop.ID || registry.file.Devices == nil {
+		return nil, errors.New("device registry desktop identity does not match")
 	}
-	registry.file.Desktop.Name = identity.Name
+	registry.file.Desktop.Name = desktop.Name
 	if err := registry.validateRecords(); err != nil {
 		return nil, err
 	}
@@ -127,57 +152,53 @@ func OpenRegistry(paths statedir.Paths, identity DesktopIdentity, now func() tim
 
 func (registry *Registry) validateRecords() error {
 	ids := make(map[string]bool, len(registry.file.Devices))
-	keys := make(map[string]bool, len(registry.file.Devices))
 	for _, device := range registry.file.Devices {
-		if !validEncodedID(device.ID, "dev_", 16) || !nodeKeyPattern.MatchString(device.NodeKey) || !validHash(device.TokenHash) || ids[device.ID] || keys[device.NodeKey] {
+		derived, keyErr := deviceIDForKey(device.DeviceKey)
+		if keyErr != nil || device.ID != derived || !validHash(device.TokenHash) || ids[device.ID] {
 			return errors.New("device registry contains an invalid or duplicate record")
+		}
+		if !validTransport(device.LastTransport) || !validRemoteAddr(device.LastRemoteAddr) {
+			return errors.New("device registry contains an invalid last transport")
 		}
 		if device.TokenPrevHash != nil && !validHash(*device.TokenPrevHash) {
 			return errors.New("device registry contains an invalid previous token hash")
 		}
 		ids[device.ID] = true
-		keys[device.NodeKey] = true
 	}
 	return nil
 }
 
+func deviceIDForKey(deviceKey string) (string, error) {
+	public, err := identity.ParsePublicKey(deviceKey)
+	if err != nil {
+		return "", err
+	}
+	return identity.DeriveID(identity.RolePhone, public)
+}
+
+// Pair records a phone whose key was proven over TLS and whose pairing session
+// was consumed. Pairing the same key again keeps the device id and pairedAt,
+// clears a revocation and replaces the token.
 func (registry *Registry) Pair(input DeviceInput) (Device, string, error) {
-	if err := validateDeviceInput(input); err != nil {
+	deviceID, err := validateDeviceInput(input)
+	if err != nil {
 		return Device{}, "", err
 	}
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	now := registry.now().UTC()
-	index := -1
-	for candidate := range registry.file.Devices {
-		if registry.file.Devices[candidate].NodeKey == input.NodeKey {
-			index = candidate
-			break
-		}
-	}
-	deviceID := ""
-	if index >= 0 {
-		deviceID = registry.file.Devices[index].ID
-	} else {
-		var err error
-		deviceID, err = registry.uniqueDeviceIDLocked()
-		if err != nil {
-			return Device{}, "", err
-		}
-	}
+	index := registry.indexLocked(deviceID)
 	token, hash, err := registry.issueTokenLocked(deviceID)
 	if err != nil {
 		return Device{}, "", err
 	}
 	device := Device{
 		ID: deviceID, Name: input.Name, Model: input.Model, Platform: input.Platform, App: input.App,
-		NodeKey: input.NodeKey, NodeID: input.NodeID, UserID: input.UserID, IP4: input.IP4,
-		TokenIssuedAt: now, LastSeenAt: now, LastRemoteAddr: input.RemoteAddr,
+		DeviceKey: input.DeviceKey, TokenIssuedAt: now, PairedAt: now, LastSeenAt: now,
+		LastTransport: input.Transport, LastRemoteAddr: input.RemoteAddr,
 	}
 	if index >= 0 {
 		device.PairedAt = registry.file.Devices[index].PairedAt
-	} else {
-		device.PairedAt = now
 	}
 	record := deviceRecord{Device: device, TokenHash: hash}
 	previous := cloneRegistry(registry.file)
@@ -193,26 +214,35 @@ func (registry *Registry) Pair(input DeviceInput) (Device, string, error) {
 	return device, token, nil
 }
 
-func validateDeviceInput(input DeviceInput) error {
-	if !validName(input.Name, 48) || !validName(input.Model, 64) || !regexpToken(input.Platform, 16) || !validName(input.App, 32) || !nodeKeyPattern.MatchString(input.NodeKey) {
-		return errors.New("invalid device identity")
+func validateDeviceInput(input DeviceInput) (string, error) {
+	if !validName(input.Name, 48) || !validName(input.Model, 64) || !regexpToken(input.Platform, 16) || !validName(input.App, 32) {
+		return "", errors.New("invalid device identity")
 	}
-	if _, err := strconv.ParseUint(input.NodeID, 10, 64); err != nil || input.NodeID == "0" {
-		return errors.New("invalid device node id")
+	deviceID, err := deviceIDForKey(input.DeviceKey)
+	if err != nil {
+		return "", errors.New("invalid device public key")
 	}
-	if _, err := strconv.ParseUint(input.UserID, 10, 64); err != nil || input.UserID == "0" {
-		return errors.New("invalid device user id")
+	if !validTransport(input.Transport) || !validRemoteAddr(input.RemoteAddr) {
+		return "", errors.New("invalid device transport or remote address")
 	}
-	ip := net.ParseIP(input.IP4)
-	if ip == nil || ip.To4() == nil {
-		return errors.New("invalid device IPv4 address")
+	return deviceID, nil
+}
+
+func validTransport(transport string) bool {
+	return transport == TransportDirect || transport == TransportTor
+}
+
+// validRemoteAddr accepts an empty value, used by sessions arriving through the
+// local Tor process, or a host:port pair.
+func validRemoteAddr(remoteAddr string) bool {
+	if remoteAddr == "" {
+		return true
 	}
-	if input.RemoteAddr != "" {
-		if _, _, err := net.SplitHostPort(input.RemoteAddr); err != nil {
-			return errors.New("invalid device remote address")
-		}
+	if len(remoteAddr) > 128 || hasControl(remoteAddr) {
+		return false
 	}
-	return nil
+	_, _, err := net.SplitHostPort(remoteAddr)
+	return err == nil
 }
 
 func regexpToken(value string, maximum int) bool {
@@ -227,24 +257,21 @@ func regexpToken(value string, maximum int) bool {
 	return true
 }
 
-func (registry *Registry) uniqueDeviceIDLocked() (string, error) {
-	for range 8 {
-		deviceID, err := randomEncoded(registry.random, "dev_", 16)
-		if err != nil {
-			return "", err
-		}
-		found := false
-		for _, existing := range registry.file.Devices {
-			if existing.ID == deviceID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return deviceID, nil
+func (registry *Registry) indexLocked(deviceID string) int {
+	for index := range registry.file.Devices {
+		if registry.file.Devices[index].ID == deviceID {
+			return index
 		}
 	}
-	return "", errors.New("could not create a unique device id")
+	return -1
+}
+
+func (registry *Registry) activeLocked(deviceID string) *deviceRecord {
+	index := registry.indexLocked(deviceID)
+	if index < 0 || registry.file.Devices[index].Revoked {
+		return nil
+	}
+	return &registry.file.Devices[index]
 }
 
 func (registry *Registry) issueTokenLocked(deviceID string) (string, string, error) {
@@ -273,6 +300,19 @@ func hashesEqual(left, right string) bool {
 	return len(left) == len(right) && subtle.ConstantTimeCompare([]byte(left), []byte(right)) == 1
 }
 
+// RegisteredKey implements identity.KeyRegistry: it maps a canonical phone
+// public key to its device id, only while the device is not revoked.
+func (registry *Registry) RegisteredKey(publicKey string) (string, bool) {
+	registry.mu.Lock()
+	defer registry.mu.Unlock()
+	for _, device := range registry.file.Devices {
+		if device.DeviceKey == publicKey && !device.Revoked {
+			return device.ID, true
+		}
+	}
+	return "", false
+}
+
 func (registry *Registry) Authenticate(token string) (Device, bool) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 || parts[0] != "cdt1" || !validEncodedID(parts[1], "dev_", 16) || !validRawURLBytes(parts[2], 32) {
@@ -281,141 +321,111 @@ func (registry *Registry) Authenticate(token string) (Device, bool) {
 	presentedHash := tokenHash(token)
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		device := &registry.file.Devices[index]
-		if device.ID != parts[1] || device.Revoked {
-			continue
-		}
-		accepted := hashesEqual(device.TokenHash, presentedHash)
-		if !accepted && device.TokenPrevHash != nil && device.PrevValidUntil != nil && registry.now().Before(*device.PrevValidUntil) {
-			accepted = hashesEqual(*device.TokenPrevHash, presentedHash)
-		}
-		if accepted {
-			return device.Device, true
-		}
+	device := registry.activeLocked(parts[1])
+	if device == nil {
 		return Device{}, false
 	}
-	return Device{}, false
+	accepted := hashesEqual(device.TokenHash, presentedHash)
+	if !accepted && device.TokenPrevHash != nil && device.PrevValidUntil != nil && registry.now().Before(*device.PrevValidUntil) {
+		accepted = hashesEqual(*device.TokenPrevHash, presentedHash)
+	}
+	if !accepted {
+		return Device{}, false
+	}
+	return device.Device, true
 }
 
 func (registry *Registry) TokenRotationDue(deviceID string) bool {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	for _, device := range registry.file.Devices {
-		if device.ID == deviceID && !device.Revoked {
-			return !registry.now().Before(device.TokenIssuedAt.Add(TokenRotationInterval))
-		}
-	}
-	return false
+	device := registry.activeLocked(deviceID)
+	return device != nil && !registry.now().Before(device.TokenIssuedAt.Add(TokenRotationInterval))
 }
 
 func (registry *Registry) RotateToken(deviceID string) (string, error) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		device := &registry.file.Devices[index]
-		if device.ID != deviceID || device.Revoked {
-			continue
-		}
-		token, hash, err := registry.issueTokenLocked(deviceID)
-		if err != nil {
-			return "", err
-		}
-		now := registry.now().UTC()
-		validUntil := now.Add(PreviousTokenWindow)
-		previousHash := device.TokenHash
-		previous := cloneRegistry(registry.file)
-		device.TokenPrevHash = &previousHash
-		device.PrevValidUntil = &validUntil
-		device.TokenHash = hash
-		device.TokenIssuedAt = now
-		device.TokenRotatedAt = &now
-		if err := registry.persistLocked(); err != nil {
-			registry.file = previous
-			return "", err
-		}
-		return token, nil
+	device := registry.activeLocked(deviceID)
+	if device == nil {
+		return "", errors.New("active device not found")
 	}
-	return "", errors.New("active device not found")
+	token, hash, err := registry.issueTokenLocked(deviceID)
+	if err != nil {
+		return "", err
+	}
+	previous := cloneRegistry(registry.file)
+	now := registry.now().UTC()
+	validUntil := now.Add(PreviousTokenWindow)
+	previousHash := device.TokenHash
+	device.TokenPrevHash = &previousHash
+	device.PrevValidUntil = &validUntil
+	device.TokenHash = hash
+	device.TokenIssuedAt = now
+	device.TokenRotatedAt = &now
+	if err := registry.persistLocked(); err != nil {
+		registry.file = previous
+		return "", err
+	}
+	return token, nil
 }
 
 // RequestTokenRotation marks a device so the edge generates and returns the
-// replacement only inside its next successful encrypted upgrade.
+// replacement only inside its next successful authenticated upgrade.
 func (registry *Registry) RequestTokenRotation(deviceID string) error {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		if registry.file.Devices[index].ID == deviceID && !registry.file.Devices[index].Revoked {
-			previous := cloneRegistry(registry.file)
-			registry.file.Devices[index].TokenIssuedAt = time.Unix(0, 0).UTC()
-			if err := registry.persistLocked(); err != nil {
-				registry.file = previous
-				return err
-			}
-			return nil
-		}
-	}
-	return errors.New("active device not found")
+	return registry.update(deviceID, true, func(device *deviceRecord) {
+		device.TokenIssuedAt = time.Unix(0, 0).UTC()
+	})
 }
 
 func (registry *Registry) Rename(deviceID, name string) error {
 	if !validName(name, 48) {
 		return errors.New("invalid device name")
 	}
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		if registry.file.Devices[index].ID == deviceID {
-			previous := cloneRegistry(registry.file)
-			registry.file.Devices[index].Name = name
-			if err := registry.persistLocked(); err != nil {
-				registry.file = previous
-				return err
-			}
-			return nil
-		}
-	}
-	return errors.New("device not found")
+	return registry.update(deviceID, false, func(device *deviceRecord) {
+		device.Name = name
+	})
 }
 
-func (registry *Registry) MarkSeen(deviceID, remoteAddr string) error {
-	if _, _, err := net.SplitHostPort(remoteAddr); err != nil {
-		return errors.New("invalid device remote address")
+// MarkSeen records the last session of an active device: when, through which
+// transport and, for direct sessions, from which remote address.
+func (registry *Registry) MarkSeen(deviceID, transport, remoteAddr string) error {
+	if !validTransport(transport) || !validRemoteAddr(remoteAddr) {
+		return errors.New("invalid device transport or remote address")
 	}
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		if registry.file.Devices[index].ID == deviceID && !registry.file.Devices[index].Revoked {
-			previous := cloneRegistry(registry.file)
-			registry.file.Devices[index].LastSeenAt = registry.now().UTC()
-			registry.file.Devices[index].LastRemoteAddr = remoteAddr
-			if err := registry.persistLocked(); err != nil {
-				registry.file = previous
-				return err
-			}
-			return nil
-		}
-	}
-	return errors.New("active device not found")
+	return registry.update(deviceID, true, func(device *deviceRecord) {
+		device.LastSeenAt = registry.now().UTC()
+		device.LastTransport = transport
+		device.LastRemoteAddr = remoteAddr
+	})
 }
 
 func (registry *Registry) Revoke(deviceID string) error {
+	return registry.update(deviceID, false, func(device *deviceRecord) {
+		now := registry.now().UTC()
+		device.Revoked = true
+		device.RevokedAt = &now
+	})
+}
+
+// update applies change to one device and persists it, restoring the
+// previous state when the write fails.
+func (registry *Registry) update(deviceID string, activeOnly bool, change func(*deviceRecord)) error {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	for index := range registry.file.Devices {
-		if registry.file.Devices[index].ID == deviceID {
-			previous := cloneRegistry(registry.file)
-			now := registry.now().UTC()
-			registry.file.Devices[index].Revoked = true
-			registry.file.Devices[index].RevokedAt = &now
-			if err := registry.persistLocked(); err != nil {
-				registry.file = previous
-				return err
-			}
-			return nil
+	index := registry.indexLocked(deviceID)
+	if index < 0 || (activeOnly && registry.file.Devices[index].Revoked) {
+		if activeOnly {
+			return errors.New("active device not found")
 		}
+		return errors.New("device not found")
 	}
-	return errors.New("device not found")
+	previous := cloneRegistry(registry.file)
+	change(&registry.file.Devices[index])
+	if err := registry.persistLocked(); err != nil {
+		registry.file = previous
+		return err
+	}
+	return nil
 }
 
 func (registry *Registry) List() []Device {
@@ -431,12 +441,11 @@ func (registry *Registry) List() []Device {
 func (registry *Registry) Get(deviceID string) (Device, bool) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
-	for _, device := range registry.file.Devices {
-		if device.ID == deviceID {
-			return device.Device, true
-		}
+	index := registry.indexLocked(deviceID)
+	if index < 0 {
+		return Device{}, false
 	}
-	return Device{}, false
+	return registry.file.Devices[index].Device, true
 }
 
 func (registry *Registry) PruneRevoked() (int, error) {

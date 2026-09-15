@@ -29,7 +29,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/control"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"

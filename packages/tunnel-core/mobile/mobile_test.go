@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
 

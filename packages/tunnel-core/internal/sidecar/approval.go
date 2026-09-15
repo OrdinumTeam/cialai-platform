@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/edge"
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
 )
 
 type approvalQueue struct {

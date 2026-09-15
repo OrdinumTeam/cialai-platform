@@ -1,0 +1,42 @@
+{
+  "payload": "CIALAI2.eyJ2IjoyLCJkIjp7ImlkIjoiZF9FTHBvTElyUk5ST1hIb3RXaUJxcml3IiwibiI6Ik1hY0Jvb2sgUHJvIGRvIEVzY3JpdMOzcmlvIiwiayI6IjBFcXlNblFydEtzNkUyaTlSaFhrNXRBaVNyY2FBV3V2aFNDak1zbDNoemMifSwibyI6InVjbmtsNWQybTVteWFsN3preDRueWxqa2NzczR0aGpkeDJsN3F6YXNwNzR0cW5jdnV0eXBwM2FkLm9uaW9uOjQ0MyIsImMiOlt7InQiOiJsYW4iLCJhIjoiMTkyLjE2OC4xNS4yMzo0NzQwIn0seyJ0IjoibGFuIiwiYSI6IjEwLjAuMC4yMzo0NzQwIn0seyJ0IjoiaXB2NiIsImEiOiJbMjAwMTpkYjg6NGEyZjoxYzAwOjhkM2U6NWI3MTo5YTBjOjJlNDFdOjQ3NDAifSx7InQiOiJpcHY2IiwiYSI6IlsyMDAxOmRiODo0YTJmOjFjMDA6OjIzXTo0NzQwIn0seyJ0IjoibWFwcGVkIiwiYSI6IjIwMy4wLjExMy40NTo2MTc0MCJ9LHsidCI6InN0dW4iLCJhIjoiMTk4LjUxLjEwMC43Nzo0NzQwIn1dLCJzIjoiV2xwYVdscGFXbHBhV2xwYVdscGFXbHBhV2xwYVdscGFXbHBhV2xwYVdsbyIsImUiOjE3ODk0MzA0MDAsInBpZCI6InBfWm1sNGRIVnlaVEUifQ",
+  "jsonBytes": 556,
+  "json": {
+    "v": 2,
+    "d": {
+      "id": "d_ELpoLIrRNROXHotWiBqriw",
+      "n": "MacBook Pro do Escritório",
+      "k": "0EqyMnQrtKs6E2i9RhXk5tAiSrcaAWuvhSCjMsl3hzc"
+    },
+    "o": "ucnkl5d2m5myal7zkx4nyljkcss4thjdx2l7qzasp74tqncvutypp3ad.onion:443",
+    "c": [
+      {
+        "t": "lan",
+        "a": "192.168.15.23:4740"
+      },
+      {
+        "t": "lan",
+        "a": "10.0.0.23:4740"
+      },
+      {
+        "t": "ipv6",
+        "a": "[2001:db8:4a2f:1c00:8d3e:5b71:9a0c:2e41]:4740"
+      },
+      {
+        "t": "ipv6",
+        "a": "[2001:db8:4a2f:1c00::23]:4740"
+      },
+      {
+        "t": "mapped",
+        "a": "203.0.113.45:61740"
+      },
+      {
+        "t": "stun",
+        "a": "198.51.100.77:4740"
+      }
+    ],
+    "s": "WlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlpaWlo",
+    "e": 1789430400,
+    "pid": "p_Zml4dHVyZTE"
+  }
+}

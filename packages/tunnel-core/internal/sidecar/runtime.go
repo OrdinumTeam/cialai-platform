@@ -15,7 +15,7 @@ import (
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/headscale"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/node"
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
+	pairing "github.com/Cialai/cialai/packages/tunnel-core/internal/pairing/pairingv1"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/rpc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 )
