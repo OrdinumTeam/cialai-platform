@@ -24,7 +24,7 @@ import {
   type TunnelStatus
 } from 'cialai-tunnel';
 
-import { authenticateWithDevice, BiometricSession } from './src/auth/biometrics';
+import { authenticateWithDevice, BIOMETRIC_STORAGE_KEY, BiometricSession, normalizeBiometricPolicy, type BiometricPolicy } from './src/auth/biometrics';
 import { getAppVersion } from './src/config/env';
 import { validateControlUrl } from './src/config/url';
 import {
@@ -93,6 +93,7 @@ function AppContent() {
   const [lockSignal, setLockSignal] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [biometricPolicy, setBiometricPolicy] = useState<BiometricPolicy>('always');
   const [biometricSession] = useState(() => new BiometricSession(authenticateWithDevice));
   const [openGate] = useState(() => new RequestGate());
   const screenRef = useRef(screen);
@@ -271,6 +272,16 @@ function AppContent() {
       } catch {
         // Sem a escolha guardada, a aparência segue o sistema.
       }
+      try {
+        const storedPolicy = await SecureStore.getItemAsync(BIOMETRIC_STORAGE_KEY);
+        if (!cancelled && storedPolicy) {
+          const policy = normalizeBiometricPolicy(storedPolicy);
+          biometricSession.setPolicy(policy);
+          setBiometricPolicy(policy);
+        }
+      } catch {
+        // Sem a escolha guardada, a biometria é pedida sempre.
+      }
       let loaded;
       try {
         loaded = await loadDesktopStore();
@@ -296,7 +307,7 @@ function AppContent() {
     };
     void bootstrap();
     return () => { cancelled = true; };
-  }, [dispatch, openSelected, refreshStatus, t]);
+  }, [biometricSession, dispatch, openSelected, refreshStatus, t]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
@@ -464,6 +475,12 @@ function AppContent() {
     setThemeMode(next);
     SecureStore.setItemAsync(THEME_STORAGE_KEY, next).catch(() => undefined);
   }, []);
+  const changeBiometricPolicy = useCallback((policy: BiometricPolicy) => {
+    const next = normalizeBiometricPolicy(policy);
+    biometricSession.setPolicy(next);
+    setBiometricPolicy(next);
+    SecureStore.setItemAsync(BIOMETRIC_STORAGE_KEY, next).catch(() => undefined);
+  }, [biometricSession]);
   const systemScheme = useColorScheme();
   const scheme = resolveScheme(themeMode, systemScheme);
   const connectionLost = useCallback(() => { void reconnectShell(); }, [reconnectShell]);
@@ -480,7 +497,7 @@ function AppContent() {
       onCancel={store.desktops.length ? () => dispatch({ type: 'show-desktops' }) : undefined} />;
   } else if (screen.kind === 'settings') {
     content = <Settings appVersion={appVersion} coreVersion={nativeCoreVersion} desktopCount={store.desktops.length}
-      logLevel={logLevel} onBack={() => dispatch({ type: 'show-desktops' })}
+      biometricPolicy={biometricPolicy} logLevel={logLevel} onBack={() => dispatch({ type: 'show-desktops' })} onBiometricPolicy={changeBiometricPolicy}
       onLogLevel={level => { setLogLevel(level); setNativeLogLevel(level); }}
       onRefreshStatus={() => void refreshStatus()} onThemeMode={changeThemeMode} themeMode={themeMode} tunnelStatus={diagnosticsStatus} />;
   } else if (screen.kind === 'desktops') {

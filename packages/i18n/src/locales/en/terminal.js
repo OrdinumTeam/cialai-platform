@@ -368,7 +368,6 @@ export default Object.freeze({
   'terminal.phone.clipboardDenied': 'Could not read the clipboard. Allow paste when your iPhone asks.',
   'terminal.phone.terminals': 'Terminals',
   'terminal.phone.files': 'Files',
-  'terminal.phone.newShort': 'New',
   'terminal.phone.backSessions': 'Back to sessions',
   'terminal.phone.backTerminal': 'Back to terminal',
   'terminal.phone.backFiles': 'Back to files',

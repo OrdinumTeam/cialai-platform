@@ -34,29 +34,39 @@ pub(super) fn channel(conn: &Connection, args: &Value) -> Result<(u32, Channel),
     let id = reference.__channel__;
     let tx = conn.tx.clone();
     let closed = conn.closed.clone();
-    let stop = conn.stop.clone();
+    let lagged = conn.lagged.clone();
     let channel = Channel::new(move |body| {
-        let frame = match body {
-            InvokeResponseBody::Raw(bytes) => {
-                Message::Binary(protocol::binary_frame(id, &bytes).into())
-            }
-            InvokeResponseBody::Json(message) => Message::Text(
+        if closed.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(channel_unavailable());
+        }
+        // Saida maior que um quadro sai em pedacos; a pagina cola os bytes
+        // pelo deslocamento. Fila cheia: so este canal sai, com o aviso de
+        // atraso que o serve manda, e a conexao continua para o resto.
+        let frames: Vec<Message> = match body {
+            InvokeResponseBody::Raw(bytes) => bytes
+                .chunks(MAX_CHUNK)
+                .map(|chunk| Message::Binary(protocol::binary_frame(id, chunk).into()))
+                .collect(),
+            InvokeResponseBody::Json(message) => vec![Message::Text(
                 format!(r#"{{"type":"channel","channel":{id},"message":{message}}}"#).into(),
-            ),
+            )],
         };
-        if closed.load(std::sync::atomic::Ordering::SeqCst)
-            || frame.len() > protocol::MAX_FRAME
-            || tx.try_send(frame).is_err()
-        {
-            closed.store(true, std::sync::atomic::Ordering::SeqCst);
-            stop.notify_one();
-            return Err(tauri::Error::Io(std::io::Error::other(t(
-                "native.error.channelUnavailable",
-            ))));
+        for frame in frames {
+            if frame.len() > protocol::MAX_FRAME || tx.try_send(frame).is_err() {
+                lock(&lagged).push(id);
+                return Err(channel_unavailable());
+            }
         }
         Ok(())
     });
     Ok((id, channel))
+}
+
+/// Maior pedaco de saida por quadro binario, com folga para o cabecalho.
+const MAX_CHUNK: usize = protocol::MAX_FRAME - 64;
+
+fn channel_unavailable() -> tauri::Error {
+    tauri::Error::Io(std::io::Error::other(t("native.error.channelUnavailable")))
 }
 
 fn prepare_binding(

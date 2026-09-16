@@ -29,9 +29,14 @@ use crate::workspace::terminal::{SubscriberKey, TerminalManager};
 
 const MAX_CONNECTIONS: usize = 8;
 const MAX_CALLS: usize = 16;
-const OUTBOUND_DEPTH: usize = 64;
+// Quadros de saida em fila por conexao. O limite em bytes por assinante e o
+// HIGH_WATER de terminal.rs; este so cobre rajadas de quadros pequenos, e uma
+// fila cheia desliga apenas o canal atrasado, nunca a conexao inteira.
+const OUTBOUND_DEPTH: usize = 4096;
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
-const WRITE_TIMEOUT: Duration = Duration::from_secs(5);
+// Um replay de 256 KiB pela reserva pode levar mais que alguns segundos; a
+// vivacidade do socket fica por conta dos pings.
+const WRITE_TIMEOUT: Duration = Duration::from_secs(20);
 const PING_INTERVAL: Duration = Duration::from_secs(20);
 
 pub(crate) const DEFAULT_BRIDGE_PORT: u16 = 3720;
@@ -113,6 +118,9 @@ pub(super) struct Connection {
     /// Session to client channel. Also serializes attach with scoped ACKs.
     bindings: Mutex<HashMap<u32, u32>>,
     pending: Mutex<HashSet<u64>>,
+    /// Canais de saida que a fila cheia desligou. A proxima volta do socket
+    /// avisa a pagina, que religa a sessao pelo deslocamento que ja tem.
+    lagged: Arc<Mutex<Vec<u32>>>,
 }
 
 impl Connection {
@@ -497,6 +505,28 @@ async fn handshake(
     Ok((socket, device_id))
 }
 
+/// Avisa a pagina dos canais que a fila cheia desligou, para ela religar a
+/// sessao a partir do deslocamento que ja tem, sem derrubar a conexao. O
+/// aviso passa na frente dos quadros em fila; a pagina descarta o que ainda
+/// chegar pelo canal antigo.
+async fn notify_lagged(socket: &mut WebSocketStream<TcpStream>, conn: &Connection) -> bool {
+    let lagged: Vec<u32> = std::mem::take(&mut *lock(&conn.lagged));
+    for channel in lagged {
+        let notice = Message::Text(
+            format!(r#"{{"type":"channel","channel":{channel},"message":{{"type":"detached","reason":"lagged"}}}}"#)
+                .into(),
+        );
+        if !matches!(
+            timeout(WRITE_TIMEOUT, socket.send(notice)).await,
+            Ok(Ok(()))
+        ) {
+            return false;
+        }
+        eprintln!("Ponte: canal {channel} desligado por fila cheia; a pagina religa a sessao.");
+    }
+    true
+}
+
 async fn serve(
     mut socket: WebSocketStream<TcpStream>,
     device_id: Option<String>,
@@ -513,6 +543,7 @@ async fn serve(
         close_frame: Mutex::new(None),
         bindings: Mutex::new(HashMap::new()),
         pending: Mutex::new(HashSet::new()),
+        lagged: Arc::new(Mutex::new(Vec::new())),
     });
     if let Some(device_id) = conn.device_id.as_deref() {
         eprintln!("Ponte conectada ao dispositivo {device_id}");
@@ -530,29 +561,31 @@ async fn serve(
     });
     let mut ping = tokio::time::interval_at(Instant::now() + PING_INTERVAL, PING_INTERVAL);
     let mut last_pong = Instant::now();
-    loop {
+    let reason = loop {
         tokio::select! {
-            _ = conn.stop.notified() => break,
+            _ = conn.stop.notified() => break "encerrada pelo desktop",
             _ = ping.tick() => {
-                if last_pong.elapsed() >= PING_INTERVAL * 2 { break; }
-                if !matches!(timeout(WRITE_TIMEOUT, socket.send(Message::Ping(vec![1].into()))).await, Ok(Ok(()))) { break; }
+                if last_pong.elapsed() >= PING_INTERVAL * 2 { break "dois pings sem resposta"; }
+                if !matches!(timeout(WRITE_TIMEOUT, socket.send(Message::Ping(vec![1].into()))).await, Ok(Ok(()))) { break "falha ao enviar ping"; }
+                if !notify_lagged(&mut socket, &conn).await { break "falha ao avisar canal atrasado"; }
             }
             outgoing = rx.recv() => {
-                let Some(message) = outgoing else { break; };
-                if !matches!(timeout(WRITE_TIMEOUT, socket.send(message)).await, Ok(Ok(()))) { break; }
+                let Some(message) = outgoing else { break "fila de saida fechada"; };
+                if !matches!(timeout(WRITE_TIMEOUT, socket.send(message)).await, Ok(Ok(()))) { break "falha ao enviar quadro"; }
+                if !notify_lagged(&mut socket, &conn).await { break "falha ao avisar canal atrasado"; }
             }
             incoming = socket.next() => {
-                let Some(Ok(message)) = incoming else { break; };
+                let Some(Ok(message)) = incoming else { break "socket fechado pelo celular"; };
                 match message {
                     Message::Pong(_) => last_pong = Instant::now(),
                     Message::Ping(_) => {
-                        if !matches!(timeout(WRITE_TIMEOUT, socket.flush()).await, Ok(Ok(()))) { break; }
+                        if !matches!(timeout(WRITE_TIMEOUT, socket.flush()).await, Ok(Ok(()))) { break "falha ao responder ping"; }
                     }
                     Message::Text(text) => {
-                        let Ok(protocol::Incoming::Call { id, cmd, args }) = serde_json::from_str(&text) else { break; };
+                        let Ok(protocol::Incoming::Call { id, cmd, args }) = serde_json::from_str(&text) else { break "mensagem fora do protocolo"; };
                         if !args.is_object() { conn.result(id, Err(t("native.error.argumentsInvalid"))); continue; }
                         if !protocol::allowed_command(&cmd) { conn.result(id, Err(t("native.error.desktopOnly"))); continue; }
-                        if !lock(&conn.pending).insert(id) { break; }
+                        if !lock(&conn.pending).insert(id) { break "id de chamada repetido"; }
                         let permits = (calls.clone().try_acquire_owned(), context.global_calls.clone().try_acquire_owned());
                         let (Ok(local_permit), Ok(global_permit)) = permits else {
                             lock(&conn.pending).remove(&id);
@@ -576,15 +609,18 @@ async fn serve(
                             tokio::task::spawn_blocking(job);
                         }
                     }
-                    Message::Close(_) => break,
-                    _ => break,
+                    Message::Close(_) => break "fechado pelo celular",
+                    _ => break "quadro inesperado",
                 }
             }
         }
-    }
+    };
     conn.close();
     lock(&context.registry).remove(&id);
     context.terminals.detach_all(conn.key());
+    if let Some(device_id) = conn.device_id.as_deref() {
+        eprintln!("Ponte encerrada para o dispositivo {device_id}: {reason}");
+    }
     let frame = lock(&conn.close_frame).take();
     let _ = timeout(WRITE_TIMEOUT, socket.close(frame)).await;
 }
@@ -1504,12 +1540,79 @@ mod tests {
             close_frame: Mutex::new(None),
             bindings: Mutex::new(HashMap::new()),
             pending: Mutex::new(HashSet::new()),
+            lagged: Arc::new(Mutex::new(Vec::new())),
         };
         assert!(conn.send(Message::Text("one".into())).is_ok());
         assert!(conn.send(Message::Text("two".into())).is_ok());
         assert!(conn.send(Message::Text("three".into())).is_err());
         assert!(conn.closed.load(Ordering::SeqCst));
         assert!(conn.send(Message::Text("four".into())).is_err());
+    }
+
+    fn test_connection(tx: mpsc::Sender<Message>) -> Connection {
+        Connection {
+            id: 1,
+            device_id: None,
+            tx,
+            closed: Arc::new(AtomicBool::new(false)),
+            stop: Arc::new(Notify::new()),
+            close_frame: Mutex::new(None),
+            bindings: Mutex::new(HashMap::new()),
+            pending: Mutex::new(HashSet::new()),
+            lagged: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    /// A fila cheia de saida de terminal desliga so o canal atrasado: a
+    /// conexao segue viva para as outras sessoes e a pagina recebe o aviso
+    /// para religar. Antes a conexao inteira caia e o celular entrava num
+    /// ciclo de reconexao a cada replay.
+    #[tokio::test]
+    async fn full_output_queue_detaches_only_the_lagging_channel() {
+        let (tx, mut rx) = mpsc::channel(1);
+        let conn = test_connection(tx);
+        let (id, channel) =
+            super::dispatch::channel(&conn, &json!({"onOutput": {"__channel__": 7}})).unwrap();
+        assert_eq!(id, 7);
+        assert!(
+            channel
+                .send(tauri::ipc::InvokeResponseBody::Raw(vec![1, 2, 3]))
+                .is_ok()
+        );
+        assert!(
+            channel
+                .send(tauri::ipc::InvokeResponseBody::Raw(vec![4]))
+                .is_err()
+        );
+        assert!(!conn.closed.load(Ordering::SeqCst));
+        assert_eq!(*lock(&conn.lagged), vec![7]);
+        let Some(Message::Binary(frame)) = rx.recv().await else {
+            panic!("primeiro quadro")
+        };
+        assert_eq!(&frame[4..], &[1, 2, 3]);
+    }
+
+    #[tokio::test]
+    async fn output_larger_than_a_frame_is_split_into_frames() {
+        let (tx, mut rx) = mpsc::channel(8);
+        let conn = test_connection(tx);
+        let (_, channel) =
+            super::dispatch::channel(&conn, &json!({"onOutput": {"__channel__": 3}})).unwrap();
+        let bytes = vec![7u8; protocol::MAX_FRAME + 10];
+        assert!(
+            channel
+                .send(tauri::ipc::InvokeResponseBody::Raw(bytes))
+                .is_ok()
+        );
+        let mut total = 0;
+        while let Ok(Message::Binary(frame)) = rx.try_recv() {
+            assert!(frame.len() <= protocol::MAX_FRAME);
+            assert_eq!(&frame[..4], &3u32.to_be_bytes());
+            total += frame.len() - 4;
+        }
+        assert_eq!(total, protocol::MAX_FRAME + 10);
+        assert!(lock(&conn.lagged).is_empty());
+        assert!(!conn.closed.load(Ordering::SeqCst));
     }
 
     #[tokio::test]

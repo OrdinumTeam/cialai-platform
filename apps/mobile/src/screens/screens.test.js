@@ -274,6 +274,23 @@ test('Settings offers the three appearance modes and reports the choice', async 
   await act(async () => tree.unmount());
 });
 
+test('Settings offers the biometric policy and reports the choice', async () => {
+  const onBiometricPolicy = jest.fn();
+  let tree;
+  await act(async () => {
+    tree = create(<Settings desktopCount={0} tunnelStatus={null} appVersion="1.0.0" coreVersion="1.0.0" logLevel="info" biometricPolicy="always"
+      onBack={() => {}} onLogLevel={() => {}} onBiometricPolicy={onBiometricPolicy} onRefreshStatus={() => {}} />);
+  });
+  expect(text(tree)).toMatch(/Face ID ou biometria/);
+  expect(text(tree)).toMatch(/Sempre Só ao abrir Desligada/);
+  expect(text(tree)).toMatch(/em cada ação no terminal/);
+  const off = tree.root.findAll(node => node.props.accessibilityLabel === 'Desligada' && typeof node.props.onPress === 'function')[0];
+  await act(async () => { off.props.onPress(); });
+  expect(onBiometricPolicy).toHaveBeenCalledWith('off');
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  await act(async () => tree.unmount());
+});
+
 test('Settings keeps connection details inside the advanced diagnostics', async () => {
   const onRefreshStatus = jest.fn();
   const tunnelStatus = {

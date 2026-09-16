@@ -306,6 +306,20 @@ test('the appearance chosen in settings reaches the page and is remembered', asy
   await act(async () => tree.unmount());
 });
 
+test('the biometric policy chosen in settings is remembered', async () => {
+  const tree = await render();
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Mostrar computadores')[0].props.onPress(); });
+  await flush();
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Abrir ajustes')[0].props.onPress(); });
+  await flush();
+  const off = tree.root.findAll(node => node.props.accessibilityLabel === 'Desligada' && typeof node.props.onPress === 'function')[0];
+  await act(async () => { off.props.onPress(); });
+  await flush();
+  expect(mockSecure.get('cialai.biometrics')).toBe('off');
+  expect(text(tree)).toMatch(/Nunca pede confirmação/);
+  await act(async () => tree.unmount());
+});
+
 test('the Android native reopening is awaited and then opens the new proxy', async () => {
   const tree = await render();
   await emit('state', { state: 'reconnecting', desktopId });

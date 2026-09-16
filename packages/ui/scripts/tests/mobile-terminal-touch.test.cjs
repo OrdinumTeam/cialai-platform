@@ -5,11 +5,12 @@ const load = () => import('../../src/terminals/touch-scroll.js');
 
 async function harness({ rowHeight = 16, scrollback = true } = {}) {
   const { createTouchScroll, ...constants } = await load();
-  const calls = { scrolled: [], keys: [], frames: [] }; let nextFrame = 1;
+  const calls = { scrolled: [], keys: [], wheel: [], frames: [] }; let nextFrame = 1;
   const scroll = createTouchScroll({
     rowHeight: () => rowHeight,
     scrollLines: (rows) => calls.scrolled.push(rows),
     sendKeys: (data) => calls.keys.push(data),
+    sendWheel: (direction, count) => calls.wheel.push([direction, count]),
     hasScrollback: () => scrollback,
     requestFrame: (callback) => { const id = nextFrame++; calls.frames.push({ id, callback }); return id; },
     cancelFrame: (id) => { calls.frames = calls.frames.filter((frame) => frame.id !== id); },
@@ -43,6 +44,9 @@ test('segurar o dedo parado impede a inercia', async () => {
 test('um novo toque interrompe a inercia', async () => {
   const { scroll, calls } = await harness({ rowHeight: 16 }); scroll.start(500, 0); for (let i = 1; i <= 5; i += 1) scroll.move(500 - i * 40, i * 16); assert.equal(scroll.end(80), true); scroll.start(300, 200); assert.equal(scroll.flinging, false); assert.equal(calls.frames.length, 0);
 });
-test('no buffer alternativo o arrasto vira setas com teto', async () => {
-  const { scroll, calls, ARROW_DOWN, ARROW_UP, MAX_ARROWS_PER_MOVE } = await harness({ rowHeight: 16, scrollback: false }); scroll.start(400, 0); scroll.move(240, 16); assert.deepEqual(calls.scrolled, []); assert.deepEqual(calls.keys, [ARROW_DOWN.repeat(MAX_ARROWS_PER_MOVE)]); scroll.move(256, 32); assert.equal(calls.keys.at(-1), ARROW_UP); assert.equal(scroll.end(40), false);
+test('no buffer alternativo o arrasto vira roda do mouse com teto e nunca setas', async () => {
+  const { scroll, calls, MAX_WHEEL_PER_MOVE } = await harness({ rowHeight: 16, scrollback: false }); scroll.start(400, 0); scroll.move(240, 16); assert.deepEqual(calls.scrolled, []); assert.deepEqual(calls.keys, []); assert.deepEqual(calls.wheel, [[1, MAX_WHEEL_PER_MOVE]]); scroll.move(256, 32); assert.deepEqual(calls.wheel.at(-1), [-1, 1]); assert.equal(scroll.end(40), false); assert.deepEqual(calls.keys, []);
+});
+test('a inercia no buffer alternativo nao manda roda nem setas', async () => {
+  const { scroll, calls } = await harness({ rowHeight: 16, scrollback: false }); scroll.start(500, 0); for (let i = 1; i <= 5; i += 1) scroll.move(500 - i * 40, i * 16); assert.equal(scroll.end(80), false); assert.equal(scroll.flinging, false); assert.deepEqual(calls.keys, []);
 });

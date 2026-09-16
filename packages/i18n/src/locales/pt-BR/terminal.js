@@ -368,7 +368,6 @@ export default Object.freeze({
   'terminal.phone.clipboardDenied': 'Não foi possível ler a área de transferência. Permita colar quando o iPhone perguntar.',
   'terminal.phone.terminals': 'Terminais',
   'terminal.phone.files': 'Arquivos',
-  'terminal.phone.newShort': 'Nova',
   'terminal.phone.backSessions': 'Voltar para sessões',
   'terminal.phone.backTerminal': 'Voltar para terminal',
   'terminal.phone.backFiles': 'Voltar para arquivos',

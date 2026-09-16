@@ -30,7 +30,7 @@ A ponte é o servidor WebSocket em Rust, em `macos/src-tauri/src/bridge/` no Con
 
 1. `tokio-tungstenite` sobre o tokio que o Tauri já traz, sem framework HTTP; o único HTTP é o upgrade, e `accept_hdr_async` dá acesso a caminho e cabeçalhos.
 2. O assinante remoto é um `Channel` do Tauri criado pela ponte em nome da conexão, então `pty_spawn` e `pty_attach` não mudam de assinatura e a CSP do webview não muda.
-3. O desktop manda, o celular acompanha ou cai. O assinante do webview acima de 512 KiB pendentes para a bomba e o shell bloqueia; o assinante remoto acima da marca espera no máximo 3 s, recebe `detached` com motivo `lagged` e é removido.
+3. O desktop manda, o celular acompanha ou cai. O assinante do webview acima de 512 KiB pendentes para a bomba e o shell bloqueia; o assinante remoto acima da marca espera no máximo 3 s, recebe `detached` com motivo `lagged` e é removido. A fila de quadros de saída da conexão, de 4096 quadros, desliga do mesmo jeito só o canal que a encheu, com o mesmo `detached`, e a conexão segue para as outras sessões; saída maior que um quadro sai em pedaços que a página cola pelo deslocamento. Até 15/09/2026 a fila tinha 64 quadros e, cheia, derrubava a conexão inteira, o que acontecia a cada replay dos históricos e deixava o celular num ciclo de reconexão.
 4. Cada sessão guarda até 256 KiB com contador absoluto; `attach` responde `replay` com offset e comprimento e um quadro binário, e só depois a saída ao vivo. O webview também recebe replay ao recarregar.
 5. Comandos ordenados por sessão passam por uma fila de uma thread só, preservando a ordem do fio: `pty_spawn`, `pty_attach`, `pty_ack`, `pty_write`, `pty_kill`, `pty_view_claim`, `pty_view_renew`, `pty_view_release`. Os demais rodam em `spawn_blocking`.
 
@@ -42,7 +42,7 @@ A ponte é o servidor WebSocket em Rust, em `macos/src-tauri/src/bridge/` no Con
 4. `Authorization: Bearer` continua aceito para clientes que não são navegador, como `websocat` em desenvolvimento.
 5. Depois do upgrade, o primeiro quadro de texto em até 5 s deve ser `hello`.
 6. Fechamentos: 4400 para `hello` inválido ou `call` antes do `hello`; 4401 para credencial inválida ou dispositivo revogado; 4426 para versão incompatível.
-7. Limites: quadro máximo de 1 MiB, até 8 conexões, 16 chamadas concorrentes por conexão, 64 quadros de saída pendentes, ping a cada 20 s e fechamento após dois pings sem resposta.
+7. Limites: quadro máximo de 1 MiB, até 8 conexões, 16 chamadas concorrentes por conexão, 4096 quadros de saída pendentes, ping a cada 20 s, escrita com prazo de 20 s e fechamento após dois pings sem resposta. A ponte registra no log o motivo de cada fechamento de conexão de celular.
 
 ## Esquema de mensagens
 
@@ -109,7 +109,7 @@ Não encaminhados: `fs://change`, `browser://install`, `drag-out://end`.
 | Assinante | Acima de `HIGH_WATER` | Ao religar |
 | --- | --- | --- |
 | Webview do desktop | A bomba para e o shell bloqueia | Replay do histórico na recarga |
-| Remoto | A bomba espera até 3 s, depois o assinante recebe `detached` e é removido; o desktop segue | Replay com offset e continuação do ponto certo |
+| Remoto | A bomba espera até 3 s, depois o assinante recebe `detached` e é removido; o desktop segue. Fila de quadros da conexão cheia: só o canal que a encheu recebe `detached` e a conexão continua | Replay com offset e continuação do ponto certo |
 
 `pty_ack` continua sendo a confirmação de bytes consumidos, por assinante; no transporte remoto `channel` identifica o canal atual junto de `id` e `bytes`, e confirmações de canal substituído são ignoradas. `detach_all` remove a conexão de todas as sessões quando o socket fecha.
 
@@ -119,7 +119,7 @@ A ponte guarda `device_id` por conexão. `devices.revoke` no sidecar chama `edge
 
 ## Transporte na página
 
-`remote.js` tem a mesma cara de `native.js`: `invoke(cmd, args)`, `listen(nome, handler)` e `createChannel(onmessage)`. `native.js` delega ao remoto quando não há Tauri e `remote.isConfigured()` é verdadeiro, depois de validar o comando em `sensitive.js`, e exporta `hasBridge()`. A reconexão espera de 0,5 a 8 s dobrando, e também tenta em `visibilitychange` e `pageshow`, porque o iOS suspende o socket em segundo plano e o mantém em `OPEN` mesmo morto. Quando o socket cai, todo canal aberto recebe `detached` com motivo `socket`, e o runtime religa a sessão. Desconectado, `invoke` rejeita com `Ponte com o computador desconectada.`. Chamadas nunca são reenviadas depois de uma queda. Prazo de 6 s para o handshake cobrindo TCP e `welcome`. A casca do celular configura a ponte em `mobile/main.jsx` com `ws://<host da página>/pty`, que no Cialai é o proxy em loopback; em desenvolvimento `?bridge=ws://127.0.0.1:3720/pty`.
+`remote.js` tem a mesma cara de `native.js`: `invoke(cmd, args)`, `listen(nome, handler)` e `createChannel(onmessage)`. `native.js` delega ao remoto quando não há Tauri e `remote.isConfigured()` é verdadeiro, depois de validar o comando em `sensitive.js`, e exporta `hasBridge()`. A reconexão espera de 0,5 a 8 s dobrando, e também tenta em `visibilitychange` e `pageshow`, porque o iOS suspende o socket em segundo plano e o mantém em `OPEN` mesmo morto; uma ocultação de menos de 15 s com o socket aberto, como o Face ID ou a central de notificações, mantém o socket em vez de religar. Quando o socket cai, todo canal aberto recebe `detached` com motivo `socket`, e o runtime religa a sessão. Desconectado, `invoke` rejeita com `Ponte com o computador desconectada.`. Chamadas nunca são reenviadas depois de uma queda. Prazo de 6 s para o handshake cobrindo TCP e `welcome`. A casca do celular configura a ponte em `mobile/main.jsx` com `ws://<host da página>/pty`, que no Cialai é o proxy em loopback; em desenvolvimento `?bridge=ws://127.0.0.1:3720/pty`.
 
 ## Compatibilidade e versionamento
 

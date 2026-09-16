@@ -1,4 +1,4 @@
-import { BiometricSession, SESSION_BACKGROUND_TTL_MS } from './biometrics';
+import { BiometricSession, normalizeBiometricPolicy, SESSION_BACKGROUND_TTL_MS } from './biometrics';
 
 describe('biometric session', () => {
   test('starts locked and caches only a successful session authorization', async () => {
@@ -53,6 +53,38 @@ describe('biometric session', () => {
     session.handleAppState('background');
     now += SESSION_BACKGROUND_TTL_MS;
     expect(session.handleAppState('active')).toBe(true);
+  });
+
+  test('policy off never prompts and counts as unlocked', async () => {
+    const authenticate = jest.fn(async () => true);
+    const session = new BiometricSession(authenticate);
+    session.setPolicy('off');
+    await expect(session.authorize('action', 'Primeira tecla')).resolves.toBe(true);
+    await expect(session.authorize('session', 'Abrir terminal')).resolves.toBe(true);
+    expect(authenticate).not.toHaveBeenCalled();
+    expect(session.isUnlocked()).toBe(true);
+  });
+
+  test('policy session prompts once for actions until the session locks', async () => {
+    const authenticate = jest.fn(async () => true);
+    const session = new BiometricSession(authenticate);
+    session.setPolicy('session');
+    await session.authorize('action', 'Primeira tecla');
+    await session.authorize('action', 'Encerrar terminal');
+    expect(authenticate).toHaveBeenCalledTimes(1);
+    session.lock();
+    await session.authorize('action', 'Primeira tecla');
+    expect(authenticate).toHaveBeenCalledTimes(2);
+    session.setPolicy('always');
+    await session.authorize('action', 'Primeira tecla');
+    expect(authenticate).toHaveBeenCalledTimes(3);
+  });
+
+  test('normalizeBiometricPolicy falls back to always', () => {
+    expect(normalizeBiometricPolicy('off')).toBe('off');
+    expect(normalizeBiometricPolicy('session')).toBe('session');
+    expect(normalizeBiometricPolicy('anything')).toBe('always');
+    expect(new BiometricSession(async () => true).getPolicy()).toBe('always');
   });
 
   test('ignores a successful prompt completed after the session was invalidated', async () => {

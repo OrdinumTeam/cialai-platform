@@ -368,7 +368,6 @@ export default Object.freeze({
   'terminal.phone.clipboardDenied': 'No se pudo leer el portapapeles. Permite pegar cuando el iPhone lo solicite.',
   'terminal.phone.terminals': 'Terminales',
   'terminal.phone.files': 'Archivos',
-  'terminal.phone.newShort': 'Nueva',
   'terminal.phone.backSessions': 'Volver a las sesiones',
   'terminal.phone.backTerminal': 'Volver al terminal',
   'terminal.phone.backFiles': 'Volver a los archivos',

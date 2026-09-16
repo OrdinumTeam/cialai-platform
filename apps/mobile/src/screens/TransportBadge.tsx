@@ -43,7 +43,7 @@ export function TransportBadge({ transport }: Props) {
   const { t } = useI18n();
   return (
     <View accessibilityLabel={t(TRANSPORT_DESCRIPTION_KEYS[transport])} accessible
-      style={[styles.badge, { backgroundColor: palette.background, borderColor: palette.separator }]}>
+      style={[styles.badge, { backgroundColor: palette.chip }]}>
       <View style={[styles.dot, { backgroundColor: color(transport) }]} />
       <Text style={[styles.text, { color: palette.secondaryLabel }]}>{t(TRANSPORT_KEYS[transport])}</Text>
     </View>
@@ -51,7 +51,7 @@ export function TransportBadge({ transport }: Props) {
 }
 
 const styles = StyleSheet.create({
-  badge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  badge: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   dot: { width: 7, height: 7, borderRadius: 3.5 },
   text: { fontSize: 12, lineHeight: 16, fontWeight: '600' }
 });

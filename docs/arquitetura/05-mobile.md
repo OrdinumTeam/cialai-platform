@@ -6,8 +6,8 @@ Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CON
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
-| Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente |
-| Página do celular | Implementado | Composição somente com Terminais e cabeçalho compacto passou nos checks compartilhados |
+| Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente; desde 16/09/2026 os ajustes escolhem se o Face ID ou a biometria é pedido sempre, só ao abrir o computador ou nunca |
+| Página do celular | Implementado | Composição somente com Terminais e cabeçalho compacto passou nos checks compartilhados; desde 15/09/2026 a apresentação segue o telefone do Control, com evidência em `docs/evidence/celular-control` |
 | Idiomas da interface | Implementado | Português do Brasil, inglês e espanhol neutro seguem o aparelho e a escolha persistida |
 | Metadados nativos por idioma | Preparado | `CFBundleLocalizations`, textos de câmera, rede local e Face ID por idioma e `localeConfig` do Android saem de `@cialai/i18n` e aparecem na introspecção do Expo; build nativo e aparelho pendentes |
 | Módulo Swift e XCFramework | Preparado | Wrapper e contrato existem; build Swift, link e execução em iPhone estão pendentes |
@@ -138,7 +138,7 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 
 ## Página do celular
 
-Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e um cabeçalho compacto com o nome do desktop e o estado da ponte; `TabBar` e `MoreSheet` saem ou ficam vazios; `links.js` e `keyboard-viewport.js` permanecem; `main.jsx` deriva a ponte de `location` como hoje. `PhoneWorkbench` e `PhoneFiles` preservam lista, terminal, arquivos e prévia, uma tela por vez. A fileira mantém Esc, Tab, Shift Tab, Ctrl C, setas, Enter, Ctrl D, Ctrl L e Colar. Toque vira rolagem por `touch-scroll.js`, `viewport.js` concede a largura e sessões encerradas conservam o histórico local. Todos os rótulos compartilhados usam o idioma enviado pela casca ou a escolha persistida na página.
+Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e um cabeçalho compacto com o nome do desktop e o estado da ponte; `TabBar` e `MoreSheet` saem ou ficam vazios; `links.js` e `keyboard-viewport.js` permanecem; `main.jsx` deriva a ponte de `location` como hoje. `PhoneWorkbench` e `PhoneFiles` preservam lista, terminal, arquivos e prévia, uma tela por vez. A fileira mantém Esc, Tab, Shift Tab, Ctrl C, setas, Enter, Ctrl D, Ctrl L e Colar, numa linha só que rola de lado. A apresentação é a do telefone do Ordinum Control, de onde a página veio: barra de título com ícones planos, título de 20 px, cards com o tom da sessão e nome de 17 px, terminal a 13 px e teclas de 44 px; os tamanhos ficam declarados no CSS, sem depender do ajuste automático de texto do WebKit, para o Android mostrar o mesmo resultado. A casca nativa acompanha com a barra de 44 px do Control, o transporte como chip e Computadores em texto no acento, sobre os neutros do iOS. Toque vira rolagem por `touch-scroll.js`, `viewport.js` concede a largura e sessões encerradas conservam o histórico local. Todos os rótulos compartilhados usam o idioma enviado pela casca ou a escolha persistida na página.
 
 ## Testes
 

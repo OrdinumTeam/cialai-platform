@@ -329,13 +329,28 @@ function installWheelScroll(session) {
 }
 
 // O xterm 6 nao trata toque: sem isto o celular nao sobe para ler o que
-// passou. O arrasto vira scrollLines no buffer normal e setas no alternativo;
-// a conta fica em touch-scroll.js. O preventDefault segura a rolagem do
-// contenedor e o efeito elastico do WebKit enquanto o dedo esta no terminal.
+// passou. O arrasto vira scrollLines no buffer normal; no alternativo vira
+// roda do mouse quando o programa acompanha o mouse e nada nos outros casos,
+// nunca setas, que num agente como o Claude Code recuperam o historico de
+// comandos. A conta fica em touch-scroll.js. O preventDefault segura a
+// rolagem do contenedor e o efeito elastico do WebKit enquanto o dedo esta
+// no terminal.
 function installTouchScroll(session) {
   const { term } = session;
   const element = term.element;
   if (!element) return;
+  // Celula sob o ultimo toque, para o relato de roda apontar onde o dedo esta.
+  let cell = { col: 1, row: 1 };
+  const locate = (touch) => {
+    const rect = element.querySelector('.xterm-screen')?.getBoundingClientRect();
+    if (!rect || !rect.width || !rect.height) return;
+    const cols = Math.max(1, term.cols);
+    const rows = Math.max(1, term.rows);
+    cell = {
+      col: Math.min(cols, Math.max(1, Math.floor((touch.clientX - rect.left) / (rect.width / cols)) + 1)),
+      row: Math.min(rows, Math.max(1, Math.floor((touch.clientY - rect.top) / (rect.height / rows)) + 1)),
+    };
+  };
   const scroll = createTouchScroll({
     rowHeight: () => {
       const screen = element.querySelector('.xterm-screen');
@@ -343,7 +358,12 @@ function installTouchScroll(session) {
       return height > 0 ? height : term.options.fontSize * (term.options.lineHeight || 1);
     },
     scrollLines: (rows) => term.scrollLines(rows),
-    sendKeys: (data) => { if (session.status === 'running' && session.ptyId != null) writeTerminal(session, data); },
+    sendWheel: (direction, count) => {
+      if (session.status !== 'running' || session.ptyId == null) return;
+      if (term.modes.mouseTrackingMode === 'none') return;
+      const button = direction > 0 ? 65 : 64;
+      writeTerminal(session, `\u001b[<${button};${cell.col};${cell.row}M`.repeat(count));
+    },
     hasScrollback: () => term.buffer.active.type === 'normal',
     requestFrame: (callback) => window.requestAnimationFrame(callback),
     cancelFrame: (handle) => window.cancelAnimationFrame(handle),
@@ -351,12 +371,13 @@ function installTouchScroll(session) {
   const single = (event) => (event.touches.length === 1 ? event.touches[0] : null);
   element.addEventListener('touchstart', (event) => {
     const touch = single(event);
-    if (touch) scroll.start(touch.clientY, performance.now());
+    if (touch) { locate(touch); scroll.start(touch.clientY, performance.now()); }
     else scroll.cancel();
   }, { passive: true });
   element.addEventListener('touchmove', (event) => {
     const touch = single(event);
     if (!touch) return;
+    locate(touch);
     scroll.move(touch.clientY, performance.now());
     if (event.cancelable) event.preventDefault();
   }, { passive: false });
@@ -371,7 +392,7 @@ function createTerminal() {
     cols: DEFAULT_COLS,
     rows: DEFAULT_ROWS,
     fontFamily: terminalFont(),
-    fontSize: isPhone() ? 12 : layout.fontSize,
+    fontSize: isPhone() ? 13 : layout.fontSize,
     lineHeight: 1.15,
     fontWeight: '400',
     fontWeightBold: '600',

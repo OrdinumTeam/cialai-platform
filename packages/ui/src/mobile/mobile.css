@@ -20,8 +20,8 @@
 [data-form-factor="phone"] .ios-header { flex: none; padding: calc(env(safe-area-inset-top) + 12px) max(16px, env(safe-area-inset-right)) 10px max(16px, env(safe-area-inset-left)); background: var(--mac-toolbar-bg); border-bottom: 1px solid var(--mac-separator); }
 [data-form-factor="phone"] .ios-header__heading { display: flex; align-items: center; gap: 4px; }
 [data-form-factor="phone"] .ios-header--terminal { min-height: 45px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: calc(env(safe-area-inset-top) + 8px) max(14px, env(safe-area-inset-right)) 8px max(14px, env(safe-area-inset-left)); }
-[data-form-factor="phone"] .ios-header--terminal h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9375rem; }
-[data-form-factor="phone"] .ios-header .ios-connection { flex: none; display: flex; align-items: center; gap: 6px; margin: 0; font-size: .75rem; color: var(--mac-label-2); }
+[data-form-factor="phone"] .ios-header--terminal h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; }
+[data-form-factor="phone"] .ios-header .ios-connection { flex: none; display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--mac-label-2); }
 [data-form-factor="phone"] .ios-header .ios-connection span { width: 7px; height: 7px; border-radius: 50%; background: var(--mac-label-3); transition: background var(--mac-normal) var(--mac-ease); }
 [data-form-factor="phone"] .ios-header .ios-connection--connected span { background: var(--mac-ok); }
 [data-form-factor="phone"] .ios-header .ios-connection--connecting span { background: var(--mac-warn); animation: macPulse 1.2s ease-in-out infinite; }
@@ -50,19 +50,20 @@
 [data-form-factor="phone"] .ios-tabbar { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(5, 1fr); padding: 6px max(4px, env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left)); background: var(--mac-bg); border-top: 1px solid var(--mac-separator); z-index: 100; }
 [data-form-factor="phone"] .ios-tabbar button { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; min-height: 49px; border: 0; background: transparent; color: var(--mac-label-2); font: inherit; font-size: .625rem; }
 [data-form-factor="phone"] [aria-current="page"] { color: var(--mac-accent) !important; }
-/* Alvos de toque: 44 px e um controle com fundo, para cada acao parecer um
-   botao. O desktop desenha .mac-tool com 28 px e sem fundo. */
+/* Alvos de toque de 44 px. As ferramentas da barra sao planas, como no
+   telefone do Ordinum Control: icone em cinza, fundo so enquanto o dedo
+   esta em cima. Os botoes de acao continuam com fundo e rotulo. */
 [data-form-factor="phone"] button, [data-form-factor="phone"] .btn { min-height: 44px; }
-[data-form-factor="phone"] .btn { height: auto; padding: 0 18px; border-radius: 12px; font-size: 15px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .btn { height: auto; padding: 0 18px; border-radius: 12px; font-size: 16px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
 [data-form-factor="phone"] .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
-[data-form-factor="phone"] .mac-tool { height: 40px; min-width: 40px; padding: 0 10px; border-radius: 12px; background: var(--mac-surface-2); color: var(--mac-accent-text); font-size: 14px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
-[data-form-factor="phone"] .mac-tool svg { width: 20px; height: 20px; stroke-width: 1.9; }
-[data-form-factor="phone"] .mac-tool--label { padding: 0 12px 0 10px; }
-[data-form-factor="phone"] .mac-tool--label span { display: inline; font-size: 14px; }
-[data-form-factor="phone"] .mac-tool.is-danger { color: var(--mac-bad); background: var(--mac-bad-bg); }
-[data-form-factor="phone"] .mac-tool:disabled, [data-form-factor="phone"] .btn:disabled { opacity: .45; }
+[data-form-factor="phone"] .mac-tool { height: 44px; min-width: 44px; padding: 0 8px; border-radius: 12px; background: transparent; color: var(--mac-label-2); font-size: 15px; font-weight: 500; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), color var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .mac-tool svg { stroke-width: 1.8; }
+[data-form-factor="phone"] .mac-tool--label { padding: 0 12px 0 10px; color: var(--mac-accent-text); }
+[data-form-factor="phone"] .mac-tool--label span { display: inline; font-size: 15px; }
+[data-form-factor="phone"] .mac-tool.is-danger { color: var(--mac-bad); }
+[data-form-factor="phone"] .mac-tool:disabled, [data-form-factor="phone"] .btn:disabled { opacity: .4; }
 [data-form-factor="phone"] :is(.btn, .mac-tool):not(:disabled):active { transform: scale(.96); }
-[data-form-factor="phone"] .mac-tool:not(:disabled):active { background: var(--mac-surface-3); }
+[data-form-factor="phone"] .mac-tool:not(:disabled):active { background: var(--mac-press); color: var(--mac-label); }
 [data-form-factor="phone"] input, [data-form-factor="phone"] select, [data-form-factor="phone"] textarea { font-size: 16px; }
 [data-form-factor="phone"] .page { padding: 20px max(16px, env(safe-area-inset-right)) 20px max(16px, env(safe-area-inset-left)); }
 [data-form-factor="phone"] .page-grid--2, [data-form-factor="phone"] .page-grid--hero, [data-form-factor="phone"] .page-grid--charts { grid-template-columns: minmax(0, 1fr); }

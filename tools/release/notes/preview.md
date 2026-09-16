@@ -8,6 +8,14 @@ This is an early preview of Cialai for macOS, Windows, Linux and Android. It is 
 
 Your phone now reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
 
+### New in 0.2.2
+
+* The phone screens follow the presentation of the Ordinum Control iPhone app: flat toolbar icons, a single scrolling row of keys starting with Esc and Enter, session cards with the session colour and a 13 px terminal.
+* The phone connection no longer restarts every few seconds while sessions produce output. The desktop bridge dropped the whole connection when its output queue filled, which happened on every replay of the session histories; a full queue now detaches only the lagging terminal, which the page reattaches on its own.
+* A short hide of the phone page, such as a Face ID prompt, keeps the connection instead of reconnecting.
+* Touch scrolling inside a program that uses the alternate screen no longer sends arrow keys, which recalled the prompt history in Claude Code.
+* Face ID or biometrics can be set in the mobile settings to always, only when opening the computer, or off.
+
 ### Fixed in 0.2.1
 
 * The Linux AppImage no longer aborts on recent distributions with an EGL display error, and terminals opened from it no longer inherit the variables of the AppImage, which broke Python, Git over HTTPS and curl.

@@ -220,11 +220,21 @@ export function resume() {
   connect();
 }
 
+// Face ID, a central de notificacoes e o seletor de apps escondem a pagina
+// por instantes com o socket vivo. So uma ausencia longa, em que o iOS pode
+// ter suspendido o processo e deixado o socket morto em OPEN, justifica
+// religar; religar a toda hora refazia o replay de cada terminal.
+export const RESUME_AFTER_HIDDEN_MS = 15000;
+
 if (typeof window !== 'undefined') {
-  let hidden = false;
+  let hiddenAt = 0;
   window.addEventListener('pageshow', (event) => { if (event.persisted) resume(); else connect(); });
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') hidden = true;
-    else if (hidden) { hidden = false; resume(); } else connect();
+    if (document.visibilityState === 'hidden') { hiddenAt = hiddenAt || Date.now(); return; }
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (!away) { connect(); return; }
+    if (away < RESUME_AFTER_HIDDEN_MS && socket?.readyState === 1 && snapshot.status === 'connected') return;
+    resume();
   });
 }

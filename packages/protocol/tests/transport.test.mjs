@@ -269,6 +269,20 @@ test('a revoked device stays removed when the page returns to the foreground', a
   remote.disconnect();
 });
 
+test('a short hide, like a Face ID prompt, keeps the live socket instead of reconnecting', async () => {
+  const socket = connection();
+  const count = SocketFixture.instances.length;
+  document.visibilityState = 'hidden';
+  listeners.get('visibilitychange')();
+  document.visibilityState = 'visible';
+  listeners.get('visibilitychange')();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(SocketFixture.instances.length, count);
+  assert.equal(SocketFixture.instances.at(-1), socket);
+  assert.equal(remote.state().status, 'connected');
+  remote.disconnect();
+});
+
 test('native adapter authorizes remote calls and bypasses authorization inside Tauri', async () => {
   const calls = [];
   let native = false;

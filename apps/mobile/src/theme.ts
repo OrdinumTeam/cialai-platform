@@ -3,6 +3,10 @@ import { useColorScheme } from 'react-native';
 
 // Aparência do app: segue o sistema por padrão, com escolha clara ou escura
 // nos ajustes. A mesma escolha vai para a página do computador pela casca.
+//
+// Os neutros são os do iOS e os da página que o computador serve, para a
+// barra nativa e a página formarem uma tela só, como no telefone do Ordinum
+// Control. O acento continua sendo o rosa do Cialai.
 export type ThemeMode = 'system' | 'light' | 'dark';
 export type ColorScheme = 'light' | 'dark';
 
@@ -20,38 +24,40 @@ export function resolveScheme(mode: ThemeMode, system: string | null | undefined
 }
 
 const light = {
-  background: '#F7F5F6',
+  background: '#F2F2F7',
   surface: '#FFFFFF',
-  label: '#171114',
-  secondaryLabel: '#6B6065',
-  tertiaryLabel: '#91868B',
-  separator: 'rgba(73, 43, 57, 0.18)',
+  chip: '#F5F6F8',
+  label: '#1D1D1F',
+  secondaryLabel: '#6E6E73',
+  tertiaryLabel: '#8E8E93',
+  separator: 'rgba(60, 60, 67, 0.22)',
   field: '#FFFFFF',
-  accent: '#B71867',
-  accentPressed: '#8F124F',
+  accent: '#E23B84',
+  accentPressed: '#C9317A',
   accentText: '#FFFFFF',
-  danger: '#D92D20',
-  success: '#248A3D',
-  warning: '#B25F00',
-  overlay: 'rgba(255, 255, 255, 0.94)',
+  danger: '#D83A3A',
+  success: '#1F9D5B',
+  warning: '#C27A00',
+  overlay: 'rgba(255, 255, 255, 0.92)',
   shadow: '#000000'
 } as const;
 
 const dark = {
-  background: '#100B0E',
-  surface: '#21171C',
-  label: '#FFFFFF',
-  secondaryLabel: '#C8BBC1',
-  tertiaryLabel: '#998C92',
-  separator: 'rgba(224, 190, 205, 0.22)',
-  field: '#21171C',
+  background: '#000000',
+  surface: '#1C1C1E',
+  chip: '#26262A',
+  label: '#F5F5F7',
+  secondaryLabel: '#AEAEB2',
+  tertiaryLabel: '#8E8E93',
+  separator: 'rgba(84, 84, 88, 0.65)',
+  field: '#1C1C1E',
   accent: '#FF7AB2',
-  accentPressed: '#FF9AC5',
-  accentText: '#32101F',
-  danger: '#FF6961',
-  success: '#30D158',
-  warning: '#FFB340',
-  overlay: 'rgba(33, 23, 28, 0.94)',
+  accentPressed: '#FF8FC0',
+  accentText: '#3A1B33',
+  danger: '#FF5C5C',
+  success: '#3CCF76',
+  warning: '#F0A629',
+  overlay: 'rgba(28, 28, 30, 0.92)',
   shadow: '#000000'
 } as const;
 

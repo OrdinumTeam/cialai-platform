@@ -5,6 +5,7 @@ import type { Locale } from '@cialai/i18n';
 
 import type { LogLevel, TunnelStatus } from 'cialai-tunnel';
 
+import { BIOMETRIC_POLICIES, type BiometricPolicy } from '../auth/biometrics';
 import { useI18n } from '../i18n';
 import { THEME_MODES, usePalette, type ThemeMode } from '../theme';
 import { PATH_KEYS, TOR_STATE_KEYS, TRANSPORT_KEYS } from './TransportBadge';
@@ -36,14 +37,17 @@ type Props = {
   coreVersion: string;
   logLevel: LogLevel;
   themeMode?: ThemeMode;
+  biometricPolicy?: BiometricPolicy;
   onBack: () => void;
   onLogLevel: (level: LogLevel) => void;
   onThemeMode?: (mode: ThemeMode) => void;
+  onBiometricPolicy?: (policy: BiometricPolicy) => void;
   onRefreshStatus: () => void;
 };
 
 export function Settings({
-  desktopCount, tunnelStatus, appVersion, coreVersion, logLevel, themeMode = 'system', onBack, onLogLevel, onThemeMode, onRefreshStatus
+  desktopCount, tunnelStatus, appVersion, coreVersion, logLevel, themeMode = 'system', biometricPolicy = 'always',
+  onBack, onLogLevel, onThemeMode, onBiometricPolicy, onRefreshStatus
 }: Props) {
   const palette = usePalette();
   const { locale, setLocale, t } = useI18n();
@@ -97,6 +101,19 @@ export function Settings({
             </Pressable>
           ))}
         </View>
+        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.biometrics')}</Text>
+        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
+          {BIOMETRIC_POLICIES.map(policy => (
+            <Pressable accessibilityLabel={t(`mobile.settings.biometrics.${policy}`)} accessibilityRole="button"
+              accessibilityState={{ selected: policy === biometricPolicy }} key={policy} onPress={() => onBiometricPolicy?.(policy)}
+              style={[styles.segmentItem, policy === biometricPolicy && { backgroundColor: palette.accent }]}>
+              <Text style={{ color: policy === biometricPolicy ? palette.accentText : palette.label, fontWeight: '600' }}>
+                {t(`mobile.settings.biometrics.${policy}`)}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={[styles.hint, { color: palette.secondaryLabel }]}>{t(`mobile.settings.biometricsHint.${biometricPolicy}`)}</Text>
         <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.logLevel')}</Text>
         <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
           {(['error', 'info', 'debug'] as const).map(level => (
@@ -162,6 +179,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: '700' },
   content: { padding: 18, gap: 12 },
   section: { marginTop: 10, marginLeft: 4, fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
+  hint: { marginTop: -4, marginHorizontal: 4, fontSize: 13, lineHeight: 18 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 6 },
   cardDetail: { marginVertical: 5, fontSize: 14, lineHeight: 20 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },

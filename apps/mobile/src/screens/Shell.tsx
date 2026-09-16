@@ -152,13 +152,13 @@ export function Shell({
     })}; true;`, [desktopId, desktopName, locale, themeMode, version]);
 
   return (
-    <View style={[styles.root, { backgroundColor: palette.background }]}>
+    <View style={[styles.root, { backgroundColor: palette.surface }]}>
       <SafeAreaView edges={['top']} style={{ backgroundColor: palette.surface }}>
         <View style={[styles.toolbar, { borderBottomColor: palette.separator }]}>
           <View style={styles.toolbarStatus}>
             <View style={[styles.connectedDot, { backgroundColor: transportColor(transport) }]} />
             <Text numberOfLines={1} style={[styles.toolbarTitle, { color: palette.label }]}>{desktopName}</Text>
-            <View style={[styles.transportBadge, { backgroundColor: palette.background, borderColor: palette.separator }]}>
+            <View style={[styles.transportBadge, { backgroundColor: palette.chip }]}>
               <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
                 numberOfLines={1} style={[styles.transportText, { color: palette.secondaryLabel }]}>
                 {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
@@ -166,7 +166,7 @@ export function Shell({
             </View>
           </View>
           <Pressable accessibilityLabel={t('mobile.shell.showDesktops')} accessibilityRole="button" onPress={onDesktops}
-            style={({ pressed }) => [styles.desktopsButton, { backgroundColor: palette.background }, pressed && styles.pressed]}>
+            style={({ pressed }) => [styles.desktopsButton, pressed && styles.pressed]}>
             <Text style={[styles.desktopsText, { color: palette.accent }]}>{t('mobile.shell.desktops')}</Text>
           </Pressable>
         </View>
@@ -206,13 +206,13 @@ export function Shell({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   webView: { flex: 1, backgroundColor: 'transparent' },
-  toolbar: { minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 10, paddingVertical: 6 },
+  toolbar: { minHeight: 44, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 8 },
   toolbarStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  transportBadge: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
+  transportBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   transportText: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
   toolbarTitle: { flexShrink: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  desktopsButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 12, borderRadius: 18 },
-  desktopsText: { fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  pressed: { opacity: 0.55, transform: [{ scale: 0.97 }] },
+  desktopsButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  desktopsText: { fontSize: 17, lineHeight: 22, fontWeight: '500' },
+  pressed: { opacity: 0.55 },
   connectedDot: { width: 8, height: 8, borderRadius: 4 }
 });

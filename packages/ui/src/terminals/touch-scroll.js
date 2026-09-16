@@ -2,12 +2,14 @@
 // Rolagem por toque do terminal. O xterm 6 trocou o viewport pelo scrollable
 // do VS Code e deixou de tratar touchstart e touchmove: no celular a tela nao
 // sobe para ler o que passou. Este controlador converte o arrasto vertical em
-// linhas do proprio xterm e, no buffer alternativo (vim, less), em setas, como
-// a roda ja faz. Uma inercia curta percorre o historico longo sem varias
-// passadas de dedo.
+// linhas do proprio xterm. No buffer alternativo, sem historico, o arrasto
+// vira roda do mouse para o programa que acompanha o mouse e nada para os
+// outros: setas, que a roda do desktop manda, num agente recuperam o
+// historico de comandos em vez de rolar. Uma inercia curta percorre o
+// historico longo sem varias passadas de dedo.
 //
-// Sem DOM aqui: quem liga aos eventos injeta medida de linha, rolagem, envio
-// de teclas e o agendador de quadros, o que deixa a conta testavel em Node.
+// Sem DOM aqui: quem liga aos eventos injeta medida de linha, rolagem, relato
+// de roda e o agendador de quadros, o que deixa a conta testavel em Node.
 
 // Velocidade em px/ms a partir da qual soltar o dedo continua rolando.
 export const FLING_MIN_SPEED = 0.25;
@@ -19,14 +21,10 @@ export const FLING_MAX_SPEED = 6;
 export const FLING_FRICTION = 0.97;
 // Pausa entre o ultimo movimento e o soltar que cancela a inercia.
 export const FLING_HOLD_MS = 100;
-// Teto de setas por movimento no buffer alternativo.
-export const MAX_ARROWS_PER_MOVE = 3;
+// Teto de entalhes de roda por movimento no buffer alternativo.
+export const MAX_WHEEL_PER_MOVE = 3;
 
-const ESC = String.fromCharCode(27);
-export const ARROW_UP = `${ESC}[A`;
-export const ARROW_DOWN = `${ESC}[B`;
-
-export function createTouchScroll({ rowHeight, scrollLines, sendKeys, hasScrollback, requestFrame, cancelFrame }) {
+export function createTouchScroll({ rowHeight, scrollLines, sendWheel, hasScrollback, requestFrame, cancelFrame }) {
   let lastY = 0;
   let lastTime = 0;
   let velocity = 0;
@@ -41,14 +39,14 @@ export function createTouchScroll({ rowHeight, scrollLines, sendKeys, hasScrollb
 
   // Pixels acumulados viram linhas inteiras; a fracao fica para o proximo
   // movimento, entao um arrasto lento tambem anda.
-  function apply(pixels, arrows) {
+  function apply(pixels, wheel) {
     const height = Math.max(1, rowHeight() || 1);
     carry += pixels / height;
     const rows = carry > 0 ? Math.floor(carry) : Math.ceil(carry);
     if (!rows) return 0;
     carry -= rows;
     if (hasScrollback()) scrollLines(rows);
-    else if (arrows) sendKeys((rows > 0 ? ARROW_DOWN : ARROW_UP).repeat(Math.min(Math.abs(rows), MAX_ARROWS_PER_MOVE)));
+    else if (wheel && sendWheel) sendWheel(rows > 0 ? 1 : -1, Math.min(Math.abs(rows), MAX_WHEEL_PER_MOVE));
     return rows;
   }
 

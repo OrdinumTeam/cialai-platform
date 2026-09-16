@@ -35,6 +35,25 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.2 preview
+
+Preview dated 2026-09-16 with the phone presentation, the phone connection and the mobile settings work on top of 0.2.1, which was never published.
+
+### Added
+
+* Face ID or biometrics can be set in the mobile settings to always, only when opening the computer, or off. The default stays always
+
+### Changed
+
+* The phone page and the mobile shell follow the presentation of the Ordinum Control iPhone app they were born from: flat toolbar icons for back, files, end session and new session, a single scrolling row of 44 px keys, session cards with the session colour and 17 px names, a 13 px terminal, and a 44 px native bar with the computer name, the transport as a small chip and the Computers action in the accent colour over the iOS neutral palette
+* The phone keys row starts with Esc and Enter, the two keys used most with an agent
+
+### Fixed
+
+* The phone connection no longer restarts every few seconds while sessions produce output. The desktop bridge dropped the whole phone connection whenever its 64 frame output queue filled, which happened on every replay of the session histories, so the page reconnected in a loop. The queue holds 4096 frames, output larger than one frame is split, and a full queue now detaches only the lagging terminal, which the page reattaches from the offset it already has. The bridge logs why each phone connection ended
+* The phone page keeps its bridge socket across short hides such as a Face ID prompt or the notification centre, instead of reconnecting and replaying every terminal
+* Touch scrolling inside a program that uses the alternate screen no longer sends arrow keys, which recalled the prompt history in Claude Code. It sends mouse wheel reports when the program tracks the mouse and nothing otherwise
+
 ## 0.2.1 preview
 
 Preview dated 2026-09-15 with Linux, interface and macOS packaging fixes on top of 0.2.0. The Android app is the same as in 0.2.0.
