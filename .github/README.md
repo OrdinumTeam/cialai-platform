@@ -283,7 +283,7 @@ Please report vulnerabilities privately as described in [SECURITY.md](../SECURIT
 
 ## Status
 
-Snapshot of 15 September 2026. The live record with commands and results is [docs/engenharia/13-progresso-e-handoff.md](../docs/engenharia/13-progresso-e-handoff.md).
+Snapshot of 15 September 2026. Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md).
 
 | Area | Verified | Pending |
 | --- | --- | --- |

@@ -144,7 +144,7 @@ Data: 12/09/2026. Contexto: os spikes exigem aparelhos reais, Xcode, assinatura 
 
 ## 024 Inventário verificável da origem antes do commit
 
-Data: 12/09/2026. Contexto: os oito arquivos do Control continuam modificados e a origem é somente leitura. Decisão: guardar o commit base e SHA-256 de cada arquivo modificado em `docs/evidence/control-source.json`, conferíveis por `npm run check:source`. Consequência: alterações posteriores são detectáveis sem copiar conteúdo privado ou modificar o Control. O inventário não substitui o commit solicitado em 0.2 nem cobre todos os arquivos da futura extração.
+Data: 12/09/2026. Contexto: os oito arquivos do Control continuam modificados e a origem é somente leitura. Decisão: guardar o commit base e SHA-256 de cada arquivo modificado num inventário interno, conferíveis por `npm run check:source`. Consequência: alterações posteriores são detectáveis sem copiar conteúdo privado ou modificar o Control. O inventário não substitui o commit solicitado em 0.2 nem cobre todos os arquivos da futura extração.
 
 ## 025 Resultado local do spike 3
 

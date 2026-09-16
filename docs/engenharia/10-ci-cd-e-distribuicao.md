@@ -2,24 +2,6 @@
 
 A distribuição foi desenhada com GitHub Actions para desktop, núcleo do túnel e interface, e Codemagic para os celulares. Nenhum valor de credencial aparece aqui; a seção de credenciais registra somente nomes, destinos e responsabilidades.
 
-## Repositórios
-
-| Repositório | Visibilidade | Uso |
-| --- | --- | --- |
-| `OrdinumTeam/cialai-platform` | Privado | Desenvolvimento, histórico completo, CI e Codemagic enquanto o projeto não for aberto |
-| Organização `Cialai`, em https://github.com/Cialai | Pública | Destino do projeto open source quando todo o trabalho estiver concluído: código, releases dos binários de macOS, Linux e Windows, issues e contribuições. Nome do repositório a definir |
-
-Em 13/09/2026 o repositório público `Cialai/cialai` foi criado com histórico limpo, em um único commit gerado por `tools/release/public-export/export_public.py` e auditado por `audit_public.py` na mesma pasta. A cópia exclui o diário de execução, o mapa de credenciais, `AGENTS.md`, a guarda de proveniência do Control, as capturas do Control e a própria pasta de exportação, e troca caminhos locais e referências internas. A suíte completa passou na cópia antes do push. Novas sincronizações repetem os dois scripts e publicam por cima do repositório público.
-
-Checklist original da exportação:
-
-1. Decidir se o público recebe o histórico completo ou um ponto de partida limpo. O histórico e os documentos internos citam caminhos locais, o Ordinum Control e o diário de execução.
-2. Revisar `docs/engenharia/13-progresso-e-handoff.md`, as variáveis de caminho de `docs/README.md` e qualquer referência interna que não deva ficar pública.
-3. Feito em 13/09/2026: o módulo Go, os imports, o endpoint do updater, o podspec e os links dos documentos já usam `github.com/Cialai/cialai`.
-4. Publicar a primeira release pelo repositório público `Cialai/cialai`. Apps instalados só procuram atualização na URL compilada neles.
-5. Definir onde ficam o app do Codemagic e os secrets de assinatura. Workflows disparados por PR de fork nunca recebem secrets.
-6. Confirmar o contato de segurança de `SECURITY.md` e o `CODE_OF_CONDUCT.md` antes de abrir.
-
 ## Estado em 13/09/2026
 
 | Item | Estado | Situação atual |
@@ -68,7 +50,7 @@ Três workflows em `codemagic.yaml`, no padrão de `$CONTROL/codemagic.yaml` e `
 
 Integração no Codemagic: chave do App Store Connect da conta Ordinum já registrada como `Advoris ASC API Key` e referenciada em `integrations.app_store_connect`. Grupos de variáveis: `appstore_credentials` com `CERTIFICATE_PRIVATE_KEY` em base64 marcada como secreta; `android_credentials` com `CM_KEYSTORE_BASE64`, `CM_KEYSTORE_PASSWORD`, `CM_KEY_PASSWORD` e `CM_KEY_ALIAS` injetadas pela API; `google_play` com `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`. Variáveis simples: `APP_STORE_APP_ID`, `BUNDLE_ID`, `APP_ENV`. Contas pessoais não podem usar variáveis globais, então tudo fica por app.
 
-Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `CODEMAGIC_API_TOKEN` e `CODEMAGIC_APP_ID` do ambiente ou de um `.env` local fora da árvore pública, com `cm_download` que só manda o token para `api.codemagic.io` sem porta e reclassifica a URL após redirecionamento; `cm-trigger.sh`, `cm-watch.sh` a cada 15 s, `cm-log.sh` com `--download`, `cm-publish.sh`, `cm-next-build-number.sh` que aborta em saída não numérica; `_stores.py` com JWT ES256 para o App Store Connect e RS256 com OAuth2 para o Play, usando só `cryptography` e `curl --http1.1 --retry 3`; `asc_api.py` com `builds`, `versions`, `testflight`; `play_api.py` com `status` e `upload` em modo de ensaio sem `--commit`; `ios-gen-signing-key.sh` gerando a chave RSA de assinatura com `ssh-keygen -m PEM`. Os três scripts de loja são idênticos aos do Advoris e do CowSynch e precisam ser espelhados quando mudarem.
+Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `CODEMAGIC_API_TOKEN` e `CODEMAGIC_APP_ID` do ambiente ou de um `.env` local fora da árvore pública, com `cm_download` que só manda o token para `api.codemagic.io` sem porta e reclassifica a URL após redirecionamento; `cm-trigger.sh`, `cm-watch.sh` a cada 15 s, `cm-log.sh` com `--download`, `cm-publish.sh`, `cm-next-build-number.sh` que aborta em saída não numérica; `_stores.py` com JWT ES256 para o App Store Connect e RS256 com OAuth2 para o Play, usando só `cryptography` e `curl --http1.1 --retry 3`; `asc_api.py` com `builds`, `versions`, `testflight`; `play_api.py` com `status` e `upload` em modo de ensaio sem `--commit`; `ios-gen-signing-key.sh` gerando a chave RSA de assinatura com `ssh-keygen -m PEM`. Os três scripts de loja são idênticos aos de outros apps da Ordinum e precisam ser espelhados quando mudarem.
 
 ## Identificadores
 
@@ -80,11 +62,8 @@ Scripts em `tools/release`, copiados do Control e do Advoris: `_lib.sh` lendo `C
 | Identificador do desktop | `br.com.ordinum.cialai` no `tauri.conf.json` |
 | Esquema de URL | `cialai`, reservado para deep links futuros |
 | App no App Store Connect | Criado em 13/09/2026, `APP_STORE_APP_ID` igual a `6811702125` |
-| App no Codemagic | `6aa75e1e235d9cae411b55df`, nome `cialai-platform`, criado pelo painel com a integração GitHub para `OrdinumTeam/cialai-platform`. Os grupos `appstore_credentials`, `android_credentials` e `google_play` foram cadastrados pela API em 14/09/2026 e o ID está em `CODEMAGIC_APP_ID` do `cialai.env`. O app `6aa75ddaa551baf04258c20c` aponta para o público `Cialai/cialai` e não é usado pelos builds |
-| App no Google Play | Criado em 13/09/2026 na conta `7730543760992383205`, Play App ID `4975087090602407034` |
-| Conta de serviço do Play | `ordinum-play-publisher@ordinum.iam.gserviceaccount.com`, do projeto `ordinum`, compartilhada pelos apps da Ordinum e validada pela API em 13/09/2026 |
+| App no Google Play | Criado em 13/09/2026, Play App ID `4975087090602407034` |
 | Nome de exibição | Cialai |
-| Referências existentes | Control: app `6809897505` e Codemagic `6aa03dae642175d18c41fe72`; Advoris: app `6783436909`, Codemagic `6a3acb9e11b238d7837dbe12`, Play `4971975462970394779` |
 
 ## Credenciais por referência
 

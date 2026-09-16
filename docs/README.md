@@ -1,6 +1,6 @@
 # Documentação do Cialai
 
-Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 15/09/2026, para a prévia 0.2.0, a conectividade automática substituiu o Headscale no fluxo do produto; a validação em aparelhos reais continua pendente. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada. Para retomar o trabalho, leia primeiro [13 Progresso e handoff](./engenharia/13-progresso-e-handoff.md); ele diferencia entregas locais de evidências externas.
+Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 15/09/2026, para a prévia 0.2.0, a conectividade automática substituiu o Headscale no fluxo do produto; a validação em aparelhos reais continua pendente. Desktop macOS, interface, protocolo e túnel têm implementação e verificação local. Aplicativos móveis, updater, CI, distribuição e materiais de loja estão preparados em diferentes níveis, mas aparelhos, sistemas remotos, assinatura, publicação e revisão permanecem pendentes. As Fases 5, 6 e 7 já estão integradas na main, com Linux verificado em contêiner e Windows apenas em compilação cruzada.
 
 Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão automática entre os aparelhos, direta sempre que a rede permite e pelo Tor embutido como ponto de encontro e reserva, sem servidor da pessoa, da Ordinum ou do projeto.
 
@@ -46,8 +46,6 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | --- | --- | --- |
 | 09 | [Monorepo e ferramentas](./engenharia/09-monorepo-e-ferramentas.md) | Estrutura de pastas, toolchains, scripts, testes por pacote e convenções |
 | 10 | [CI/CD e distribuição](./engenharia/10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, identificadores, credenciais por referência, lojas e releases |
-| 13 | [Progresso e handoff](./engenharia/13-progresso-e-handoff.md) | O que foi executado, evidências, pendências e próxima ação |
-| 15 | [Credenciais de build](./engenharia/15-credenciais-de-build.md) | Onde ficam as credenciais do Codemagic para iOS e Android e como cadastrá-las |
 | v1 | [Procedimento da versão 1](./engenharia/release-v1.md) | Portões e passos para publicar a primeira versão estável |
 
 Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `Implementado`, `Preparado` e `Pendente`. O roteiro não considera workflow escrito como workflow executado, binding gerado como aplicativo nativo compilado, nem material de loja como submissão.
@@ -56,10 +54,10 @@ Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `
 
 | Convenção | Valor |
 | --- | --- |
-| `$CONTROL` | `/Users/focoamorim/Github Projects/OrdinumTeam/ordinum-control`, o protótipo, somente leitura |
-| `$CIALAI` | `/Users/focoamorim/Github Projects/OrdinumTeam/cialai-platform`, este repositório |
-| `$ADVORIS` | `/Users/focoamorim/Github Projects/OrdinumTeam/advoris-mobile`, referência de publicação nas lojas |
-| `$MARCA` | `/Users/focoamorim/Github Projects/OrdinumTeam/ordinum-marketing/projects/CIALAI`, identidade visual |
+| `$CONTROL` | Ordinum Control, o protótipo interno de onde o estúdio foi extraído; não é publicado |
+| `$CIALAI` | Raiz deste repositório |
+| `$ADVORIS` | App interno da Ordinum usado como referência de publicação nas lojas; não é publicado |
+| `$MARCA` | Pasta `brand` deste repositório, com a identidade visual |
 | Citações de código | Caminho relativo a `$CONTROL` e, quando útil, número de linha, como `macos/src-tauri/src/workspace/terminal.rs:883` |
 | Estado do protótipo | Working tree de 12/09/2026, branch `main`, com oito arquivos modificados sem commit listados no documento 02. A extração parte do working tree, não do último commit |
 | Idioma | Documentação de planejamento em português. README público, CONTRIBUTING, textos das lojas e mensagens de erro voltadas ao público internacional em inglês na fase de lançamento |

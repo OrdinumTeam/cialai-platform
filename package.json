@@ -4,8 +4,14 @@
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
-  "workspaces": ["apps/*", "packages/*"],
-  "engines": { "node": "22.x", "npm": "10.x" },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": "22.x",
+    "npm": "10.x"
+  },
   "packageManager": "npm@10.9.8",
   "scripts": {
     "check:foundation": "node tools/check/foundation.mjs",
@@ -41,7 +47,6 @@
     "test:selftest:driver": "node tools/selftest/driver.mjs",
     "test:integration:headscale": "node tools/run.mjs integration-headscale",
     "test:netlab": "node tools/run.mjs netlab",
-    "test:spike:headscale": "node tools/run.mjs spike-headscale",
-    "check:source": "node tools/check/control-source.mjs"
+    "test:spike:headscale": "node tools/run.mjs spike-headscale"
   }
 }

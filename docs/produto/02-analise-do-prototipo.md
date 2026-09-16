@@ -6,7 +6,7 @@ Inventário técnico do estúdio de terminais do Ordinum Control, em `$CONTROL`,
 
 | Item do inventário | Estado | Situação atual |
 | --- | --- | --- |
-| Proveniência do Control | Implementado | Commit base e hashes dos oito arquivos modificados estão em `docs/evidence/control-source.json`; o Control permaneceu somente leitura |
+| Proveniência do Control | Implementado | Commit base e hashes dos oito arquivos modificados ficaram num inventário interno; o Control permaneceu somente leitura |
 | Extração do Rust elegível | Implementado | Código de terminal, arquivos, Git, prévias, Dev Browser, ponte e ciclo de vida está no crate Cialai e passa localmente no macOS |
 | Extração da interface | Implementado | Estúdio, cascas desktop e celular e componentes compartilhados estão em `packages/ui` com checks locais |
 | Remoção das áreas de negócio | Implementado | Stack, reuniões, VPN, backend Node, Python e views de negócio não fazem parte do produto |
@@ -51,7 +51,7 @@ Destinos: preservar significa copiar com renomeações; adaptar significa mudan�
 | `workspace/office.rs` | 379 | `soffice` headless para PDF, cache de 512 MiB, uma conversão por vez, 2 min | Preservar; adaptar descoberta e `file_url` |
 | `workspace/preview.rs` | 181 | Esquema `preview://<token>/caminho` servindo a raiz do projeto | Preservar; aceitar a forma `http://preview.localhost/` do Windows |
 | `workspace/dragout.rs` | 296 | Arraste para fora pelo AppKit, evento `drag-out://end` | Preservar só no macOS; stub nos demais até a Fase 6 |
-| `workspace/repos.rs` e `workspace/mod.rs` | 175 | Raízes `Github Projects/OrdinumTeam` e `OrdinumCustomers`, shell padrão `/bin/zsh` | Adaptar: raízes viram preferência; shell por sistema |
+| `workspace/repos.rs` e `workspace/mod.rs` | 175 | Raízes de projetos fixas do ambiente interno, shell padrão `/bin/zsh` | Adaptar: raízes viram preferência; shell por sistema |
 | `bridge/mod.rs`, `protocol.rs`, `dispatch.rs`, `events.rs` | 1190 | Servidor WebSocket, handshake, lista permitida, despacho ordenado, eventos | Preservar; reduzir a `pty`, exigir o segredo da borda, `welcome` estendido |
 | `commands.rs` | 472 | Registro dos comandos Tauri | Preservar as seções de terminais, arquivos, Git, Dev Browser e preview |
 | `lib.rs` | 234 | Plugins, estado gerenciado, esquema `preview`, ordem de encerramento | Adaptar: sem stack, reuniões e VPN; supervisor do sidecar |

@@ -6,7 +6,7 @@ Resumo em português: use as versões fixadas, trabalhe em uma branch curta, rod
 
 ## Before you start
 
-Read the [execution handoff](docs/engenharia/13-progresso-e-handoff.md) first. The [roadmap](docs/produto/11-roadmap-de-execucao.md) records task dependencies and acceptance criteria. Existing local changes belong to their author and must be preserved.
+Read the [roadmap](docs/produto/11-roadmap-de-execucao.md) first. It records task dependencies and acceptance criteria. Existing local changes belong to their author and must be preserved.
 
 Use these toolchains:
 
@@ -81,7 +81,7 @@ Hardware tests, remote CI, code signing, notarization and store review require e
 - Use a conventional area prefix such as `feat(desktop):`, `fix(mobile):`, `docs(release):` or `test(network):`.
 - Keep code, identifiers and code comments in English.
 - Add `SPDX-License-Identifier: Apache-2.0` to new source files.
-- Update `docs/engenharia/13-progresso-e-handoff.md` after each delivery, relevant test or blocker.
+- Update the task state in `docs/produto/11-roadmap-de-execucao.md` when a delivery changes it.
 - Preserve the sibling Ordinum Control repository as a read only source.
 
 Visible interface copy must not use parentheses or dash characters as separators. Use labels, subtitles, rows or separate sentences. Syntax and normal spelling remain unchanged.

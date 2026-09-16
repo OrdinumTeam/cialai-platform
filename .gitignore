@@ -32,3 +32,39 @@ packages/tunnel-core/cialai-tunnel
 apps/desktop/src-tauri/tauri.release.conf.json
 _INTERNO_ORDINUM/
 _INTERNAL/
+
+# Credenciais, certificados e chaves: nunca entram no repositório
+*.p12
+*.pfx
+*.cer
+*.crt
+*.der
+*.mobileprovision
+*.provisionprofile
+*.password
+*.env
+**/key.properties
+google-services.json
+GoogleService-Info.plist
+*service-account*.json
+*credentials*.json
+.netrc
+.npmrc
+.pypirc
+
+# Pacotes e binários gerados
+*.apk
+*.aab
+*.ipa
+*.dmg
+*.msi
+*.AppImage
+*.xcarchive/
+
+# Caches e saídas locais
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+tools/browser/test-results/
+playwright-report/

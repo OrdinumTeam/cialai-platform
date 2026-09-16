@@ -230,7 +230,7 @@ as bibliotecas do próprio sistema:
 
 ```sh
 cd ~/Downloads
-wget https://github.com/Cialai/cialai/releases/latest/download/Cialai_amd64.deb
+wget https://cialai.com.br/downloads/Cialai_amd64.deb
 sudo apt install ./Cialai_amd64.deb
 cialai-desktop
 ```

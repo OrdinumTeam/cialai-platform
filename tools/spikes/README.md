@@ -59,7 +59,7 @@ Headscale existentes.
 
 Não substituir os resultados acima por build, simulador ou testes unitários. Registre
 data, aparelho, versão do sistema, versões dos componentes, medições e resultado
-em `docs/engenharia/13-progresso-e-handoff.md` e em `docs/produto/12-decisoes.md`.
+em `docs/produto/12-decisoes.md`.
 
 ## Preparação do spike 1
 

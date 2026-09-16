@@ -10,7 +10,7 @@ As fotos do pacote de defeitos, com fonte serifada, botões soltos e fileira de 
 
 ## Referência
 
-O telefone do Ordinum Control, em `OrdinumTeam/ordinum-control/frontend/src`, é a origem desta página. As medidas seguem as capturas do iPhone dele: barra de título de 52 px com ferramentas planas, título de 20 px, busca de 46 px com texto de 17 px, cards com raio de 12 px e nome de 17 px, terminal a 13 px, fileira única de teclas de 44 px com texto de 16 px. O acento continua sendo o rosa do Cialai.
+O telefone do Ordinum Control, protótipo interno de onde esta página saiu, é a referência. As medidas seguem as capturas do iPhone dele: barra de título de 52 px com ferramentas planas, título de 20 px, busca de 46 px com texto de 17 px, cards com raio de 12 px e nome de 17 px, terminal a 13 px, fileira única de teclas de 44 px com texto de 16 px. O acento continua sendo o rosa do Cialai.
 
 | Tela | Tema | Antes | Depois |
 | --- | --- | --- | --- |

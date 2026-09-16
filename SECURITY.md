@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Cialai has no supported stable release yet. Preview builds are published on GitHub Releases and the repository contains preparation for version 1.0.0. Security fixes are applied to the current `main` branch while release support is being defined.
+Cialai has no supported stable release yet. Preview builds are published on cialai.com.br and the repository contains preparation for version 1.0.0. Security fixes are applied to the current `main` branch while release support is being defined.
 
 ## Reporting a vulnerability
 

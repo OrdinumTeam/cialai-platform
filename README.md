@@ -2,7 +2,7 @@
 
 Cialai is an open source terminal studio for desktop and mobile. It keeps shells, files, Git context, previews and coding agent sessions together, then lets you reach the same terminal history from a paired phone. The computer and the phone connect on their own, directly whenever the network allows, with no server run by you, by Ordinum or by the project.
 
-> Cialai is in preview. Preview installers for macOS, Windows, Linux and Android are published on GitHub Releases. Version 1.0.0, the iOS app and store listings have not been published yet.
+> Cialai is in preview. Preview installers for macOS, Windows, Linux and Android are published on [cialai.com.br](https://cialai.com.br/#baixar), with checksums in `SHA256SUMS.txt` on the same mirror. Version 1.0.0 and the store listings have not been published yet, and the iOS app is not in the App Store.
 
 ## A terminal workspace that travels with you
 
@@ -27,17 +27,27 @@ These captures use fictional projects and the reproducible demo mode. The comple
 - Reach the computer from the phone automatically, over a direct encrypted connection when possible and through an embedded Tor onion service as backup.
 - Keep project contents and credentials out of Cialai hosted services because there are none.
 
+## Install a preview
+
+Downloads live on [cialai.com.br](https://cialai.com.br/#baixar). On macOS and Linux, one command downloads the current build for your system, checks it against `SHA256SUMS.txt` and installs it:
+
+```sh
+curl -fsSL https://cialai.com.br/install.sh | bash
+```
+
+Windows installers and the Android APK are on the same page. The desktop app checks the same mirror for signed updates. Each preview is described in the [changelog](./CHANGELOG.md).
+
 ## Project status
 
 | Area | Status |
 | --- | --- |
 | Desktop studio | Implemented and verified locally on macOS |
 | Automatic connectivity | Implemented with automated suites and in process tests against the real Tor network; the physical checklist on real devices is pending |
-| iOS and Android | Android preview APK published; iOS build, store review and real device checks pending |
+| iOS and Android | Android preview APK published; iOS builds run through TestFlight; store review and real device checks pending |
 | Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; physical Windows machines and code signing pending |
-| Signed releases and stores | macOS Developer ID signing and notarization accepted locally; Windows signing, store accounts, external review and version 1.0.0 pending |
+| Signed releases and stores | macOS previews signed with Developer ID and notarized; Windows signing, store review and version 1.0.0 pending |
 
-Prepared code is not the same as verified distribution. See the [execution handoff](./docs/engenharia/13-progresso-e-handoff.md) for exact evidence and remaining external work.
+Prepared code is not the same as verified distribution. See the [roadmap](./docs/produto/11-roadmap-de-execucao.md) for the state of each task and the remaining external work.
 
 ## Run the desktop app from source
 

@@ -1,6 +1,6 @@
 # Builds móveis do Cialai. Não há disparo automático configurado.
 # A integração App Store Connect reaproveita a chave da conta Ordinum já cadastrada no Codemagic.
-# Grupos e credenciais estão descritos em docs/engenharia/15-credenciais-de-build.md.
+# Grupos e credenciais são configurados no Codemagic por quem mantém a publicação dos apps.
 
 workflows:
   ios-testflight:
