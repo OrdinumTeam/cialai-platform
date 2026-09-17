@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 // Contrato do release.yml e dos auxiliares de canal, assinatura e arquivos da release.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createHash, generateKeyPairSync, sign } from 'node:crypto';
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { appVersions, releaseChannel } from '../release/release-channel.mjs';
 import { signingPlan } from '../release/signing-mode.mjs';
@@ -141,7 +142,9 @@ for (const tool of [APPIMAGETOOL, APPIMAGE_RUNTIME]) {
   assert.match(tool.sha256, /^[0-9a-f]{64}$/, `${tool.url} needs a pinned SHA-256`);
 }
 const appRun = readFileSync(APPRUN_TEMPLATE, 'utf8');
-assert.ok(statSync(APPRUN_TEMPLATE).mode & 0o111, 'the AppRun template must be executable');
+// O bit de execução vem do índice do git: no Windows o NTFS não guarda o modo do arquivo.
+const appRunMode = execFileSync('git', ['ls-files', '--stage', '--', 'tools/release/appimage/AppRun'], { cwd: fileURLToPath(rootUrl), encoding: 'utf8' });
+assert.ok(appRunMode.startsWith('100755 '), 'the AppRun template must be executable');
 assert.match(appRun, /^#!\/bin\/sh\n/);
 for (const leaked of ['PATH', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH', 'PYTHONDONTWRITEBYTECODE', 'PERLLIB', 'QT_PLUGIN_PATH']) {
   assert.doesNotMatch(appRun, new RegExp(`^\\s*(export\\s+)?${leaked}=`, 'm'), `the AppRun must not set ${leaked}`);
