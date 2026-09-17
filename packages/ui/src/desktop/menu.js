@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import { isTauri } from '../lib/native.js';
 import { currentOs, isAppShortcut, isShortcut, isTerminalFocused } from '../lib/keys.js';
+import { toggleShortcut } from '../notch/model.js';
 import { translate } from './i18n.js';
 
 let installedLocale = '';
@@ -21,7 +22,7 @@ export async function installNativeMenu(actionsRef, views = [], locale = '') {
   const appearanceMenu = await Submenu.new({ text: translate('desktop.preferences.appearance'), items: [await item('appearance-system', translate('desktop.appearance.systemShort'), undefined, 'setAppearance', 'system'), await item('appearance-light', translate('desktop.appearance.lightShort'), undefined, 'setAppearance', 'light'), await item('appearance-dark', translate('desktop.appearance.darkShort'), undefined, 'setAppearance', 'dark')] });
   const sections = [];
   for (let index = 0; index < views.length; index += 1) sections.push(await item(`view-${views[index].id}`, views[index].label, `CmdOrCtrl+${index + 1}`, 'navigate', views[index].id));
-  const viewMenu = await Submenu.new({ text: translate('native.menu.view'), items: [await item('toggle-sidebar', translate('desktop.action.toggleSidebar'), 'Ctrl+Cmd+S', 'toggleSidebar'), await item('command-palette', translate('desktop.palette.title'), 'CmdOrCtrl+K', 'openPalette'), await separator(), appearanceMenu, await separator(), ...sections, await separator(), await predefined('Fullscreen', translate('native.menu.fullscreen'))] });
+  const viewMenu = await Submenu.new({ text: translate('native.menu.view'), items: [await item('toggle-sidebar', translate('desktop.action.toggleSidebar'), 'Ctrl+Cmd+S', 'toggleSidebar'), await item('command-palette', translate('desktop.palette.title'), 'CmdOrCtrl+K', 'openPalette'), await separator(), await item('notch-toggle', translate('desktop.notch.action.toggle'), 'CmdOrCtrl+Shift+N', 'toggleNotch'), await item('notch-hide', translate('desktop.notch.action.hide'), undefined, 'hideNotch'), await separator(), appearanceMenu, await separator(), ...sections, await separator(), await predefined('Fullscreen', translate('native.menu.fullscreen'))] });
   const windowMenu = await Submenu.new({ text: translate('native.menu.window'), items: [await predefined('Minimize', translate('native.menu.minimize')), await predefined('Maximize', translate('native.menu.zoom'))] });
   await (await Menu.new({ items: [appMenu, fileMenu, editMenu, viewMenu, windowMenu] })).setAsAppMenu();
 }
@@ -38,6 +39,9 @@ export function installDomShortcuts(actionsRef, views = []) {
     if (app('Mod+K')) run = actions.openPalette;
     else if (app('Mod+T')) run = actions.newTerminal;
     else if (app('Mod+N')) run = actions.newFile;
+    // Depois de Mod+N: fora do macOS a variante segura de novo arquivo e
+    // Ctrl+Shift+N, entao a barra de IA usa outra letra nesses sistemas.
+    else if (app(toggleShortcut(currentOs()))) run = actions.toggleNotch;
     else if (app('Mod+W')) run = actions.closeActiveTerminalOrWindow;
     else if (isTauri() && app('Mod+R')) run = actions.reloadData;
     else if (app('Mod+Comma')) run = actions.openPreferences;

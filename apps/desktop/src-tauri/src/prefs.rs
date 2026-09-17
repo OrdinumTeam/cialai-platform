@@ -17,6 +17,9 @@ pub struct Preferences {
     pub dev_browser: DevBrowserPreferences,
     pub window: WindowPreferences,
     pub network: NetworkPreferences,
+    /// Barra de IA: visibilidade, perfis, limiares e avisos. Gravado pelos
+    /// comandos `notch_*`; `set_preferences` preserva o bloco.
+    pub notch: crate::notch::prefs::NotchPreferences,
 }
 
 impl Default for Preferences {
@@ -28,6 +31,7 @@ impl Default for Preferences {
             dev_browser: DevBrowserPreferences::default(),
             window: WindowPreferences::default(),
             network: NetworkPreferences::default(),
+            notch: crate::notch::prefs::NotchPreferences::default(),
         }
     }
 }
@@ -261,6 +265,10 @@ mod tests {
         assert_eq!(prefs.window.backdrop, "auto");
         assert_eq!(prefs.terminal, TerminalPreferences::default());
         assert_eq!(prefs.network, NetworkPreferences::default());
+        assert_eq!(
+            prefs.notch,
+            crate::notch::prefs::NotchPreferences::default()
+        );
     }
 
     #[test]
@@ -269,6 +277,9 @@ mod tests {
         assert_eq!(value["projectRoots"], json!(["~/Projects"]));
         assert_eq!(value["devBrowser"]["chromiumPath"], Value::Null);
         assert_eq!(value["network"]["requireApproval"], false);
+        assert_eq!(value["notch"]["visibility"], "open");
+        assert_eq!(value["notch"]["hideDefaultWhenDuplicate"], true);
+        assert_eq!(value["notch"]["alerts"]["threshold"], false);
         for removed in ["repoDir", "stopStackOnQuit", "meetings"] {
             assert!(
                 value.get(removed).is_none(),

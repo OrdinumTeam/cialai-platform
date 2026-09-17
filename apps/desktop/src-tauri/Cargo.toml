@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 [package]
 name = "cialai-desktop"
-version = "0.2.2"
+version = "0.2.3"
 description = "Cialai desktop terminal studio"
 authors = ["Ordinum"]
 edition = "2024"
@@ -38,6 +38,11 @@ which = "7"
 dunce = "1"
 tauri-plugin-updater = "2.11.0"
 tauri-plugin-process = "2.3.1"
+# Avisos de limite da Barra de IA, desligados por padrao.
+tauri-plugin-notification = "2"
+# O cache do Claude Desktop grava o corpo em zstd e nenhum dos tres sistemas
+# traz decoder que um app assinado possa chamar.
+zstd = "0.13"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
@@ -50,7 +55,7 @@ keepawake = "0.6.1"
 keyring = { version = "3.6.3", features = ["apple-native"] }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSGeometry", "objc2-core-foundation", "NSFileManager", "NSURL", "NSError", "NSString", "NSArray", "NSProcessInfo"] }
-objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSScreen", "NSApplication", "NSEvent", "NSGraphicsContext", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSPasteboard", "NSImage", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSScreen", "NSApplication", "NSEvent", "NSGraphicsContext", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSPasteboard", "NSImage", "NSWorkspace", "NSRunningApplication", "libc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }

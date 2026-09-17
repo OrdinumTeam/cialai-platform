@@ -39,6 +39,7 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | 06 | [Rede e pareamento](./arquitetura/06-rede-e-pareamento.md) | Conectividade automática, núcleo do túnel, borda, proxy, pareamento, ameaças e testes; as seções do Headscale são históricas até CON-070 |
 | 07 | [Protocolo da ponte](./arquitetura/07-protocolo-da-ponte.md) | A ponte WebSocket entre a página do celular e o desktop, preservada e estendida |
 | 14 | [Diferenças por plataforma](./arquitetura/14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
+| 15 | [Barra de IA](./arquitetura/15-barra-de-ia.md) | O painel com um anel por conta de Claude Code e Codex: de onde vem o uso do plano e a atividade das sessões, o contrato com a interface e o que muda por sistema |
 
 ## Engenharia
 

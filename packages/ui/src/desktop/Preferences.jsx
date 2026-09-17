@@ -16,6 +16,8 @@ import {
   sanitizePreferences,
 } from './preferences-model.js';
 import AccessPanel from './AccessPanel.jsx';
+import NotchPreferences from './NotchPreferences.jsx';
+import { notchActions } from './notch-runtime.js';
 import { useTunnel } from './TunnelContext.jsx';
 import { DESKTOP_NAME_MAX } from './tunnel-model.js';
 import Updater from './Updater.jsx';
@@ -48,7 +50,7 @@ function Row({ title, description, wide = false, children }) {
 const splitLines = (value) => String(value || '').split('\n');
 const snapshotKey = (value) => JSON.stringify(sanitizePreferences(value));
 
-export default function Preferences({ open, onClose, appearance }) {
+export default function Preferences({ open, onClose, appearance, section = null }) {
   const notify = useToast();
   const tunnel = useTunnel();
   const native = isTauri();
@@ -56,6 +58,7 @@ export default function Preferences({ open, onClose, appearance }) {
   const [savedKey, setSavedKey] = useState('');
   const [effectiveShell, setEffectiveShell] = useState(null);
   const [appPaths, setAppPaths] = useState(null);
+  const [notchProfiles, setNotchProfiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [installingHook, setInstallingHook] = useState(false);
@@ -79,16 +82,19 @@ export default function Preferences({ open, onClose, appearance }) {
     let cancelled = false;
     setLoading(true);
     setError('');
+    // A barra de IA responde por `notch_state`: as preferências dela vencem o
+    // bloco `notch` do arquivo, e a lista de perfis da máquina vem junto.
     const load = native
-      ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null)])
-      : Promise.resolve([{ ...DEFAULT_PREFERENCES, network: tunnel.preferences }, null, null]);
-    load.then(([value, shell, paths]) => {
+      ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null), notchActions.state().catch(() => null)])
+      : Promise.resolve([{ ...DEFAULT_PREFERENCES, network: tunnel.preferences }, null, null, null]);
+    load.then(([value, shell, paths, notch]) => {
       if (cancelled) return;
-      const next = normalizePreferenceDraft({ ...(value || {}), appearance: appearance.mode });
+      const next = normalizePreferenceDraft({ ...(value || {}), appearance: appearance.mode, notch: notch?.prefs || value?.notch });
       setDraft(next);
       setSavedKey(snapshotKey(next));
       setEffectiveShell(shell?.path ? shell : null);
       setAppPaths(paths);
+      setNotchProfiles(Array.isArray(notch?.allProfiles) ? notch.allProfiles : []);
     }).catch((loadError) => {
       if (!cancelled) setError(translate('desktop.preferences.loadError', { error: loadError?.message || loadError }));
     }).finally(() => { if (!cancelled) setLoading(false); });
@@ -110,13 +116,30 @@ export default function Preferences({ open, onClose, appearance }) {
     setDraft((current) => current ? { ...current, appearance: mode } : current);
   };
 
+  // A visibilidade da barra de IA vale na hora, como a aparência; fechar sem
+  // salvar devolve a anterior.
+  const changeNotchVisibility = (visibility) => {
+    if (native) notchActions.setVisibility(visibility).catch(() => { /* a barra mostra o estado real */ });
+    setDraft((current) => current ? { ...current, notch: { ...current.notch, visibility } } : current);
+  };
+
   const close = () => {
     if (draft && dirty) {
       const saved = savedKey ? JSON.parse(savedKey) : null;
       if (saved?.appearance) appearance.setMode(saved.appearance);
+      if (native && saved?.notch?.visibility && saved.notch.visibility !== draft.notch?.visibility) {
+        notchActions.setVisibility(saved.notch.visibility).catch(() => { /* a barra mostra o estado real */ });
+      }
     }
     onClose();
   };
+
+  // Aberta pelo pedido da barra de IA, rola até a seção dela.
+  const ready = Boolean(draft) && !loading;
+  useEffect(() => {
+    if (!open || !ready || !section) return;
+    document.getElementById(`prefs-${section}`)?.scrollIntoView?.({ block: 'start' });
+  }, [open, ready, section]);
 
   const addProjectRoot = async () => {
     const picked = await chooseDirectory({ title: translate('desktop.preferences.addProjectFolder'), defaultPath: draft?.projectRoots?.[0] || undefined });
@@ -155,6 +178,11 @@ export default function Preferences({ open, onClose, appearance }) {
       if (JSON.stringify(sanitizePreferences(normalized).network) !== JSON.stringify(previousNetwork)) {
         tunnel.applyNetworkPreferences(normalized.network).catch(() => { /* o painel mostra o erro da rede */ });
       }
+      // A barra de IA relê os perfis pelo próprio comando.
+      const previousNotch = savedKey ? JSON.parse(savedKey).notch : null;
+      if (native && JSON.stringify(sanitizePreferences(normalized).notch) !== JSON.stringify(previousNotch)) {
+        notchActions.setPrefs(normalized.notch).catch((notchError) => notify(translate('desktop.preferences.saveError', { error: notchError?.message || notchError }), 'warning'));
+      }
       notify(native ? translate('desktop.preferences.saved') : translate('desktop.preferences.previewUpdated'), 'success');
     } catch (saveError) {
       setError(translate('desktop.preferences.saveError', { error: saveError?.message || saveError }));
@@ -192,6 +220,10 @@ export default function Preferences({ open, onClose, appearance }) {
         <Row title={translate('desktop.preferences.computerName')} description={translate('desktop.preferences.computerNameDescription')}><input className="field__control mac-prefs__input" value={draft.network.desktopName || ''} placeholder={tunnel.desktopName || translate('desktop.preferences.computerNamePlaceholder')} maxLength={DESKTOP_NAME_MAX} spellCheck="false" onChange={(event) => updateNetwork({ desktopName: event.target.value || null })} aria-label={translate('desktop.preferences.computerName')} /></Row>
         <Row title={translate('desktop.preferences.confirmPhone')} description={translate('desktop.preferences.confirmPhoneDescription')}><input type="checkbox" className="mac-switch" checked={Boolean(draft.network.requireApproval)} onChange={(event) => updateNetwork({ requireApproval: event.target.checked })} aria-label={translate('desktop.preferences.confirmPhone')} /></Row>
         <Row title={translate('desktop.preferences.keepAwake')} description={translate('desktop.preferences.keepAwakeDescription')}><input type="checkbox" className="mac-switch" checked={Boolean(draft.network.keepAwakeWhilePaired)} onChange={(event) => updateNetwork({ keepAwakeWhilePaired: event.target.checked })} aria-label={translate('desktop.preferences.keepAwake')} /></Row>
+      </section>
+
+      <section className="mac-prefs__section" id="prefs-notch"><h3 className="mac-prefs__heading">{translate('desktop.notch.title')}</h3>
+        <NotchPreferences value={draft.notch} profiles={notchProfiles} onChange={(notch) => setDraft((current) => ({ ...current, notch }))} onVisibility={changeNotchVisibility} disabled={saving} />
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>

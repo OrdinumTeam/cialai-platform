@@ -15,8 +15,9 @@ const placeholder = 'REPLACE_WITH_TAURI_UPDATER_PUBLIC_KEY';
 
 assert.equal(config.bundle.createUpdaterArtifacts, true);
 // O espelho no site atende quando o GitHub não entrega a release; o manifesto espelhado aponta para os mesmos arquivos assinados.
+// As releases vivem em OrdinumTeam/cialai-platform desde que o GitHub escondeu a organização Cialai.
 assert.deepEqual(config.plugins?.updater?.endpoints, [
-  'https://github.com/Cialai/cialai/releases/latest/download/latest.json',
+  'https://github.com/OrdinumTeam/cialai-platform/releases/latest/download/latest.json',
   'https://cialai.com.br/downloads/latest.json',
 ]);
 assert.equal(typeof config.plugins?.updater?.pubkey, 'string');

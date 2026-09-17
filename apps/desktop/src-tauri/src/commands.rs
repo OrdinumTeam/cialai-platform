@@ -51,9 +51,13 @@ pub fn app_platform(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<Plat
 pub fn set_preferences(
     app: AppHandle,
     prefs: State<'_, PrefsState>,
-    next: Preferences,
+    mut next: Preferences,
 ) -> Result<Preferences, String> {
-    let previous_backdrop = prefs.get().window.backdrop().to_string();
+    let previous = prefs.get();
+    let previous_backdrop = previous.window.backdrop().to_string();
+    // O bloco da Barra de IA so muda pelos comandos `notch_*`: o dialogo de
+    // Preferencias monta o objeto do zero e o zeraria.
+    next.notch = previous.notch;
     next.save(&app)?;
     if let Some(browsers) = app.try_state::<BrowserManager>() {
         browsers.set_chromium_path(next.dev_browser.chromium_path.clone());

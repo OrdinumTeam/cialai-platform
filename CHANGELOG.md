@@ -14,9 +14,6 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * Signed update support prepared for desktop releases
 * Automated checks for the desktop, shared interface, tunnel protocol, mobile shell and release documentation
 * An AppImage smoke test that opens the Linux app under Xvfb on Ubuntu 24.04 and Arch Linux with the system Mesa, WebKitGTK and GVfs
-* The mobile app has a home screen with the last computer, Computers, Pair, Terminal and Settings cards, and every back button leads to it. The app opens on the home when there is no last computer or the last connection failed, and goes straight to the terminal otherwise. Leaving the terminal keeps the proxy open for 90 s so returning reuses the same connection, and Disconnect on the Continue card closes it at once. The offline screen offers the home, the list, settings and pairing, and the loading screen shows the Cialai name
-* Core log lines reach the advanced diagnostics in the mobile settings and, on iOS, the macOS Console through `os_log`
-* The nightly workflow builds the Windows app in release and repeats the self test counting console windows, the AppImage smoke fails when the tunnel core does not start from inside the image, and the website repository checks `install.sh` in Arch, Debian, Fedora and Ubuntu containers
 
 ### Fixed
 
@@ -27,6 +24,30 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * The pairing dialog kept resetting the ten minute validity at every code rotation. The window now starts once, each rotated code carries the remaining time, and the dialog says when it expired. The duplicated pairing shortcut in the Devices toolbar was removed
 * Session cards show the model, the reasoning effort, the context window used and the estimated cost of the Claude Code session, and offer to install the status line hook from the card or from Preferences when it is missing
 * The Linux AppImage no longer aborts on current distributions such as Arch Linux with Mesa 26 and recent Ubuntu. The system Mesa stack and its base libraries now come from the host, the WebKit helpers find the bundled libraries on their own, the bundled GLib ignores the host GIO modules and the launcher no longer exports `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` or `QT_PLUGIN_PATH`. The updater signature is made over the final AppImage
+
+### Security
+
+* Pairing credentials remain outside the browser interface and are stored by platform protected storage
+* The mobile proxy accepts loopback traffic only and uses a short lived opening secret
+* Release publication is blocked until the updater public key and signing secrets are configured
+
+### Release status
+
+Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.2.3 preview
+
+Preview dated 2026-09-17 with the AI bar, the phone terminal and connection fixes, the mobile home screen, the Windows console fix and the Linux sidecar fix on top of 0.2.2, whose desktop build was never published.
+
+### Added
+
+* An AI bar on the right of the content, retractable, with one ring per Claude Code and Codex account found on the computer. Each ring shows the current session usage of that plan, the detail shows the weekly and per model windows and the sessions of the account, and the studio session activity appears on the ring. Open, collapsed or hidden with Shift Cmd N or Shift Ctrl N, the View menu and a Preferences section. Usage is read from the tools' own files, the Claude Code CLI and the official usage endpoints, never written, and alerts are off by default. The reading logic comes from Codenotch, MIT
+* The mobile app has a home screen with the last computer, Computers, Pair, Terminal and Settings cards, and every back button leads to it. The app opens on the home when there is no last computer or the last connection failed, and goes straight to the terminal otherwise. Leaving the terminal keeps the proxy open for 90 s so returning reuses the same connection, and Disconnect on the Continue card closes it at once. The offline screen offers the home, the list, settings and pairing, and the loading screen shows the Cialai name
+* Core log lines reach the advanced diagnostics in the mobile settings and, on iOS, the macOS Console through `os_log`
+* The nightly workflow builds the Windows app in release and repeats the self test counting console windows, the AppImage smoke fails when the tunnel core does not start from inside the image, and the website repository checks `install.sh` in Arch, Debian, Fedora and Ubuntu containers
+
+### Fixed
+
 * The Linux AppImage showed Network with a problem from the first launch and never started `cialai-tunnel`: the sidecar was looked up next to the `.AppImage` file instead of inside the mounted image. It is now resolved next to the real executable and under `$APPDIR/usr/bin`, and a missing or invalid sidecar is written to `app.log` with the path that was tried
 * On Windows the app kept opening console windows: the Git status of the explorer, the tunnel core and the diagnostic were spawned from a GUI subsystem process without `CREATE_NO_WINDOW`. All three now start as background commands, the tunnel binary is built as a GUI subsystem program, and the check `check:background-commands` refuses any production `Command::new` without that protection
 * The tunnel core is started at most ten times per ten minute window, counting automatic restarts and interface calls, so a crash loop no longer multiplies processes
@@ -40,16 +61,6 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * Re-adopting a path to the same address no longer closes the WebSockets or counts as a switch, and network interface changes reach the core only after 2.5 s of stability and respect the reserve hysteresis. QUIC uses a 20 s keepalive with a 45 s idle timeout and a 4 s direct dial budget for slow mobile networks
 * The offline screen and the connection state share one retry ladder from 2 s to 16 s per computer, no longer restarting when the reason changes, and retry at once when the core announces a path. On iOS a healthy check after returning from the background no longer restarts the session, and the page waits for the previous socket to close before opening the next one
 * The Linux installer decides the package format from `ID` and `ID_LIKE` in `/etc/os-release` before checking tools, so Arch with `apt-get` or `dnf` installed receives the AppImage. It replaces the AppImage atomically so updating with the app open works, creates the `cialai.desktop` entry with icons, and only warns about FUSE when neither `fusermount3` nor `fusermount` exists
-
-### Security
-
-* Pairing credentials remain outside the browser interface and are stored by platform protected storage
-* The mobile proxy accepts loopback traffic only and uses a short lived opening secret
-* Release publication is blocked until the updater public key and signing secrets are configured
-
-### Release status
-
-Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
 ## 0.2.2 preview
 

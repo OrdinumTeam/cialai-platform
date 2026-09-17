@@ -12,6 +12,7 @@ mod i18n;
 mod lifecycle;
 #[cfg(target_os = "macos")]
 mod menu;
+pub mod notch;
 pub mod platform;
 mod prefs;
 pub mod tunnel;
@@ -32,6 +33,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        // Avisos de limite da Barra de IA, desligados por padrao.
+        .plugin(tauri_plugin_notification::init())
         .register_uri_scheme_protocol(workspace::preview::SCHEME, |context, request| {
             let roots = context
                 .app_handle()
@@ -109,6 +112,12 @@ pub fn run() {
             commands::git_status,
             commands::git_diff,
             commands::preview_register,
+            notch::commands::notch_state,
+            notch::commands::notch_refresh,
+            notch::commands::notch_set_prefs,
+            notch::commands::notch_focus_session,
+            notch::commands::notch_open_settings,
+            notch::commands::notch_set_visibility,
         ])
         .setup(|app| {
             diagnostics::install(app.handle());
@@ -136,6 +145,11 @@ pub fn run() {
             app.manage(workspace::ai::UsageCache::default());
             app.manage(workspace::preview::PreviewRoots::default());
             app.manage(workspace::office::OfficeQueue::default());
+            // A Barra de IA le os perfis e os arquivos que cada agente grava;
+            // os dois relogios dela sobem aqui e param na saida.
+            let notch = notch::setup(app.handle());
+            notch.start();
+            app.manage(notch);
             let support = app
                 .path()
                 .app_data_dir()
@@ -200,6 +214,9 @@ pub fn run() {
                 return;
             }
             diagnostics::note("saida pedida: encerrando browsers e terminais");
+            if let Some(notch) = handle.try_state::<notch::NotchManager>() {
+                notch.stop();
+            }
             if let Some(browsers) = handle.try_state::<workspace::browser::BrowserManager>() {
                 browsers.kill_all_blocking();
             }

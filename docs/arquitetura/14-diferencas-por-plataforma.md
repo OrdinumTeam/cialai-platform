@@ -191,6 +191,29 @@ conexão. Tampa e botão de energia levam à espera em qualquer caso. O Cialai n
 mantém a tela acesa nem usa `PowerRequestExecutionRequired`; o comportamento
 num aparelho físico com Modern Standby ainda não foi verificado.
 
+## Barra de IA
+
+A barra lê o uso do plano e as sessões de cada perfil de Claude Code e Codex
+nos três sistemas; o que muda é onde a credencial mora, se existe cache do
+Claude Desktop e até onde o clique numa sessão consegue levar. O detalhe está
+em [15-barra-de-ia.md](./15-barra-de-ia.md).
+
+| Tema | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Credencial do Claude Code | Chaveiro do login por `security find-generic-password`, com cache de cinco minutos, nunca escrita | `<pasta>/.credentials.json`, nunca escrito | `<pasta>/.credentials.json`, nunca escrito |
+| Pasta `~/.claude-<slug>` vira perfil | Item do chaveiro com o sufixo da pasta | O `.credentials.json` existe | O `.credentials.json` existe |
+| Cache do Claude Desktop | `~/Library/Application Support/Claude/Cache/Cache_Data` | Sem Claude Desktop; a fonte é pulada | `%APPDATA%\Claude\Cache\Cache_Data` |
+| Foco de uma sessão fora do estúdio | App dono pela árvore de processos e aba por tty no Terminal e no iTerm2 | Sem app dono; nada acontece | Sem app dono; nada acontece |
+| Atalho para abrir ou recolher a barra | Shift Cmd N no menu Visualizar | Ctrl Shift A, porque Ctrl Shift N é a variante segura de novo arquivo dentro do terminal | Ctrl Shift A, pelo mesmo motivo |
+| Foco de uma sessão dentro do estúdio | Evento `notch://focus-session` com o card | Igual | Igual |
+| Chamadas HTTP | `/usr/bin/curl` | `/usr/bin/curl`, senão `PATH` | `System32\curl.exe`, senão `PATH` |
+
+Sem `curl` a fonte fica com estado `curlMissing` e a próxima da cascata entra.
+Os processos auxiliares da barra, `security`, `curl`, `claude` e `osascript`,
+passam por `platform::configure_background_command`. Linux e Windows foram
+escritos sem execução nesta linha; a leitura do `.credentials.json` e do cache
+do Windows aguarda uma máquina real.
+
 ## Empacotamento
 
 | Sistema | Formatos | Política de distribuição |

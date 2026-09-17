@@ -16,6 +16,7 @@ export const SOURCE_ROOTS = Object.freeze([
   path.join(repositoryRoot, 'packages/ui/src/terminals'),
   path.join(repositoryRoot, 'packages/ui/src/shared'),
   path.join(repositoryRoot, 'packages/ui/src/lib'),
+  path.join(repositoryRoot, 'packages/ui/src/notch'),
   path.join(repositoryRoot, 'apps/mobile'),
 ]);
 // O núcleo nativo não tem texto literal verificado aqui, mas usa chaves do

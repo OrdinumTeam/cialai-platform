@@ -44,6 +44,7 @@ apps/desktop/
       workspace/procs/{mod,macos,linux,windows}.rs
       workspace/watch/{mod,kqueue,notify}.rs
       workspace/{files,git,journal,resume,ai,preview,office,browser,repos,dragout,mobile_files}.rs
+      notch/{mod,commands,prefs,profiles,alerts}.rs, notch/usage/*, notch/sessions/*   Barra de IA, documento 15
       bridge/{mod,protocol,dispatch,events}.rs
   tools/                       wksnap, winid, winbounds, drive, movidos de $CONTROL/macos/tools
 ```

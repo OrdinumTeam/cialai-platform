@@ -395,6 +395,9 @@
 
 /* conteudo */
 .mac-main{position:relative;display:flex;flex-direction:column;flex:1;min-width:0;background:var(--mac-bg);color:var(--mac-label);transition:background-color var(--mac-normal) var(--mac-ease)}
+/* corpo abaixo da toolbar: a area de conteudo e, a direita dela, a barra de
+   IA, que empurra o conteudo como a sidebar faz */
+.mac-body{display:flex;flex:1;min-height:0;min-width:0}
 
 .mac-toolbar{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 16px 0 10px;background:var(--mac-toolbar-bg);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--mac-separator);user-select:none;-webkit-user-select:none;transition:background-color var(--mac-normal) var(--mac-ease)}
 [data-platform="macos"] .mac-toolbar.is-sidebar-hidden{padding-left:82px}
@@ -427,7 +430,7 @@
 .mac-tool--search span{flex:1;text-align:left}
 .mac-tool kbd,.mac-palette kbd{font:10px var(--mac-font);color:var(--mac-label-3);padding:1px 5px;border:1px solid var(--mac-separator);border-radius:4px;background:var(--mac-surface)}
 
-.mac-content{flex:1;min-height:0;overflow:auto;padding:76px 32px 56px;position:relative;scroll-behavior:smooth}
+.mac-content{flex:1;min-width:0;min-height:0;overflow:auto;padding:76px 32px 56px;position:relative;scroll-behavior:smooth}
 .mac-content>.view,.mac-content>.page{max-width:1320px;margin:0 auto}
 .mac-window.is-booting .mac-content,.mac-window.is-booting .mac-toolbar__titles,.mac-window.is-booting .mac-toolbar__trailing{visibility:hidden}
 

@@ -8,6 +8,16 @@ This is an early preview of Cialai for macOS, Windows, Linux and Android. It is 
 
 Your phone now reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
 
+### New in 0.2.3
+
+* **AI bar.** A retractable panel on the right of the content shows one ring per Claude Code and Codex account found on the computer, with the current session usage of each plan, the weekly and per model windows in the detail, and the activity of the session that runs in the studio. Open, collapsed or hidden, with Shift Cmd N or Shift Ctrl N, the View menu and a section in Preferences. Usage is read from the tools' own files, the Claude Code CLI and the official endpoints, never written, and no alert is on by default.
+* The phone terminal no longer types by itself after switching sessions or computers or after a dropped connection: the replayed history never produces input, reattaching backs off from 500 ms to 8 s, and wheel reports are only sent while the program tracks the mouse.
+* Accented characters and ç typed on the phone come out once and correctly.
+* The phone connection is stable: the health probe uses a local route that the loopback proxy answers without a cookie, losing health shows a Reconnecting banner instead of unmounting the page, the proxy is reused for the same computer, readopting the same path no longer closes the terminals, and there is one retry ladder from 2 s to 16 s.
+* The mobile app has a home screen with the last computer, Computers, Pair, Terminal and Settings, and every back button leads to it. These mobile fixes ship with the next mobile build.
+* On Windows the app no longer opens console windows for Git, the tunnel core or the diagnostic, and the tunnel core is restarted at most ten times per ten minutes.
+* The Linux AppImage finds its tunnel core inside the mounted image, so the network is ready from the first launch on Arch Linux and every other distribution installed by `install.sh`, which now also creates the menu entry and icons, decides the package by `/etc/os-release` and updates with the app open.
+
 ### New in 0.2.2
 
 * The phone screens follow the presentation of the Ordinum Control iPhone app: flat toolbar icons, a single scrolling row of keys starting with Esc and Enter, session cards with the session colour and a 13 px terminal.

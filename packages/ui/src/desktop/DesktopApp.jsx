@@ -12,6 +12,8 @@ import { platform } from '../lib/platform.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
+import NotchBar from '../notch/NotchBar.jsx';
+import { ensureSubscribed as ensureNotchSubscribed, notchActions, onFocusSession, onOpenSettings } from './notch-runtime.js';
 import Preferences from './Preferences.jsx';
 import Onboarding, { shouldShowOnboarding } from './Onboarding.jsx';
 import PairingDialog from './PairingDialog.jsx';
@@ -98,6 +100,7 @@ function DesktopShell() {
   const [sidebarHidden, setSidebarHidden] = useState(() => readStored(SIDEBAR_KEY) === 'true');
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [prefsSection, setPrefsSection] = useState(null);
   const [pairOpen, setPairOpen] = useState(false);
   const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
@@ -115,7 +118,12 @@ function DesktopShell() {
     import('../terminals/browser/runtime.js').then((browser) => browser.reloadActive()).catch(() => {});
   }, []);
   const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const openPreferences = useCallback(() => setPrefsOpen(true), []);
+  // `section` só chega de quem pede uma seção, como a barra de IA; o clique
+  // da toolbar passa o evento e cai no início.
+  const openPreferences = useCallback((section) => {
+    setPrefsSection(typeof section === 'string' ? section : null);
+    setPrefsOpen(true);
+  }, []);
   const openPair = useCallback(() => setPairOpen(true), []);
   const newTerminal = useCallback(() => {
     navigate('terminais');
@@ -133,6 +141,11 @@ function DesktopShell() {
       .then((runtime) => { if (!runtime.closeActive()) closeWindow(); })
       .catch(closeWindow);
   }, [closeWindow]);
+  // Barra de IA: a barra vive na própria janela, então aqui ficam só os
+  // comandos do menu, da paleta e dos atalhos.
+  const showNotch = useCallback(() => { notchActions.setVisibility('open').catch(() => {}); }, []);
+  const hideNotch = useCallback(() => { notchActions.setVisibility('hidden').catch(() => {}); }, []);
+  const toggleNotch = useCallback(() => { notchActions.toggle().catch(() => {}); }, []);
   const completeOnboarding = useCallback((root, options = {}) => {
     setOnboardingOpen(false);
     navigate('terminais');
@@ -144,7 +157,8 @@ function DesktopShell() {
     navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair,
     setAppearance: appearance.setMode, newTerminal, newFile,
     closeActiveTerminalOrWindow, closeWindow, quitApp,
-  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp]);
+    showNotch, hideNotch, toggleNotch,
+  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp, showNotch, hideNotch, toggleNotch]);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
@@ -168,6 +182,20 @@ function DesktopShell() {
     return () => { disposed = true; off?.(); };
   }, []);
 
+  // A barra de IA pede duas coisas a esta janela: abrir a sessão do estúdio
+  // onde um agente roda, pela tag do PTY, e abrir as Preferências na seção
+  // dela.
+  useEffect(() => { ensureNotchSubscribed(); }, []);
+  useEffect(() => {
+    const offs = [];
+    onFocusSession((tag) => {
+      navigate('terminais');
+      import('../terminals/runtime.js').then((runtime) => runtime.selectSession?.(tag)).catch(() => {});
+    }).then((off) => offs.push(off)).catch(() => {});
+    onOpenSettings(() => openPreferences('notch')).then((off) => offs.push(off)).catch(() => {});
+    return () => offs.forEach((off) => off && off());
+  }, [navigate, openPreferences]);
+
   const { setAdvancedOpen } = tunnel;
   useEffect(() => {
     const pair = () => setPairOpen(true);
@@ -189,10 +217,13 @@ function DesktopShell() {
             <Sidebar views={views} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
               <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={views} />
-              <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
+              <div className="mac-body">
+                <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
+                <NotchBar />
+              </div>
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={views} actions={actions} appearance={appearance} />
-            <Preferences open={prefsOpen} onClose={() => setPrefsOpen(false)} appearance={appearance} />
+            <Preferences open={prefsOpen} section={prefsSection} onClose={() => setPrefsOpen(false)} appearance={appearance} />
             <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}

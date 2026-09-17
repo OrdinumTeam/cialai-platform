@@ -8,6 +8,23 @@ const APPEARANCES = new Set(['system', 'light', 'dark']);
 // permite; sólido deixa só o fundo pintado pela página.
 export const BACKDROPS = Object.freeze(['auto', 'solid']);
 
+// Barra de IA: um bloco `notch` no mesmo arquivo de preferências, com os
+// mesmos nomes e valores do Rust. A visibilidade vale na hora; o resto é
+// gravado com Salvar e aplicado por `notch_set_prefs`.
+export const NOTCH_VISIBILITIES = Object.freeze(['open', 'collapsed', 'hidden']);
+export const NOTCH_RESET_FORMATS = Object.freeze(['automatic', 'remaining']);
+export const NOTCH_THRESHOLDS = Object.freeze([0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]);
+export const DEFAULT_NOTCH_PREFERENCES = Object.freeze({
+  visibility: 'open',
+  profiles: Object.freeze({}),
+  order: Object.freeze([]),
+  hideDefaultWhenDuplicate: true,
+  watchLimit: 0.5,
+  criticalLimit: 0.7,
+  alerts: Object.freeze({ threshold: false, limitReached: false, reset: false }),
+  resetTimeFormat: 'automatic',
+});
+
 export const DEFAULT_PREFERENCES = Object.freeze({
   appearance: 'system',
   terminal: Object.freeze({ shell: null, args: [], lang: null, pathPrefix: [] }),
@@ -20,11 +37,44 @@ export const DEFAULT_PREFERENCES = Object.freeze({
     requireApproval: false,
     keepAwakeWhilePaired: false,
   }),
+  notch: DEFAULT_NOTCH_PREFERENCES,
 });
 
 const strings = (value) => Array.isArray(value) ? value.map((item) => String(item ?? '')) : [];
 const cleanList = (value) => [...new Set(strings(value).map((item) => item.trim()).filter(Boolean))];
 const optional = (value) => String(value ?? '').trim() || null;
+const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const limitOf = (value, fallback) => {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 && number <= 1 ? number : fallback;
+};
+
+// Preferências da barra de IA, no formato de `notch_state`. Perfis
+// desconhecidos entram como vieram; o apelido vazio vira null.
+export function normalizeNotchPreferences(value = {}) {
+  const config = isObject(value) ? value : {};
+  const profiles = {};
+  if (isObject(config.profiles)) {
+    for (const [id, row] of Object.entries(config.profiles)) {
+      if (!isObject(row)) continue;
+      profiles[id] = { enabled: row.enabled !== false, alias: optional(row.alias), muted: row.muted === true };
+    }
+  }
+  return {
+    visibility: NOTCH_VISIBILITIES.includes(config.visibility) ? config.visibility : DEFAULT_NOTCH_PREFERENCES.visibility,
+    profiles,
+    order: cleanList(config.order),
+    hideDefaultWhenDuplicate: config.hideDefaultWhenDuplicate !== false,
+    watchLimit: limitOf(config.watchLimit, DEFAULT_NOTCH_PREFERENCES.watchLimit),
+    criticalLimit: limitOf(config.criticalLimit, DEFAULT_NOTCH_PREFERENCES.criticalLimit),
+    alerts: {
+      threshold: config.alerts?.threshold === true,
+      limitReached: config.alerts?.limitReached === true,
+      reset: config.alerts?.reset === true,
+    },
+    resetTimeFormat: NOTCH_RESET_FORMATS.includes(config.resetTimeFormat) ? config.resetTimeFormat : DEFAULT_NOTCH_PREFERENCES.resetTimeFormat,
+  };
+}
 
 export function normalizePreferenceDraft(value = {}) {
   const terminal = value.terminal || {};
@@ -57,6 +107,7 @@ export function normalizePreferenceDraft(value = {}) {
       ...normalizeNetworkPreferences(value.network),
       desktopName: value.network?.desktopName == null ? null : String(value.network.desktopName),
     },
+    notch: normalizeNotchPreferences(value.notch),
   };
 }
 
@@ -77,6 +128,7 @@ export function sanitizePreferences(value) {
       chromiumPath: optional(normalized.devBrowser.chromiumPath),
     },
     network: normalizeNetworkPreferences(normalized.network),
+    notch: normalizeNotchPreferences(normalized.notch),
   };
 }
 

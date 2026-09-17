@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Cialai",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "identifier": "br.com.ordinum.cialai",
   "build": {
     "beforeDevCommand": "npm run build:mobile-resource && npm run vite",
@@ -72,7 +72,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBN0EzNTQyNjg1RjJBN0QKUldSOUtsOW9RalY2cXBPcU12eDh1QzNYaVZCT1p6MzlFUWMrQ08xNnEySlBLdjhOY1ViajVUYmsK",
       "endpoints": [
-        "https://github.com/Cialai/cialai/releases/latest/download/latest.json",
+        "https://github.com/OrdinumTeam/cialai-platform/releases/latest/download/latest.json",
         "https://cialai.com.br/downloads/latest.json"
       ],
       "windows": {

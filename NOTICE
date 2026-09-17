@@ -67,6 +67,14 @@ packaged:
 - AndroidX LocalBroadcastManager 1.1.0, required by tor-android: Apache-2.0,
   https://developer.android.com/jetpack/androidx/releases/localbroadcastmanager
 
+Provider glyphs bundled with the desktop interface, in
+packages/ui/src/notch/glyphs with their own NOTICE.md:
+
+- @lobehub/icons-static-svg 1.95.0: MIT, Copyright LobeHub; the Claude and
+  OpenAI marks identify the provider of each profile in the AI bar and only
+  say which product the usage belongs to
+  https://github.com/lobehub/lobe-icons/blob/master/LICENSE
+
 Planned dependencies, not yet bundled:
 
 - xterm.js: MIT, https://github.com/xtermjs/xterm.js

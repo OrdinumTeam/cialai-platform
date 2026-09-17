@@ -5,6 +5,8 @@
 // ações ficam num botão de menu na toolbar. Só o Windows, sem moldura, desenha
 // os próprios controles; no Linux eles vêm do gerenciador de janelas.
 
+import { currentOs } from '../lib/keys.js';
+import { toggleShortcut } from '../notch/model.js';
 import { translate } from './i18n.js';
 
 export function windowChrome(os) {
@@ -27,8 +29,9 @@ export function windowControlLabels(t = translate) {
 export const WINDOW_CONTROL_LABELS = windowControlLabels();
 
 // Itens do botão de menu, na ordem da menubar do macOS. `label` recebe uma
-// combinação como 'Mod+T' e devolve o rótulo do sistema.
-export function appMenuItems(actions, views = [], { label = () => '', t = translate } = {}) {
+// combinação como 'Mod+T' e devolve o rótulo do sistema; `os` decide a
+// combinação da barra de IA, que muda fora do macOS.
+export function appMenuItems(actions, views = [], { label = () => '', t = translate, os = currentOs() } = {}) {
   const run = (name, ...args) => () => actions?.[name]?.(...args);
   const item = (id, text, combo, name, ...args) => ({ id, label: text, hint: combo ? label(combo) : '', run: run(name, ...args) });
   return [
@@ -39,6 +42,8 @@ export function appMenuItems(actions, views = [], { label = () => '', t = transl
     { separator: true },
     item('command-palette', t('desktop.palette.title'), 'Mod+K', 'openPalette'),
     item('toggle-sidebar', t('desktop.action.toggleSidebar'), '', 'toggleSidebar'),
+    item('notch-toggle', t('desktop.notch.action.toggle'), toggleShortcut(os), 'toggleNotch'),
+    item('notch-hide', t('desktop.notch.action.hide'), '', 'hideNotch'),
     { separator: true },
     item('appearance-system', t('desktop.appearance.systemMenu'), '', 'setAppearance', 'system'),
     item('appearance-light', t('desktop.appearance.light'), '', 'setAppearance', 'light'),
