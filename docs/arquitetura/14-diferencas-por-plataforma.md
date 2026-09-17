@@ -11,7 +11,7 @@ especificação detalhada continua em [04-desktop.md](./04-desktop.md); este tex
 | macOS arm64 | Suíte Rust nativa com 151 casos aprovados e dois ensaios externos ignorados. O caso do instalador do Chromium passou novamente depois do ajuste portável do fixture | Bundle assinado, notarização e instalação limpa |
 | Ubuntu 22.04 arm64 | Suíte Rust em contêiner com 145 casos aprovados e dois ensaios externos ignorados | WebKitGTK visível, instaladores e IME real |
 | AppImage x86_64 | Em 15/09/2026, no run `34948496705` do público, `smoke.sh` abriu a prévia 0.2.0 corrigida por `fix-appimage.mjs` sob Xvfb no Ubuntu 24.04 e num contêiner Arch com Mesa, WebKitGTK e GVfs do sistema, com a interface renderizada e os processos do WebKit vivos. Sem a correção, a mesma prévia abortou no Arch com `EGL_BAD_PARAMETER` e mostrou `undefined symbol` no GVfs do Ubuntu 24.04 | Sessão Wayland real, GPU física, driver NVIDIA e atualização automática de um AppImage instalado |
-| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando | Máquina física, WebView2 com GPU, self test completo, IME, instalação dos instaladores e Authenticode |
+| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando | Máquina física, WebView2 com GPU, self test completo, IME, instalação dos instaladores e Authenticode. Processos filhos sem janela de console no binário de release: o check estático e o self test de release do nightly cobrem a regra, mas nenhuma execução em Windows real foi registrada |
 
 O contêiner Linux teve limite de 6 GiB e dois CPUs e foi removido ao final. O
 cross check Windows usou `CIALAI_SKIP_WINDOWS_RESOURCES=1` porque o host não
@@ -71,6 +71,17 @@ O ConPTY nasce perguntando a posição do cursor e só inicia o shell depois da
 resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e
 tira a pergunta da saída, então nenhum xterm responde de novo e a sessão abre
 mesmo fora da tela ou antes de o app ter a concessão de largura.
+
+No Windows em release o app é subsistema GUI e não tem console. Todo processo
+auxiliar de console, como `git.exe`, `cialai-tunnel.exe`, `soffice` e o
+Chromium, nasce com `CREATE_NO_WINDOW` por
+`platform::configure_background_command`, e
+`tools/check/desktop-background-commands.mjs` reprova qualquer `Command::new`
+de produção sem essa chamada na mesma função. O sidecar Go ainda sai como
+subsistema GUI por `-H=windowsgui`, e os inícios dele ficam limitados a dez por
+janela de dez minutos, para um crash loop não multiplicar processos. O nightly
+roda o self test também sobre o binário de release, contando janelas de console
+novas; o resultado numa máquina Windows real ainda não foi registrado.
 
 O terminal exibido usa WebGL. Num runner do Windows sem GPU o WebView2 desenha
 esse WebGL por SwiftShader e a página ficou lenta a ponto de não responder ao
@@ -224,6 +235,18 @@ linuxdeploy-plugin-gtk troca `/usr` por `././` dentro da `libwebkit2gtk`, e o
 WebKit acha os processos auxiliares por caminho relativo ao diretório de
 trabalho. O diretório de onde o app foi aberto fica em `OWD`, e processos filhos
 precisam de diretório de trabalho explícito.
+
+O sidecar `cialai-tunnel` fica dentro da imagem, em `$APPDIR/usr/bin`, ao lado
+do `cialai-desktop` real. O supervisor o procura por `std::env::current_exe()`
+e, no Linux, prefere `$APPDIR/usr/bin` quando o AppRun definiu a variável.
+`$APPIMAGE`, o caminho do arquivo baixado, nunca decide o sidecar, e um
+`cialai-tunnel` solto ao lado do `.AppImage` não é lido, porque o atualizador
+troca só a imagem e deixaria o sidecar numa versão diferente.
+`CIALAI_TUNNEL_BIN` continua valendo para desenvolvimento. Quando o sidecar não
+é encontrado, o `app.log` registra `sidecar não encontrado` com o caminho
+tentado. O smoke de `appimage-smoke.yml` falha se nenhum `cialai-tunnel` nascer
+de dentro do `APPDIR` ou se `tunnel/tunnel.log` não for criado no `HOME`
+isolado, e roda em todo PR que toque `apps/desktop/src-tauri/src/tunnel`.
 
 No Debian e no Ubuntu, o `.deb` é a alternativa ao AppImage e usa o WebKitGTK e
 as bibliotecas do próprio sistema:

@@ -33,8 +33,10 @@ describe('local proxy URL policy', () => {
     expect(controlOriginWhitelist(PROXY)).toEqual(['*']);
   });
 
-  test('builds health checks without carrying the nonce', () => {
-    expect(buildHealthUrl(PROXY)).toBe('http://127.0.0.1:47400/api/health');
+  test('builds health checks on the local route without carrying the nonce', () => {
+    expect(buildHealthUrl(PROXY)).toBe('http://127.0.0.1:47400/_cialai/health');
+    expect(buildHealthUrl(PROXY)).not.toContain(NONCE);
+    expect(() => buildHealthUrl('https://127.0.0.1:47400/')).toThrow('health_url_invalid_origin');
   });
 
   test('opens only HTTPS external URLs', () => {

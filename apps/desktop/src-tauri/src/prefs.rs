@@ -154,6 +154,7 @@ pub fn computer_name() -> String {
 // reconhece; o nome de host fica de reserva.
 #[cfg(target_os = "macos")]
 fn detect_computer_name() -> Option<String> {
+    // sem CREATE_NO_WINDOW: so no macOS, onde um filho nao abre console.
     let output = std::process::Command::new("/usr/sbin/scutil")
         .args(["--get", "ComputerName"])
         .stdin(std::process::Stdio::null())

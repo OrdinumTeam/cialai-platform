@@ -278,6 +278,21 @@ async function run() {
     return '';
   });
 
+  await check('replay não gera entrada', async () => {
+    // A marca de replay cala a entrada enquanto o histórico volta ao xterm.
+    // Um reattach reproduz o histórico com as consultas do shell dentro; se a
+    // marca falhasse, o xterm responderia a ESC[6n e a resposta sairia por
+    // onData. Reattacha a sessão pelo mesmo caminho da recarga do webview e
+    // afirma que nenhuma resposta de cursor vazou.
+    await runtime.restart(sessionId);
+    await until(() => runtime.getSession(sessionId)?.status === 'running', 'o shell reabrir');
+    await until(() => document.querySelector('.terminais-terminal__host .xterm-screen'), 'o terminal montar de novo', TERMINAL_READY_MS);
+    if (cursor.replies !== 0) {
+      throw new Error(`o xterm respondeu ${cursor.replies} consultas de cursor no reattach`);
+    }
+    return `nenhuma resposta de cursor vazou em ${cursor.queries} consultas vistas`;
+  });
+
   await check('arquivos pelo Rust', async () => {
     const original = await fs.readText(`${paths.root}/origem.txt`);
     if (original.content !== 'origem\n') throw new Error('a leitura devolveu conteúdo diferente');

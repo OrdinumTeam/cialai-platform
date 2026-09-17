@@ -18,21 +18,27 @@ const reasonKeys: Record<OfflineReason, { title: string; detail: string }> = {
 };
 
 type Props = {
+  desktopId: string;
   reason: OfflineReason;
   // Progresso da conexão de reserva enquanto ela prepara; nulo quando não se aplica.
   reserveProgress: number | null;
   onRetry: () => Promise<boolean>;
+  onHome: () => void;
   onDesktops: () => void;
+  onSettings: () => void;
+  onPair: () => void;
   onPairAgain: () => void;
 };
 
-export function Offline({ reason, reserveProgress, onRetry, onDesktops, onPairAgain }: Props) {
+export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, onDesktops, onSettings, onPair, onPairAgain }: Props) {
   const palette = usePalette();
   const { t } = useI18n();
   const [checking, setChecking] = useState(false);
   const [gate] = useState(() => new RequestGate());
-  const attempt = useRef(0);
-  const attemptReason = useRef(reason);
+  // A escada é do computador, não do motivo: o motivo alterna entre túnel, sem
+  // caminho e reserva preparando enquanto o núcleo procura, e zerar a cada troca
+  // prendia as tentativas em 2 s.
+  const attempt = useRef({ desktopId, count: 0 });
   const leaving = useRef(false);
   const removed = reason === 'removed';
   const connecting = reason === 'reconnecting' || reason === 'reserve-preparing';
@@ -45,20 +51,20 @@ export function Offline({ reason, reserveProgress, onRetry, onDesktops, onPairAg
     return healthy;
   }
 
-  // Cada motivo novo recomeça em 2 s; a revogação nunca agenda outra tentativa.
+  // Outro computador recomeça em 2 s; a revogação nunca agenda outra tentativa.
+  // O app também tenta na hora quando o núcleo anuncia um caminho ou a reserva pronta.
   useEffect(() => {
-    if (attemptReason.current !== reason) {
-      attemptReason.current = reason;
-      attempt.current = 0;
-    }
+    if (attempt.current.desktopId !== desktopId) attempt.current = { desktopId, count: 0 };
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // O degrau só avança quando a tentativa dispara: trocar de motivo reagenda
+    // o mesmo degrau em vez de pular um.
     const schedule = () => {
-      const delay = retryDelay(reason, attempt.current);
+      const delay = retryDelay(reason, attempt.current.count);
       if (delay === null) return;
-      attempt.current += 1;
       timer = setTimeout(async () => {
         if (cancelled || leaving.current) return;
+        attempt.current.count += 1;
         if (!(await onRetry()) && !cancelled) schedule();
       }, delay);
     };
@@ -67,7 +73,7 @@ export function Offline({ reason, reserveProgress, onRetry, onDesktops, onPairAg
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [onRetry, reason]);
+  }, [desktopId, onRetry, reason]);
 
   useEffect(() => () => gate.invalidate(), [gate]);
   const copy = reasonKeys[reason];
@@ -113,9 +119,22 @@ export function Offline({ reason, reserveProgress, onRetry, onDesktops, onPairAg
               : <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.offline.retry')}</Text>}
           </Pressable>
         )}
-        <Pressable accessibilityRole="button" onPress={() => leave(onDesktops)} style={styles.secondary}>
-          <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.offline.switchDesktop')}</Text>
+        <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={() => leave(onHome)} style={styles.secondary}>
+          <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
         </Pressable>
+        <View style={styles.shortcuts}>
+          <Pressable accessibilityLabel={t('mobile.home.openDesktops')} accessibilityRole="button" onPress={() => leave(onDesktops)} style={styles.shortcut}>
+            <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.desktops')}</Text>
+          </Pressable>
+          <Pressable accessibilityLabel={t('mobile.desktops.openSettings')} accessibilityRole="button" onPress={() => leave(onSettings)} style={styles.shortcut}>
+            <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.settings')}</Text>
+          </Pressable>
+          {removed ? null : (
+            <Pressable accessibilityLabel={t('mobile.home.openPair')} accessibilityRole="button" onPress={() => leave(onPair)} style={styles.shortcut}>
+              <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.pair')}</Text>
+            </Pressable>
+          )}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -139,5 +158,8 @@ const styles = StyleSheet.create({
   primaryText: { fontSize: 17, fontWeight: '600' },
   secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
   secondaryText: { fontSize: 17, fontWeight: '600' },
+  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4, marginTop: 4 },
+  shortcut: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
+  shortcutText: { fontSize: 15, fontWeight: '600' },
   disabled: { opacity: 0.62 }
 });

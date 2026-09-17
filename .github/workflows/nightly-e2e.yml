@@ -23,7 +23,8 @@ jobs:
       matrix:
         os: [ubuntu-22.04, windows-2022]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 75
+    # O Windows compila o app duas vezes, em debug e em release.
+    timeout-minutes: 120
     env:
       CARGO_BUILD_JOBS: 2
       CARGO_TERM_COLOR: always
@@ -96,10 +97,88 @@ jobs:
         if: runner.os == 'Windows'
         run: npm run test:selftest:driver -- --artifacts selftest-artifacts
 
+      # Em release o app é subsistema GUI, sem console: um filho de console criado sem CREATE_NO_WINDOW abre uma
+      # janela. O binário de debug herda o console do runner e nunca mostra isso, então o self test roda de novo
+      # sobre o release enquanto um vigia registra toda janela de console nova durante a execução.
+      - name: Compilar o app de release no Windows
+        if: runner.os == 'Windows'
+        run: npm run build --workspace @cialai/desktop -- --no-bundle
+
+      - name: Self test no Windows sobre o binário de release, contando janelas de console
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $app = Join-Path $env:GITHUB_WORKSPACE 'apps\desktop\src-tauri\target\release\cialai-desktop.exe'
+          if (-not (Test-Path $app)) { throw "Binário de release ausente em $app" }
+          $watch = Join-Path $env:RUNNER_TEMP 'console-windows.ps1'
+          $seen = Join-Path $env:RUNNER_TEMP 'console-windows.txt'
+          $stop = Join-Path $env:RUNNER_TEMP 'console-windows.stop'
+          Remove-Item $seen, $stop -ErrorAction SilentlyContinue
+          @'
+          param($seen, $stop)
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Collections.Generic;
+          using System.Runtime.InteropServices;
+          using System.Text;
+          public static class ConsoleWindows {
+            public delegate bool EnumProc(IntPtr hWnd, IntPtr lParam);
+            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc callback, IntPtr lParam);
+            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, StringBuilder name, int count);
+            [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+            [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+            public static Dictionary<long, string> Visible() {
+              var found = new Dictionary<long, string>();
+              EnumWindows((hWnd, lParam) => {
+                if (!IsWindowVisible(hWnd)) return true;
+                var name = new StringBuilder(256);
+                GetClassName(hWnd, name, name.Capacity);
+                if (name.ToString() != "ConsoleWindowClass") return true;
+                var title = new StringBuilder(512);
+                GetWindowText(hWnd, title, title.Capacity);
+                uint pid;
+                GetWindowThreadProcessId(hWnd, out pid);
+                found[hWnd.ToInt64()] = "pid " + pid + " " + title;
+                return true;
+              }, IntPtr.Zero);
+              return found;
+            }
+          }
+          "@
+          $baseline = [ConsoleWindows]::Visible()
+          $reported = @{}
+          while (-not (Test-Path $stop)) {
+            foreach ($entry in [ConsoleWindows]::Visible().GetEnumerator()) {
+              if ($baseline.ContainsKey($entry.Key) -or $reported.ContainsKey($entry.Key)) { continue }
+              $reported[$entry.Key] = $true
+              Add-Content -Path $seen -Value ("janela de console nova: handle " + $entry.Key + " " + $entry.Value)
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          '@ | Set-Content -Path $watch -Encoding utf8
+          $watcher = Start-Job -FilePath $watch -ArgumentList $seen, $stop
+          Start-Sleep -Seconds 3
+          npm run test:selftest:driver -- --app $app --artifacts selftest-release-artifacts
+          $selftest = $LASTEXITCODE
+          New-Item -ItemType File -Path $stop -Force | Out-Null
+          Wait-Job $watcher -Timeout 30 | Out-Null
+          Receive-Job $watcher
+          Remove-Job $watcher -Force
+          if (Test-Path $seen) {
+            Get-Content $seen
+            Copy-Item $seen selftest-release-artifacts\console-windows.txt -ErrorAction SilentlyContinue
+            throw 'O app de release abriu janelas de console durante o self test'
+          }
+          Write-Host 'Nenhuma janela de console nova durante o self test de release'
+          exit $selftest
+
       - name: Anexar evidências
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: selftest-${{ runner.os }}-${{ runner.arch }}
           if-no-files-found: warn
-          path: selftest-artifacts/
+          path: |
+            selftest-artifacts/
+            selftest-release-artifacts/

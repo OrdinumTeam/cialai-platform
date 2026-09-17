@@ -34,8 +34,13 @@ const FRESH_ROWS_LIMIT = 60;
 // um arraste, como no explorador do VS Code.
 const HOVER_EXPAND_MS = 700;
 
-const GIT_REFRESH_MS = 15000;
-const GIT_DEBOUNCE_MS = 900;
+// No Windows cada git_status abre dois processos e CreateProcess é caro, então
+// o painel espaça as chamadas: poll de 60 s quando visível, nenhum quando
+// oculto, debounce do watcher de 2,5 s com coalescência, e um piso de 5 s que
+// corta o disparo redundante quando um status acabou de rodar.
+const GIT_REFRESH_MS = 60000;
+const GIT_DEBOUNCE_MS = 2500;
+const GIT_MIN_INTERVAL_MS = 5000;
 const DIR_RELOAD_DEBOUNCE_MS = 150;
 const STATUS_LETTER = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T', untracked: 'U', conflict: '!' };
 const statusLabel = (status) => STATUS_LETTER[status] ? translate(`terminal.explorer.status.${status}`) : status;
@@ -107,14 +112,21 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     timers.set(path, setTimeout(() => { timers.delete(path); loadDir(path, { quiet: true }); }, DIR_RELOAD_DEBOUNCE_MS));
   }, [loadDir]);
 
-  const refreshGit = useCallback(async () => {
+  const refreshGit = useCallback(async ({ force = false } = {}) => {
+    // Piso de 5 s: um foco, uma visibilidade ou um evento do watcher logo depois
+    // de um status recém rodado não abre outro par de processos à toa. O
+    // primeiro carregamento tem gitAt em zero e sempre passa.
+    if (!force && Date.now() - (session.explorer.gitAt || 0) < GIT_MIN_INTERVAL_MS) return;
+    // Marca o início para uma segunda chamada na mesma janela não escapar
+    // enquanto o git_status ainda corre.
+    session.explorer.gitAt = Date.now();
     try {
       const status = await git.status(root);
       session.explorer.git = status;
-      session.explorer.gitAt = Date.now();
     } catch (_error) {
       session.explorer.git = { isRepo: false, changes: [] };
     }
+    session.explorer.gitAt = Date.now();
     markExplorerChanged(sessionId);
   }, [root, session, sessionId]);
 

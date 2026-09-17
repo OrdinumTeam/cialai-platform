@@ -11,7 +11,7 @@ use std::process::{Command, Stdio};
 use serde::Serialize;
 
 use crate::i18n::{t, tf};
-use crate::platform::child_env;
+use crate::platform::{self, child_env};
 
 /// Teto de entradas alteradas devolvidas; acima disso a lista vem cortada.
 const CHANGES_LIMIT: usize = 3_000;
@@ -75,6 +75,9 @@ fn git() -> Command {
         .stdout(Stdio::piped());
     // O git por HTTPS carrega libcurl, que quebra com o LD_LIBRARY_PATH do AppImage.
     child_env::sanitize(&mut command);
+    // Em release no Windows o app e subsistema GUI, sem console: um `git.exe`
+    // criado sem CREATE_NO_WINDOW abre uma janela de console a cada consulta.
+    platform::configure_background_command(&mut command);
     command
 }
 
@@ -311,6 +314,17 @@ u UU N... 100644 100644 100644 100644 h1 h2 h3 conflito.txt\0\
         let status = parse_status(b"# branch.oid abc\0# branch.head (detached)\0");
         assert!(status.detached);
         assert!(status.branch.is_none());
+    }
+
+    /// No Unix o helper deixa `pgroup` no comando, prova de que passou por
+    /// `configure_background_command`, a mesma chamada que no Windows poe
+    /// `CREATE_NO_WINDOW`. O std nao expoe as flags de criacao do Windows, por
+    /// isso la a garantia fica com `tools/check/desktop-background-commands.mjs`.
+    #[cfg(unix)]
+    #[test]
+    fn git_helper_is_configured_as_a_background_command() {
+        let described = format!("{:#?}", git());
+        assert!(described.contains("pgroup: Some("), "{described}");
     }
 
     #[test]

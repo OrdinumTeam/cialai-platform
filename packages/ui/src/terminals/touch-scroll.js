@@ -24,7 +24,7 @@ export const FLING_HOLD_MS = 100;
 // Teto de entalhes de roda por movimento no buffer alternativo.
 export const MAX_WHEEL_PER_MOVE = 3;
 
-export function createTouchScroll({ rowHeight, scrollLines, sendWheel, hasScrollback, requestFrame, cancelFrame }) {
+export function createTouchScroll({ rowHeight, scrollLines, sendWheel, hasScrollback, mouseTracking = () => true, requestFrame, cancelFrame }) {
   let lastY = 0;
   let lastTime = 0;
   let velocity = 0;
@@ -46,7 +46,11 @@ export function createTouchScroll({ rowHeight, scrollLines, sendWheel, hasScroll
     if (!rows) return 0;
     carry -= rows;
     if (hasScrollback()) scrollLines(rows);
-    else if (wheel && sendWheel) sendWheel(rows > 0 ? 1 : -1, Math.min(Math.abs(rows), MAX_WHEEL_PER_MOVE));
+    // Roda do mouse só quando um programa vivo acompanha o mouse de verdade. A
+    // marca vem revalidada depois do replay: um programa já encerrado pode ter
+    // deixado o modo ligado no histórico, e sem esta guarda o dedo injetaria o
+    // relato de roda como texto.
+    else if (wheel && sendWheel && mouseTracking()) sendWheel(rows > 0 ? 1 : -1, Math.min(Math.abs(rows), MAX_WHEEL_PER_MOVE));
     return rows;
   }
 

@@ -30,7 +30,14 @@ function isHighSurrogate(code) {
 // O que o terminal precisa receber para a linha passar de `before` a `after`:
 // um DEL por caractere apagado depois do prefixo comum e o texto novo. Conta
 // pontos de codigo, nao unidades UTF-16, para um emoji custar um DEL so.
+//
+// Antes de comparar, normaliza os dois lados em NFC: o ditado do iOS entrega
+// `c` seguido da cedilha combinante U+0327, e sem a normalizacao a diferenca
+// sairia como dois caracteres em vez de um unico `ç`.
 export function textareaDelta(before, after) {
+  if (before === after) return '';
+  before = before.normalize('NFC');
+  after = after.normalize('NFC');
   if (before === after) return '';
   const limit = Math.min(before.length, after.length);
   let common = 0;
@@ -84,6 +91,12 @@ export function createImeInput({ read, send, schedule }) {
       close();
       flush();
     },
+    // A composicao assumiu o controle: joga fora so a tecla que a disparou,
+    // sempre a ultima, para o flush ja agendado nao vazar o parcial dela. As
+    // teclas anteriores, digitacao normal ainda sem flush, continuam na fila.
+    discard() {
+      entries.pop();
+    },
   };
 }
 
@@ -96,9 +109,13 @@ export function installImeInput(term, { schedule = (callback) => setTimeout(call
   if (!textarea || !element || typeof helper?._handleAnyTextareaChanges !== 'function') return { dispose() {} };
 
   let active = true;
+  // Dentro de uma composicao o proprio CompositionHelper do xterm envia o
+  // texto composto. O rastreador cala e descarta o que juntou para nao mandar
+  // o parcial junto do composto, o que dava `´ç`, `cç` ou `ç` em dobro.
+  let composing = false;
   const tracker = createImeInput({
     read: () => textarea.value,
-    send: (data) => { if (active) term.input(data, true); },
+    send: (data) => { if (active && !composing) term.input(data, true); },
     schedule,
   });
   const onKeydown = (event) => {
@@ -106,6 +123,13 @@ export function installImeInput(term, { schedule = (callback) => setTimeout(call
   };
   const onInput = () => tracker.input();
   const onEnd = () => tracker.end();
+  // A ordem entre o flush do rastreador, em setTimeout(0), e o compositionstart
+  // muda entre o WKWebView do iOS e o Chromium do Android. Ligar a marca no
+  // comeco e descartar o pendente cobre as duas: se o flush corre antes, o
+  // campo ainda nao mudou e o delta e vazio; se corre depois, a marca ja calou.
+  const onCompositionStart = () => { composing = true; tracker.discard(); };
+  const onCompositionUpdate = () => { composing = true; };
+  const onCompositionEnd = () => { composing = false; };
 
   helper._handleAnyTextareaChanges = () => tracker.key();
   // Captura no elemento do terminal para rodar antes dos ouvintes do xterm,
@@ -113,7 +137,9 @@ export function installImeInput(term, { schedule = (callback) => setTimeout(call
   element.addEventListener('keydown', onKeydown, true);
   textarea.addEventListener('input', onInput);
   textarea.addEventListener('keyup', onEnd);
-  textarea.addEventListener('compositionstart', onEnd);
+  textarea.addEventListener('compositionstart', onCompositionStart);
+  textarea.addEventListener('compositionupdate', onCompositionUpdate);
+  textarea.addEventListener('compositionend', onCompositionEnd);
 
   return {
     dispose() {
@@ -121,7 +147,9 @@ export function installImeInput(term, { schedule = (callback) => setTimeout(call
       element.removeEventListener('keydown', onKeydown, true);
       textarea.removeEventListener('input', onInput);
       textarea.removeEventListener('keyup', onEnd);
-      textarea.removeEventListener('compositionstart', onEnd);
+      textarea.removeEventListener('compositionstart', onCompositionStart);
+      textarea.removeEventListener('compositionupdate', onCompositionUpdate);
+      textarea.removeEventListener('compositionend', onCompositionEnd);
       delete helper._handleAnyTextareaChanges;
     },
   };

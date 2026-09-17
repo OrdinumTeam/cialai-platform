@@ -6,7 +6,7 @@ Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CON
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
-| Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente; desde 16/09/2026 os ajustes escolhem se o Face ID ou a biometria é pedido sempre, só ao abrir o computador ou nunca |
+| Casca Expo, QR, perfis e estados | Implementado | Typecheck e lint já registrados no handoff, mais 101 testes em 15 suítes na validação final desta frente; desde 16/09/2026 os ajustes escolhem se o Face ID ou a biometria é pedido sempre, só ao abrir o computador ou nunca, e a perda de saúde mantém a página montada com a faixa de reconexão em vez de destruir o WebView; a tela inicial é o hub e o destino de todo voltar, com o proxy guardado por 90 s ao sair do terminal, pela decisão 037 |
 | Página do celular | Implementado | Composição somente com Terminais e cabeçalho compacto passou nos checks compartilhados; desde 15/09/2026 a apresentação segue o telefone do Control, com evidência em `docs/evidence/celular-control` |
 | Idiomas da interface | Implementado | Português do Brasil, inglês e espanhol neutro seguem o aparelho e a escolha persistida |
 | Metadados nativos por idioma | Preparado | `CFBundleLocalizations`, textos de câmera, rede local e Face ID por idioma e `localeConfig` do Android saem de `@cialai/i18n` e aparecem na introspecção do Expo; build nativo e aparelho pendentes |
@@ -26,14 +26,14 @@ Os apps iOS e Android do Cialai são a casca Expo do iPhone do Control, em `$CON
 
 | Parte do Control | Comportamento | No Cialai |
 | --- | --- | --- |
-| `App.tsx` | Estados `loading`, `connect`, `shell`, `offline`; bootstrap lendo o endereço do Keychain, validando e sondando a saúde; bloqueio biométrico por `AppState`; `changeAddress` bloqueia e navega antes de apagar | Estados `loading`, `pair`, `desktops`, `shell`, `offline`; bootstrap lê os perfis e o último desktop |
+| `App.tsx` | Estados `loading`, `connect`, `shell`, `offline`; bootstrap lendo o endereço do Keychain, validando e sondando a saúde; bloqueio biométrico por `AppState`; `changeAddress` bloqueia e navega antes de apagar | Estados `loading`, `pair`, `home`, `desktops`, `settings`, `shell`, `offline`; bootstrap lê os perfis e o último desktop; `home` é o hub e o destino de todo voltar |
 | `screens/Connect.tsx` | Endereço `.ts.net` digitado, `Testar conexão` | Substituída por `Pair.tsx` com o leitor e `Desktops.tsx` com a lista |
-| `screens/Shell.tsx` | WebView em `source={{uri}}` com `originWhitelist(['*'])` e guarda própria que abre fora tudo que não é a mesma origem; `injectedJavaScriptBeforeContentLoaded` define `window.__ORDINUM_SHELL__`; saúde a cada 10 s em primeiro plano e ao voltar; `onContentProcessDidTerminate` recarrega; toolbar nativa mínima | Preservada; URL do proxy; global `__CIALAI_SHELL__`; toolbar mostra o nome do desktop e o estado do túnel |
-| `screens/Offline.tsx` | Retentativas em 2, 4, 8 e 16 s, `Tentar agora` por `RequestGate`, `Alterar endereço` | Preservada; `Trocar de computador` no lugar de alterar endereço |
+| `screens/Shell.tsx` | WebView em `source={{uri}}` com `originWhitelist(['*'])` e guarda própria que abre fora tudo que não é a mesma origem; `injectedJavaScriptBeforeContentLoaded` define `window.__ORDINUM_SHELL__`; saúde a cada 10 s em primeiro plano e ao voltar; `onContentProcessDidTerminate` recarrega; toolbar nativa mínima | Preservada; URL do proxy; global `__CIALAI_SHELL__`; toolbar mostra o nome do desktop e o estado do túnel; faixa nativa `Reconectando` acima da página enquanto `reconnecting` está ligado; `onError` conta como uma falha, com os mesmos dois strikes da sondagem, em vez de derrubar a conexão sozinho; `source` memorizado pela URL para o proxy reaproveitado não recarregar a página |
+| `screens/Offline.tsx` | Retentativas em 2, 4, 8 e 16 s, `Tentar agora` por `RequestGate`, `Alterar endereço` | Preservada; `Início` e os atalhos Computadores, Ajustes e Vincular no lugar de alterar endereço; a escada é indexada pelo computador, não pelo motivo, e não recomeça quando o motivo alterna entre túnel, sem caminho e reserva preparando |
 | `auth/biometrics.ts` | `SESSION_BACKGROUND_TTL_MS` de 5 min; `authorize('session')` só uma vez por sessão desbloqueada; `authorize('action')` sempre; fila serializada; época invalida prompts em voo; estado só em memória | Preservada |
 | `bridge/messages.ts`, `downloads.ts`, `share-download.ts` | Só `auth`, `download` e `open-external`; limites de 160 caracteres de motivo, 11,2 MB de mensagem e 8 MiB de download; MIME permitidos; nomes de arquivo saneados | Preservados; nova mensagem `navigate-back` para o botão do Android |
 | `config/url.ts` | Exige `https` em `.ts.net` fora do desenvolvimento | Aceita `http://127.0.0.1:<porta>/?k=<nonce>` em produção, e só isso |
-| `network/health.ts` | `{"status":"ok","service":"workplace"}` com prazo de 5 s | Serviço `cialai` |
+| `network/health.ts` | `{"status":"ok","service":"workplace"}` com prazo de 5 s | Serviço `cialai` na rota local `/_cialai/health` do proxy, servida sem cookie e sem nonce; cada sondagem que falha registra o código HTTP ou o motivo no anel de diagnóstico |
 | `config/storage.ts` | Chave `ordinum.control.mac-url` no Keychain com `WHEN_UNLOCKED_THIS_DEVICE_ONLY` | Tokens por desktop e perfis, abaixo |
 | `app.config.ts` | `br.com.ordinum.control`, `platforms: ['ios']`, `supportsTablet false`, Face ID, `usesNonExemptEncryption false`, `CFBundleDevelopmentRegion pt-BR` | `br.com.ordinum.cialai`, iOS e Android, câmera, rede local, `usesNonExemptEncryption false`, pela atualização de 14/09/2026 da decisão 014 |
 
@@ -44,13 +44,35 @@ Toolchain herdada: Expo 57, React Native 0.86, React 19.2, `react-native-webview
 ```ts
 type AppScreen =
   | { kind: 'loading' }
-  | { kind: 'pair'; error?: string }
+  | { kind: 'pair'; error?: string; notice?: string }
+  | { kind: 'home' }
   | { kind: 'desktops' }
-  | { kind: 'shell'; desktopId: string; url: string }
-  | { kind: 'offline'; desktopId: string };
+  | { kind: 'settings' }
+  | { kind: 'shell'; desktopId: string; url: string; transport: Transport | null; path: PathKind | null; reconnecting: boolean }
+  | { kind: 'offline'; desktopId: string; reason: OfflineReason };
 ```
 
-Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincular de novo quando perfis antigos do Headscale foram apagados; com o último computador, `Connect` e `OpenDesktop`, `shell` com a URL devolvida; falha do caminho ou da saúde, `offline`. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente. Mudança de rede pelo NetInfo chama `NotifyNetworkChange`.
+Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincular de novo quando perfis antigos do Headscale foram apagados; sem `lastDesktopId` ou com a marca `cialai.lastConnectionFailed` gravada no Secure Store, `home`; com o último computador, `Connect` e `OpenDesktop`, `shell` com a URL devolvida; falha do caminho, `offline`, que grava a marca para a próxima abertura começar no início; o proxy aberto apaga a marca. Depois do pareamento o app vai ao terminal. A tela `loading` mostra o nome Cialai e um texto curto sob o spinner. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; quando ela responde, `notifyHealthy` avisa o módulo iOS que o proxy sobreviveu à suspensão e a próxima conexão não recomeça do zero. Ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente.
+
+### Início como hub e destino do voltar
+
+A ação `show-home` leva ao estado `home` de qualquer tela. A tela inicial mostra o card Continuar com o último computador, o ponto de estado de `describeDesktop` e o chip de transporte, e quatro cards: Computadores com a contagem, Vincular, Terminal e Ajustes. Todos os botões de volta apontam para o início com o rótulo Início: a barra do terminal, o `navigate-back` do Android na lista de sessões, Ajustes, Sem conexão, Vincular e o voltar novo da lista de computadores. Sair do terminal não chama `closeDesktop`: `App.tsx` guarda o proxy por `HOME_PROXY_GRACE_MS`, 90 s, e um temporizador o fecha se a pessoa não voltar. Voltar ao terminal dentro do prazo refaz `Connect` e `OpenDesktop`; o núcleo devolve a mesma URL, porta e nonce para o mesmo computador, então a página recarrega com o cookie que já tem. Abrir outro computador fecha o proxy guardado na hora. Enquanto o proxy está guardado, o card Continuar mostra Desconectar, que fecha o proxy de propósito; a tela sem conexão também oferece Início e os atalhos Computadores, Ajustes e Vincular, e sair dela cancela a escada de tentativas. Os glifos dos cards são desenhados com `View`, sem dependência de ícones, pela decisão 037.
+
+### Reconexão sem desmontar a página
+
+A perda de saúde com a página aberta não troca de tela. As ações `shell-reconnecting` e `shell-recovered` ligam e desligam `reconnecting` dentro de `shell`; a faixa nativa `Reconectando` aparece acima do WebView e a página, com o xterm e o replay, fica montada. Com a faixa ligada o app consulta o núcleo: `state: offline` confirma que não há caminho e leva a `offline`; caminho ativo com a sondagem mais longa respondendo é só a reserva lenta e a faixa sai; nos demais casos o app refaz `Connect` e `OpenDesktop` pedindo a porta atual como `preferredPort`. O núcleo devolve a mesma URL, porta e nonce quando o proxy segue aberto para o mesmo computador, e `desktop-opened` com a mesma URL não muda o `source` do WebView. Uma falha ao reabrir dentro do prazo `SHELL_RECONNECT_DEADLINE_MS` de 45 s mantém a página; a próxima sondagem boa tira a faixa, e o prazo vencido ou a confirmação do núcleo levam a `offline`. A reabertura nativa do Android depois da parada em segundo plano usa a mesma faixa e troca a URL sem remontar o WebView.
+
+### Uma escada de tentativas só
+
+A tela `offline` tem a única escada de retentativas do app: 2, 4, 8 e 16 s, repetindo o último intervalo, indexada por `desktopId`. A reserva em preparo não tem mais intervalo fixo de 3 s: o app tenta na hora quando o núcleo emite `path` com transporte para o computador ou quando o Tor fica pronto, e a escada continua como reserva. O núcleo mantém a escada dele; o app não recria o proxy por conta própria a cada intervalo.
+
+### Debounce da rede
+
+Mudança de rede pelo NetInfo chama `NotifyNetworkChange`. Mudança de alcance é repassada na hora, porque a volta da rede destrava a reconexão. Mudança só de interface, como Wi-Fi para rede móvel com o mesmo alcance, só chega ao núcleo depois de `NETWORK_TYPE_SETTLE_MS` de 2,5 s estável, porque o NetInfo oscila entre `wifi`, `cellular` e `unknown` durante a troca; um vaivém que termina na interface de antes não gera aviso e repetições idênticas nunca chegam ao núcleo. No Android o módulo só reinicia a descoberta DNS-SD quando o transporte da rede ativa mudou de fato.
+
+### Diagnóstico no aparelho
+
+`src/state/diagnostics.ts` guarda um anel com as 80 últimas linhas: o app registra o código HTTP ou o motivo de cada sondagem que falhou, o motivo de cada tela sem conexão e o resultado de cada reabertura do proxy; os eventos `log` do núcleo entram como vieram. Ajustes mostra o anel em Diagnóstico avançado, em Linhas recentes, para a causa de uma queda ser lida no próprio aparelho. No iOS o módulo espelha as mesmas linhas em `os_log`, subsistema `br.com.ordinum.cialai` e categoria `tunnel`, visíveis no Console do macOS com o iPhone ligado.
 
 ## Telas
 
@@ -58,10 +80,11 @@ Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincula
 | --- | --- |
 | Pair | Leitor de QR em tela cheia por `CameraView` com `barcodeScannerSettings` só `qr` e `onBarcodeScanned` desligado após a primeira leitura; texto "Abra Vincular celular no computador"; botão de colar o texto do QR para quem prefere; permissão da câmera pedida aqui com o texto explicando o uso |
 | Confirmação | "Vincular a <nome do desktop>?", com a impressão digital do computador para conferir com a exibida no computador; com aprovação exigida, a pessoa confere o código de 4 dígitos no computador; progresso: lendo código, procurando na rede local, conectando pela internet, conectando pela reserva, confirmando |
-| Desktops | Lista de computadores com nome, estado, último acesso e badge Direta ou Reserva; tocar abre `shell`; menu com renomear, esquecer, e `Vincular outro` |
-| Shell | WebView com a página do computador; toolbar nativa com nome do desktop, ponto do túnel, botão Desktops; teclado e fileira de teclas vêm da página |
-| Offline | Retentativas e `Tentar agora`; motivo visível: computador fora de alcance, reserva preparando, reserva indisponível ou celular removido |
-| Ajustes | Diagnóstico avançado com transporte e caminho ativos, conexão de reserva e redes públicas usadas; nível de log, versão do núcleo e da página, licenças |
+| Início | Título grande, card Continuar com o último computador, ponto de estado, badge Direta ou Reserva e Desconectar enquanto o proxy está guardado; cards Computadores com a contagem, Vincular, Terminal e Ajustes, com glifos desenhados com `View`; destino de todo voltar |
+| Desktops | Lista de computadores com nome, estado, último acesso e badge Direta ou Reserva; tocar abre `shell`; menu com renomear, esquecer, e `Vincular outro`; barra com Início e Ajustes |
+| Shell | WebView com a página do computador; toolbar nativa com nome do desktop, ponto do túnel, botão Início que guarda o proxy por 90 s; faixa `Reconectando` acima da página enquanto o caminho volta; teclado e fileira de teclas vêm da página |
+| Offline | Retentativas em uma escada só por computador e `Tentar agora`; motivo visível: computador fora de alcance, reserva preparando, reserva indisponível ou celular removido; tenta na hora quando o núcleo anuncia um caminho; Início e os atalhos Computadores, Ajustes e Vincular |
+| Ajustes | Diagnóstico avançado com transporte e caminho ativos, conexão de reserva, redes públicas usadas e as linhas recentes do anel de diagnóstico; nível de log, versão do núcleo e da página, licenças; voltar leva ao Início |
 
 ## Módulo nativo `cialai-tunnel`
 
@@ -83,6 +106,7 @@ export function status(): Promise<TunnelStatus>;
 export function desktops(): Promise<DesktopRecord[]>;
 export function notifyNetworkChange(reachable: boolean): void;
 export function notifyForeground(active: boolean): void;
+export function notifyHealthy(): void;
 export function forgetDesktop(desktopId: string): Promise<void>;
 export function setLogLevel(level: 'error' | 'info' | 'debug'): void;
 export function addListener(handler: (event: TunnelEvent) => void): { remove(): void };
@@ -94,7 +118,7 @@ Tokens: `expo-secure-store` com chave `cialai.device.<desktopId>` e `WHEN_UNLOCK
 
 ## WebView
 
-O WebView carrega `http://127.0.0.1:47400/?k=<nonce>`; o proxy grava o cookie e redireciona para `/`. Propriedades preservadas de `Shell.tsx:181-205`: `allowsBackForwardNavigationGestures` desligado, `allowsLinkPreview` desligado, `contentInsetAdjustmentBehavior never`, `domStorageEnabled`, `javaScriptEnabled`, `keyboardDisplayRequiresUserAction` desligado, `pullToRefreshEnabled`, `sharedCookiesEnabled` desligado, `onContentProcessDidTerminate` recarregando, `onError` levando a `offline`, `originWhitelist(['*'])` com a guarda de `Shell.tsx:114-121` comparando a origem do proxy. `injectedJavaScriptBeforeContentLoaded` define `window.__CIALAI_SHELL__` com plataforma, versão, identificador, nome do computador e idioma. A página deriva o WebSocket de `location.host`, então conecta em `ws://127.0.0.1:47400/pty` sem saber de túnel. A saúde é sondada em `http://127.0.0.1:47400/api/health` e espera `service: "cialai"`.
+O WebView carrega `http://127.0.0.1:47400/?k=<nonce>`; o proxy grava o cookie e redireciona para `/`. Propriedades preservadas de `Shell.tsx:181-205`: `allowsBackForwardNavigationGestures` desligado, `allowsLinkPreview` desligado, `contentInsetAdjustmentBehavior never`, `domStorageEnabled`, `javaScriptEnabled`, `keyboardDisplayRequiresUserAction` desligado, `pullToRefreshEnabled`, `sharedCookiesEnabled` desligado, `onContentProcessDidTerminate` recarregando, `onError` contando uma falha com os mesmos strikes da sondagem, `originWhitelist(['*'])` com a guarda de `Shell.tsx:114-121` comparando a origem do proxy. `injectedJavaScriptBeforeContentLoaded` define `window.__CIALAI_SHELL__` com plataforma, versão, identificador, nome do computador e idioma. A página deriva o WebSocket de `location.host`, então conecta em `ws://127.0.0.1:47400/pty` sem saber de túnel. A saúde é sondada em `http://127.0.0.1:47400/_cialai/health`, rota local do proxy servida antes do portão do cookie e do nonce, porque o `fetch` do app não enxerga o cookie que o WKWebView recebeu, e espera `status: "ok"` com `service: "cialai"`; 503 com `status: "offline"` e `reason` conta como falha e o motivo vai para o anel de diagnóstico.
 
 Teclado: a página mede o `visualViewport` em `mobile/keyboard-viewport.js` e reposiciona o prompt; no Android o `app.json` usa `softwareKeyboardLayoutMode: "resize"` para o WebView encolher em vez de rolar. Rota do terminal persistida em `cialai_terminals_phone_route`, então recarregar devolve o mesmo painel.
 
@@ -116,8 +140,8 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 | --- | --- |
 | Projeto nativo | `expo prebuild --platform android` no CI, nunca versionado, como `ios/app/android` hoje |
 | Texto claro | Plugin de configuração que grava `res/xml/network_security_config.xml` com `base-config cleartextTrafficPermitted="false"` e `domain-config` liberando só `127.0.0.1`; nunca `usesCleartextTraffic` global |
-| Botão voltar | `BackHandler` na casca envia `navigate-back` à página, que volta do preview para arquivos, de arquivos para o terminal e do terminal para a lista; na lista, sai para Desktops |
-| Ciclo de vida | Em segundo plano o núcleo fica vivo 2 minutos e então `Stop()`; ao voltar, `Connect` e `OpenDesktop` em 2 a 4 s com a tela Offline mostrando "reconectando" |
+| Botão voltar | `BackHandler` na casca envia `navigate-back` à página, que volta do preview para arquivos, de arquivos para o terminal e do terminal para a lista; na lista, sai para o Início com o proxy guardado por 90 s |
+| Ciclo de vida | Em segundo plano o núcleo fica vivo 2 minutos e então `Stop()`; ao voltar, `Connect` e `OpenDesktop` em 2 a 4 s com a página montada atrás da faixa `Reconectando` e a URL nova trocada sem remontar o WebView |
 | Backup | `allowBackup` desligado ou `fullBackupContent` excluindo `cialai/`; tokens no Keystore pelo Secure Store |
 | Permissões | `CAMERA` para o QR; `USE_BIOMETRIC`; `INTERNET`; nada de VPN, localização ou notificações |
 | SDK | `targetSdk` 36 por `expo-build-properties`, exigência do Play para atualizações a partir de 31/08/2026, como o Advoris já faz; `minSdk` 26 pelo `gomobile` |
@@ -132,7 +156,7 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 | Conformidade de exportação | `usesNonExemptEncryption: false` desde 14/09/2026: algoritmos padrão fora da App Store da França dispensam documentação na Apple. Mercado de massa e relatório anual continuam valendo; distribuir na França exige a declaração francesa, o código aprovado e o Info.plist verdadeiro. Confirmar com o jurídico |
 | Proteção de dados | Estado do núcleo e do Tor sob `NSFileProtectionCompleteUntilFirstUserAuthentication` e `isExcludedFromBackup` |
 | Mínimo | iOS 16.4, como o protótipo |
-| Segundo plano | Sem modos de segundo plano; 30 s depois de sair o iOS congela as threads do Go; ao voltar, `rebind` e `restun` e o proxy derruba upstreams mortos para a página religar |
+| Segundo plano | Sem modos de segundo plano; 30 s depois de sair o iOS congela as threads do Go; ao voltar, `rebind` e `restun` e o proxy derruba upstreams mortos para a página religar. O módulo marca `freshStartPending` na volta e a limpa em `notifyHealthy`, quando a sondagem do app confirma que o proxy respondeu; assim uma conexão pedida minutos depois não derruba uma sessão saudável. A página, em `remote.js`, espera o `onclose` do socket anterior antes de abrir o novo, com prazo de segurança de 1,5 s, para não bater no limite de sockets por aparelho |
 | Texto de revisão | "Encrypted link to your own computer"; nunca a palavra VPN em interface, metadados ou notas; desktop de demonstração e vídeo do pareamento nas notas de revisão; ensaio por TestFlight externo antes da submissão |
 | iPad | Recebe a casca de telefone, como hoje; `supportsTablet` desligado |
 
@@ -142,7 +166,7 @@ Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e 
 
 ## Testes
 
-Jest com `jest-expo`, herdando os 65 casos de `ios/app` e acrescentando: inspeção do QR em cada estado de erro; `validateControlUrl` aceitando só a URL do proxy em produção; saúde com serviço `cialai`; loja de perfis; transições de primeiro e segundo plano chamando o módulo nativo; `navigate-back`; renderização de Pair, Desktops e Offline. Verificações da página: `check-phone-terminal.mjs`, `check-phone-workbench.mjs`, `check-mobile.mjs` e `check-mobile-readonly-ui.mjs` portados. Roteiros manuais de rede no documento 06, com iPhone e Android reais, porque simuladores não têm UDP confiável para o caminho direto; o roteiro físico da conectividade está em `docs/testes/roteiro-conectividade.md`.
+Jest com `jest-expo`, herdando os 65 casos de `ios/app` e acrescentando: inspeção do QR em cada estado de erro; `validateControlUrl` aceitando só a URL do proxy em produção; saúde com serviço `cialai` sondada com o `fetch` do Node contra um proxy HTTP de teste local, sem cookie, com 200 e 503; loja de perfis; transições de primeiro e segundo plano chamando o módulo nativo; debounce do NetInfo; `navigate-back`; renderização de Pair, Desktops, Offline e Shell com a faixa de reconexão; `App.test.js` provando que o WebView não é remontado numa falha transitória e que o proxy reaproveitado mantém o `source`. Verificações da página: `check-phone-terminal.mjs`, `check-phone-workbench.mjs`, `check-mobile.mjs` e `check-mobile-readonly-ui.mjs` portados. Roteiros manuais de rede no documento 06, com iPhone e Android reais, porque simuladores não têm UDP confiável para o caminho direto; o roteiro físico da conectividade está em `docs/testes/roteiro-conectividade.md`.
 
 ## Lojas
 
@@ -153,7 +177,7 @@ Identificadores, credenciais por referência e workflows no documento 10. Exigê
 | Risco | Mitigação |
 | --- | --- |
 | Tamanho e memória do runtime Go no celular | Spike 1 com limites numéricos; só arm64 na loja |
-| Reconexão após troca de rede ou segundo plano | Spike 2; `NotifyNetworkChange` e `NotifyForeground`; prazo de 60 s no proxy |
+| Reconexão após troca de rede ou segundo plano | Spike 2; `NotifyNetworkChange` com debounce da interface e `NotifyForeground`; prazo de 60 s no proxy; faixa de reconexão sem desmontar a página |
 | Revisão da Apple lendo o túnel como VPN | Texto, notas e ensaio por TestFlight externo |
 | Outro app ou página acessando o proxy em loopback no Android | Nonce, cookie estrito e `Origin` |
 | Expo Go inutilizável | Dev client; documentado no documento 09 |

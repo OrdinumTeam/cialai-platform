@@ -224,7 +224,12 @@ func (tunnel *Tunnel) Connect(desktopID string) (string, error) {
 }
 
 // OpenDesktop creates the authenticated loopback origin consumed by WebView.
-// The proxy dials the desktop through the path manager.
+// The proxy dials the desktop through the path manager and answers the local
+// health route from its state. When the proxy of desktopID is already open it
+// is reused: same port, nonce and page cookie, with the device token replaced
+// and one more first load allowed, so the page keeps its sockets and does not
+// load again. Only another desktop, or a proxy closed meanwhile, gets a new
+// one; preferredPort is ignored on reuse.
 func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort int) (string, error) {
 	tunnel.opMu.Lock()
 	defer tunnel.opMu.Unlock()
@@ -234,6 +239,14 @@ func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort i
 	}
 	tunnel.mu.Lock()
 	previous, previousID := tunnel.proxy, tunnel.proxyID
+	tunnel.mu.Unlock()
+	if previous != nil && previousID == desktopID {
+		if reused, err := previous.Reuse(deviceToken); err == nil {
+			tunnel.log(levelDebug, "reused the local proxy of "+desktopID+" on port "+fmt.Sprint(reused.Port))
+			return marshalJSON(reused)
+		}
+	}
+	tunnel.mu.Lock()
 	tunnel.proxy, tunnel.proxyID = nil, ""
 	tunnel.mu.Unlock()
 	tunnel.closeProxy(previous, previousID)
@@ -246,6 +259,7 @@ func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort i
 		OnRevoked: func() {
 			tunnel.emit("proxy", map[string]any{"state": "revoked", "desktopId": desktopID})
 		},
+		Health: func() proxy.Health { return healthOf(manager) },
 	})
 	if err != nil {
 		return "", coded("proxy_invalid", err)
@@ -266,6 +280,21 @@ func (tunnel *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort i
 	}
 	tunnel.emit("proxy", event)
 	return marshalJSON(opened)
+}
+
+// healthOf reports the manager to the local health route of the proxy: the
+// active path, or the phone API code of the last failure and otherwise the
+// state, such as connecting.
+func healthOf(manager *pathmgr.Manager) proxy.Health {
+	status := manager.Status()
+	if status.Active != nil {
+		return proxy.Health{Active: *status.Active}
+	}
+	reason := status.Error
+	if reason == "" {
+		reason = string(status.State)
+	}
+	return proxy.Health{Reason: reason}
 }
 
 // CloseDesktop closes the proxy and the path of desktopID.

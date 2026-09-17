@@ -191,7 +191,9 @@ pub fn pty_metrics(terminals: State<'_, TerminalManager>) -> Vec<SessionMetrics>
 }
 
 /// Texto digitado ou colado. Com `binary`, cada char e um byte, para os
-/// eventos `onBinary` do xterm.
+/// eventos `onBinary` do xterm: a pagina so usa esse caminho para os relatos
+/// de mouse X10, que cabem em um byte por char. Qualquer char acima de U+00FF
+/// e recusado em vez de truncado, para texto nunca perder acentos por ali.
 #[tauri::command]
 pub fn pty_write(
     terminals: State<'_, TerminalManager>,
@@ -200,11 +202,24 @@ pub fn pty_write(
     binary: Option<bool>,
 ) -> Result<(), String> {
     if binary.unwrap_or(false) {
-        let bytes: Vec<u8> = data.chars().map(|char| char as u32 as u8).collect();
-        terminals.write(id, &bytes)
+        terminals.write(id, &binary_bytes(&data)?)
     } else {
         terminals.write(id, data.as_bytes())
     }
+}
+
+/// Bytes do caminho `binary`: um por char, somente ate U+00FF.
+fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
+    data.chars()
+        .map(|char| {
+            u8::try_from(u32::from(char)).map_err(|_| {
+                format!(
+                    "o caminho binario do terminal so aceita chars ate U+00FF e recebeu U+{:04X}",
+                    u32::from(char)
+                )
+            })
+        })
+        .collect()
 }
 
 #[tauri::command]
@@ -399,6 +414,22 @@ pub fn detect_project_roots(app: AppHandle) -> Result<Vec<RepoRoot>, String> {
 #[tauri::command]
 pub fn app_shell(prefs: State<'_, PrefsState>) -> ShellSpec {
     platform::default_shell(&prefs.get())
+}
+
+#[cfg(test)]
+mod pty_write_tests {
+    use super::binary_bytes;
+
+    #[test]
+    fn binary_path_maps_one_byte_per_char_and_rejects_anything_wider() {
+        assert_eq!(binary_bytes("\x1b[M !!").unwrap(), b"\x1b[M !!");
+        assert_eq!(binary_bytes("\u{ff}\u{80}").unwrap(), [0xff, 0x80]);
+        // `ç` e U+00E7 e cabe no relato de mouse; nao vira UTF-8 por aqui.
+        assert_eq!(binary_bytes("\u{e7}").unwrap(), [0xe7]);
+        let error = binary_bytes("\x1b[M \u{e7}\u{100}").unwrap_err();
+        assert!(error.contains("U+0100"), "{error}");
+        assert!(binary_bytes("\u{1f600}").is_err());
+    }
 }
 
 #[cfg(test)]

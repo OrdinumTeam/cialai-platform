@@ -462,8 +462,11 @@ func TestEndpointCloseEndsDialedSessions(t *testing.T) {
 func TestEndpointTimingsAndSingleListener(t *testing.T) {
 	h := newHarness(t, ListenConfig{})
 	config := h.server.quicConfig
-	if config.KeepAlivePeriod != 5*time.Second || config.MaxIdleTimeout != 15*time.Second {
-		t.Fatalf("keepalive %s and idle %s differ from 5 s and 15 s", config.KeepAlivePeriod, config.MaxIdleTimeout)
+	if config.KeepAlivePeriod != 20*time.Second || config.MaxIdleTimeout != 45*time.Second {
+		t.Fatalf("keepalive %s and idle %s differ from 20 s and 45 s", config.KeepAlivePeriod, config.MaxIdleTimeout)
+	}
+	if config.KeepAlivePeriod > config.MaxIdleTimeout/2 {
+		t.Fatalf("keepalive %s is longer than half the idle timeout %s, so quic-go would shorten it", config.KeepAlivePeriod, config.MaxIdleTimeout)
 	}
 	if config.MaxIncomingUniStreams >= 0 || config.Allow0RTT {
 		t.Fatal("unidirectional streams or 0-RTT are allowed")

@@ -3,7 +3,8 @@ import {
   connectionErrorCode,
   openConnection,
   outcomeForCode,
-  RESERVE_PREPARING_RETRY_MS,
+  preferredPortOf,
+  RETRY_DELAYS_MS,
   retryDelay,
   type ConnectionPorts
 } from './connection';
@@ -36,12 +37,27 @@ describe('opening a desktop through the path manager', () => {
   test('connects before opening the proxy with the stored token', async () => {
     const native = ports();
     await expect(openConnection(desktopId, native)).resolves.toEqual({
-      kind: 'opened', desktopId, url: proxyUrl, transport: 'tor', path: 'tor'
+      kind: 'opened', desktopId, url: proxyUrl, transport: 'tor', path: 'tor', reused: false
     });
     expect(native.readToken).toHaveBeenCalledWith(desktopId);
     expect(native.connect).toHaveBeenCalledWith(desktopId);
-    expect(native.openDesktop).toHaveBeenCalledWith(desktopId, token);
+    expect(native.openDesktop).toHaveBeenCalledWith(desktopId, token, 0);
     expect(native.connect.mock.invocationCallOrder[0]).toBeLessThan(native.openDesktop.mock.invocationCallOrder[0]!);
+  });
+
+  test('reconnecting to the same desktop asks for the open port and reports the reused proxy', async () => {
+    const native = ports();
+    await expect(openConnection(desktopId, native, proxyUrl)).resolves.toEqual({
+      kind: 'opened', desktopId, url: proxyUrl, transport: 'tor', path: 'tor', reused: true
+    });
+    expect(native.openDesktop).toHaveBeenCalledWith(desktopId, token, 47400);
+
+    const moved = `http://127.0.0.1:47401/?k=${'M'.repeat(43)}`;
+    const reopened = ports({ openDesktop: jest.fn(async () => ({ url: moved, port: 47401, nonce: 'M'.repeat(43) })) });
+    await expect(openConnection(desktopId, reopened, proxyUrl)).resolves.toMatchObject({ kind: 'opened', url: moved, reused: false });
+    expect(preferredPortOf(null)).toBe(0);
+    expect(preferredPortOf('not a url')).toBe(0);
+    expect(preferredPortOf('http://127.0.0.1/')).toBe(0);
   });
 
   test('asks for pairing again without calling the core when the token is gone', async () => {
@@ -92,10 +108,12 @@ describe('offline retries', () => {
     expect([0, 1, 2, 3, 4, 9].map(attempt => retryDelay('no-path', attempt))).toEqual([2_000, 4_000, 8_000, 16_000, 16_000, 16_000]);
     expect([0, 3].map(attempt => retryDelay('reserve-unavailable', attempt))).toEqual([2_000, 16_000]);
     expect(retryDelay('reconnecting', 0)).toBe(2_000);
+    expect(RETRY_DELAYS_MS).toEqual([2_000, 4_000, 8_000, 16_000]);
   });
 
-  test('retry quickly while the reserve prepares and never after revocation', () => {
-    expect(retryDelay('reserve-preparing', 5)).toBe(RESERVE_PREPARING_RETRY_MS);
+  test('the reserve in preparation follows the same ladder and revocation never retries', () => {
+    expect([0, 1, 5].map(attempt => retryDelay('reserve-preparing', attempt))).toEqual([2_000, 4_000, 16_000]);
+    expect(retryDelay('tunnel', 2)).toBe(8_000);
     expect(retryDelay('removed', 0)).toBeNull();
   });
 });

@@ -18,12 +18,17 @@ const (
 var (
 	DefaultDuration      = 24 * time.Hour
 	DefaultBurstInterval = 10 * time.Second
+	// DefaultPathInterval spaces the path changes of the oscillating soak.
+	DefaultPathInterval = 10 * time.Second
 )
 
 type Config struct {
 	Duration      time.Duration
 	BurstInterval time.Duration
-	ReportPath    string
+	// PathInterval is the time between two path changes of the oscillating
+	// soak, which alternates an equivalent adopt and a real switch.
+	PathInterval time.Duration
+	ReportPath   string
 }
 
 func ConfigFromEnvironment() (Config, error) {
@@ -41,12 +46,19 @@ func ConfigFromEnvironment() (Config, error) {
 	if interval <= 0 || interval >= time.Minute {
 		return Config{}, fmt.Errorf("CIALAI_SOAK_BURST_INTERVAL must be positive and shorter than one minute")
 	}
+	pathInterval, err := durationEnvironment("CIALAI_SOAK_PATH_INTERVAL", DefaultPathInterval)
+	if err != nil {
+		return Config{}, err
+	}
+	if pathInterval <= 0 || pathInterval >= time.Minute {
+		return Config{}, fmt.Errorf("CIALAI_SOAK_PATH_INTERVAL must be positive and shorter than one minute")
+	}
 	path := os.Getenv("CIALAI_SOAK_REPORT")
 	if path == "" {
 		// `go test ./soak` executes with the package directory as cwd.
 		path = "../build/soak/proxy-soak.json"
 	}
-	return Config{Duration: duration, BurstInterval: interval, ReportPath: path}, nil
+	return Config{Duration: duration, BurstInterval: interval, PathInterval: pathInterval, ReportPath: path}, nil
 }
 
 func durationEnvironment(name string, fallback time.Duration) (time.Duration, error) {

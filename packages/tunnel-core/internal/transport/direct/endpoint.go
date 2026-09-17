@@ -20,11 +20,14 @@ import (
 	"github.com/quic-go/quic-go"
 )
 
-// Default QUIC timings: a failed path is detected after 15 s of silence while
-// keepalives every 5 s keep NAT bindings open.
+// Default QUIC timings: keepalives every 20 s, aligned with the pings of the
+// desktop bridge, keep NAT bindings open, and a failed path is detected after
+// 45 s of silence, so a phone suspended or handed off for less than that keeps
+// its direct path instead of falling back and climbing again. quic-go caps the
+// keepalive at half the idle timeout, so the two values must keep that ratio.
 const (
-	DefaultKeepAlivePeriod      = 5 * time.Second
-	DefaultMaxIdleTimeout       = 15 * time.Second
+	DefaultKeepAlivePeriod      = 20 * time.Second
+	DefaultMaxIdleTimeout       = 45 * time.Second
 	DefaultHandshakeIdleTimeout = 5 * time.Second
 	DefaultStreamHeaderTimeout  = 5 * time.Second
 )

@@ -24,12 +24,16 @@ export function validateControlUrl(value: string, allowDevelopmentWithoutNonce =
   return `${url.origin}/?k=${url.searchParams.get('k')}`;
 }
 
+// Rota local do proxy, servida antes do portão do cookie e do nonce: o `fetch`
+// do app não enxerga o cookie do WebView e não pode gastar o nonce.
+export const HEALTH_PATH = '/_cialai/health';
+
 export function buildHealthUrl(controlUrl: string): string {
   const url = new URL(controlUrl);
   if (url.protocol !== 'http:' || url.hostname !== LOOPBACK_HOST || !url.port) {
     throw new Error('health_url_invalid_origin');
   }
-  return new URL('/api/health', url.origin).toString();
+  return new URL(HEALTH_PATH, url.origin).toString();
 }
 
 export function isSameControlOrigin(controlUrl: string, candidate: string): boolean {

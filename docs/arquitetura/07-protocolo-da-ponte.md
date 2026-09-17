@@ -113,6 +113,19 @@ Não encaminhados: `fs://change`, `browser://install`, `drag-out://end`.
 
 `pty_ack` continua sendo a confirmação de bytes consumidos, por assinante; no transporte remoto `channel` identifica o canal atual junto de `id` e `bytes`, e confirmações de canal substituído são ignoradas. `detach_all` remove a conexão de todas as sessões quando o socket fecha.
 
+## Replay nunca gera entrada
+
+Regra do contrato: o replay do histórico nunca produz entrada no PTY. Quando o histórico volta ao xterm, o reparse faz o próprio xterm responder às consultas gravadas nele. `ESC[6n` vira uma resposta de posição de cursor, `ESC[c` e `ESC[>c` viram respostas de atributos, e `OSC 10;?` e `OSC 11;?` viram respostas de cor. Sem proteção essas respostas saem por `onData`, entram no stdin do shell como se fossem digitadas e ainda são gravadas no anel de histórico, o que gera novas respostas no próximo attach. Esse laço é a causa do terminal que digita sozinho depois de uma troca de sessão ou de uma queda.
+
+Duas defesas em camadas fecham o laço.
+
+| Camada | Onde | O que faz |
+| --- | --- | --- |
+| Marca de replay na página | `packages/ui/src/terminals/replay.js` e `packages/ui/src/terminals/runtime.js` | `beginReplay` liga a marca de replay em andamento na sessão antes de qualquer `term.write` do quadro de replay, e ela desliga só no callback do `term.write`, depois que o xterm terminou de processar os bytes. Enquanto a marca está ligada, `onData` e `onBinary` retornam sem enviar nada. Um histórico vazio não liga a marca, para ela nunca ficar presa. Assim as respostas às consultas do replay são absorvidas em vez de enviadas |
+| Limpeza no anel de histórico do desktop | `apps/desktop/src-tauri/src/workspace/terminal.rs` | Antes de gravar a saída no anel de histórico, o desktop remove as consultas do fluxo: `ESC[6n`, `ESC[c`, `ESC[>c`, `OSC 10;?` e `OSC 11;?`. Assim o replay já sai limpo e nem chega a provocar resposta, generalizando o que `pty/cursor.rs` fazia só no arranque do ConPTY no Windows |
+
+A marca de replay também cobre o resto da leitura: `onBell` e os handlers de OSC de notificação já a consultam para não sinalizar atenção durante o replay, e a roda do mouse por toque só é habilitada quando o modo de rastreio do mouse vale fora do replay, para um modo deixado ligado por um programa já encerrado não injetar relato de roda como texto.
+
 ## Revogação
 
 A ponte guarda `device_id` por conexão. `devices.revoke` no sidecar chama `edge.Server.Revoke`, que marca o celular como revogado no registro v2 e emite `devices.changed` com `revoked: true` uma única vez; o supervisor Rust repassa à ponte, que tira o celular do mapa de identidades e fecha os sockets daquele dispositivo com 4401 em menos de 1 s. A borda espera esses sockets terminarem por até 500 ms e só então fecha as sessões QUIC e Tor da chave, para o fechamento 4401 chegar ao celular. `remote.js` não tenta de novo em 4401 nem em 4426, então a página mostra o estado "removido" e a casca oferece parear de novo.

@@ -305,6 +305,7 @@ export default Object.freeze({
   'desktop.tunnel.error.tunnelDisconnected': 'The tunnel core was disconnected.',
   'desktop.tunnel.error.tunnelHandshake': 'The tunnel core did not negotiate the expected protocol.',
   'desktop.tunnel.error.tunnelInternal': 'The tunnel operation was interrupted.',
+  'desktop.tunnel.error.tunnelRestartLimit': 'The tunnel core failed ten times in ten minutes. Wait a moment before trying again.',
   'desktop.tunnel.error.tunnelStart': 'Could not start the tunnel core.',
   'desktop.tunnel.error.tunnelState': 'Could not prepare the tunnel state.',
   'desktop.tunnel.error.tunnelStopped': 'The tunnel core stopped.',

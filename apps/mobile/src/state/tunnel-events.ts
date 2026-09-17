@@ -1,5 +1,7 @@
 import type { PathKind, TorProgress, TorState, Transport, TunnelEvent } from 'cialai-tunnel';
 
+import type { DiagnosticLevel } from './diagnostics';
+
 export type TunnelSignal =
   | { type: 'path'; desktopId: string; transport: Transport | null; path: PathKind | null; reason: string }
   | { type: 'tor'; tor: TorProgress }
@@ -11,6 +13,7 @@ export type TunnelSignal =
   | { type: 'native-reopen-failed'; desktopId: string | null; code: string | null }
   | { type: 'legacy-discarded' }
   | { type: 'pair-stage'; state: string }
+  | { type: 'log'; level: DiagnosticLevel; message: string }
   | { type: 'status-changed' };
 
 const TOR_STATES: ReadonlySet<string> = new Set(['disabled', 'starting', 'bootstrapping', 'ready', 'failed']);
@@ -89,6 +92,12 @@ export function interpretTunnelEvent(event: TunnelEvent): TunnelSignal[] {
     case 'pair': {
       const state = text(payload.state);
       return state ? [{ type: 'pair-stage', state }] : [];
+    }
+    case 'log': {
+      // Linha do núcleo ou do módulo nativo para o anel de diagnóstico; sem texto não há o que guardar.
+      const level: DiagnosticLevel = payload.level === 'error' || payload.level === 'debug' ? payload.level : 'info';
+      const message = text(payload.message) ?? text(payload.code);
+      return message ? [{ type: 'log', level, message }] : [];
     }
     default:
       return [];

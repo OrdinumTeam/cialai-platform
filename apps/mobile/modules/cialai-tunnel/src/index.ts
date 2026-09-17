@@ -82,6 +82,7 @@ type NativeCialaiTunnel = {
   desktops(): Promise<{ desktops: DesktopRecord[] }>;
   notifyNetworkChange(reachable: boolean): void;
   notifyForeground(active: boolean): void;
+  notifyHealthy(): void;
   forgetDesktop(desktopId: string): Promise<void>;
   setLogLevel(level: LogLevel): void;
 };
@@ -102,6 +103,9 @@ export const status = (): Promise<TunnelStatus> => nativeModule.status();
 export const desktops = async (): Promise<DesktopRecord[]> => (await nativeModule.desktops()).desktops;
 export const notifyNetworkChange = (reachable: boolean): void => nativeModule.notifyNetworkChange(reachable);
 export const notifyForeground = (active: boolean): void => nativeModule.notifyForeground(active);
+// O app confirmou que o proxy aberto responde depois de voltar ao primeiro plano:
+// a próxima conexão não precisa recomeçar do zero.
+export const notifyHealthy = (): void => nativeModule.notifyHealthy();
 export const forgetDesktop = (desktopId: string): Promise<void> => nativeModule.forgetDesktop(desktopId);
 export const setLogLevel = (level: LogLevel): void => nativeModule.setLogLevel(level);
 export const addListener = (handler: (event: TunnelEvent) => void): EventSubscription =>

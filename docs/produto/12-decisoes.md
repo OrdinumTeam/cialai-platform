@@ -205,3 +205,31 @@ Data: 13/09/2026. Contexto: a tarefa 6.6 previa preparar a tradução para ingl�
 Alternativa rejeitada: dicionários próprios no Rust, no Expo e nos checks, mantidos à mão, porque divergiriam a cada texto novo.
 
 Consequência: `@cialai/i18n` é a fonte única, com dicionários separados por idioma e área e a mesma API pública. O núcleo Rust embute o catálogo das chaves `native.*` gerado por `tools/i18n/native-catalog.mjs` e segue o idioma enviado pela interface, que fica gravado para o menu de início e a confirmação de saída da próxima abertura. O app móvel gera os textos de permissão por idioma pelo campo `locales` do Expo e declara as mesmas línguas no Android por `localeConfig`. `check:i18n` exige as três línguas com as mesmas chaves, valores e placeholders, confere os valores de cada chamada e rejeita textos literais e chaves sem uso; `check:native-i18n` confere o catálogo gerado e as chamadas do Rust. Erros do sidecar e do supervisor com código estável são traduzidos na interface desktop, e erros do protocolo trazem código para a interface traduzir. Mensagens detalhadas criadas pelo computador seguem o idioma escolhido no computador, inclusive quando chegam ao celular. Textos de lojas e políticas em espanhol ficam fora desta decisão e continuam pendentes.
+
+## 036 Primeira submissão às lojas sem ambiente dedicado de revisão
+
+Data: 16/09/2026. Contexto: a ficha das duas lojas estava pronta em pt-BR e o `docs/review/desktop-demo-runbook.md` previa um computador dedicado, acordado e alcançável, para o revisor pareá-lo. Montar esse ambiente é trabalho do responsável e não estava feito. O Cialai se encaixa em três critérios de app restrito do Google: código QR, biometria e ação em outro aparelho.
+
+Decisão: declarar o acesso como restrito nas duas lojas, informar que não existe credencial e instruir o revisor a instalar o app desktop gratuito e parear por conta própria. A App Store recebeu a versão longa dessas instruções no campo de notas; o Google Play recebeu a mesma substância aparada para os 500 caracteres do campo.
+
+Alternativa rejeitada: adiar a submissão até o ambiente dedicado existir.
+
+Consequência: as duas submissões entraram em revisão em 16/09/2026, App Store com a 0.2.2 build 5 e Google Play com a ficha mais dez declarações, tendo a 0.2.2 `versionCode` 15 na faixa interna. Este é o maior risco de rejeição das duas, porque o revisor pode não conseguir ver o terminal funcionando. Se a rejeição vier por acesso, o caminho é o runbook, que continua íntegro no repositório.
+
+Duas respostas ficaram como julgamento e merecem revisão se a classificação for contestada. No questionário da IARC, conteúdo online foi respondido como ausente, tratando o Cialai como app de acesso remoto à máquina do próprio usuário, no mesmo critério de clientes de terminal e desktop remoto. Na Apple, acesso irrestrito à web foi respondido como falso, com apoio no `webview.test.ts`, que trava a WebView em uma origem loopback única e não abre navegação externa. As duas lojas devolveram classificação livre.
+
+Palavras chave da App Store foram escolhidas junto com a categoria, sem medição de desempenho na busca, e estão registradas em `docs/stores/listing-pt-BR.md`.
+
+## 037 Tela inicial do app como hub e destino do voltar
+
+Data: 16/09/2026. Contexto: a raiz do app era a lista de computadores, o app abria direto no WebView do terminal, Ajustes era um link de texto no canto da lista e Vincular ficava no fim da rolagem. Sair do terminal fechava o proxy e a conexão inteira, então não existia ir a um hub e voltar barato. Não havia ícones no app.
+
+Decisão: a casca ganha o estado `home` em `src/state/machine.ts` e a tela `src/screens/Home.tsx`, com título grande, o card Continuar com o último computador, o ponto de estado e o chip de transporte, e quatro cards de altura mínima 92: Computadores com a contagem, Vincular, Terminal e Ajustes. Todos os botões de volta apontam para o início com o rótulo Início: barra do terminal, botão Voltar do Android na lista de sessões, Ajustes, Sem conexão, Vincular e um voltar novo na lista de computadores. A tela sem conexão oferece Início e os atalhos Computadores, Ajustes e Vincular.
+
+Abertura do app: começa no início só quando não há `lastDesktopId` ou quando a última conexão falhou, marca gravada no Secure Store em `cialai.lastConnectionFailed` sempre que a casca vai para a tela sem conexão e apagada quando o proxy abre. Nos demais casos abre direto no terminal, porque é onde a pessoa quer chegar e `App.test.js` espera o WebView na abertura. Depois do pareamento o app segue para o terminal, como antes.
+
+Ir ao início não derruba a conexão: `App.tsx` guarda o proxy por `HOME_PROXY_GRACE_MS`, 90 segundos, e um temporizador chama `closeDesktop` se a pessoa não voltar. Voltar ao terminal dentro do prazo refaz `Connect` e `OpenDesktop` e o núcleo devolve a mesma URL, porta e nonce, então a página recarrega com o cookie que já tem e sem novo pareamento do proxy. Abrir outro computador fecha o proxy guardado na hora. O card Continuar mostra Desconectar enquanto o proxy está guardado, que é o encerramento explícito.
+
+Ícones: glifos simples desenhados só com `View` no acento da paleta, em `Home.tsx`, para monitor, código QR, janela de terminal e controles. Alternativa rejeitada: uma dependência de ícones, porque o app não tinha nenhuma e quatro glifos não justificam uma biblioteca nem o peso no build nativo.
+
+Consequência: `docs/arquitetura/05-mobile.md` e os roteiros de teste citam o início como raiz da navegação; a chave `mobile.offline.switchDesktop` e as chaves `mobile.shell.desktops` e `mobile.shell.showDesktops` saem dos dicionários, e as chaves `mobile.home.*`, `mobile.loading.detail` e o novo valor de `mobile.pair.back` entram nos três idiomas. Capturas antes e depois em `docs/evidence/` continuam pendentes até existir aparelho ou simulador com o build.

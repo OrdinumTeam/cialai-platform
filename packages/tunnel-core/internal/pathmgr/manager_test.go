@@ -98,8 +98,8 @@ func TestFallbackAfterTheDirectBudgetsThenPunch(t *testing.T) {
 		h.puncher.err, h.puncher.answer = nil, netip.MustParseAddrPort(punchAddress)
 
 		result := h.mustConnect(KindTor)
-		if result.Transport != transport.NameTor || result.ElapsedMillis != 2000 {
-			t.Fatalf("result = %+v, want the fallback after the 2 s direct budget", result)
+		if result.Transport != transport.NameTor || result.ElapsedMillis != DefaultDirectBudget.Milliseconds() {
+			t.Fatalf("result = %+v, want the fallback after the %s direct budget", result, DefaultDirectBudget)
 		}
 		h.clock.Advance(punchDelay)
 		active := h.expectActive(KindDirect)
@@ -111,10 +111,10 @@ func TestFallbackAfterTheDirectBudgetsThenPunch(t *testing.T) {
 			{DesktopID: h.card.Desktop.ID, Transport: "tor", Path: KindTor, Reason: ReasonConnect},
 			{DesktopID: h.card.Desktop.ID, Transport: "direct", Path: KindDirect, Reason: ReasonPunch},
 		}
-		if len(events) != 2 || events[0].event != want[0] || events[1].event != want[1] || events[1].at != 2*time.Second+punchDelay {
+		if len(events) != 2 || events[0].event != want[0] || events[1].event != want[1] || events[1].at != DefaultDirectBudget+punchDelay {
 			t.Fatalf("events = %+v", events)
 		}
-		if punches := h.puncher.callTimes(); !slices.Equal(punches, []time.Duration{2 * time.Second}) {
+		if punches := h.puncher.callTimes(); !slices.Equal(punches, []time.Duration{DefaultDirectBudget}) {
 			t.Fatalf("punches at %v", punches)
 		}
 	})
@@ -160,7 +160,7 @@ func TestEveryPathFailing(t *testing.T) {
 				h.direct.set(stunAddress, modeHang)
 				h.tor.dialHang = true
 			},
-			code: CodeNoPath, elapsed: 22 * time.Second,
+			code: CodeNoPath, elapsed: DefaultDirectBudget + DefaultTorBudget,
 		},
 		{
 			name:  "tor not running",
@@ -382,6 +382,124 @@ func TestOscillatingDirectPathNeverImprovesWithinHysteresis(t *testing.T) {
 			if events[i].event.Path == KindDirect && events[i].event.Reason != ReasonUpgrade {
 				t.Fatalf("direct adopted for %q", events[i].event.Reason)
 			}
+		}
+	})
+}
+
+// TestNetworkChangesKeepTheReserveWithinHysteresis is CONN-06: the phone
+// reports a network change every 10 s, as NetInfo does during a handoff, and
+// the reserve is re-dialed each time but only left for a direct path when the
+// stability rules allow an improvement, the same schedule as the oscillating
+// direct path above.
+func TestNetworkChangesKeepTheReserveWithinHysteresis(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, withoutPuncher(), withCard(pairing.Candidate{Type: pairing.CandidateSTUN, Address: stunAddress}))
+		h.direct.set(stunAddress, modeAnswer)
+		h.direct.life = 10 * time.Second
+		h.direct.migrate = func(context.Context) error { return nil }
+		h.mustConnect(KindDirect)
+		torDials := h.tor.dialCount()
+		changes := 0
+		for h.clock.Elapsed() < 30*time.Minute {
+			h.clock.Advance(5 * time.Second)
+			if h.clock.Elapsed()%(10*time.Second) != 5*time.Second {
+				continue
+			}
+			h.manager.NotifyNetworkChange(true)
+			synctest.Wait()
+			changes++
+		}
+
+		var attempts []time.Duration
+		for _, call := range h.direct.callList() {
+			attempts = append(attempts, call.at)
+		}
+		want := []time.Duration{0}
+		for at := 2*time.Minute + 10*time.Second; at < 30*time.Minute; at += 5 * time.Minute {
+			want = append(want, at)
+		}
+		if !slices.Equal(attempts, want) {
+			t.Fatalf("direct attempts at %v, want %v despite %d network changes", attempts, want, changes)
+		}
+		events := h.events.pathList()
+		for i := 1; i < len(attempts); i++ {
+			var lastSwitch time.Duration
+			for _, event := range events {
+				if event.at < attempts[i] {
+					lastSwitch = event.at
+				}
+			}
+			if attempts[i]-lastSwitch < DefaultHysteresis {
+				t.Fatalf("network change left the reserve at %s, only %s after the switch at %s", attempts[i], attempts[i]-lastSwitch, lastSwitch)
+			}
+		}
+		// Every change with the reserve active re-dialed it and kept it.
+		if h.tor.dialCount() < torDials+changes/2 {
+			t.Fatalf("tor dials %d after %d network changes, want the reserve re-dialed", h.tor.dialCount()-torDials, changes)
+		}
+		for i := 1; i < len(events); i++ {
+			if events[i].event.Path == KindTor && events[i].event.Reason != ReasonPathFailed {
+				t.Fatalf("reserve adopted again for %q: a kept reserve emits nothing", events[i].event.Reason)
+			}
+		}
+		if status := h.manager.Status(); status.State != StateConnected || status.Active == nil || status.Active.Kind != KindTor {
+			t.Fatalf("status = %+v", status)
+		}
+	})
+}
+
+// TestAdoptingAnEquivalentPathKeepsItAndEmitsNoEvent is the manager half of
+// CONN-05: an evaluation that dials the endpoint of the active path again
+// replaces the session underneath but keeps the path, Since included, resets
+// no hysteresis and emits nothing, so the proxy closes no upstream. A path of
+// another kind is still a switch.
+func TestAdoptingAnEquivalentPathKeepsItAndEmitsNoEvent(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, withoutTor(), withoutPuncher())
+		h.direct.set(lanAddress, modeAnswer)
+		h.mustConnect(KindLAN)
+		before := h.manager.Active()
+		old := h.direct.session(0)
+		h.clock.Advance(time.Minute)
+
+		// An evaluation without migration dials the same local candidate
+		// while the path is still active.
+		h.manager.mu.Lock()
+		h.manager.startRunLocked(ReasonNetworkChanged, plan{lan: true})
+		h.manager.mu.Unlock()
+		synctest.Wait()
+
+		fresh := h.direct.session(-1)
+		if fresh == old || !old.ended() || fresh.ended() {
+			t.Fatal("the new session must replace the old one underneath the path")
+		}
+		if after := h.manager.Active(); after != before {
+			t.Fatalf("equivalent adopt changed the path: %+v to %+v", before, after)
+		}
+		if events := h.events.pathList(); len(events) != 1 {
+			t.Fatalf("equivalent adopt emitted events: %+v", events)
+		}
+		h.manager.mu.Lock()
+		switched := h.manager.lastSwitchAt
+		h.manager.mu.Unlock()
+		if !switched.IsZero() {
+			t.Fatalf("equivalent adopt counted as a switch at %s", switched.Sub(epoch))
+		}
+		if status := h.manager.Status(); status.State != StateConnected {
+			t.Fatalf("status = %+v", status)
+		}
+
+		h.direct.set(lanAddress, modeRefuse)
+		h.direct.set(stunAddress, modeAnswer)
+		h.manager.mu.Lock()
+		h.manager.startRunLocked(ReasonNetworkChanged, plan{internet: true})
+		h.manager.mu.Unlock()
+		synctest.Wait()
+		if active := h.manager.Active(); active.Kind != KindDirect || active.Since.Sub(epoch) != time.Minute {
+			t.Fatalf("active = %+v, want the internet path adopted now", active)
+		}
+		if events := h.events.pathList(); len(events) != 2 || events[1].event.Path != KindDirect || events[1].at != time.Minute {
+			t.Fatalf("events = %+v, want the switch to the internet path", events)
 		}
 	})
 }

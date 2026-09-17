@@ -3,11 +3,13 @@ import { act, create } from 'react-test-renderer';
 import { Text } from 'react-native';
 
 import { Desktops } from './Desktops';
+import { Home } from './Home';
 import { Offline } from './Offline';
 import { Pair } from './Pair';
 import { Settings } from './Settings';
 import { Shell } from './Shell';
 import { getLocale, setLocale } from '../i18n';
+import { clearDiagnostics, logApp } from '../state/diagnostics';
 
 const mockListeners = new Set();
 const mockPair = jest.fn();
@@ -30,6 +32,8 @@ jest.mock('expo-camera', () => ({
 }));
 jest.mock('expo-clipboard', () => ({ getStringAsync: jest.fn(async () => 'CIALAI2.payload') }));
 jest.mock('react-native-webview', () => ({ WebView: 'WebView' }));
+const mockHealth = jest.fn(async () => true);
+jest.mock('../network/health', () => ({ ...jest.requireActual('../network/health'), checkControlHealth: (...args) => mockHealth(...args) }));
 
 const text = tree => tree.root.findAllByType(Text).map(node => node.props.children).flat(Infinity).join(' ');
 const pressable = (tree, label) => tree.root.findAll(node => typeof node.props.onPress === 'function' &&
@@ -52,7 +56,23 @@ beforeEach(async () => {
   mockListeners.clear();
   mockPair.mockReset();
   mockInspect.mockReset();
+  mockHealth.mockReset();
+  mockHealth.mockResolvedValue(true);
+  clearDiagnostics();
   await setLocale('pt-BR');
+});
+
+const shellProps = overrides => ({
+  url: 'http://127.0.0.1:47400/?k=test', desktopId: 'desktop-1', desktopName: 'Studio', version: '1.0.0',
+  biometricSession: { authorize: async () => true, lock: () => false }, lockSignal: 0, transport: 'tor', reconnecting: false,
+  onConnectionLost: () => {}, onConnectionRestored: () => {}, onHome: () => {}, ...overrides
+});
+const offlineProps = overrides => ({
+  desktopId, reason: 'no-path', reserveProgress: null, onRetry: async () => false,
+  onHome: () => {}, onDesktops: () => {}, onSettings: () => {}, onPair: () => {}, onPairAgain: () => {}, ...overrides
+});
+const homeHandlers = () => ({
+  onContinue: jest.fn(), onDisconnect: jest.fn(), onDesktops: jest.fn(), onPair: jest.fn(), onTerminal: jest.fn(), onSettings: jest.fn()
 });
 
 test('Pair explains the QR flow, camera use and a pairing notice', async () => {
@@ -64,7 +84,7 @@ test('Pair explains the QR flow, camera use and a pairing notice', async () => {
   expect(text(tree)).toMatch(/Abra Vincular celular no/);
   expect(text(tree)).toMatch(/Permitir câmera/);
   expect(text(tree)).toMatch(/Vincule Mac de Foco de novo/);
-  expect(text(tree)).toMatch(/Voltar aos computadores/);
+  expect(text(tree)).toMatch(/Voltar ao início/);
   await act(async () => tree.unmount());
 });
 
@@ -153,9 +173,10 @@ test('Pair maps a pairing failure without exposing the native message', async ()
 
 test('Desktops renders each state and the last transport badge', async () => {
   const describe = id => id === desktopId ? { state: 'connected', transport: 'direct' } : { state: 'removed', transport: null };
+  const onHome = jest.fn();
   let tree;
   await act(async () => {
-    tree = create(<Desktops store={store} describe={describe} onOpen={() => {}} onPair={() => {}}
+    tree = create(<Desktops store={store} describe={describe} onOpen={() => {}} onHome={onHome} onPair={() => {}}
       onSettings={() => {}} onRename={() => {}} onForgetDesktop={() => {}} />);
   });
   const rendered = text(tree);
@@ -166,15 +187,79 @@ test('Desktops renders each state and the last transport badge', async () => {
   expect(rendered).toMatch(/Este celular foi removido/);
   expect(rendered).not.toMatch(forbiddenOnMainScreens);
   expect(rendered).not.toMatch(forbiddenPunctuation);
+  // O voltar da lista leva ao início, com rótulo próprio.
+  await act(async () => { pressable(tree, 'Início').props.onPress(); });
+  expect(onHome).toHaveBeenCalledTimes(1);
   await act(async () => tree.unmount());
 
   await act(async () => {
     tree = create(<Desktops store={store} describe={() => ({ state: 'idle', transport: null })} onOpen={() => {}}
-      onPair={() => {}} onSettings={() => {}} onRename={() => {}} onForgetDesktop={() => {}} />);
+      onHome={() => {}} onPair={() => {}} onSettings={() => {}} onRename={() => {}} onForgetDesktop={() => {}} />);
   });
   expect(text(tree)).toMatch(/Não conectado/);
   expect(text(tree)).toMatch(/Reserva/);
   expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Conexão de reserva')).not.toHaveLength(0);
+  await act(async () => tree.unmount());
+});
+
+test('Home shows the last computer, the four cards and the count, without addresses', async () => {
+  const describe = id => id === desktopId ? { state: 'connected', transport: 'direct' } : { state: 'idle', transport: null };
+  const handlers = homeHandlers();
+  let tree;
+  await act(async () => {
+    tree = create(<Home store={store} describe={describe} keptDesktopId={desktopId} {...handlers} />);
+  });
+  const rendered = text(tree);
+  for (const expected of ['Início', 'Continuar', 'Mac de Foco', 'Conectado', 'Direta', 'Desconectar',
+    'Computadores', '2 vinculados', 'Vincular', 'Ler o código do computador', 'Terminal', 'Ajustes']) {
+    expect(rendered).toContain(expected);
+  }
+  expect(rendered).not.toMatch(forbiddenOnMainScreens);
+  expect(rendered).not.toMatch(forbiddenPunctuation);
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Conexão direta')).not.toHaveLength(0);
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Continuar em Mac de Foco')[0].props.onPress(); });
+  expect(handlers.onContinue).toHaveBeenCalledWith(store.desktops[0]);
+  for (const [label, handler] of [['Mostrar computadores', 'onDesktops'], ['Abrir o pareamento', 'onPair'],
+    ['Abrir o terminal', 'onTerminal'], ['Abrir ajustes', 'onSettings']]) {
+    await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === label)[0].props.onPress(); });
+    expect(handlers[handler]).toHaveBeenCalledTimes(1);
+  }
+  await act(async () => { pressable(tree, 'Desconectar').props.onPress(); });
+  expect(handlers.onDisconnect).toHaveBeenCalledTimes(1);
+  await act(async () => tree.unmount());
+});
+
+test('Home without a last computer hides Continue and offers to choose one', async () => {
+  const handlers = homeHandlers();
+  let tree;
+  await act(async () => {
+    tree = create(<Home store={{ version: 2, lastDesktopId: null, desktops: [] }} describe={() => ({ state: 'idle', transport: null })}
+      keptDesktopId={null} {...handlers} />);
+  });
+  expect(text(tree)).not.toMatch(/Continuar/);
+  expect(text(tree)).toMatch(/Nenhum vinculado/);
+  expect(text(tree)).toMatch(/Escolha um computador/);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  // Com um computador fora de alcance e sem proxy guardado, não há Desconectar.
+  await act(async () => tree.update(<Home store={{ ...store, desktops: [store.desktops[0]] }}
+    describe={() => ({ state: 'offline', transport: null })} keptDesktopId={null} {...handlers} />));
+  expect(text(tree)).toMatch(/Um vinculado/);
+  expect(text(tree)).toMatch(/Fora de alcance/);
+  expect(text(tree)).toMatch(/Reserva/);
+  expect(text(tree)).not.toMatch(/Desconectar/);
+  await act(async () => tree.unmount());
+});
+
+test('Home renders the selected Spanish locale', async () => {
+  await setLocale('es-MX');
+  let tree;
+  await act(async () => {
+    tree = create(<Home store={store} describe={() => ({ state: 'idle', transport: null })} keptDesktopId={null} {...homeHandlers()} />);
+  });
+  for (const expected of ['Inicio', 'Continuar', 'Computadoras', '2 vinculadas', 'Vincular', 'Terminal', 'Configuración']) {
+    expect(text(tree)).toContain(expected);
+  }
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
   await act(async () => tree.unmount());
 });
 
@@ -183,13 +268,18 @@ test('Offline shows the reserve progress and retries it', async () => {
   const onRetry = jest.fn(async () => false);
   let tree;
   await act(async () => {
-    tree = create(<Offline reason="reserve-preparing" reserveProgress={37} onRetry={onRetry} onDesktops={() => {}} onPairAgain={() => {}} />);
+    tree = create(<Offline {...offlineProps({ reason: 'reserve-preparing', reserveProgress: 37, onRetry })} />);
   });
   expect(text(tree)).toMatch(/Preparando a conexão de reserva/);
   expect(text(tree)).toMatch(/Preparando 37%/);
   expect(text(tree)).toMatch(/Conectando/);
-  await act(async () => { jest.advanceTimersByTime(3_000); });
+  // A reserva em preparo segue a mesma escada dos outros motivos.
+  await act(async () => { jest.advanceTimersByTime(2_000); });
   expect(onRetry).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(3_999); });
+  expect(onRetry).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(1); });
+  expect(onRetry).toHaveBeenCalledTimes(2);
   expect(text(tree)).not.toMatch(forbiddenOnMainScreens);
   await act(async () => tree.unmount());
   jest.useRealTimers();
@@ -200,7 +290,7 @@ test('Offline backs off at 2, 4, 8 and 16 seconds without a path', async () => {
   const onRetry = jest.fn(async () => false);
   let tree;
   await act(async () => {
-    tree = create(<Offline reason="no-path" reserveProgress={null} onRetry={onRetry} onDesktops={() => {}} onPairAgain={() => {}} />);
+    tree = create(<Offline {...offlineProps({ onRetry })} />);
   });
   expect(text(tree)).toMatch(/O computador está fora de alcance/);
   for (const [delay, calls] of [[1_999, 0], [1, 1], [4_000, 2], [8_000, 3], [16_000, 4], [16_000, 5]]) {
@@ -211,20 +301,67 @@ test('Offline backs off at 2, 4, 8 and 16 seconds without a path', async () => {
   jest.useRealTimers();
 });
 
+test('Offline keeps climbing the ladder when the reason changes and restarts for another desktop', async () => {
+  jest.useFakeTimers();
+  const onRetry = jest.fn(async () => false);
+  const render = (id, reason) => <Offline {...offlineProps({ desktopId: id, reason, onRetry })} />;
+  let tree;
+  await act(async () => { tree = create(render(desktopId, 'tunnel')); });
+  await act(async () => { jest.advanceTimersByTime(2_000); });
+  expect(onRetry).toHaveBeenCalledTimes(1);
+  // O motivo muda enquanto o núcleo procura; a próxima tentativa segue em 4 s, não volta a 2 s.
+  await act(async () => tree.update(render(desktopId, 'no-path')));
+  await act(async () => { jest.advanceTimersByTime(3_999); });
+  expect(onRetry).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(1); });
+  expect(onRetry).toHaveBeenCalledTimes(2);
+  await act(async () => tree.update(render(desktopId, 'reserve-preparing')));
+  await act(async () => { jest.advanceTimersByTime(8_000); });
+  expect(onRetry).toHaveBeenCalledTimes(3);
+  // Outro computador recomeça a escada em 2 s.
+  await act(async () => tree.update(render('d_BBBBBBBBBBBBBBBBBBBBBB', 'no-path')));
+  await act(async () => { jest.advanceTimersByTime(2_000); });
+  expect(onRetry).toHaveBeenCalledTimes(4);
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
 test('Offline after revocation offers pairing again and never retries', async () => {
   jest.useFakeTimers();
   const onRetry = jest.fn(async () => false);
   const onPairAgain = jest.fn();
   let tree;
   await act(async () => {
-    tree = create(<Offline reason="removed" reserveProgress={null} onRetry={onRetry} onDesktops={() => {}} onPairAgain={onPairAgain} />);
+    tree = create(<Offline {...offlineProps({ reason: 'removed', onRetry, onPairAgain })} />);
   });
   expect(text(tree)).toMatch(/Este celular foi removido/);
   expect(text(tree)).not.toMatch(/Tentar agora/);
+  // Depois da revogação o atalho Vincular sai: o botão principal já vincula de novo.
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Abrir o pareamento')).toHaveLength(0);
   await act(async () => { jest.advanceTimersByTime(60_000); });
   expect(onRetry).not.toHaveBeenCalled();
   await act(async () => { pressable(tree, 'Vincular de novo').props.onPress(); });
   expect(onPairAgain).toHaveBeenCalled();
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
+test('Offline goes back to the home and offers the list, settings and pairing shortcuts', async () => {
+  jest.useFakeTimers();
+  const onRetry = jest.fn(async () => false);
+  const handlers = { onHome: jest.fn(), onDesktops: jest.fn(), onSettings: jest.fn(), onPair: jest.fn() };
+  let tree;
+  await act(async () => { tree = create(<Offline {...offlineProps({ onRetry, ...handlers })} />); });
+  for (const expected of ['Início', 'Computadores', 'Ajustes', 'Vincular']) expect(text(tree)).toContain(expected);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  for (const [label, handler] of [['Ir para o início', 'onHome'], ['Mostrar computadores', 'onDesktops'],
+    ['Abrir ajustes', 'onSettings'], ['Abrir o pareamento', 'onPair']]) {
+    await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === label)[0].props.onPress(); });
+    expect(handlers[handler]).toHaveBeenCalledTimes(1);
+  }
+  // Sair da tela cancela a escada: nenhuma tentativa dispara depois.
+  await act(async () => { jest.advanceTimersByTime(60_000); });
+  expect(onRetry).not.toHaveBeenCalled();
   await act(async () => tree.unmount());
   jest.useRealTimers();
 });
@@ -234,11 +371,13 @@ test('Offline renders the selected Spanish locale', async () => {
   await setLocale('es-MX');
   let tree;
   await act(async () => {
-    tree = create(<Offline reason="reserve-unavailable" reserveProgress={null} onRetry={async () => false} onDesktops={() => {}} onPairAgain={() => {}} />);
+    tree = create(<Offline {...offlineProps({ reason: 'reserve-unavailable' })} />);
   });
   expect(text(tree)).toMatch(/Conexión de reserva no disponible/);
   expect(text(tree)).toMatch(/Intentar ahora/);
-  expect(text(tree)).toMatch(/Cambiar de computadora/);
+  expect(text(tree)).toMatch(/Inicio/);
+  expect(text(tree)).toMatch(/Computadoras/);
+  expect(text(tree)).toMatch(/Configuración/);
   await act(async () => tree.unmount());
   jest.useRealTimers();
 });
@@ -293,6 +432,7 @@ test('Settings offers the biometric policy and reports the choice', async () => 
 
 test('Settings keeps connection details inside the advanced diagnostics', async () => {
   const onRefreshStatus = jest.fn();
+  logApp('info', 'health probe: HTTP 403 forbidden', new Date(2026, 8, 16, 11, 7, 3).getTime());
   const tunnelStatus = {
     state: 'connected',
     active: { desktopId, transport: 'tor', path: 'tor', since: '2026-09-15T10:00:00Z' },
@@ -310,10 +450,21 @@ test('Settings keeps connection details inside the advanced diagnostics', async 
   const rendered = text(tree);
   for (const expected of ['Núcleo', 'Conectado', 'Transporte ativo', 'Reserva', 'Caminho ativo', 'Rede Tor',
     'Conexão de reserva', 'Preparando 64%', 'Computadores vinculados', '2', 'Versão do núcleo', 'core-2.0.0',
-    'Redes públicas usadas', 'STUN opcional', 'DNS-SD local']) {
+    'Redes públicas usadas', 'STUN opcional', 'DNS-SD local', 'Linhas recentes', '11:07:03', 'app: health probe: HTTP 403 forbidden']) {
     expect(rendered).toContain(expected);
   }
   expect(rendered).not.toMatch(forbiddenPunctuation);
+  await act(async () => tree.unmount());
+});
+
+test('Settings says when the diagnostic ring is still empty', async () => {
+  let tree;
+  await act(async () => {
+    tree = create(<Settings desktopCount={0} tunnelStatus={null} appVersion="1.0.0" coreVersion="1.0.0" logLevel="info"
+      onBack={() => {}} onLogLevel={() => {}} onRefreshStatus={() => {}} />);
+  });
+  await act(async () => { pressable(tree, 'Mostrar detalhes').props.onPress(); });
+  expect(text(tree)).toMatch(/Nenhuma linha registrada ainda/);
   await act(async () => tree.unmount());
 });
 
@@ -322,9 +473,7 @@ test('Shell shows the transport dot and passes the selected locale to the mobile
   await setLocale('es-MX');
   let tree;
   await act(async () => {
-    tree = create(<Shell url="http://127.0.0.1:47400/?k=test" desktopId="desktop-1" desktopName="Studio"
-      version="1.0.0" biometricSession={{ authorize: async () => true, lock: () => false }} lockSignal={0}
-      transport="tor" onConnectionLost={() => {}} onDesktops={() => {}} />);
+    tree = create(<Shell {...shellProps()} />);
   });
   const webView = tree.root.findAll(node => typeof node.props.injectedJavaScriptBeforeContentLoaded === 'string')[0];
   expect(webView.props.injectedJavaScriptBeforeContentLoaded).toContain('"locale":"es"');
@@ -333,10 +482,59 @@ test('Shell shows the transport dot and passes the selected locale to the mobile
   expect(text(tree)).toMatch(/Studio/);
   expect(text(tree)).toMatch(/Reserva/);
   expect(text(tree)).not.toMatch(forbiddenOnMainScreens);
-  await act(async () => tree.update(<Shell url="http://127.0.0.1:47400/?k=test" desktopId="desktop-1" desktopName="Studio"
-    version="1.0.0" biometricSession={{ authorize: async () => true, lock: () => false }} lockSignal={0}
-    transport={null} onConnectionLost={() => {}} onDesktops={() => {}} />));
+  await act(async () => tree.update(<Shell {...shellProps({ transport: null })} />));
   expect(text(tree)).toMatch(/Buscando camino/);
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
+test('Shell shows the reconnecting banner above the page and keeps the same source', async () => {
+  jest.useFakeTimers();
+  const onHome = jest.fn();
+  let tree;
+  await act(async () => { tree = create(<Shell {...shellProps({ onHome })} />); });
+  const webView = () => tree.root.findAll(node => node.props.source?.uri)[0];
+  const source = webView().props.source;
+  // O botão da barra volta ao início, com rótulo próprio.
+  await act(async () => { pressable(tree, 'Início').props.onPress(); });
+  expect(onHome).toHaveBeenCalledTimes(1);
+  expect(text(tree)).not.toMatch(/Reconectando/);
+  await act(async () => tree.update(<Shell {...shellProps({ reconnecting: true })} />));
+  expect(text(tree)).toMatch(/Reconectando/);
+  expect(text(tree)).toMatch(/A página continua aqui/);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  expect(webView().props.source).toBe(source);
+  await act(async () => tree.update(<Shell {...shellProps({ reconnecting: false })} />));
+  expect(text(tree)).not.toMatch(/Reconectando/);
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
+test('Shell needs two strikes from probes or load errors before reporting the loss, and reports recovery', async () => {
+  jest.useFakeTimers();
+  const onConnectionLost = jest.fn();
+  const onConnectionRestored = jest.fn();
+  let tree;
+  await act(async () => { tree = create(<Shell {...shellProps({ onConnectionLost, onConnectionRestored })} />); });
+  const webView = tree.root.findAll(node => node.props.source?.uri)[0];
+  const loadError = { nativeEvent: { code: -1009, description: 'Sem conexão' } };
+  // Um erro de carregamento sozinho não derruba nada.
+  await act(async () => { webView.props.onError(loadError); });
+  expect(onConnectionLost).not.toHaveBeenCalled();
+  // Uma sondagem boa zera a contagem e avisa que a página respondeu.
+  await act(async () => { jest.advanceTimersByTime(10_000); });
+  expect(onConnectionRestored).toHaveBeenCalledTimes(1);
+  await act(async () => { webView.props.onError(loadError); });
+  expect(onConnectionLost).not.toHaveBeenCalled();
+  // O segundo erro seguido completa o par.
+  await act(async () => { webView.props.onError(loadError); });
+  expect(onConnectionLost).toHaveBeenCalledTimes(1);
+  // Sondagem falha mais erro de carregamento também formam o par.
+  mockHealth.mockResolvedValueOnce(false);
+  await act(async () => { jest.advanceTimersByTime(10_000); });
+  expect(onConnectionLost).toHaveBeenCalledTimes(1);
+  await act(async () => { webView.props.onError(loadError); });
+  expect(onConnectionLost).toHaveBeenCalledTimes(2);
   await act(async () => tree.unmount());
   jest.useRealTimers();
 });

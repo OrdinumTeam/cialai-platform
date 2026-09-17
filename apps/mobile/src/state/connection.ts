@@ -4,7 +4,8 @@ import { tunnelErrorCode } from '../network/tunnel-errors';
 import type { OfflineReason } from './machine';
 
 export type ConnectionOutcome =
-  | { kind: 'opened'; desktopId: string; url: string; transport: Transport; path: PathKind }
+  // `reused` diz que o proxy devolvido é o mesmo da página aberta: a URL não muda e o WebView não recarrega.
+  | { kind: 'opened'; desktopId: string; url: string; transport: Transport; path: PathKind; reused: boolean }
   | { kind: 'offline'; desktopId: string; reason: Exclude<OfflineReason, 'removed' | 'reconnecting'> }
   | { kind: 'revoked'; desktopId: string }
   | { kind: 'unpaired'; desktopId: string };
@@ -12,7 +13,7 @@ export type ConnectionOutcome =
 export type ConnectionPorts = {
   readToken: (desktopId: string) => Promise<string | null>;
   connect: (desktopId: string) => Promise<ConnectResult>;
-  openDesktop: (desktopId: string, token: string) => Promise<OpenDesktopResult>;
+  openDesktop: (desktopId: string, token: string, preferredPort: number) => Promise<OpenDesktopResult>;
   validateUrl: (url: string) => string;
 };
 
@@ -35,9 +36,22 @@ export function outcomeForCode(desktopId: string, code: string | null): Connecti
   }
 }
 
+// Porta do proxy já aberto para a página atual; zero deixa o núcleo escolher.
+export function preferredPortOf(currentUrl: string | null): number {
+  if (!currentUrl) return 0;
+  try {
+    const port = Number(new URL(currentUrl).port);
+    return Number.isInteger(port) && port > 0 && port <= 65_535 ? port : 0;
+  } catch {
+    return 0;
+  }
+}
+
 // Conecta pelo gerenciador de caminho e só então abre o proxy local com o token.
 // Sem token guardado o computador precisa ser vinculado de novo, sem chamar o núcleo.
-export async function openConnection(desktopId: string, ports: ConnectionPorts): Promise<ConnectionOutcome> {
+// Com a URL da página aberta, pede a mesma porta: o núcleo devolve o mesmo proxy
+// quando ele segue aberto para o mesmo computador, e a página não recarrega.
+export async function openConnection(desktopId: string, ports: ConnectionPorts, currentUrl: string | null = null): Promise<ConnectionOutcome> {
   let token: string | null;
   try {
     token = await ports.readToken(desktopId);
@@ -47,13 +61,15 @@ export async function openConnection(desktopId: string, ports: ConnectionPorts):
   if (!token) return { kind: 'unpaired', desktopId };
   try {
     const connected = await ports.connect(desktopId);
-    const opened = await ports.openDesktop(desktopId, token);
+    const opened = await ports.openDesktop(desktopId, token, preferredPortOf(currentUrl));
+    const url = ports.validateUrl(opened.url);
     return {
       kind: 'opened',
       desktopId,
-      url: ports.validateUrl(opened.url),
+      url,
       transport: connected.transport,
-      path: connected.path
+      path: connected.path,
+      reused: currentUrl !== null && url === currentUrl
     };
   } catch (caught) {
     return outcomeForCode(desktopId, connectionErrorCode(caught));
@@ -61,12 +77,11 @@ export async function openConnection(desktopId: string, ports: ConnectionPorts):
 }
 
 export const RETRY_DELAYS_MS = [2_000, 4_000, 8_000, 16_000] as const;
-export const RESERVE_PREPARING_RETRY_MS = 3_000;
 
-// Revogação não tenta de novo. A reserva em preparo volta em intervalo curto e fixo;
-// os demais motivos seguem 2, 4, 8 e 16 s, repetindo o último intervalo.
+// Uma escada só, para qualquer motivo: 2, 4, 8 e 16 s, repetindo o último
+// intervalo. A revogação nunca tenta de novo. A reserva em preparo não tem mais
+// intervalo próprio: o núcleo avisa quando ela fica pronta e o app tenta na hora.
 export function retryDelay(reason: OfflineReason, attempt: number): number | null {
   if (reason === 'removed') return null;
-  if (reason === 'reserve-preparing') return RESERVE_PREPARING_RETRY_MS;
   return RETRY_DELAYS_MS[Math.min(Math.max(attempt, 0), RETRY_DELAYS_MS.length - 1)]!;
 }

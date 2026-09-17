@@ -70,22 +70,47 @@ type NetworkState = {
 };
 
 export type NetworkChange = { reachable: boolean; changed: boolean; regained: boolean };
+export type NetworkForwarder = ((state: NetworkState) => NetworkChange) & { cancel: () => void };
+
+// Tempo que uma interface nova precisa ficar estável antes de chegar ao núcleo.
+export const NETWORK_TYPE_SETTLE_MS = 2_500;
 
 export function isReachable(state: NetworkState): boolean {
   return state.isConnected === true && state.isInternetReachable !== false;
 }
 
-// Repassa ao núcleo cada mudança de alcance ou de interface, como Wi-Fi para rede
-// móvel com alcance igual, e ignora repetições idênticas do NetInfo.
-export function createNetworkForwarder(notifyNetworkChange: (reachable: boolean) => void) {
-  let last: { reachable: boolean; type: string } | null = null;
-  return (state: NetworkState): NetworkChange => {
+// Mudança de alcance chega ao núcleo na hora: a volta da rede é o que destrava a
+// reconexão. Mudança só de interface, como Wi-Fi para rede móvel com o mesmo
+// alcance, espera NETWORK_TYPE_SETTLE_MS estável, porque o NetInfo oscila entre
+// wifi, cellular e unknown durante a troca; um vaivém que termina na interface
+// de antes não gera aviso, e repetições idênticas nunca chegam ao núcleo.
+export function createNetworkForwarder(
+  notifyNetworkChange: (reachable: boolean) => void,
+  settleMs = NETWORK_TYPE_SETTLE_MS
+): NetworkForwarder {
+  let forwarded: { reachable: boolean; type: string } | null = null;
+  let settling: ReturnType<typeof setTimeout> | null = null;
+  const cancel = () => {
+    if (settling) clearTimeout(settling);
+    settling = null;
+  };
+  const forward = (state: NetworkState): NetworkChange => {
     const reachable = isReachable(state);
     const type = state.type ?? 'unknown';
-    if (last && last.reachable === reachable && last.type === type) return { reachable, changed: false, regained: false };
-    const regained = last !== null && !last.reachable && reachable;
-    last = { reachable, type };
+    cancel();
+    if (forwarded && forwarded.reachable === reachable) {
+      if (forwarded.type === type) return { reachable, changed: false, regained: false };
+      settling = setTimeout(() => {
+        settling = null;
+        forwarded = { reachable, type };
+        notifyNetworkChange(reachable);
+      }, settleMs);
+      return { reachable, changed: false, regained: false };
+    }
+    const regained = forwarded !== null && !forwarded.reachable && reachable;
+    forwarded = { reachable, type };
     notifyNetworkChange(reachable);
     return { reachable, changed: true, regained };
   };
+  return Object.assign(forward, { cancel });
 }

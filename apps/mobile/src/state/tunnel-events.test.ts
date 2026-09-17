@@ -53,9 +53,17 @@ describe('native tunnel events', () => {
       .toEqual({ type: 'native-reopen-failed', desktopId: null, code: 'revoked' });
   });
 
-  test('pair events expose the core stage and logs are ignored', () => {
+  test('pair events expose the core stage', () => {
     expect(interpretTunnelEvent({ kind: 'pair', payload: { state: 'tor' } })).toEqual([{ type: 'pair-stage', state: 'tor' }]);
-    expect(interpretTunnelEvent({ kind: 'log', payload: { level: 'error', code: 'x' } })).toEqual([]);
+  });
+
+  test('log events reach the diagnostic ring with a known level', () => {
+    expect(interpretTunnelEvent({ kind: 'log', payload: { level: 'debug', message: 'pathmgr: adopt direct' } }))
+      .toEqual([{ type: 'log', level: 'debug', message: 'pathmgr: adopt direct' }]);
+    expect(interpretTunnelEvent({ kind: 'log', payload: { level: 'error', code: 'x' } })).toEqual([{ type: 'log', level: 'error', message: 'x' }]);
+    expect(interpretTunnelEvent({ kind: 'log', payload: { level: 'weird', message: 'no level' } })[0]).toEqual({ type: 'log', level: 'info', message: 'no level' });
+    expect(interpretTunnelEvent({ kind: 'log', payload: { level: 'info' } })).toEqual([]);
+    expect(interpretTunnelEvent({ kind: 'log', payload: null })).toEqual([]);
   });
 
   test('reserve percentage is shown only while the reserve prepares', () => {

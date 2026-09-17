@@ -20,9 +20,43 @@ describe('mobile state transitions', () => {
     expect(transition(loading, { type: 'show-settings' })).toEqual({ kind: 'settings' });
   });
 
+  test('opens the home from any screen, including an open shell', () => {
+    expect(transition(loading, { type: 'show-home' })).toEqual({ kind: 'home' });
+    const shell = transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'direct', path: 'lan' });
+    expect(transition(shell, { type: 'show-home' })).toEqual({ kind: 'home' });
+    const removed: AppScreen = { kind: 'offline', desktopId, reason: 'removed' };
+    expect(transition(removed, { type: 'show-home' })).toEqual({ kind: 'home' });
+    const home: AppScreen = { kind: 'home' };
+    expect(transition(home, { type: 'path-changed', desktopId, transport: 'tor', path: 'tor' })).toBe(home);
+    expect(transition(home, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' }))
+      .toEqual({ kind: 'shell', desktopId, url, transport: 'tor', path: 'tor', reconnecting: false });
+  });
+
   test('opens a local shell with the active transport', () => {
     expect(transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'direct', path: 'lan' }))
-      .toEqual({ kind: 'shell', desktopId, url, transport: 'direct', path: 'lan' });
+      .toEqual({ kind: 'shell', desktopId, url, transport: 'direct', path: 'lan', reconnecting: false });
+  });
+
+  test('health loss marks the shell as reconnecting without leaving the page', () => {
+    const shell = transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' });
+    const reconnecting = transition(shell, { type: 'shell-reconnecting', desktopId });
+    expect(reconnecting).toEqual({ kind: 'shell', desktopId, url, transport: 'tor', path: 'tor', reconnecting: true });
+    expect(transition(reconnecting, { type: 'shell-reconnecting', desktopId })).toBe(reconnecting);
+    expect(transition(shell, { type: 'shell-reconnecting', desktopId: otherDesktopId })).toBe(shell);
+    expect(transition(reconnecting, { type: 'shell-recovered', desktopId })).toEqual(shell);
+    expect(transition(shell, { type: 'shell-recovered', desktopId })).toBe(shell);
+    const offline: AppScreen = { kind: 'offline', desktopId, reason: 'no-path' };
+    expect(transition(offline, { type: 'shell-reconnecting', desktopId })).toBe(offline);
+    expect(transition(offline, { type: 'shell-recovered', desktopId })).toBe(offline);
+  });
+
+  test('reopening the same proxy keeps the page and clears the reconnecting flag', () => {
+    const shell = transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' });
+    expect(transition(shell, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' })).toBe(shell);
+    const reconnecting = transition(shell, { type: 'shell-reconnecting', desktopId });
+    expect(transition(reconnecting, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' })).toEqual(shell);
+    expect(transition(reconnecting, { type: 'desktop-opened', desktopId, url: 'http://127.0.0.1:47401/', transport: 'direct', path: 'lan' }))
+      .toEqual({ kind: 'shell', desktopId, url: 'http://127.0.0.1:47401/', transport: 'direct', path: 'lan', reconnecting: false });
   });
 
   test.each<OfflineReason>(['reconnecting', 'reserve-preparing', 'reserve-unavailable', 'no-path', 'tunnel', 'removed'])(
@@ -33,9 +67,9 @@ describe('mobile state transitions', () => {
   test('path events move the dot only for the open desktop', () => {
     const shell = transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'direct', path: 'direct' });
     expect(transition(shell, { type: 'path-changed', desktopId, transport: 'tor', path: 'tor' }))
-      .toEqual({ kind: 'shell', desktopId, url, transport: 'tor', path: 'tor' });
+      .toEqual({ kind: 'shell', desktopId, url, transport: 'tor', path: 'tor', reconnecting: false });
     expect(transition(shell, { type: 'path-changed', desktopId, transport: null, path: null }))
-      .toEqual({ kind: 'shell', desktopId, url, transport: null, path: null });
+      .toEqual({ kind: 'shell', desktopId, url, transport: null, path: null, reconnecting: false });
     expect(transition(shell, { type: 'path-changed', desktopId: otherDesktopId, transport: 'tor', path: 'tor' })).toBe(shell);
     expect(transition(shell, { type: 'path-changed', desktopId, transport: 'direct', path: 'direct' })).toBe(shell);
     const desktops: AppScreen = { kind: 'desktops' };
@@ -47,7 +81,7 @@ describe('mobile state transitions', () => {
     expect(transition(removed, { type: 'desktop-offline', desktopId, reason: 'no-path' })).toBe(removed);
     expect(transition(removed, { type: 'desktop-opened', desktopId, url, transport: 'tor', path: 'tor' })).toBe(removed);
     expect(transition(removed, { type: 'desktop-opened', desktopId: otherDesktopId, url, transport: 'tor', path: 'tor' }))
-      .toEqual({ kind: 'shell', desktopId: otherDesktopId, url, transport: 'tor', path: 'tor' });
+      .toEqual({ kind: 'shell', desktopId: otherDesktopId, url, transport: 'tor', path: 'tor', reconnecting: false });
     expect(transition(removed, { type: 'needs-pairing' })).toEqual({ kind: 'pair' });
   });
 });

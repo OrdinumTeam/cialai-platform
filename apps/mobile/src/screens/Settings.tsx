@@ -7,6 +7,7 @@ import type { LogLevel, TunnelStatus } from 'cialai-tunnel';
 
 import { BIOMETRIC_POLICIES, type BiometricPolicy } from '../auth/biometrics';
 import { useI18n } from '../i18n';
+import { formatDiagnosticTime, useDiagnosticLog } from '../state/diagnostics';
 import { THEME_MODES, usePalette, type ThemeMode } from '../theme';
 import { PATH_KEYS, TOR_STATE_KEYS, TRANSPORT_KEYS } from './TransportBadge';
 
@@ -52,6 +53,7 @@ export function Settings({
   const palette = usePalette();
   const { locale, setLocale, t } = useI18n();
   const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const diagnosticLog = useDiagnosticLog();
   const active = tunnelStatus?.active ?? null;
   const tor = tunnelStatus?.tor ?? null;
   const none = t('mobile.settings.diagnostics.none');
@@ -70,8 +72,8 @@ export function Settings({
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <View style={styles.header}>
-        <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}>
-          <Text style={[styles.backText, { color: palette.accent }]}>{t('mobile.desktops.title')}</Text>
+        <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={onBack} style={styles.back}>
+          <Text style={[styles.backText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
         </Pressable>
         <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.settings.title')}</Text>
       </View>
@@ -154,6 +156,16 @@ export function Settings({
                   </View>
                 ))}
               </View>
+              <View style={[styles.row, styles.rowStacked, { borderTopColor: palette.separator }]}>
+                <Text style={[styles.rowLabel, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.log')}</Text>
+                {diagnosticLog.length ? [...diagnosticLog].reverse().map(line => (
+                  <Text key={`${line.at}:${line.message}`} selectable style={[styles.logLine, { color: palette.label }]}>
+                    <Text style={{ color: palette.tertiaryLabel }}>{formatDiagnosticTime(line.at)}</Text>
+                    {' '}
+                    {line.message}
+                  </Text>
+                )) : <Text style={[styles.networkDetail, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.logEmpty')}</Text>}
+              </View>
               <Pressable accessibilityRole="button" onPress={onRefreshStatus} style={[styles.rowButton, styles.refresh, { borderTopColor: palette.separator }]}>
                 <Text style={[styles.rowButtonText, { color: palette.accent }]}>{t('mobile.settings.diagnostics.refresh')}</Text>
               </Pressable>
@@ -189,6 +201,7 @@ const styles = StyleSheet.create({
   network: { gap: 2 },
   networkName: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   networkDetail: { fontSize: 13, lineHeight: 18 },
+  logLine: { fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] },
   rowButton: { minHeight: 44, justifyContent: 'center' },
   refresh: { borderTopWidth: StyleSheet.hairlineWidth },
   rowButtonText: { fontSize: 15, fontWeight: '600' },

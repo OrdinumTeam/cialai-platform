@@ -21,7 +21,7 @@ import (
 // Default budgets and stability timings from section 6.3 of the plan.
 const (
 	DefaultLANBudget       = 1500 * time.Millisecond
-	DefaultDirectBudget    = 2 * time.Second
+	DefaultDirectBudget    = 4 * time.Second
 	DefaultTorBudget       = 20 * time.Second
 	DefaultPunchBudget     = 5 * time.Second
 	DefaultMigrateBudget   = 2 * time.Second
@@ -390,15 +390,36 @@ func (m *Manager) NotifyNetworkChange(reachable bool) {
 		m.broadcastLocked()
 		return
 	}
-	m.retries = 0
-	full := m.fullPlan()
 	switch {
 	case m.active != nil && m.active.session != nil:
+		full := m.fullPlan()
 		full.migrate = true
 		m.startRunLocked(ReasonNetworkChanged, full)
-	case m.active != nil || m.state != StateIdle:
-		m.startRunLocked(ReasonNetworkChanged, full)
+	case m.active != nil:
+		// The fallback is active: it is re-dialed, and the direct steps run
+		// only when the stability rules allow an improvement now, so a
+		// handoff that reports several changes in a row does not leave the
+		// reserve for a direct path that dies at once.
+		m.startRunLocked(ReasonNetworkChanged, m.recheckPlanLocked())
+	case m.state != StateIdle:
+		m.retries = 0
+		m.startRunLocked(ReasonNetworkChanged, m.fullPlan())
 	}
+}
+
+// recheckPlanLocked plans the evaluation of an active fallback after a
+// network change or the foreground: the fallback is dialed again, and the
+// direct steps and the punch run only when an improvement attempt is allowed
+// now, which counts as the attempt.
+func (m *Manager) recheckPlanLocked() plan {
+	recheck := plan{tor: true, punch: true}
+	now := m.clock.Now()
+	if m.upgradeOpenLocked(now) {
+		m.lastUpgradeAt = now
+		recheck = m.fullPlan()
+		recheck.upgrade = true
+	}
+	return recheck
 }
 
 // NotifyForeground reports whether the app is in the foreground. Background
@@ -425,13 +446,7 @@ func (m *Manager) NotifyForeground(active bool) {
 		m.retries = 0
 		m.startRunLocked(ReasonForeground, m.fullPlan())
 	case m.active.path.Kind == KindTor:
-		recheck := plan{tor: true, punch: true}
-		if m.upgradeOpenLocked(m.clock.Now()) {
-			m.lastUpgradeAt = m.clock.Now()
-			recheck = m.fullPlan()
-			recheck.upgrade = true
-		}
-		m.startRunLocked(ReasonForeground, recheck)
+		m.startRunLocked(ReasonForeground, m.recheckPlanLocked())
 	}
 }
 
@@ -600,9 +615,16 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 		path.Transport = transport.NameDirect
 		path.Address = canonicalAddress(session.RemoteAddr())
 	}
+	// A path adopted again to the endpoint of the active one is the same
+	// path: it keeps its Since, counts as no switch and emits nothing, so
+	// the proxy keeps the upstreams it carries.
+	same := previous != nil && previous.path.Equivalent(path)
+	if same {
+		path.Since = previous.path.Since
+	}
 	next := &activePath{seq: m.pathSeq, path: path, session: session, stop: make(chan struct{})}
 	next.ctx, next.cancel = context.WithCancel(context.Background())
-	if m.hadPath {
+	if m.hadPath && !same {
 		m.lastSwitchAt = now
 	}
 	m.hadPath = true
@@ -610,7 +632,9 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 	m.retries = 0
 	m.lastErr = nil
 	m.state = StateConnected
-	m.emitPathLocked(PathEvent{DesktopID: path.DesktopID, Transport: path.Transport, Path: kind, Reason: reason})
+	if !same {
+		m.emitPathLocked(PathEvent{DesktopID: path.DesktopID, Transport: path.Transport, Path: kind, Reason: reason})
+	}
 	if session != nil {
 		m.wait.Add(1)
 		go m.watch(next)
@@ -621,9 +645,14 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 	}
 	m.broadcastLocked()
 	m.mu.Unlock()
-	if path.Address != "" {
+	switch {
+	case same && path.Address != "":
+		m.config.Logf("pathmgr: %s adopted %s at %s again, reason %s", path.DesktopID, kind, path.Address, reason)
+	case same:
+		m.config.Logf("pathmgr: %s adopted %s again, reason %s", path.DesktopID, kind, reason)
+	case path.Address != "":
 		m.config.Logf("pathmgr: %s active over %s at %s, reason %s", path.DesktopID, kind, path.Address, reason)
-	} else {
+	default:
 		m.config.Logf("pathmgr: %s active over %s, reason %s", path.DesktopID, kind, reason)
 	}
 	m.release(previous)

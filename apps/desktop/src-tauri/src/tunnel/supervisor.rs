@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
+use std::ffi::OsStr;
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -15,7 +16,7 @@ use serde_json::{Value, json};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::bridge::{BridgeControl, IdentityControl};
-use crate::platform::child_env;
+use crate::platform::{self, child_env};
 
 use super::awake::Awake;
 use super::credentials::ApiKeyStore;
@@ -29,6 +30,17 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RESTARTS: usize = 10;
+/// Janela em que `MAX_RESTARTS` inícios do sidecar são admitidos, somando os do
+/// ciclo de reinício e os pedidos diretos da interface. Esgotada, nenhum
+/// sidecar nasce até o início mais antigo sair da janela, para um crash loop
+/// não multiplicar processos a cada chamada da interface.
+const RESTART_WINDOW: Duration = Duration::from_secs(10 * 60);
+const RESTART_LIMIT_CODE: &str = "tunnel_restart_limit";
+const SIDECAR_NAME: &str = if cfg!(windows) {
+    "cialai-tunnel.exe"
+} else {
+    "cialai-tunnel"
+};
 
 /// Comandos cujos argumentos de borda pertencem ao supervisor: `staticDir`,
 /// `bridgeUrl` e `proxySecret` são sempre injetados aqui e o que vier da
@@ -136,6 +148,36 @@ impl ProcessHandle {
     }
 }
 
+/// Inícios do sidecar numa janela deslizante de `RESTART_WINDOW`.
+struct RestartBudget {
+    attempts: VecDeque<Instant>,
+}
+
+impl RestartBudget {
+    fn new() -> Self {
+        Self {
+            attempts: VecDeque::new(),
+        }
+    }
+
+    /// Admite um início em `now` ou devolve quanto falta para o próximo.
+    fn admit(&mut self, now: Instant) -> Result<(), Duration> {
+        while self
+            .attempts
+            .front()
+            .is_some_and(|&at| now.duration_since(at) >= RESTART_WINDOW)
+        {
+            self.attempts.pop_front();
+        }
+        if self.attempts.len() >= MAX_RESTARTS {
+            let oldest = self.attempts[0];
+            return Err(RESTART_WINDOW - now.duration_since(oldest));
+        }
+        self.attempts.push_back(now);
+        Ok(())
+    }
+}
+
 struct Inner {
     launch: LaunchConfig,
     events: EventSink,
@@ -149,6 +191,7 @@ struct Inner {
     start_gate: Mutex<()>,
     stopping: AtomicBool,
     restart_active: AtomicBool,
+    restarts: Mutex<RestartBudget>,
 }
 
 #[derive(Clone)]
@@ -164,7 +207,10 @@ impl Supervisor {
         bridge_control: BridgeControl,
         awake: Awake,
     ) -> Result<Self, String> {
-        let binary = resolve_binary(app)?;
+        let binary = resolve_binary().map_err(|error| {
+            crate::diagnostics::note(&format!("[tunnel] sidecar não encontrado: {error}"));
+            error
+        })?;
         let tor_binary = resolve_tor_binary(app)?;
         let state_dir = app
             .path()
@@ -212,6 +258,7 @@ impl Supervisor {
                 start_gate: Mutex::new(()),
                 stopping: AtomicBool::new(false),
                 restart_active: AtomicBool::new(false),
+                restarts: Mutex::new(RestartBudget::new()),
             }),
         }
     }
@@ -262,6 +309,7 @@ impl Supervisor {
             .stderr(Stdio::null());
         self.inner.launch.append_tor(&mut command);
         child_env::sanitize(&mut command);
+        platform::configure_background_command(&mut command);
         let output = command.output().map_err(|error| {
             RpcProblem::local(
                 "doctor_unavailable",
@@ -391,7 +439,9 @@ impl Inner {
         match self.start_once() {
             Ok(()) => Ok(()),
             Err(problem) => {
-                if !self.stopping.load(Ordering::SeqCst) {
+                // Com a janela de inícios esgotada não há o que rearmar: a
+                // interface volta a pedir quando o mais antigo sair da janela.
+                if problem.code != RESTART_LIMIT_CODE && !self.stopping.load(Ordering::SeqCst) {
                     self.schedule_restart();
                 }
                 Err(problem)
@@ -409,6 +459,17 @@ impl Inner {
                 true,
             ));
         }
+        if let Err(wait) = lock(&self.restarts).admit(Instant::now()) {
+            return Err(RpcProblem::local(
+                RESTART_LIMIT_CODE,
+                format!(
+                    "O núcleo do túnel falhou {MAX_RESTARTS} vezes em {} min. Nova tentativa em {} s.",
+                    RESTART_WINDOW.as_secs() / 60,
+                    wait.as_secs().max(1)
+                ),
+                true,
+            ));
+        }
         fs::create_dir_all(&self.launch.state_dir).map_err(|error| {
             RpcProblem::local(
                 "tunnel_state",
@@ -417,8 +478,13 @@ impl Inner {
             )
         })?;
         self.emit_local("tunnel.state", json!({"state":"starting"}));
-        let binary = validate_binary(&self.launch.binary)
-            .map_err(|message| RpcProblem::local("tunnel_start", message, true))?;
+        let binary = validate_binary(&self.launch.binary).map_err(|message| {
+            crate::diagnostics::note(&format!(
+                "[tunnel] sidecar não encontrado em {}: {message}",
+                self.launch.binary.display()
+            ));
+            RpcProblem::local("tunnel_start", message, true)
+        })?;
         let mut command = Command::new(binary);
         command
             .args(&self.launch.binary_args)
@@ -431,6 +497,9 @@ impl Inner {
         // O sidecar e o `tor` que ele abre acham as proprias bibliotecas pelo
         // `$ORIGIN`; nada do ambiente do AppImage lhes serve.
         child_env::sanitize(&mut command);
+        // Sem CREATE_NO_WINDOW o sidecar abriria um console no Windows em
+        // release, e um crash loop deixaria uma janela por tentativa.
+        platform::configure_background_command(&mut command);
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -626,9 +695,15 @@ impl Inner {
                 }
                 thread::sleep(delay);
                 let _gate = lock(&owner.start_gate);
-                if owner.start_once().is_ok() {
-                    owner.restart_active.store(false, Ordering::SeqCst);
-                    return;
+                match owner.start_once() {
+                    Ok(()) => {
+                        owner.restart_active.store(false, Ordering::SeqCst);
+                        return;
+                    }
+                    // A janela de inícios esgotou: o resto da escada não
+                    // mudaria nada além de somar processos.
+                    Err(problem) if problem.code == RESTART_LIMIT_CODE => break,
+                    Err(_) => {}
                 }
             }
             owner.restart_active.store(false, Ordering::SeqCst);
@@ -790,7 +865,11 @@ fn validate_binary(path: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
-fn resolve_binary(app: &AppHandle) -> Result<PathBuf, String> {
+/// Sidecar ao lado do executável real. `tauri::process::current_binary` não
+/// serve aqui: no AppImage ele devolve `$APPIMAGE`, o arquivo `.AppImage` na
+/// pasta de download, enquanto o sidecar vive na imagem montada, em
+/// `$APPDIR/usr/bin`, ao lado do `cialai-desktop` que `current_exe` aponta.
+fn resolve_binary() -> Result<PathBuf, String> {
     if let Some(path) = std::env::var_os("CIALAI_TUNNEL_BIN") {
         let path = PathBuf::from(path);
         if !path.is_absolute() {
@@ -798,18 +877,26 @@ fn resolve_binary(app: &AppHandle) -> Result<PathBuf, String> {
         }
         return Ok(path);
     }
-    let current = tauri::process::current_binary(&app.env())
-        .map_err(|error| format!("executável do Cialai indisponível: {error}"))?;
-    let name = if cfg!(windows) {
-        "cialai-tunnel.exe"
+    let appdir = if cfg!(target_os = "linux") {
+        std::env::var_os("APPDIR")
     } else {
-        "cialai-tunnel"
+        None
     };
-    let sibling = current
+    let current = std::env::current_exe()
+        .map_err(|error| format!("executável do Cialai indisponível: {error}"))?;
+    sidecar_beside(&current, appdir.as_deref())
+}
+
+/// `$APPDIR/usr/bin` quando o AppRun definiu a variável; senão o diretório do
+/// executável, que cobre `.deb`, `.rpm`, o `.app` do macOS e o Windows.
+fn sidecar_beside(current_exe: &Path, appdir: Option<&OsStr>) -> Result<PathBuf, String> {
+    if let Some(appdir) = appdir.filter(|value| !value.is_empty()) {
+        return Ok(Path::new(appdir).join("usr/bin").join(SIDECAR_NAME));
+    }
+    let directory = current_exe
         .parent()
-        .ok_or_else(|| "o executável do Cialai não tem diretório".to_string())?
-        .join(name);
-    Ok(sibling)
+        .ok_or_else(|| "o executável do Cialai não tem diretório".to_string())?;
+    Ok(directory.join(SIDECAR_NAME))
 }
 
 /// `CIALAI_TOR_BIN` aponta para um `tor` de desenvolvimento, o mesmo nome do
@@ -882,6 +969,69 @@ mod tests {
             restart_delays().collect::<Vec<_>>(),
             [1, 2, 4, 8, 16, 30, 30, 30, 30, 30].map(Duration::from_secs)
         );
+    }
+
+    #[test]
+    fn restart_budget_admits_ten_starts_per_window_and_then_waits() {
+        let mut budget = RestartBudget::new();
+        let start = Instant::now();
+        let second = |seconds: usize| start + Duration::from_secs(seconds as u64);
+        for attempt in 0..MAX_RESTARTS {
+            assert!(budget.admit(second(attempt)).is_ok(), "{attempt}");
+        }
+        assert_eq!(
+            budget.admit(second(MAX_RESTARTS)).unwrap_err(),
+            RESTART_WINDOW - Duration::from_secs(MAX_RESTARTS as u64)
+        );
+        // O início mais antigo sai da janela e libera exatamente um novo.
+        assert!(budget.admit(start + RESTART_WINDOW).is_ok());
+        assert!(budget.admit(start + RESTART_WINDOW).is_err());
+        assert!(
+            budget
+                .admit(start + RESTART_WINDOW + Duration::from_secs(1))
+                .is_ok()
+        );
+    }
+
+    /// Cada chamada da interface tenta iniciar de novo, como no crash loop
+    /// do Windows. Dentro da janela só `MAX_RESTARTS` sidecars nascem, entre
+    /// as tentativas diretas e as do ciclo de reinício; depois a chamada é
+    /// recusada sem rearmar o ciclo.
+    #[test]
+    fn a_missing_sidecar_is_not_retried_beyond_the_restart_window() {
+        let root = std::env::temp_dir();
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let captured = events.clone();
+        let supervisor = Supervisor::new(
+            fixture(
+                &root,
+                root.join("missing-sidecar"),
+                BridgeSession {
+                    port: 3720,
+                    secret: "fixture".into(),
+                },
+            ),
+            Arc::new(move |_, value| lock(&captured).push(value)),
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("unused-key")),
+            Awake::disabled(),
+        );
+        let codes = (0..MAX_RESTARTS + 5)
+            .map(|_| supervisor.call("net.status", json!({})).unwrap_err().code)
+            .collect::<Vec<_>>();
+        supervisor.shutdown_blocking();
+        assert_eq!(codes[0], "tunnel_start");
+        assert!(
+            codes[MAX_RESTARTS..]
+                .iter()
+                .all(|code| code == RESTART_LIMIT_CODE),
+            "{codes:?}"
+        );
+        let starting = lock(&events)
+            .iter()
+            .filter(|value| value["data"]["state"] == "starting")
+            .count();
+        assert_eq!(starting, MAX_RESTARTS);
     }
 
     #[test]
@@ -1101,6 +1251,105 @@ mod tests {
         assert!(validate_binary(Path::new("relative-sidecar")).is_err());
         let directory = std::env::temp_dir();
         assert!(validate_binary(&directory).is_err());
+    }
+
+    #[test]
+    fn appimage_sidecar_lives_in_the_mounted_image_beside_the_real_executable() {
+        let image = Path::new("/tmp/.mount_CialaiXYZ");
+        let desktop = image.join("usr/bin/cialai-desktop");
+        assert_eq!(
+            sidecar_beside(&desktop, Some(image.as_os_str())).unwrap(),
+            image.join("usr/bin").join(SIDECAR_NAME)
+        );
+        // APPDIR vazio e ausência de APPDIR valem o diretório do executável.
+        assert_eq!(
+            sidecar_beside(&desktop, Some(OsStr::new(""))).unwrap(),
+            image.join("usr/bin").join(SIDECAR_NAME)
+        );
+        assert_eq!(
+            sidecar_beside(Path::new("/opt/cialai/cialai-desktop"), None).unwrap(),
+            Path::new("/opt/cialai").join(SIDECAR_NAME)
+        );
+    }
+
+    /// Variáveis do processo trocadas só por um teste de cada vez; o valor
+    /// anterior volta ao sair do escopo, mesmo com pânico.
+    struct ScopedEnv {
+        previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+        _lock: MutexGuard<'static, ()>,
+    }
+
+    impl ScopedEnv {
+        fn new(vars: &[(&'static str, Option<&str>)]) -> Self {
+            static ENV_LOCK: Mutex<()> = Mutex::new(());
+            let guard = lock(&ENV_LOCK);
+            let previous = vars
+                .iter()
+                .map(|(key, _)| (*key, std::env::var_os(key)))
+                .collect();
+            for (key, value) in vars {
+                Self::apply(key, value.map(OsStr::new));
+            }
+            Self {
+                previous,
+                _lock: guard,
+            }
+        }
+
+        fn apply(key: &str, value: Option<&OsStr>) {
+            // SAFETY: o mutex de `ScopedEnv` serializa os testes que alteram o
+            // ambiente; o std sincroniza as leituras feitas em Rust.
+            unsafe {
+                match value {
+                    Some(value) => std::env::set_var(key, value),
+                    None => std::env::remove_var(key),
+                }
+            }
+        }
+    }
+
+    impl Drop for ScopedEnv {
+        fn drop(&mut self) {
+            for (key, value) in self.previous.drain(..) {
+                Self::apply(key, value.as_deref());
+            }
+        }
+    }
+
+    /// `APPIMAGE` aponta para o arquivo baixado e nunca decide o sidecar; no
+    /// Linux `APPDIR` leva à imagem montada, e nos demais vale `current_exe`.
+    #[test]
+    fn resolve_binary_ignores_appimage_and_follows_appdir_or_the_executable() {
+        let image = std::env::temp_dir().join("cialai-mount-fixture");
+        let env = ScopedEnv::new(&[
+            ("CIALAI_TUNNEL_BIN", None),
+            ("APPDIR", Some(image.to_str().unwrap())),
+            (
+                "APPIMAGE",
+                Some("/home/ana/Downloads/Cialai_amd64.AppImage"),
+            ),
+        ]);
+        let resolved = resolve_binary().unwrap();
+        assert_ne!(resolved.parent(), Some(Path::new("/home/ana/Downloads")));
+        if cfg!(target_os = "linux") {
+            assert_eq!(resolved, image.join("usr/bin").join(SIDECAR_NAME));
+        } else {
+            assert_eq!(
+                resolved,
+                std::env::current_exe()
+                    .unwrap()
+                    .with_file_name(SIDECAR_NAME)
+            );
+        }
+        drop(env);
+
+        let env = ScopedEnv::new(&[("CIALAI_TUNNEL_BIN", Some("relative/cialai-tunnel"))]);
+        assert!(resolve_binary().is_err());
+        drop(env);
+
+        let custom = std::env::temp_dir().join("custom-cialai-tunnel");
+        let _env = ScopedEnv::new(&[("CIALAI_TUNNEL_BIN", Some(custom.to_str().unwrap()))]);
+        assert_eq!(resolve_binary().unwrap(), custom);
     }
 
     #[cfg(unix)]

@@ -2,6 +2,7 @@
 import ExpoModulesCore
 import Foundation
 import Tunnelcore
+import os.log
 
 private final class TunnelListener: NSObject, MobileListenerProtocol {
   weak var module: CialaiTunnelModule?
@@ -15,6 +16,9 @@ private final class TunnelListener: NSObject, MobileListenerProtocol {
           let data = payloadJSON.data(using: .utf8),
           let payload = try? JSONSerialization.jsonObject(with: data) else {
       return
+    }
+    if kind == "log", let entry = payload as? [String: Any] {
+      module?.mirrorCoreLog(level: entry["level"] as? String, message: entry["message"] as? String)
     }
     module?.sendEvent("onTunnelEvent", ["kind": kind, "payload": payload])
   }
@@ -127,6 +131,12 @@ public final class CialaiTunnelModule: Module {
 
     Function("notifyForeground") { (active: Bool) in
       self.queue.async { self.setForeground(active) }
+    }
+
+    // O App sondou o proxy depois de voltar ao primeiro plano e ele respondeu: as ligações
+    // sobreviveram à suspensão e a próxima conexão não precisa derrubar tudo.
+    Function("notifyHealthy") {
+      self.queue.async { self.freshStartPending = false }
     }
 
     AsyncFunction("forgetDesktop") { (desktopId: String, promise: Promise) in
@@ -326,8 +336,19 @@ public final class CialaiTunnelModule: Module {
   }
 
   private func log(_ level: LogLevel, _ message: String) {
+    os_log("%{public}@", log: Self.systemLog, type: level.osLogType, message)
     guard level <= logLevel else { return }
     sendEvent("onTunnelEvent", ["kind": "log", "payload": ["level": level.rawValue, "message": message]])
+  }
+
+  // Linhas do núcleo Go, como as do pathmgr, espelhadas no log unificado: com o iPhone
+  // ligado ao Mac, o Console mostra o subsistema br.com.ordinum.cialai sem cabo de depuração.
+  private static let systemLog = OSLog(subsystem: "br.com.ordinum.cialai", category: "tunnel")
+
+  fileprivate func mirrorCoreLog(level: String?, message: String?) {
+    guard let message, !message.isEmpty else { return }
+    let parsed = level.flatMap { LogLevel(rawValue: $0) } ?? .info
+    os_log("%{public}@", log: Self.systemLog, type: parsed.osLogType, message)
   }
 
   private static func prepareStateDirectory() throws -> URL {
@@ -358,5 +379,14 @@ private enum LogLevel: String, Comparable {
 
   static func < (left: LogLevel, right: LogLevel) -> Bool {
     left.rank < right.rank
+  }
+
+  // `info` vira `.default` para aparecer no Console sem ligar as mensagens de informação.
+  var osLogType: OSLogType {
+    switch self {
+    case .error: return .error
+    case .info: return .default
+    case .debug: return .debug
+    }
   }
 }

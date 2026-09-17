@@ -9,8 +9,9 @@
 # Falha quando um ELF do bundle tem biblioteca não resolvida sem LD_LIBRARY_PATH, quando os auxiliares do
 # WebKit resolvem a libwebkit2gtk fora do bundle, quando o app sai antes do prazo, quando o WebKitWebProcess
 # ou o WebKitNetworkProcess do bundle não estão vivos no fim, quando o processo principal herdou variáveis
-# que o AppRun não pode exportar, quando nenhuma janela Cialai aparece e quando o log mostra aborto, símbolo
-# indefinido, módulo que não carrega ou coredump.
+# que o AppRun não pode exportar, quando nenhuma janela Cialai aparece, quando nenhum cialai-tunnel com
+# executável dentro do APPDIR nasceu, quando tunnel/tunnel.log não foi criado no HOME isolado e quando o log
+# mostra aborto, símbolo indefinido, módulo que não carrega ou coredump.
 #
 # Uso: tools/release/appimage/smoke.sh <AppImage> [segundos] [pasta de logs]
 # Precisa de xvfb-run, xauth, xwininfo, pgrep e ldd; tira captura da tela quando o import do ImageMagick existe.
@@ -94,9 +95,10 @@ launch() {
   echo "== $name: $* a partir de $dir"
   (
     cd "$dir"
-    # Um desktop sem as variáveis que o AppRun antigo exportava; HOME novo para o app abrir do zero.
+    # Um desktop sem as variáveis que o AppRun antigo exportava; HOME novo e sem XDG para o app abrir do zero.
     exec setsid env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH -u PERLLIB -u QT_PLUGIN_PATH \
-      -u GIO_MODULE_DIR -u GIO_EXTRA_MODULES -u GTK_PATH -u APPDIR -u OWD HOME="$home" \
+      -u GIO_MODULE_DIR -u GIO_EXTRA_MODULES -u GTK_PATH -u APPDIR -u OWD \
+      -u XDG_DATA_HOME -u XDG_CONFIG_HOME -u XDG_CACHE_HOME HOME="$home" \
       xvfb-run -a -s '-screen 0 1280x800x24 -nolisten tcp' "$@"
   ) >"$log" 2>&1 &
   local group=$!
@@ -134,6 +136,20 @@ launch() {
           fail "$name: $helper do bundle não está vivo depois de $seconds s"
         fi
       done
+      # O sidecar do túnel nasce ao abrir e precisa vir da própria imagem, ao lado do executável real, e não da
+      # pasta do arquivo .AppImage. O núcleo grava tunnel.log no diretório de estado do HOME isolado assim que sobe.
+      if pid="$(bundle_process cialai-tunnel "$appdir")"; then
+        echo "$name: cialai-tunnel vivo, pid $pid, $(readlink "/proc/$pid/exe")"
+      else
+        fail "$name: nenhum cialai-tunnel com executável dentro de $appdir depois de $seconds s"
+      fi
+      local tunnel_log="$home/.local/share/br.com.ordinum.cialai/tunnel/tunnel.log"
+      if [ -f "$tunnel_log" ]; then
+        echo "$name: $tunnel_log criado com $(wc -l <"$tunnel_log") linhas"
+        cp "$tunnel_log" "$logs/$name-tunnel.log" 2>/dev/null || true
+      else
+        fail "$name: $tunnel_log não foi criado no HOME isolado"
+      fi
       display="$(environ_of "$main" | sed -n 's/^DISPLAY=//p')"
       xauthority="$(environ_of "$main" | sed -n 's/^XAUTHORITY=//p')"
       if DISPLAY="$display" XAUTHORITY="$xauthority" xwininfo -root -tree 2>/dev/null | grep -q '"Cialai"'; then
@@ -183,4 +199,4 @@ if (( failures )); then
   echo "FAIL AppImage smoke: $failures problemas em $(uname -n)"
   exit 1
 fi
-echo "PASS AppImage smoke: interface e processos do WebKit vivos por $seconds s nos dois cenários"
+echo "PASS AppImage smoke: interface, processos do WebKit e cialai-tunnel da imagem vivos por $seconds s nos dois cenários, com tunnel.log no HOME isolado"

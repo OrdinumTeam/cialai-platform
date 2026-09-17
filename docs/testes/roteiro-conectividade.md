@@ -50,10 +50,10 @@ As metas de cada cenário vêm da seção 9 do plano de conectividade e estão r
 ## Preparação
 
 - [ ] Builds internos da tarefa CON-056 instalados: TestFlight interno no iPhone e faixa interna do Play no Android
-- [ ] Versões anotadas na Identificação: no computador, em Preferências, Versão atual; no celular, em Computadores, Ajustes, Sobre, e em Diagnóstico avançado, Versão do núcleo
+- [ ] Versões anotadas na Identificação: no computador, em Preferências, Versão atual; no celular, em Início, Ajustes, Sobre, e em Diagnóstico avançado, Versão do núcleo
 - [ ] Computador com o estado Acessível no botão Vincular celular antes de cada cenário, salvo quando o cenário pede outra condição
 - [ ] Preferência Manter ativo durante o uso remoto ligada no computador
-- [ ] Nível de log do celular em Diagnóstico, em Computadores, Ajustes, Nível de log
+- [ ] Nível de log do celular em Diagnóstico, em Início, Ajustes, Nível de log
 - [ ] Relógios automáticos ativos no computador e nos celulares
 - [ ] Nenhum QR, token, chave, endereço onion completo ou endereço IP público será anexado à evidência
 
@@ -87,8 +87,9 @@ No Fedora e no openSUSE, use o `Cialai_x86_64.rpm` com o gerenciador de pacotes 
 | O que ver | Onde | Texto na tela |
 | --- | --- | --- |
 | Transporte na sessão | Barra superior da sessão, ao lado do nome do computador | Direta, Reserva ou Procurando caminho |
-| Transporte na lista | Computadores, badge abaixo do computador | Direta ou Reserva, com Conectado, Conectando, Não conectado, Fora de alcance ou Este celular foi removido |
-| Diagnóstico avançado | Computadores, Ajustes, Diagnóstico avançado, Mostrar detalhes | Núcleo, Transporte ativo, Caminho ativo, Conexão de reserva, Computadores vinculados, Versão do núcleo e Redes públicas usadas |
+| Transporte no início | Início, card Continuar, badge ao lado do estado | Direta ou Reserva, com Conectado, Conectando, Não conectado, Fora de alcance ou Este celular foi removido |
+| Transporte na lista | Início, Computadores, badge abaixo do computador | Direta ou Reserva, com Conectado, Conectando, Não conectado, Fora de alcance ou Este celular foi removido |
+| Diagnóstico avançado | Início, Ajustes, Diagnóstico avançado, Mostrar detalhes | Núcleo, Transporte ativo, Caminho ativo, Conexão de reserva, Computadores vinculados, Versão do núcleo e Redes públicas usadas |
 | Caminho ativo | Diagnóstico avançado | Rede local, Internet direta ou Rede Tor |
 | Conexão de reserva | Diagnóstico avançado | Iniciando, Preparando com o percentual, Pronta, Desligada ou Com problema |
 | Etapas do pareamento | Vincular celular, depois de ler o código e tocar em Vincular | Lendo código, Procurando na rede local, Conectando pela internet, Conectando pela reserva e Confirmando |
@@ -114,7 +115,7 @@ IPv6: registre sim quando Endereços anunciados mostra o chip IPv6 no computador
 
 ### Como medir
 
-- **Tempo até a página:** inicie o cronômetro no toque sobre o computador na lista Computadores e pare quando o terminal mostrar o prompt. Prefira gravar a tela do celular e ler o tempo pelos quadros.
+- **Tempo até a página:** inicie o cronômetro no toque sobre o computador na lista Computadores e pare quando o terminal mostrar o prompt. Prefira gravar a tela do celular e ler o tempo pelos quadros. Antes de cada medição, toque em Desconectar no card Continuar do Início: sair do terminal guarda o proxy por 90 s e uma volta dentro desse prazo reabre a página sem nova conexão.
 - **Tor já iniciado:** antes da abertura, o Diagnóstico avançado do celular mostra Conexão de reserva Pronta.
 - **App do celular frio:** encerre o Cialai pelo seletor de apps, abra pelo ícone e cronometre do toque no ícone até o prompt, incluindo o toque no computador.
 - **Tempo até voltar:** inicie o cronômetro no evento do cenário, como a troca de rede ou o desbloqueio da tela, e pare quando o terminal voltar a receber saída.
@@ -227,7 +228,7 @@ Validade: só vale execução em aparelho físico. Simulação não aprova este 
 3. Confira que o celular mostra a pergunta de vínculo com o nome do computador e a mesma Impressão digital exibida no Diagnóstico avançado do computador. Toque em Vincular.
 4. Anote as etapas exibidas no celular. O esperado é Procurando na rede local seguida de Confirmando, sem Conectando pela reserva.
 5. Na sessão aberta, rode `echo celular` e confira o eco da digitação e a saída.
-6. Volte a Computadores. Toque no computador e meça o tempo até a página.
+6. Volte ao Início, toque em Desconectar e abra Computadores. Toque no computador e meça o tempo até a página.
 7. Anote o transporte da barra superior da sessão e o Caminho ativo do Diagnóstico avançado do celular. O esperado é Direta e Rede local.
 8. Repita os passos 6 e 7 até completar dez execuções por aparelho.
 
@@ -304,7 +305,7 @@ Validade: só vale execução em aparelho físico. Simulação não aprova este 
 3. Aguarde Conexão de reserva pronta no computador e Conexão de reserva Pronta no Diagnóstico avançado do celular.
 4. Na lista Computadores, toque no computador e meça o tempo até a página.
 5. Anote o transporte e o Caminho ativo. Em ao menos três execuções por aparelho e rodada, meça a latência de eco.
-6. Volte a Computadores e repita os passos 4 e 5 até completar dez execuções por aparelho.
+6. Volte ao Início, toque em Desconectar, abra Computadores e repita os passos 4 e 5 até completar dez execuções por aparelho.
 7. Rodada B: desligue UPnP e NAT-PMP no roteador, toque em Atualizar endereços e confirme Mapeamento de porta Nenhum. Se o mapeamento continuar, saia do Cialai no computador e abra de novo. Repita os passos 2 a 6.
 8. Pareamento de outra rede, uma vez por aparelho em cada rodada: com Serviço onion Publicado no computador, abra Vincular celular, leia o código no celular em 4G ou 5G e cronometre do toque em Vincular até a sessão abrir.
 
@@ -412,7 +413,7 @@ Validade: só vale execução em aparelho físico. Simulação não aprova este 
 5. Anote o transporte e o Caminho ativo na abertura.
 6. Observe o transporte por 30 s depois da abertura. Se a sessão abriu em Reserva e passou a Direta com Internet direta, marque furo bem sucedido.
 7. Rode `echo celular` e confira a saída.
-8. Volte a Computadores e repita os passos 4 a 7 até completar cinco execuções por aparelho.
+8. Volte ao Início, toque em Desconectar, abra Computadores e repita os passos 4 a 7 até completar cinco execuções por aparelho.
 
 ### Meta da seção 9
 
@@ -647,7 +648,7 @@ Validade: só vale execução em aparelho físico. Simulação não aprova este 
 
 1. Condição A, Tor bloqueado e sem caminho direto: ligue o celular à rede de teste que bloqueia todo tráfego de saída exceto DNS, o que derruba a rede Tor e o caminho direto.
 2. Na lista Computadores, toque no computador e anote a tela exibida. O esperado é Conexão de reserva indisponível, com o texto Não há caminho direto até o computador e a conexão de reserva não respondeu.
-3. Anote os intervalos das novas tentativas pelo log do celular. O esperado é 2, 4, 8 e 16 s.
+3. Anote os intervalos das novas tentativas em Ajustes, Diagnóstico avançado, Linhas recentes. O esperado é 2, 4, 8 e 16 s, sem recomeçar quando o motivo da tela muda.
 4. Libere o firewall sem tocar em Tentar agora e cronometre até a página voltar.
 5. Repita os passos 1 a 4 até completar três execuções.
 6. Condição B, STUN bloqueado: na rede do computador, bloqueie UDP de saída para as portas 3478 e 19302. No Diagnóstico avançado, toque em Executar diagnóstico e confirme a falha de Endereço público por STUN.
@@ -831,7 +832,7 @@ Validade: só vale execução em aparelho físico. Simulação não aprova este 
 1. Abra uma sessão no celular e anote o transporte.
 2. Bloqueie a tela pelo tempo da linha: 1 min, 10 min ou 60 min.
 3. Desbloqueie com o Cialai em primeiro plano, inicie o cronômetro no desbloqueio e pare quando a sessão voltar a receber saída.
-4. Anote o transporte depois do retorno. No iPhone, reconexão do zero é esperada; no Android, o núcleo para depois de 120 s e reabre.
+4. Anote o transporte depois do retorno. Com o proxy respondendo, a página fica como estava e não aparece Reconectando; com o proxy parado, a faixa Reconectando aparece acima da página e ela não recarrega quando o núcleo devolve o mesmo proxy. No Android, o núcleo para depois de 120 s e reabre com a faixa.
 5. Repita até completar três execuções por duração e aparelho.
 
 ### Meta da seção 9

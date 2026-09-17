@@ -69,6 +69,15 @@ type Path struct {
 	Since   time.Time `json:"since"`
 }
 
+// Equivalent reports whether other reaches the same desktop over the same
+// transport, kind and address. Since is left out, so a path adopted again
+// after a re-dial of the same endpoint is equivalent to the one it replaced
+// and the streams it carries need not be closed.
+func (path Path) Equivalent(other Path) bool {
+	return path.DesktopID == other.DesktopID && path.Transport == other.Transport &&
+		path.Kind == other.Kind && path.Address == other.Address
+}
+
 // PathEvent is the payload of EventPathChanged.
 type PathEvent struct {
 	DesktopID string `json:"desktopId"`

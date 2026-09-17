@@ -1326,6 +1326,77 @@ mod tests {
         assert_eq!(*lock(&writes), vec!["a", "b"]);
     }
 
+    /// `ç` digitado no celular chega ao PTY como os bytes UTF-8 `C3 A7`: o
+    /// quadro JSON da ponte, o despacho e `TerminalManager::write` não
+    /// recodificam. O shell confirma imprimindo em hexadecimal o que recebeu.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn pty_write_delivers_the_utf8_bytes_of_cedilla_to_the_pty() {
+        let terminals = TerminalManager::with_notifier(Arc::new(|_| {}));
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(terminals.clone());
+        let shell = crate::workspace::pty::TestShell::isolated();
+        let output = Arc::new(Mutex::new(Vec::new()));
+        let session = {
+            let output = output.clone();
+            terminals
+                .spawn_test_shell_for(
+                    &shell,
+                    "ponte-cedilha",
+                    SubscriberKey::Webview,
+                    tauri::ipc::Channel::new(move |body| {
+                        if let tauri::ipc::InvokeResponseBody::Raw(bytes) = body {
+                            lock(&output).extend_from_slice(&bytes);
+                        }
+                        Ok(())
+                    }),
+                )
+                .unwrap()
+                .id
+        };
+        // O mesmo caminho de `dispatch` para `pty_write` sem `binary`: a
+        // string do JSON vai aos bytes do PTY como está.
+        let dispatch: Dispatch = {
+            let terminals = terminals.clone();
+            Arc::new(move |_, cmd, args| {
+                assert_eq!(cmd, "pty_write");
+                let id = u32::try_from(args["id"].as_u64().unwrap()).unwrap();
+                let data = args["data"].as_str().unwrap();
+                terminals.write(id, data.as_bytes()).map(|()| Value::Null)
+            })
+        };
+        let (url, task, _) = sequential_server(dispatch, None, terminals.clone(), 1).await;
+        let (mut socket, _) = connect_async(url).await.unwrap();
+        socket
+            .send(Message::Text(r#"{"type":"hello","version":1}"#.into()))
+            .await
+            .unwrap();
+        let _ = socket.next().await;
+        send_call(
+            &mut socket,
+            1,
+            "pty_write",
+            json!({"id":session, "data":"printf '%s' 'ç' | od -An -tx1\n"}),
+        )
+        .await;
+        assert_eq!(next_json(&mut socket).await["ok"], true);
+        eventually("o shell precisa mostrar os bytes c3 a7", || {
+            String::from_utf8_lossy(&lock(&output))
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains("c3 a7")
+        })
+        .await;
+        socket.close(None).await.unwrap();
+        task.await.unwrap();
+    }
+
     #[tokio::test]
     async fn hello_deadline_closes_an_idle_upgraded_socket() {
         let (url, task, _) = test_server(Arc::new(|_, _, _| Ok(Value::Null)), None).await;

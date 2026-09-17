@@ -6,20 +6,21 @@ import { formatLastSeen } from '../desktops/format';
 import { MAX_DESKTOP_NAME, type DesktopEntry, type DesktopStore } from '../desktops/store';
 import { useI18n } from '../i18n';
 import type { DesktopConnection, DesktopConnectionState } from '../state/machine';
-import { usePalette } from '../theme';
+import { usePalette, type Palette } from '../theme';
 import { TransportBadge } from './TransportBadge';
 
 type Props = {
   store: DesktopStore;
   describe: (desktopId: string) => DesktopConnection;
   onOpen: (desktop: DesktopEntry) => void;
+  onHome: () => void;
   onPair: () => void;
   onSettings: () => void;
   onRename: (desktopId: string, name: string) => void;
   onForgetDesktop: (desktop: DesktopEntry) => void;
 };
 
-const STATE_KEYS: Readonly<Record<DesktopConnectionState, string>> = {
+export const STATE_KEYS: Readonly<Record<DesktopConnectionState, string>> = {
   idle: 'mobile.desktops.state.idle',
   connecting: 'mobile.desktops.state.connecting',
   connected: 'mobile.desktops.state.connected',
@@ -27,26 +28,32 @@ const STATE_KEYS: Readonly<Record<DesktopConnectionState, string>> = {
   removed: 'mobile.desktops.state.removed'
 };
 
-export function Desktops({ store, describe, onOpen, onPair, onSettings, onRename, onForgetDesktop }: Props) {
+// Cor do ponto de estado, a mesma na lista e no card Continuar do início.
+export function stateColor(palette: Palette, state: DesktopConnectionState): string {
+  return state === 'connected' ? palette.success
+    : state === 'connecting' ? palette.warning
+      : state === 'offline' || state === 'removed' ? palette.danger : palette.tertiaryLabel;
+}
+
+export function Desktops({ store, describe, onOpen, onHome, onPair, onSettings, onRename, onForgetDesktop }: Props) {
   const palette = usePalette();
   const { locale, t } = useI18n();
   const [selected, setSelected] = useState<DesktopEntry | null>(null);
   const [name, setName] = useState('');
 
-  const stateColor = (state: DesktopConnectionState) => state === 'connected' ? palette.success
-    : state === 'connecting' ? palette.warning
-      : state === 'offline' || state === 'removed' ? palette.danger : palette.tertiaryLabel;
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
-      <View style={styles.header}>
-        <View style={styles.headerText}>
-          <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.desktops.title')}</Text>
-          <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>{t('mobile.desktops.subtitle')}</Text>
-        </View>
-        <Pressable accessibilityLabel={t('mobile.desktops.openSettings')} accessibilityRole="button" onPress={onSettings} style={styles.headerButton}>
-          <Text style={[styles.headerButtonText, { color: palette.accent }]}>{t('mobile.desktops.settings')}</Text>
+      <View style={styles.navBar}>
+        <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={onHome} style={styles.navButton}>
+          <Text style={[styles.navButtonText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
         </Pressable>
+        <Pressable accessibilityLabel={t('mobile.desktops.openSettings')} accessibilityRole="button" onPress={onSettings} style={styles.navButton}>
+          <Text style={[styles.navButtonText, { color: palette.accent }]}>{t('mobile.desktops.settings')}</Text>
+        </Pressable>
+      </View>
+      <View style={styles.header}>
+        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.desktops.title')}</Text>
+        <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>{t('mobile.desktops.subtitle')}</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.list}>
@@ -58,7 +65,7 @@ export function Desktops({ store, describe, onOpen, onPair, onSettings, onRename
           return (
             <View key={desktop.id} style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
               <Pressable accessibilityRole="button" disabled={connection.state === 'connecting'} onPress={() => onOpen(desktop)} style={styles.cardMain}>
-                <View style={[styles.dot, { backgroundColor: stateColor(connection.state) }]} />
+                <View style={[styles.dot, { backgroundColor: stateColor(palette, connection.state) }]} />
                 <View style={styles.cardText}>
                   <Text style={[styles.cardTitle, { color: palette.label }]}>{desktop.name}</Text>
                   <Text style={[styles.cardState, { color: palette.secondaryLabel }]}>{t(STATE_KEYS[connection.state])}</Text>
@@ -116,12 +123,12 @@ export function Desktops({ store, describe, onOpen, onPair, onSettings, onRename
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: { paddingHorizontal: 24, paddingTop: 20, paddingBottom: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  headerText: { flexShrink: 1 },
+  navBar: { minHeight: 44, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16 },
+  navButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
+  navButtonText: { fontSize: 17, lineHeight: 22, fontWeight: '500' },
+  header: { paddingHorizontal: 24, paddingTop: 4, paddingBottom: 12 },
   title: { fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: 0.2 },
   subtitle: { marginTop: 4, fontSize: 17, lineHeight: 22 },
-  headerButton: { minHeight: 44, justifyContent: 'center', paddingLeft: 16 },
-  headerButtonText: { fontSize: 17, lineHeight: 22, fontWeight: '500' },
   list: { paddingHorizontal: 20, paddingVertical: 12, gap: 12 },
   card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, overflow: 'hidden' },
   cardMain: { minHeight: 92, flexDirection: 'row', alignItems: 'center', padding: 16 },

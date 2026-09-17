@@ -176,3 +176,166 @@ test('o xterm fixado ainda tem o metodo que a correcao substitui', () => {
   assert.match(bundle, /_handleAnyTextareaChanges\(\)\{let \w+=this\._textarea\.value;setTimeout\(/);
   assert.match(bundle, /input\(\w+,\w+=!0\)\{this\._core\.input\(/);
 });
+
+// --- Composicao com o CompositionHelper real do xterm ---------------------
+//
+// O helper real do xterm nao e exportado e so nasce dentro de Terminal.open,
+// que precisa de DOM completo. Aqui vai uma replica fiel da classe do
+// @xterm/xterm 6.0.0 (a classe $t em lib/xterm.mjs): compositionstart,
+// compositionupdate, compositionend, _finalizeComposition, keydown e
+// _handleAnyTextareaChanges, com os mesmos setTimeout. O teste acima prende
+// esta replica a versao instalada; se o bundle mudar, ele acusa.
+
+test('@xterm/xterm instalado e a versao que a replica de composicao segue', () => {
+  const version = require('@xterm/xterm/package.json').version;
+  assert.equal(version, '6.0.0', 'atualize a replica do CompositionHelper ao trocar de versao');
+});
+
+function realisticCompositionHelper(textarea, triggerDataEvent, schedule) {
+  return {
+    _isComposing: false,
+    _isSendingComposition: false,
+    _compositionPosition: { start: 0, end: 0 },
+    _dataAlreadySent: '',
+    get isComposing() { return this._isComposing; },
+    compositionstart() {
+      this._isComposing = true;
+      this._compositionPosition.start = textarea.value.length;
+      this._dataAlreadySent = '';
+    },
+    compositionupdate() {
+      schedule(() => { this._compositionPosition.end = textarea.value.length; });
+    },
+    compositionend() { this._finalizeComposition(true); },
+    keydown(event) {
+      if (this._isComposing || this._isSendingComposition) {
+        if ([20, 229, 16, 17, 18].includes(event.keyCode)) return false;
+        this._finalizeComposition(false);
+      }
+      if (event.keyCode === 229) { this._handleAnyTextareaChanges(); return false; }
+      return true;
+    },
+    _finalizeComposition(sendComposition) {
+      this._isComposing = false;
+      if (sendComposition) {
+        const position = { start: this._compositionPosition.start, end: this._compositionPosition.end };
+        this._isSendingComposition = true;
+        schedule(() => {
+          if (this._isSendingComposition) {
+            this._isSendingComposition = false;
+            position.start += this._dataAlreadySent.length;
+            const data = this._isComposing
+              ? textarea.value.substring(position.start, this._compositionPosition.start)
+              : textarea.value.substring(position.start);
+            if (data.length > 0) triggerDataEvent(data);
+          }
+        });
+      } else {
+        this._isSendingComposition = false;
+        triggerDataEvent(textarea.value.substring(this._compositionPosition.start, this._compositionPosition.end));
+      }
+    },
+    _handleAnyTextareaChanges() {
+      const before = textarea.value;
+      schedule(() => {
+        if (!this._isComposing) {
+          const now = textarea.value;
+          const added = now.replace(before, '');
+          this._dataAlreadySent = added;
+          if (now.length > before.length) triggerDataEvent(added);
+          else if (now.length < before.length) triggerDataEvent(DEL_CHAR);
+          else if (now.length === before.length && now !== before) triggerDataEvent(now);
+        }
+      });
+    },
+  };
+}
+
+const DEL_CHAR = String.fromCharCode(0x7f);
+
+async function composeHarness() {
+  const { installImeInput } = await load();
+  const textarea = new EventTarget();
+  textarea.value = '';
+  const sent = [];
+  const timers = [];
+  const schedule = (callback) => timers.push(callback);
+  const helper = realisticCompositionHelper(textarea, (data) => sent.push(data), schedule);
+  // Sem arvore de DOM: o elemento e o proprio campo, como nos outros testes.
+  const term = { _core: { _compositionHelper: helper }, textarea, element: textarea, input: (data) => sent.push(data) };
+  // Ouvintes do proprio xterm, registrados antes da correcao, como na classe.
+  textarea.addEventListener('keydown', (event) => helper.keydown(event), true);
+  textarea.addEventListener('compositionstart', () => helper.compositionstart());
+  textarea.addEventListener('compositionupdate', (event) => helper.compositionupdate(event));
+  textarea.addEventListener('compositionend', () => helper.compositionend());
+  const installed = installImeInput(term, { schedule });
+  const runTimers = () => { while (timers.length) timers.shift()(); };
+  const emit = (type, fields = {}) => textarea.dispatchEvent(event(type, fields));
+  // Uma composicao inteira. `steps` sao os valores do campo a cada tecla; cada
+  // tecla chega com keydown 229, o compositionstart vem antes do primeiro
+  // input, e `flushFirst` roda o timer do rastreador antes do compositionstart
+  // para exercer a ordem do WKWebView do iOS.
+  const compose = (steps, { flushFirst = false } = {}) => {
+    // A composicao acrescenta ao que ja estava no campo, nao apaga o prefixo.
+    const base = textarea.value;
+    steps.forEach((value, index) => {
+      emit('keydown', { keyCode: IME_KEY_CODE });
+      if (index === 0 && flushFirst) runTimers();
+      if (index === 0) emit('compositionstart');
+      textarea.value = base + value;
+      emit('compositionupdate', { data: value });
+      emit('input', { isComposing: true });
+    });
+    emit('compositionend', { data: textarea.value });
+    runTimers();
+  };
+  const type = (text) => {
+    for (const character of text) {
+      emit('keydown', { keyCode: IME_KEY_CODE });
+      textarea.value += character;
+      emit('input');
+      emit('keyup', { keyCode: IME_KEY_CODE });
+    }
+  };
+  return { sent, compose, type, runTimers, installed };
+}
+
+const IME_KEY_CODE = 229;
+
+for (const flushFirst of [false, true]) {
+  const order = flushFirst ? 'flush antes do compositionstart, como no iOS' : 'flush depois, como no Android';
+  test(`composicao de ç, á e ã sai uma vez so (${order})`, async () => {
+    for (const character of ['ç', 'á', 'ã']) {
+      const { sent, compose } = await composeHarness();
+      compose([character], { flushFirst });
+      assert.deepEqual(sent, [character], `${character} nao pode duplicar nem vazar o parcial`);
+    }
+  });
+
+  test(`dead key ´ seguida de c compoe uma vez so (${order})`, async () => {
+    const { sent, compose } = await composeHarness();
+    // Acento agudo seguido de c: o campo passa por ´ e termina em ć.
+    compose(['´', 'ć'], { flushFirst });
+    assert.deepEqual(sent, ['ć'], 'o parcial ´ nao pode sair junto do composto');
+  });
+
+  test(`a sequencia do Android c mais ¸ compoe ç uma vez so (${order})`, async () => {
+    const { sent, compose } = await composeHarness();
+    // c e depois a cedilha combinante, tudo dentro da mesma composicao.
+    compose(['c', 'ç'], { flushFirst });
+    assert.deepEqual(sent, ['ç'], 'o c nao pode ficar solto antes do ç');
+  });
+}
+
+test('digitacao normal antes de uma composicao nao e engolida pela composicao', async () => {
+  const { sent, type, compose } = await composeHarness();
+  type('ls ');
+  compose(['á']);
+  assert.equal(sent.join(''), 'ls á', 'as teclas anteriores continuam saindo, so o parcial da composicao e descartado');
+});
+
+test('c seguido da cedilha combinante U+0327 sai como um unico ç pelo caminho do rastreador', async () => {
+  const { textareaDelta } = await load();
+  assert.equal(textareaDelta('c', 'ç'), `${DEL_CHAR}ç`, 'apaga o c e envia o ç normalizado em NFC');
+  assert.equal(textareaDelta('', 'ç'), 'ç', 'a cedilha combinante entra ja composta');
+});

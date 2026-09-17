@@ -4,6 +4,8 @@ package mobile
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
 	"github.com/Cialai/cialai/packages/tunnel-core/testutil"
 )
@@ -416,4 +419,116 @@ func TestTunnelRevocationClosesTheSocketWith4401AndEndsThePath(t *testing.T) {
 	if _, ok := desktop.Registry.Authenticate(paired.Token); ok {
 		t.Fatal("the token of the revoked pairing still authenticates")
 	}
+}
+
+// TestOpenDesktopReusesTheProxyOfTheSameDesktop is CONN-04 with CONN-02 and
+// CONN-11 end to end: opening the same desktop again returns the same URL,
+// port and nonce, keeps the socket the page holds and lets a page load once
+// more; the local health route answers without the cookie; and a page loaded
+// again with its cookie is sent to the bridge. Another desktop gets a proxy
+// of its own and the previous socket ends.
+func TestOpenDesktopReusesTheProxyOfTheSameDesktop(t *testing.T) {
+	ctx := testContext(t, 2*time.Minute)
+	first := testutil.StartDesktop(t, testutil.DesktopOptions{Name: "Mac do estúdio"})
+	second := testutil.StartDesktop(t, testutil.DesktopOptions{Name: "Mac da sala"})
+	events := &recorder{}
+	tunnel := newTestTunnel(t, t.TempDir(), events)
+	pairedA := pairWith(t, tunnel, first.BeginPair(t, []pairing.Candidate{first.LANCandidate()}, 10*time.Minute))
+	pairedB := pairWith(t, tunnel, second.BeginPair(t, []pairing.Candidate{second.LANCandidate()}, 10*time.Minute))
+
+	// Before the desktop is open the health route is not served at all.
+	connectTo(t, tunnel, pairedA.DesktopID)
+	openedA := decode[proxy.OpenResult](t, must(tunnel.OpenDesktop(pairedA.DesktopID, pairedA.Token, 0)))
+	page := openPage(t, must(tunnel.OpenDesktop(pairedA.DesktopID, pairedA.Token, 0)))
+	socket := page.echo(t, ctx, "before opening again")
+	defer socket.CloseNow()
+
+	again := decode[proxy.OpenResult](t, must(tunnel.OpenDesktop(pairedA.DesktopID, pairedA.Token, 0)))
+	if again.URL != openedA.URL || again.Port != openedA.Port || again.Nonce != openedA.Nonce {
+		t.Fatalf("opening the same desktop again returned %+v, want %+v", again, openedA)
+	}
+	if err := socket.Write(ctx, websocket.MessageText, []byte("after opening again")); err != nil {
+		t.Fatal(err)
+	}
+	if _, data, err := socket.Read(ctx); err != nil || string(data) != "after opening again" {
+		t.Fatalf("the socket did not survive the second opening: %q, %v", data, err)
+	}
+	// The same opening bootstraps a page loaded anew, with the same cookie.
+	fresh := openPage(t, must(tunnel.OpenDesktop(pairedA.DesktopID, pairedA.Token, 0)))
+	if fresh.cookie != page.cookie {
+		t.Fatalf("cookie changed across openings: %q then %q", page.cookie, fresh.cookie)
+	}
+	fresh.echo(t, ctx, "fresh page over the reused proxy").CloseNow()
+	opens := 0
+	for _, event := range events.kinds(0, "proxy") {
+		if event["state"] == "open" {
+			opens++
+		}
+	}
+	if opens != 1 {
+		t.Fatalf("proxy opened %d times for the same desktop: %v", opens, events.kinds(0, "proxy"))
+	}
+
+	// The health route answers the shell without the cookie and never
+	// reaches the desktop bridge.
+	health, err := http.Get(fmt.Sprintf("http://127.0.0.1:%d%s", openedA.Port, proxy.HealthPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	healthBody := decode[map[string]string](t, readAll(t, health))
+	if health.StatusCode != http.StatusOK || healthBody["status"] != "ok" || healthBody["service"] != "cialai" || healthBody["transport"] != "direct" {
+		t.Fatalf("health: HTTP %d %v", health.StatusCode, healthBody)
+	}
+	// A page loaded again with its cookie is sent to the bridge location.
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	reload, err := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/", openedA.Port), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reload.Header.Set("Cookie", page.cookie)
+	redirected, err := client.Do(reload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = redirected.Body.Close()
+	if redirected.StatusCode != http.StatusFound || redirected.Header.Get("Location") != proxy.BridgeLocation(openedA.Port) {
+		t.Fatalf("second load of the page root: HTTP %d Location %q", redirected.StatusCode, redirected.Header.Get("Location"))
+	}
+	if code, body := page.get(t, "/"); code != http.StatusOK || !strings.Contains(body, "Cialai mobile") {
+		t.Fatalf("page after the redirect: HTTP %d %q", code, body)
+	}
+
+	// Another desktop replaces the proxy and ends the previous socket.
+	mark := events.mark()
+	connectTo(t, tunnel, pairedB.DesktopID)
+	openedB := decode[proxy.OpenResult](t, must(tunnel.OpenDesktop(pairedB.DesktopID, pairedB.Token, 0)))
+	if openedB.Nonce == openedA.Nonce || openedB.URL == openedA.URL {
+		t.Fatalf("the second desktop reused the opening of the first: %+v", openedB)
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	_, _, err = socket.Read(readCtx)
+	cancel()
+	if err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("the socket of the first desktop stayed open: %v", err)
+	}
+	if closed := events.wait(t, mark, "proxy", field("state", "closed")); closed["desktopId"] != pairedA.DesktopID {
+		t.Fatalf("proxy closed event %v", closed)
+	}
+	if opened := events.wait(t, mark, "proxy", field("state", "open")); opened["desktopId"] != pairedB.DesktopID {
+		t.Fatalf("proxy open event %v", opened)
+	}
+	openPage(t, must(tunnel.OpenDesktop(pairedB.DesktopID, pairedB.Token, 0))).echo(t, ctx, "second desktop").CloseNow()
+	if upgrade := lastUpgrade(t, second); upgrade.DeviceID != pairedB.DeviceID {
+		t.Fatalf("second desktop saw %+v", upgrade)
+	}
+}
+
+func readAll(t *testing.T, response *http.Response) string {
+	t.Helper()
+	defer response.Body.Close()
+	raw, err := io.ReadAll(response.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(raw)
 }

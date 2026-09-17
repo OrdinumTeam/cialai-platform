@@ -880,3 +880,259 @@ func TestCloseWatcherFindsTheStatusAcrossSplitReads(t *testing.T) {
 		t.Fatal("frames after the first close were followed")
 	}
 }
+
+// readopt adopts the active path again: same kind and address, later Since,
+// as the manager does after re-dialing the endpoint of the active path.
+func (dialer *fakeDialer) readopt() pathmgr.PathEvent {
+	dialer.mu.Lock()
+	defer dialer.mu.Unlock()
+	dialer.path.Since = dialer.path.Since.Add(time.Second)
+	return pathmgr.PathEvent{DesktopID: dialer.path.DesktopID, Transport: dialer.path.Transport, Path: dialer.path.Kind, Reason: pathmgr.ReasonNetworkChanged}
+}
+
+// TestLocalHealthRouteAnswersWithoutCookieAndNeverReachesTheDesktop is the Go
+// part of CONN-02: the native shell polls the proxy itself, without the cookie
+// only the WebView holds, and reads the state of the path manager.
+func TestLocalHealthRouteAnswersWithoutCookieAndNeverReachesTheDesktop(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, _ *http.Request) { response.WriteHeader(http.StatusNoContent) }))
+	defer backend.Close()
+	dialer := newFakeDialer(backend.Listener.Addr().String())
+	proxy := newTestProxy(t, dialer, deviceToken(10), nil)
+	probe := func(method string, withCookie bool) (int, map[string]string, http.Header) {
+		request := httptest.NewRequest(method, "http://127.0.0.1:47400"+HealthPath, nil)
+		if withCookie {
+			request.AddCookie(&http.Cookie{Name: CookieName, Value: proxy.nonce})
+		}
+		response := httptest.NewRecorder()
+		proxy.ServeHTTP(response, request)
+		var body map[string]string
+		_ = json.Unmarshal(response.Body.Bytes(), &body)
+		return response.Code, body, response.Header()
+	}
+
+	code, body, headers := probe(http.MethodGet, false)
+	if code != http.StatusOK || body["status"] != "ok" || body["service"] != HealthService || body["transport"] != HealthTransportDirect {
+		t.Fatalf("health over the direct path without cookie: HTTP %d %v", code, body)
+	}
+	if headers.Get("Content-Type") != "application/json" || headers.Get("Cache-Control") != "no-store" {
+		t.Fatalf("health headers %v", headers)
+	}
+	proxy.PathChanged(dialer.switchTo(pathmgr.KindTor))
+	if code, body, _ := probe(http.MethodGet, false); code != http.StatusOK || body["transport"] != HealthTransportReserve {
+		t.Fatalf("health over the reserve: HTTP %d %v", code, body)
+	}
+	if code, body, _ := probe(http.MethodGet, true); code != http.StatusOK || body["transport"] != HealthTransportReserve {
+		t.Fatalf("health with the cookie: HTTP %d %v", code, body)
+	}
+	dialer.mu.Lock()
+	dialer.path = pathmgr.Path{}
+	dialer.mu.Unlock()
+	code, body, _ = probe(http.MethodGet, false)
+	if code != http.StatusServiceUnavailable || body["status"] != "offline" || body["service"] != HealthService || body["reason"] != pathmgr.CodeNoPath {
+		t.Fatalf("health without a path: HTTP %d %v", code, body)
+	}
+	if code, _, _ := probe(http.MethodPost, true); code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST to the health route returned HTTP %d", code)
+	}
+	if dials := dialer.dialed(); len(dials) != 0 {
+		t.Fatalf("the health route reached the desktop: %+v", dials)
+	}
+
+	// The reason comes from the manager when the owner wires it.
+	preparing, err := New(Config{
+		Dialer: dialer, DesktopID: "desktop-one", DeviceToken: deviceToken(10), Random: bytes.NewReader(proxyEntropy(512)),
+		Health: func() Health { return Health{Reason: pathmgr.CodeReservePreparing} },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := preparing.begin(47401); err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47401"+HealthPath, nil)
+	response := httptest.NewRecorder()
+	preparing.ServeHTTP(response, request)
+	body = nil
+	_ = json.Unmarshal(response.Body.Bytes(), &body)
+	if response.Code != http.StatusServiceUnavailable || body["reason"] != pathmgr.CodeReservePreparing {
+		t.Fatalf("health while the reserve prepares: HTTP %d %v", response.Code, body)
+	}
+
+	// A closed proxy answers offline instead of the generic closed problem.
+	if err := preparing.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	response = httptest.NewRecorder()
+	preparing.ServeHTTP(response, request)
+	body = nil
+	_ = json.Unmarshal(response.Body.Bytes(), &body)
+	if response.Code != http.StatusServiceUnavailable || body["status"] != "offline" || body["reason"] != "proxy_closed" {
+		t.Fatalf("health after close: HTTP %d %v", response.Code, body)
+	}
+}
+
+// TestPageRootWithCookieRedirectsToTheBridge is the Go part of CONN-11: after
+// the one-use opening, every load of the page root with the cookie is sent to
+// the bridge location again, so a WebView that loads the page anew still
+// connects to the proxy socket. The page with the bridge, and every other
+// path, is proxied.
+func TestPageRootWithCookieRedirectsToTheBridge(t *testing.T) {
+	var seenMu sync.Mutex
+	var seen []string
+	backend := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		seenMu.Lock()
+		seen = append(seen, request.URL.RequestURI())
+		seenMu.Unlock()
+		_, _ = response.Write([]byte("Cialai mobile"))
+	}))
+	defer backend.Close()
+	dialer := newFakeDialer(backend.Listener.Addr().String())
+	proxy := newTestProxy(t, dialer, deviceToken(12), nil)
+	get := func(target string, withCookie bool) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:47400"+target, nil)
+		if withCookie {
+			request.AddCookie(&http.Cookie{Name: CookieName, Value: proxy.nonce})
+		}
+		response := httptest.NewRecorder()
+		proxy.ServeHTTP(response, request)
+		return response
+	}
+	for _, target := range []string{"/", "/?k=" + proxy.nonce} {
+		if response := get(target, true); response.Code != http.StatusFound || response.Header().Get("Location") != BridgeLocation(47400) {
+			t.Fatalf("second load of %s: HTTP %d Location %q", target, response.Code, response.Header().Get("Location"))
+		}
+	}
+	if response := get("/?motion=0", true); response.Code != http.StatusFound || response.Header().Get("Location") != "/?bridge=ws%3A%2F%2F127.0.0.1%3A47400%2Fpty&motion=0" {
+		t.Fatalf("second load with other parameters: HTTP %d Location %q", response.Code, response.Header().Get("Location"))
+	}
+	if dials := dialer.dialed(); len(dials) != 0 {
+		t.Fatalf("the redirect reached the desktop: %+v", dials)
+	}
+	if response := get(BridgeLocation(47400), true); response.Code != http.StatusOK || response.Body.String() != "Cialai mobile" {
+		t.Fatalf("page with the bridge: HTTP %d %q", response.Code, response.Body)
+	}
+	if response := get("/assets/app.js", true); response.Code != http.StatusOK {
+		t.Fatalf("asset: HTTP %d", response.Code)
+	}
+	if response := get("/", false); response.Code != http.StatusForbidden {
+		t.Fatalf("root without the cookie: HTTP %d", response.Code)
+	}
+	seenMu.Lock()
+	defer seenMu.Unlock()
+	if len(seen) != 2 || seen[0] != BridgeLocation(47400) || seen[1] != "/assets/app.js" {
+		t.Fatalf("desktop saw %q", seen)
+	}
+}
+
+// TestEquivalentPathKeepsOpenWebSockets is the proxy half of CONN-05: a path
+// adopted again to the same endpoint, with a later Since, closes nothing and
+// the socket keeps echoing; only a path of another kind closes it.
+func TestEquivalentPathKeepsOpenWebSockets(t *testing.T) {
+	ctx := testContext(t)
+	backend := startBridge(t, nil, echo)
+	dialer := newFakeDialer(backend.address())
+	proxy, err := New(Config{Dialer: dialer, DesktopID: "desktop-one", DeviceToken: deviceToken(13)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := openPage(t, proxy)
+	socket, _, err := page.dial(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer socket.CloseNow()
+	exchange := func(message string) error {
+		if err := socket.Write(ctx, websocket.MessageText, []byte(message)); err != nil {
+			return err
+		}
+		_, echoed, err := socket.Read(ctx)
+		if err != nil {
+			return err
+		}
+		if string(echoed) != message {
+			return fmt.Errorf("echo = %q", echoed)
+		}
+		return nil
+	}
+	if err := exchange("before"); err != nil {
+		t.Fatal(err)
+	}
+	for round := range 3 {
+		if closed := proxy.PathChanged(dialer.readopt()); closed != 0 {
+			t.Fatalf("equivalent adopt %d closed %d upstreams", round, closed)
+		}
+		if err := exchange(fmt.Sprintf("after equivalent adopt %d", round)); err != nil {
+			t.Fatalf("socket after equivalent adopt %d: %v", round, err)
+		}
+	}
+	if proxy.Upstreams() != 1 {
+		t.Fatalf("upstreams = %d, want the one socket", proxy.Upstreams())
+	}
+	if closed := proxy.PathChanged(dialer.switchTo(pathmgr.KindTor)); closed != 1 {
+		t.Fatalf("switch to the reserve closed %d upstreams, want 1", closed)
+	}
+	readCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	_, _, err = socket.Read(readCtx)
+	cancel()
+	if err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("the socket stayed open after the real switch: %v", err)
+	}
+	if dials := dialer.dialed(); len(dials) != 1 {
+		t.Fatalf("dials = %+v, want the one socket", dials)
+	}
+	select {
+	case failure := <-dialer.failures:
+		t.Fatalf("a path change was reported as a failure: %v", failure)
+	default:
+	}
+}
+
+// TestReuseKeepsTheOpeningAndReplacesTheToken is the proxy half of CONN-04:
+// the owner hands the same opening out again for the same desktop, the page
+// may claim the nonce once more, and the new token is the one injected.
+func TestReuseKeepsTheOpeningAndReplacesTheToken(t *testing.T) {
+	observed := make(chan string, 4)
+	backend := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		observed <- request.Header.Get("Authorization")
+		response.WriteHeader(http.StatusNoContent)
+	}))
+	defer backend.Close()
+	proxy, err := New(Config{Dialer: newFakeDialer(backend.Listener.Addr().String()), DesktopID: "desktop-one", DeviceToken: deviceToken(14)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := proxy.Reuse(deviceToken(15)); err == nil {
+		t.Fatal("a proxy that is not open was reused")
+	}
+	page := openPage(t, proxy)
+	again, err := proxy.Reuse(deviceToken(15))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != page.opening {
+		t.Fatalf("reuse returned %+v, want the opening %+v", again, page.opening)
+	}
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	response, err := client.Get(again.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if response.StatusCode != http.StatusFound || len(response.Cookies()) != 1 || response.Cookies()[0].Value != again.Nonce {
+		t.Fatalf("first load after reuse: HTTP %d cookies %v", response.StatusCode, response.Cookies())
+	}
+	if response, err := client.Get(again.URL); err != nil || response.StatusCode != http.StatusForbidden {
+		t.Fatalf("the reused opening was claimable twice: %v, %v", response, err)
+	}
+	request, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/api/health", again.Port), nil)
+	request.Header.Set("Cookie", page.cookie)
+	if response, err := http.DefaultClient.Do(request); err != nil || response.StatusCode != http.StatusNoContent {
+		t.Fatalf("request with the old cookie after reuse: %v, %v", response, err)
+	}
+	if bearer := <-observed; bearer != "Bearer "+deviceToken(15) {
+		t.Fatalf("desktop saw %q, want the replaced token", bearer)
+	}
+	if _, err := proxy.Reuse("invalid"); err == nil || proxy.currentToken() != deviceToken(15) {
+		t.Fatalf("an invalid token was adopted: %v", err)
+	}
+}

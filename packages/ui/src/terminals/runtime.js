@@ -54,6 +54,7 @@ export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
 import { isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
+import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
@@ -88,6 +89,9 @@ const FINISHED_MIN_MS = 4000;
 const ACTIVITY_THROTTLE_MS = 500;
 const DEFAULT_COLS = 120;
 const DEFAULT_ROWS = 32;
+// Relato de mouse na codificação X10, único conteúdo que o xterm entrega por
+// onBinary: ESC [ M seguido dos bytes de botão e posição.
+const MOUSE_REPORT = /^\x1b\[M/;
 
 const state = {
   sessions: new Map(),
@@ -358,9 +362,12 @@ function installTouchScroll(session) {
       return height > 0 ? height : term.options.fontSize * (term.options.lineHeight || 1);
     },
     scrollLines: (rows) => term.scrollLines(rows),
+    // Revalidado a cada arrasto, depois do replay: durante o replay a entrada
+    // fica calada e o modo de rastreio do mouse só vale quando reflete um
+    // programa vivo, não um resquício deixado no histórico por um já encerrado.
+    mouseTracking: () => !session.replaying && term.modes.mouseTrackingMode !== 'none',
     sendWheel: (direction, count) => {
       if (session.status !== 'running' || session.ptyId == null) return;
-      if (term.modes.mouseTrackingMode === 'none') return;
       const button = direction > 0 ? 65 : 64;
       writeTerminal(session, `\u001b[<${button};${cell.col};${cell.row}M`.repeat(count));
     },
@@ -443,6 +450,10 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
     error: null,
     spawning: false,
     reattachId: null,
+    // Contagem de reattaches seguidos sem sucesso e o timer da próxima
+    // tentativa, para a escada de backoff de reattach.js.
+    reattachAttempt: 0,
+    reattachTimer: null,
     spawnToken: null,
     pendingAck: 0,
     outputOffset: 0,
@@ -464,6 +475,8 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
     saved: null,
     restoring: null,
     replaying: false,
+    // Bytes de replay que faltam chegar ao xterm antes de a marca desligar.
+    replayRemaining: 0,
     reopening: false,
     disposables: [],
     editor: {
@@ -506,11 +519,19 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
 
   session.disposables.push(term.onData((data) => {
     if (session.ptyId == null || session.status !== 'running') return;
+    // Replay nunca gera entrada: as respostas do xterm às consultas gravadas
+    // no histórico não podem sair como se fossem digitação.
+    if (session.replaying) return;
     if (session.attention) clearAttention(session);
     writeTerminal(session, data);
   }));
   session.disposables.push(term.onBinary((data) => {
     if (session.ptyId == null || session.status !== 'running') return;
+    if (session.replaying) return;
+    // Só relatos de mouse X10 usam o caminho binário; o lado Rust rejeita bytes
+    // acima de U+00FF nesse canal, então nenhum outro conteúdo binário passa
+    // por ele, senão um ç cairia no truncamento Latin-1.
+    if (!MOUSE_REPORT.test(data)) return;
     writeTerminal(session, data, true);
   }));
   session.disposables.push(term.onResize(({ cols, rows }) => {
@@ -580,7 +601,12 @@ function handleMessage(session, token, message) {
     else if (message instanceof ArrayBuffer) bytes = new Uint8Array(message);
     else bytes = Uint8Array.from(message);
     const output = consumeOutput(session, bytes);
+    // Enquanto o quadro do replay não terminou de ser processado, a marca
+    // continua ligada. Ela desliga só no callback do term.write, depois que o
+    // xterm reparseou os bytes e já disparou as respostas às consultas.
+    const closesReplay = session.replaying && (session.replayRemaining -= bytes.byteLength) <= 0;
     session.term.write(output, () => {
+      if (closesReplay) { session.replaying = false; session.replayRemaining = 0; }
       if (session.spawnToken !== token) return;
       session.pendingAck += bytes.byteLength;
       if (session.pendingAck >= ACK_THRESHOLD) flushAck(session);
@@ -597,7 +623,15 @@ function handleMessage(session, token, message) {
     session.spawnToken = null;
     session.pendingAck = 0;
     setStatus(session, 'disconnected');
-    if (remote.state().status === 'connected') setTimeout(() => reattachSession(session, session.ptyId), 500);
+    if (remote.state().status === 'connected') {
+      // Backoff com teto por sessão: 500 ms, 1 s, 2 s, 4 s e 8 s. Cada reattach
+      // reenvia o histórico, então repetir a cada 500 ms realimenta o ciclo de
+      // detached. A contagem zera quando o reattach dá certo.
+      const delay = reattachDelay(session.reattachAttempt);
+      session.reattachAttempt += 1;
+      if (session.reattachTimer) clearTimeout(session.reattachTimer);
+      session.reattachTimer = setTimeout(() => { session.reattachTimer = null; reattachSession(session, session.ptyId); }, delay);
+    }
     return;
   }
   if (message && message.type === 'exit') {
@@ -679,6 +713,7 @@ async function spawnSession(session) {
     const info = await invoke('pty_spawn', { cwd: session.cwd, cols, rows, ...spawnCursor(session.term), tag: session.id, onOutput: channel });
     if (session.spawnToken !== token) return;
     applyTerminalInfo(session, info);
+    session.reattachAttempt = 0;
     setStatus(session, 'running');
     fitNow(session);
     if (isPhone() && session.host) requestTerminalControl(session.id).catch(() => {});
@@ -717,6 +752,7 @@ async function reattachSession(session, ptyId) {
     const info = await invoke('pty_attach', { id: ptyId, onOutput: channel });
     if (session.spawnToken !== token) return;
     applyTerminalInfo(session, info);
+    session.reattachAttempt = 0;
     setStatus(session, 'running');
     fitNow(session);
     if (isPhone() && session.host) requestTerminalControl(session.id).catch(() => {});
@@ -1407,7 +1443,12 @@ async function syncSharedSessions() {
         session.remoteOrder = value.order;
       }
       applyTerminalInfo(session, info);
-      if (!session.spawnToken || session.status !== 'running') await reattachSession(session, info.id);
+      if (!session.spawnToken || session.status !== 'running') {
+        // Não reattachar sessão em erro nem repetir o replay de uma sessão
+        // estacionada fora da tela; ela reattacha quando for exibida.
+        const visible = session.host != null || state.selectedId === session.id;
+        if (shouldReattachOnPoll({ status: session.status, visible })) await reattachSession(session, info.id);
+      }
     }
     if (!isTauri()) state.order.sort((a, b) => (state.sessions.get(a)?.remoteOrder ?? Infinity) - (state.sessions.get(b)?.remoteOrder ?? Infinity));
     state.sessions.forEach((session) => {
@@ -1532,6 +1573,9 @@ export function hostTerminal(id, element) {
   state.hostElement = element;
   loadWebgl(session);
   fitNow(session);
+  // Uma sessão estacionada que volta à tela reattacha agora, já que o poll de
+  // 3 s adiou o reattach dela enquanto estava fora da tela.
+  if (!isTauri() && session.status === 'disconnected') syncSharedSessions().catch(() => {});
   if (isPhone()) requestTerminalControl(id).catch((error) => dispatch({ type: 'error', message: messageOf(error) }));
   else if (state.selectedId === id) term.focus();
 }

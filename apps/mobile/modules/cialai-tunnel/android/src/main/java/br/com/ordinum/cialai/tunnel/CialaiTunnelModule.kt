@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package br.com.ordinum.cialai.tunnel
 
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -43,6 +45,8 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
   private var activeDesktopId: String? = null
   private var backgroundedAt: Long? = null
   private var stoppedForBackground = false
+  // Tipo da rede na última notificação, para só reiniciar o DNS-SD quando ele muda de fato.
+  private var lastNetworkKind: String? = null
 
   private val backgroundStop = Runnable { queries.post { stopForBackground(overdue = false) } }
 
@@ -146,15 +150,21 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
       execute(queries, promise) { jsonObject(requireTunnel().desktopsJSON()) }
     }
 
+    // O JS já segura oscilações do NetInfo; aqui a busca local só recomeça, descartando
+    // o que já foi achado, quando o tipo de rede mudou de fato, como Wi-Fi para rede
+    // móvel. Uma notificação com a mesma rede não derruba a descoberta em andamento.
     Function("notifyNetworkChange") { reachable: Boolean ->
       queries.post {
         requireTunnel().notifyNetworkChange(reachable)
-        val desktopId = synchronized(lifecycle) {
-          activeDesktopId.takeIf { backgroundedAt == null && !stoppedForBackground }
+        val kind = if (reachable) currentNetworkKind() else NETWORK_NONE
+        val (desktopId, changed) = synchronized(lifecycle) {
+          val changed = lastNetworkKind != kind
+          lastNetworkKind = kind
+          activeDesktopId.takeIf { backgroundedAt == null && !stoppedForBackground } to changed
         }
         when {
           !reachable -> discovery?.stop()
-          desktopId != null -> searchLan(requireTunnel(), desktopId, forget = true)
+          desktopId != null && changed -> searchLan(requireTunnel(), desktopId, forget = true)
         }
       }
     }
@@ -162,6 +172,10 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     Function("notifyForeground") { active: Boolean ->
       if (active) enterForeground() else enterBackground()
     }
+
+    // No Android o ciclo de vida não marca reinício do zero; a confirmação de saúde do
+    // App não tem o que limpar aqui.
+    Function("notifyHealthy") { }
 
     AsyncFunction("forgetDesktop") { desktopId: String, promise: Promise ->
       execute(operations, promise) {
@@ -314,6 +328,20 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     if (wasActive) discovery?.stop()
   }
 
+  // Transporte da rede ativa segundo o sistema; desconhecido quando não há rede ativa.
+  private fun currentNetworkKind(): String {
+    val context = appContext.reactContext?.applicationContext ?: return NETWORK_UNKNOWN
+    val manager = context.getSystemService(ConnectivityManager::class.java) ?: return NETWORK_UNKNOWN
+    val capabilities = runCatching { manager.getNetworkCapabilities(manager.activeNetwork) }.getOrNull()
+      ?: return NETWORK_UNKNOWN
+    return when {
+      capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+      capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+      capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "cellular"
+      else -> NETWORK_UNKNOWN
+    }
+  }
+
   private fun searchLan(current: Tunnel, desktopId: String, forget: Boolean) {
     val lan = discovery ?: return
     // Uma reconexão pedida em segundo plano não prende o MulticastLock com o
@@ -420,6 +448,8 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     const val BACKGROUND_TTL_MS = 120_000L
     const val TOR_HANDOVER_WAIT_MS = 15_000L
     const val LOG_TAG = "CialaiTunnel"
+    const val NETWORK_NONE = "none"
+    const val NETWORK_UNKNOWN = "unknown"
     const val LOG_ERROR = 0
     const val LOG_INFO = 1
     val LOG_LEVELS = listOf("error", "info", "debug")

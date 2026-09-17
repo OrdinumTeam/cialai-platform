@@ -206,6 +206,7 @@ func (t *Tunnel) StatusJSON() (string, error)
 
 func (t *Tunnel) OpenDesktop(desktopID, deviceToken string, preferredPort int) (string, error)
 // -> {"url":"http://127.0.0.1:47400/?k=<nonce>","port":47400,"nonce":"..."}
+// Reaproveita o proxy já aberto do mesmo computador: mesma URL, porta e nonce, token trocado no lugar.
 func (t *Tunnel) CloseDesktop(desktopID string) error
 
 func (t *Tunnel) NotifyNetworkChange(reachable bool)
@@ -359,7 +360,21 @@ Borda, só no listener da tailnet em `:4740`, nunca em loopback:
 
 O bundle da página do celular é empacotado como recurso do Tauri e o caminho absoluto vai em `staticDir` de `net.start`, porque o Tauri embute `frontendDist` no binário e o sidecar não consegue lê-lo.
 
-Proxy no celular, em `127.0.0.1:47400` por perfil, reserva de `47401` a `47409`, depois aleatória com aviso: a primeira requisição precisa trazer `?k=<nonce>`, recebe `Set-Cookie: cialai_k=<nonce>; HttpOnly; SameSite=Strict; Path=/` e `302 /`; as demais precisam do cookie ou recebem 403 sem nunca ganhar o Bearer; upgrades de `/pty` exigem `Origin` igual à origem do proxy ou ausente; `Host` reescrito para `cialai-desktop`; `Authorization: Bearer` injetado; `DialContext` do transporte é o `Dial` do nó ao IP do desktop resolvido pela lista de peers pela chave de nó a cada discagem; prazo de leitura de 60 s no lado do túnel, renovado pelos pings de 20 s da ponte, derrubando os dois lados em qualquer erro. Depois do upgrade o proxy é um cano de bytes.
+Proxy no celular, em `127.0.0.1:47400` por perfil, reserva de `47401` a `47409`, depois aleatória com aviso: a primeira requisição precisa trazer `?k=<nonce>`, recebe `Set-Cookie: cialai_k=<nonce>; HttpOnly; SameSite=Strict; Path=/` e `302 /?bridge=ws://127.0.0.1:<porta>/pty`; as demais precisam do cookie ou recebem 403 sem nunca ganhar o Bearer, com a única exceção da rota de saúde local abaixo; upgrades de `/pty` exigem `Origin` igual à origem do proxy ou ausente; `Host` reescrito para `cialai-desktop`; `Authorization: Bearer` injetado; `DialContext` do transporte é o `Dial` do nó ao IP do desktop resolvido pela lista de peers pela chave de nó a cada discagem; prazo de leitura de 60 s no lado do túnel, renovado pelos pings de 20 s da ponte, derrubando os dois lados em qualquer erro. Depois do upgrade o proxy é um cano de bytes.
+
+### Saúde local, reaproveitamento do proxy e histerese
+
+Desde 16/09/2026, pela seção 3 do plano do mesmo dia, o proxy do celular e o gerenciador de caminho seguem as regras abaixo, cada uma com a prova automatizada ao lado, em `internal/proxy`, `internal/pathmgr`, `mobile` e `soak`.
+
+| Regra | Comportamento | Prova |
+| --- | --- | --- |
+| Rota de saúde local | `GET /_cialai/health` é respondida pelo próprio proxy, antes do portão de cookie, sem cookie nem nonce, e nunca chega ao computador. Com caminho ativo devolve `200` com `{"status":"ok","service":"cialai","transport":"direct"}`, ou `"reserve"` pela Tor; sem caminho devolve `503` com `{"status":"offline","service":"cialai","reason":"<código>"}`, em que o código é o erro do gerenciador, como `reserve_preparing`, ou o estado dele, como `connecting`; com o proxy fechado, `proxy_closed`. Sempre `Content-Type: application/json` e `Cache-Control: no-store`; outros métodos recebem 405. A casca sonda essa rota em vez de `/api/health`, porque no iOS o `fetch` nativo não enxerga o cookie do WebView e recebia 403 | `TestLocalHealthRouteAnswersWithoutCookieAndNeverReachesTheDesktop` |
+| Reaproveitamento do proxy | `OpenDesktop` para o computador já aberto devolve a mesma URL, porta e nonce, mantém o cookie e os sockets da página, troca o token do aparelho no lugar e libera uma primeira carga a mais com `?k=`; só outro computador, ou um proxy fechado antes por `CloseDesktop`, `Stop`, `ForgetDesktop` ou novo pareamento, ganha proxy novo, e `preferredPort` é ignorado no reaproveitamento. O evento `proxy open` sai uma vez por proxy | `TestReuseKeepsTheOpeningAndReplacesTheToken` e `TestOpenDesktopReusesTheProxyOfTheSameDesktop` |
+| Ponte em toda carga | `GET /` com cookie válido e sem `?bridge=` recebe `302` para `/?bridge=ws://127.0.0.1:<porta>/pty`, preservando os demais parâmetros, então `mobile/main.jsx` configura a ponte em toda carga, inclusive quando o WebView recarrega com a URL de abertura já consumida | `TestPageRootWithCookieRedirectsToTheBridge` |
+| Histerese de adopt | O caminho é comparado por computador, transporte, tipo e endereço, nunca por `Since`. Um adopt para o mesmo endereço do caminho ativo mantém o `Path`, não conta como troca para a histerese, não emite `path.changed` e o proxy não fecha nenhum upstream; só a troca real fecha os WebSockets, e a página religa por offset | `TestEquivalentPathKeepsOpenWebSockets`, `TestAdoptingAnEquivalentPathKeepsItAndEmitsNoEvent` e `TestProxySoakOscillatingPath` com `go test -tags soak` |
+| Histerese na mudança de rede | Com a reserva ativa, `NotifyNetworkChange` redisca a reserva e só tenta os passos diretos quando a histerese de 2 min e o intervalo de 5 min permitem, como já fazia o retorno ao primeiro plano; com sessão direta ativa continua migrando o socket. O contador de retentativas só é zerado quando não há caminho ativo | `TestNetworkChangesKeepTheReserveWithinHysteresis` |
+
+Prazos do QUIC desde a mesma data: keepalive a cada 20 s, alinhado ao ping da ponte, e `MaxIdleTimeout` de 45 s, então um celular suspenso ou em handoff por menos que isso mantém o caminho direto em vez de cair para a reserva e subir de novo; o quic-go limita o keepalive à metade do idle, e `TestEndpointTimingsAndSingleListener` guarda essa razão. O orçamento do passo direto pela internet subiu de 2 s para 4 s, para caber o handshake em 4G ruim, e o passo local segue em 1,5 s; os dois correm em paralelo, então a reserva começa em até 4 s.
 
 ## Pareamento
 

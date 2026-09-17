@@ -34,6 +34,7 @@ export const TUNNEL_ERROR_KEYS = Object.freeze({
   tunnel_disconnected: 'desktop.tunnel.error.tunnelDisconnected',
   tunnel_handshake: 'desktop.tunnel.error.tunnelHandshake',
   tunnel_internal: 'desktop.tunnel.error.tunnelInternal',
+  tunnel_restart_limit: 'desktop.tunnel.error.tunnelRestartLimit',
   tunnel_start: 'desktop.tunnel.error.tunnelStart',
   tunnel_state: 'desktop.tunnel.error.tunnelState',
   tunnel_stopped: 'desktop.tunnel.error.tunnelStopped',

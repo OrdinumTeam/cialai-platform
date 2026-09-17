@@ -251,7 +251,7 @@ Critérios: os pedidos explicam a finalidade. Negar a câmera mantém uma altern
 
 Passos: use o botão do sistema na prévia, em Arquivos, no terminal e na lista de sessões.
 
-Critérios: a navegação volta de prévia para Arquivos, de Arquivos para terminal, de terminal para lista e de lista para Computadores. Nenhuma etapa fecha o aplicativo por engano.
+Critérios: a navegação volta de prévia para Arquivos, de Arquivos para terminal, de terminal para lista e de lista para o Início, onde o card Continuar mostra o computador com Desconectar por até 90 segundos. Nenhuma etapa fecha o aplicativo por engano.
 
 | Campo | Registro |
 | --- | --- |

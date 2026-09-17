@@ -26,6 +26,7 @@ import (
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pathmgr"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/proxy"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
 	"github.com/coder/websocket"
 )
 
@@ -255,7 +256,7 @@ func runBurst(connections []*websocket.Conn, payload []byte) (uint64, error) {
 	return disconnects, joined
 }
 
-func writeReport(path string, report soakReport) error {
+func writeReport(path string, report any) error {
 	raw, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
@@ -368,5 +369,231 @@ func TestProxySoak(t *testing.T) {
 	t.Logf("report=%s proxy_disconnects=%d rss_growth=%d heap_growth=%d", config.ReportPath, report.ProxyDisconnects, report.RSSGrowthBytes, report.HeapGrowthBytes)
 	if report.Failure != "" || report.ProxyDisconnects != 0 || report.BackendUnexpectedErrors != 0 {
 		t.Fatalf("soak failed: %#v", report)
+	}
+}
+
+// oscillatingDialer stands in for a path manager whose active path is adopted
+// again or replaced on a schedule, while every path reaches the same loopback
+// echo backend.
+type oscillatingDialer struct {
+	endpoint string
+	failures atomic.Uint64
+
+	mu   sync.Mutex
+	path pathmgr.Path
+}
+
+func newOscillatingDialer(endpoint string) *oscillatingDialer {
+	return &oscillatingDialer{endpoint: endpoint, path: pathmgr.Path{
+		DesktopID: "desktop-soak", Transport: transport.NameDirect, Kind: pathmgr.KindDirect, Address: "203.0.113.7:4740", Since: time.Now(),
+	}}
+}
+
+func (dialer *oscillatingDialer) DialContext(ctx context.Context, network, _ string) (net.Conn, error) {
+	var direct net.Dialer
+	return direct.DialContext(ctx, network, dialer.endpoint)
+}
+
+func (dialer *oscillatingDialer) Active() pathmgr.Path {
+	dialer.mu.Lock()
+	defer dialer.mu.Unlock()
+	return dialer.path
+}
+
+func (dialer *oscillatingDialer) ReportFailure(error) { dialer.failures.Add(1) }
+
+// readopt adopts the active path again with a later Since, as the manager
+// does after re-dialing the endpoint of the active path.
+func (dialer *oscillatingDialer) readopt() pathmgr.PathEvent {
+	dialer.mu.Lock()
+	defer dialer.mu.Unlock()
+	dialer.path.Since = time.Now()
+	return pathmgr.PathEvent{DesktopID: dialer.path.DesktopID, Transport: dialer.path.Transport, Path: dialer.path.Kind, Reason: pathmgr.ReasonNetworkChanged}
+}
+
+// flip replaces the active path by one of the other kind: the direct path
+// becomes the reserve and the reserve becomes a direct path again.
+func (dialer *oscillatingDialer) flip() pathmgr.PathEvent {
+	dialer.mu.Lock()
+	defer dialer.mu.Unlock()
+	if dialer.path.Kind == pathmgr.KindTor {
+		dialer.path = pathmgr.Path{DesktopID: dialer.path.DesktopID, Transport: transport.NameDirect, Kind: pathmgr.KindDirect, Address: "203.0.113.7:4740", Since: time.Now()}
+		return pathmgr.PathEvent{DesktopID: dialer.path.DesktopID, Transport: transport.NameDirect, Path: pathmgr.KindDirect, Reason: pathmgr.ReasonUpgrade}
+	}
+	dialer.path = pathmgr.Path{DesktopID: dialer.path.DesktopID, Transport: transport.NameTor, Kind: pathmgr.KindTor, Since: time.Now()}
+	return pathmgr.PathEvent{DesktopID: dialer.path.DesktopID, Transport: transport.NameTor, Path: pathmgr.KindTor, Reason: pathmgr.ReasonPathFailed}
+}
+
+type pathSoakReport struct {
+	StartedAt                string `json:"startedAt"`
+	FinishedAt               string `json:"finishedAt"`
+	RequestedDuration        string `json:"requestedDuration"`
+	ElapsedMillis            int64  `json:"elapsedMillis"`
+	Sockets                  int    `json:"sockets"`
+	PathInterval             string `json:"pathInterval"`
+	MeasuredBursts           int    `json:"measuredBursts"`
+	EquivalentAdopts         int    `json:"equivalentAdopts"`
+	UpstreamsClosedOnAdopt   int    `json:"upstreamsClosedOnEquivalentAdopt"`
+	SocketsSurvivedAdopt     int    `json:"socketsSurvivedEquivalentAdopt"`
+	RealSwitches             int    `json:"realSwitches"`
+	UpstreamsClosedOnSwitch  int    `json:"upstreamsClosedOnRealSwitch"`
+	SocketsClosedOnSwitch    int    `json:"socketsClosedOnRealSwitch"`
+	BackendAbruptDisconnects uint64 `json:"backendAbruptDisconnects"`
+	PathFailuresReported     uint64 `json:"pathFailuresReported"`
+	Failure                  string `json:"failure,omitempty"`
+}
+
+// awaitClosed reads every socket until the proxy ends it; a socket still open
+// after timeout is a failure.
+func awaitClosed(connections []*websocket.Conn, timeout time.Duration) error {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	for index, connection := range connections {
+		if _, _, err := connection.Read(ctx); err == nil || errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("socket %d stayed open after the real switch: %v", index+1, err)
+		}
+	}
+	return nil
+}
+
+// awaitCount waits until counter reaches want, for the backend goroutines to
+// record the disconnects the proxy caused.
+func awaitCount(counter *atomic.Uint64, want uint64, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for counter.Load() < want {
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return true
+}
+
+// TestProxySoakOscillatingPath is CONN-13: the active path is adopted again
+// and really switched in turns, every PathInterval. Sockets over an
+// equivalent path survive and keep echoing, and only a real switch closes the
+// upstreams, all of them, after which the page opens its sockets again.
+func TestProxySoakOscillatingPath(t *testing.T) {
+	config, err := ConfigFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats := &echoStats{}
+	backend := httptest.NewServer(http.HandlerFunc(stats.handler))
+	defer backend.Close()
+	dialer := newOscillatingDialer(strings.TrimPrefix(backend.URL, "http://"))
+	instance, err := proxy.New(proxy.Config{
+		Dialer: dialer, DesktopID: "desktop-soak", DeviceToken: testDeviceToken(), ReadTimeout: time.Minute,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	opening, err := instance.Open(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer instance.Close(context.Background())
+	setupContext, setupCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	cookie, err := bootstrapCookie(setupContext, opening)
+	if err != nil {
+		setupCancel()
+		t.Fatal(err)
+	}
+	connections, err := openSockets(setupContext, opening, cookie)
+	setupCancel()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { closeSockets(connections) }()
+
+	payload := bytes.Repeat([]byte{0xC2}, FrameBytes)
+	report := pathSoakReport{
+		StartedAt:         time.Now().UTC().Format(time.RFC3339Nano),
+		RequestedDuration: config.Duration.String(),
+		Sockets:           SocketCount,
+		PathInterval:      config.PathInterval.String(),
+	}
+	started := time.Now()
+	deadline := started.Add(config.Duration)
+	var expectedAbrupt uint64
+	for cycle := 0; ; cycle++ {
+		if _, err := runBurst(connections, payload); err != nil {
+			report.Failure = fmt.Sprintf("burst %d: %v", report.MeasuredBursts+1, err)
+			break
+		}
+		report.MeasuredBursts++
+		if cycle > 0 && cycle%2 == 1 {
+			// The burst just completed proves the sockets survived the
+			// equivalent adopt before it.
+			report.SocketsSurvivedAdopt += len(connections)
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			break
+		}
+		time.Sleep(min(config.PathInterval, remaining))
+		if cycle%2 == 0 {
+			closed := instance.PathChanged(dialer.readopt())
+			report.EquivalentAdopts++
+			report.UpstreamsClosedOnAdopt += closed
+			if closed != 0 {
+				report.Failure = fmt.Sprintf("equivalent adopt %d closed %d upstreams", report.EquivalentAdopts, closed)
+				break
+			}
+			if abrupt := stats.unexpectedErr.Load(); abrupt != expectedAbrupt {
+				report.Failure = fmt.Sprintf("equivalent adopt %d disconnected %d backend sockets", report.EquivalentAdopts, abrupt-expectedAbrupt)
+				break
+			}
+			continue
+		}
+		event := dialer.flip()
+		closed := instance.PathChanged(event)
+		report.RealSwitches++
+		report.UpstreamsClosedOnSwitch += closed
+		if closed != len(connections) {
+			report.Failure = fmt.Sprintf("real switch %d to %s closed %d upstreams, want %d", report.RealSwitches, event.Path, closed, len(connections))
+			break
+		}
+		if err := awaitClosed(connections, 10*time.Second); err != nil {
+			report.Failure = err.Error()
+			break
+		}
+		report.SocketsClosedOnSwitch += len(connections)
+		expectedAbrupt += uint64(len(connections))
+		if !awaitCount(&stats.unexpectedErr, expectedAbrupt, 10*time.Second) {
+			report.Failure = fmt.Sprintf("backend saw %d abrupt disconnects after switch %d, want %d", stats.unexpectedErr.Load(), report.RealSwitches, expectedAbrupt)
+			break
+		}
+		for _, connection := range connections {
+			_ = connection.CloseNow()
+		}
+		reopenContext, reopenCancel := context.WithTimeout(context.Background(), 30*time.Second)
+		connections, err = openSockets(reopenContext, opening, cookie)
+		reopenCancel()
+		if err != nil {
+			report.Failure = fmt.Sprintf("reopen after switch %d: %v", report.RealSwitches, err)
+			connections = nil
+			break
+		}
+		t.Logf("switch=%d to %s closed=%d adopts=%d bursts=%d", report.RealSwitches, event.Path, closed, report.EquivalentAdopts, report.MeasuredBursts)
+	}
+	report.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	report.ElapsedMillis = time.Since(started).Milliseconds()
+	report.BackendAbruptDisconnects = stats.unexpectedErr.Load()
+	report.PathFailuresReported = dialer.failures.Load()
+	if report.Failure == "" && report.BackendAbruptDisconnects != expectedAbrupt {
+		report.Failure = fmt.Sprintf("backend saw %d abrupt disconnects, want %d from the real switches", report.BackendAbruptDisconnects, expectedAbrupt)
+	}
+	if report.Failure == "" && report.PathFailuresReported != 0 {
+		report.Failure = fmt.Sprintf("proxy reported %d path failures", report.PathFailuresReported)
+	}
+	reportPath := strings.TrimSuffix(config.ReportPath, ".json") + "-oscillating.json"
+	if err := writeReport(reportPath, report); err != nil {
+		t.Fatalf("write report: %v", err)
+	}
+	t.Logf("report=%s bursts=%d equivalent_adopts=%d survived=%d real_switches=%d closed=%d", reportPath,
+		report.MeasuredBursts, report.EquivalentAdopts, report.SocketsSurvivedAdopt, report.RealSwitches, report.UpstreamsClosedOnSwitch)
+	if report.Failure != "" || report.EquivalentAdopts == 0 || report.RealSwitches == 0 {
+		t.Fatalf("oscillating soak failed: %#v", report)
 	}
 }

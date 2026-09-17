@@ -26,11 +26,11 @@ for (const path of ['docs/stores/listing-pt-BR.md', 'docs/stores/listing-en.md']
 
 const apple = read('docs/stores/app-store-privacy.md');
 assert.match(apple, /No, we do not collect data from this app/);
-assert.match(apple, /verify these answers against the archived binary/i);
+assert.match(apple, /against the archived binary/i);
 
 const play = read('docs/stores/google-play-data-safety.md');
 assert.match(play, /Does the app collect or share any required user data types\? \| No/);
-assert.match(play, /verify these answers against the signed AAB/i);
+assert.match(play, /against the signed AAB/i);
 
 for (const [policy, contactMarker] of [
   ['docs/legal/privacy-policy-en.md', /TO BE CONFIRMED BEFORE PUBLICATION/],
@@ -45,7 +45,7 @@ const screenshots = read('docs/stores/screenshots.md');
 for (const required of ['1320 by 2868', '1080 by 1920', '1920 by 1080', '2560 by 1440', '1024 by 500']) {
   assert.match(screenshots, new RegExp(required));
 }
-assert.match(screenshots, /Pending native iPhone build/);
-assert.match(screenshots, /Pending signed Android build/);
+assert.match(screenshots, /English set pending/);
+assert.match(screenshots, /real device build/);
 
 console.log('PASS store metadata: bilingual policy and copy, privacy answers, character limits and screenshot plan');

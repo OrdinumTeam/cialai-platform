@@ -305,6 +305,7 @@ export default Object.freeze({
   'desktop.tunnel.error.tunnelDisconnected': 'O núcleo do túnel foi desconectado.',
   'desktop.tunnel.error.tunnelHandshake': 'O núcleo do túnel não negociou o protocolo esperado.',
   'desktop.tunnel.error.tunnelInternal': 'A operação do túnel foi interrompida.',
+  'desktop.tunnel.error.tunnelRestartLimit': 'O núcleo do túnel falhou dez vezes em dez minutos. Aguarde um momento antes de tentar de novo.',
   'desktop.tunnel.error.tunnelStart': 'Não foi possível iniciar o núcleo do túnel.',
   'desktop.tunnel.error.tunnelState': 'Não foi possível preparar o estado do túnel.',
   'desktop.tunnel.error.tunnelStopped': 'O núcleo do túnel foi encerrado.',

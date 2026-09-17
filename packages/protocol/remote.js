@@ -20,6 +20,7 @@ let configured;
 let socket;
 let retryTimer;
 let handshakeTimer;
+let resumeTimer;
 let retryDelay = 500;
 let nextCall = 1;
 let nextChannel = 1;
@@ -175,6 +176,8 @@ export function disconnect() {
   clearTimeout(retryTimer);
   retryTimer = null;
   clearTimeout(handshakeTimer);
+  clearTimeout(resumeTimer);
+  resumeTimer = null;
   const previous = socket;
   socket = null;
   previous?.close();
@@ -207,6 +210,13 @@ export async function listen(name, handler) {
   return () => { events.get(name)?.delete(handler); };
 }
 
+// Prazo curto para o socket anterior confirmar o fechamento antes de abrir o
+// novo; passado ele, o novo abre mesmo assim.
+export const RESUME_CLOSE_GRACE_MS = 1500;
+
+// A borda do computador limita os sockets por aparelho: abrir o novo antes de o
+// anterior fechar de verdade podia bater no limite e virar mais um ciclo de
+// reconexão. O novo socket espera o onclose do anterior, ou o prazo de segurança.
 export function resume() {
   if (!configured) return;
   const previous = socket;
@@ -214,10 +224,26 @@ export function resume() {
   clearTimeout(handshakeTimer);
   clearTimeout(retryTimer);
   retryTimer = null;
-  previous?.close();
+  clearTimeout(resumeTimer);
+  resumeTimer = null;
   publish({ status: 'disconnected', code: null });
   detach();
-  connect();
+  if (!previous || previous.readyState === 3) {
+    connect();
+    return;
+  }
+  let reopened = false;
+  const reopen = () => {
+    if (reopened) return;
+    reopened = true;
+    clearTimeout(resumeTimer);
+    resumeTimer = null;
+    connect();
+  };
+  previous.onclose = reopen;
+  previous.onerror = reopen;
+  resumeTimer = setTimeout(reopen, RESUME_CLOSE_GRACE_MS);
+  if (previous.readyState < 2) previous.close();
 }
 
 // Face ID, a central de notificacoes e o seletor de apps escondem a pagina

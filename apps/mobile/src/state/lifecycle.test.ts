@@ -1,4 +1,4 @@
-import { ANDROID_BACKGROUND_STOP_MS, createNetworkForwarder, handleAppStateTransition } from './lifecycle';
+import { ANDROID_BACKGROUND_STOP_MS, createNetworkForwarder, handleAppStateTransition, NETWORK_TYPE_SETTLE_MS } from './lifecycle';
 import type { AppScreen } from './machine';
 
 const desktopId = 'd_AAAAAAAAAAAAAAAAAAAAAA';
@@ -7,7 +7,8 @@ const shell: AppScreen = {
   desktopId,
   url: `http://127.0.0.1:47400/?k=${'A'.repeat(43)}`,
   transport: 'tor',
-  path: 'tor'
+  path: 'tor',
+  reconnecting: false
 };
 
 function transitionFrom(
@@ -82,6 +83,9 @@ describe('app state transitions', () => {
 });
 
 describe('network changes', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
   test.each([
     [{ isConnected: true, isInternetReachable: true }, true],
     [{ isConnected: true, isInternetReachable: null }, true],
@@ -94,21 +98,71 @@ describe('network changes', () => {
     expect(notifyNetworkChange).toHaveBeenCalledWith(expected);
   });
 
-  test('forwards interface changes with the same reachability and drops exact repeats', () => {
+  test('forwards an interface change with the same reachability only after it settles', () => {
     const notifyNetworkChange = jest.fn();
     const forward = createNetworkForwarder(notifyNetworkChange);
     expect(forward({ isConnected: true, isInternetReachable: true, type: 'wifi' })).toEqual({ reachable: true, changed: true, regained: false });
     expect(forward({ isConnected: true, isInternetReachable: true, type: 'wifi' })).toEqual({ reachable: true, changed: false, regained: false });
-    expect(forward({ isConnected: true, isInternetReachable: true, type: 'cellular' })).toEqual({ reachable: true, changed: true, regained: false });
+    expect(forward({ isConnected: true, isInternetReachable: true, type: 'cellular' })).toEqual({ reachable: true, changed: false, regained: false });
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS - 1);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(1);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(2);
+    expect(notifyNetworkChange).toHaveBeenLastCalledWith(true);
+    // Depois de estável, a mesma interface não é repassada de novo.
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS);
     expect(notifyNetworkChange).toHaveBeenCalledTimes(2);
   });
 
-  test('reports when the network comes back', () => {
+  test('a handoff that flaps through unknown reaches the core once and a round trip never does', () => {
     const notifyNetworkChange = jest.fn();
     const forward = createNetworkForwarder(notifyNetworkChange);
     forward({ isConnected: true, isInternetReachable: true, type: 'wifi' });
+    // Wi-Fi para rede móvel oscilando por unknown: um aviso só, depois de estabilizar.
+    forward({ isConnected: true, isInternetReachable: true, type: 'unknown' });
+    jest.advanceTimersByTime(1_000);
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
+    jest.advanceTimersByTime(1_000);
+    forward({ isConnected: true, isInternetReachable: true, type: 'unknown' });
+    jest.advanceTimersByTime(1_000);
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(1);
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(2);
+    // Vaivém que termina na rede móvel de antes: nada chega ao núcleo.
+    forward({ isConnected: true, isInternetReachable: true, type: 'unknown' });
+    jest.advanceTimersByTime(500);
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS * 2);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(2);
+    // Volta ao Wi-Fi: uma interface diferente da última repassada, avisada depois de estável.
+    forward({ isConnected: true, isInternetReachable: true, type: 'unknown' });
+    jest.advanceTimersByTime(500);
+    forward({ isConnected: true, isInternetReachable: true, type: 'wifi' });
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(3);
+  });
+
+  test('reachability changes are immediate, cancel a pending interface change and report the return', () => {
+    const notifyNetworkChange = jest.fn();
+    const forward = createNetworkForwarder(notifyNetworkChange);
+    forward({ isConnected: true, isInternetReachable: true, type: 'wifi' });
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
     expect(forward({ isConnected: false, isInternetReachable: false, type: 'none' })).toEqual({ reachable: false, changed: true, regained: false });
     expect(forward({ isConnected: true, isInternetReachable: null, type: 'cellular' })).toEqual({ reachable: true, changed: true, regained: true });
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS * 2);
     expect(notifyNetworkChange.mock.calls).toEqual([[true], [false], [true]]);
+  });
+
+  test('cancel drops an interface change that has not settled', () => {
+    const notifyNetworkChange = jest.fn();
+    const forward = createNetworkForwarder(notifyNetworkChange);
+    forward({ isConnected: true, isInternetReachable: true, type: 'wifi' });
+    forward({ isConnected: true, isInternetReachable: true, type: 'cellular' });
+    forward.cancel();
+    jest.advanceTimersByTime(NETWORK_TYPE_SETTLE_MS * 2);
+    expect(notifyNetworkChange).toHaveBeenCalledTimes(1);
   });
 });

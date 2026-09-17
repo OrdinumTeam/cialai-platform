@@ -64,11 +64,18 @@ function sha256(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex');
 }
 
+// No Windows o sidecar sai como subsistema GUI: o app em release não tem console, e um filho de
+// console criado sem CREATE_NO_WINDOW abriria uma janela. A flag no spawn do supervisor é a defesa
+// principal; esta é a de profundidade. Os pipes de stdio seguem funcionando num binário GUI.
+export function goLdflags(goos) {
+  return goos === 'windows' ? '-s -w -H=windowsgui' : '-s -w';
+}
+
 export function buildSidecar(triple) {
   const { goos, goarch } = TARGETS[triple];
   const output = `${OUTPUT_DIR}/${binaryName(triple)}`;
   mkdirSync(OUTPUT_DIR, { recursive: true });
-  const result = spawnSync('go', ['build', '-trimpath', '-mod=readonly', '-ldflags=-s -w', '-o', output, './cmd/cialai-tunnel'], {
+  const result = spawnSync('go', ['build', '-trimpath', '-mod=readonly', `-ldflags=${goLdflags(goos)}`, '-o', output, './cmd/cialai-tunnel'], {
     cwd: `${root}packages/tunnel-core`,
     env: { ...process.env, CGO_ENABLED: '0', GOOS: goos, GOARCH: goarch },
     stdio: 'inherit',

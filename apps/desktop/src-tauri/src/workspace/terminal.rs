@@ -54,6 +54,24 @@ const LOW_WATER: usize = 128 * 1024;
 const QUEUE_DEPTH: usize = 32;
 const SCROLLBACK_LIMIT: usize = 256 * 1024;
 const REMOTE_LAG_GRACE: Duration = Duration::from_secs(3);
+/// Consultas que um programa faz ao terminal e que o xterm responde sozinho:
+/// posicao do cursor, atributos do dispositivo e cores de frente e fundo. Ao
+/// vivo elas seguem intactas, porque o programa espera a resposta. No anel de
+/// historico cada byte delas vira NUL, que o xterm ignora: o replay de um
+/// attach nao gera resposta nenhuma e mantem o tamanho e os offsets da saida
+/// ao vivo. A pergunta do arranque do ConPTY e tratada antes, em `pty::cursor`.
+const TERMINAL_QUERIES: &[&[u8]] = &[
+    b"\x1b[6n",
+    b"\x1b[?6n",
+    b"\x1b[c",
+    b"\x1b[0c",
+    b"\x1b[>c",
+    b"\x1b[>0c",
+    b"\x1b]10;?\x07",
+    b"\x1b]10;?\x1b\\",
+    b"\x1b]11;?\x07",
+    b"\x1b]11;?\x1b\\",
+];
 /// Tempo entre o SIGHUP e o SIGKILL de um shell que nao encerrou sozinho.
 const KILL_GRACE: Duration = Duration::from_millis(400);
 /// Shell que sai antes disto provavelmente falhou no .zshrc.
@@ -210,6 +228,38 @@ struct OutputState {
     subscribers: HashMap<SubscriberKey, Subscriber>,
     history: VecDeque<u8>,
     sequence: u64,
+    /// Ate onde o historico ja foi limpo de consultas; o resto pode terminar
+    /// num comeco de consulta cortado entre dois trechos.
+    clean: usize,
+}
+
+/// Troca por NUL as consultas do historico a partir de `from` e devolve ate
+/// onde ele esta limpo. Um comeco de consulta no fim do trecho fica pendente
+/// ate o proximo trecho dizer se ela se completa.
+fn neutralize_queries(history: &mut VecDeque<u8>, from: usize) -> usize {
+    let tail: Vec<u8> = history.range(from..).copied().collect();
+    let mut index = 0;
+    while index < tail.len() {
+        if tail[index] != 0x1b {
+            index += 1;
+            continue;
+        }
+        let rest = &tail[index..];
+        if let Some(query) = TERMINAL_QUERIES
+            .iter()
+            .find(|query| rest.starts_with(query))
+        {
+            for offset in 0..query.len() {
+                history[from + index + offset] = 0;
+            }
+            index += query.len();
+        } else if TERMINAL_QUERIES.iter().any(|query| query.starts_with(rest)) {
+            return from + index;
+        } else {
+            index += 1;
+        }
+    }
+    history.len()
 }
 
 /// Delivery serializes replay with live output, but callbacks run outside
@@ -253,6 +303,8 @@ impl OutputLink {
                 state.history.extend(data);
                 let overflow = state.history.len().saturating_sub(SCROLLBACK_LIMIT);
                 state.history.drain(..overflow);
+                let from = state.clean.saturating_sub(overflow);
+                state.clean = neutralize_queries(&mut state.history, from);
                 data.len()
             } else {
                 0
@@ -1873,6 +1925,58 @@ mod tests {
         );
         link.send(InvokeResponseBody::Raw(b"next".to_vec()));
         assert!(matches!(rx.recv().unwrap(), InvokeResponseBody::Raw(data) if data == b"next"));
+    }
+
+    /// O replay nao pode carregar consulta nenhuma, nem a que chegou cortada
+    /// entre dois trechos; ao vivo a mesma saida passa intacta.
+    #[test]
+    fn replay_neutralizes_terminal_queries_even_when_split_between_chunks() {
+        let (local, live) = sink();
+        let link = OutputLink::new(local);
+        let chunks: [&[u8]; 3] = [
+            b"prompt \x1b[6n\x1b[",
+            b"c\x1b]11;?",
+            b"\x1b\\ \x1b[>0c\x1b[?25l fim",
+        ];
+        let mut seen = Vec::new();
+        for chunk in chunks {
+            link.send(InvokeResponseBody::Raw(chunk.to_vec()));
+            let InvokeResponseBody::Raw(data) = live.recv().unwrap() else {
+                panic!("saida ao vivo");
+            };
+            assert_eq!(data, chunk);
+            seen.extend_from_slice(chunk);
+        }
+        let (remote, rx) = sink();
+        link.attach(SubscriberKey::Remote(4), remote);
+        let InvokeResponseBody::Json(marker) = rx.recv().unwrap() else {
+            panic!("replay marker");
+        };
+        let marker: serde_json::Value = serde_json::from_str(&marker).unwrap();
+        assert_eq!(marker["offset"], 0);
+        assert_eq!(marker["length"], seen.len() as u64);
+        let InvokeResponseBody::Raw(replay) = rx.recv().unwrap() else {
+            panic!("replay");
+        };
+        assert_eq!(replay.len(), seen.len());
+        for query in TERMINAL_QUERIES {
+            assert!(
+                !replay.windows(query.len()).any(|window| window == *query),
+                "{query:?}"
+            );
+        }
+        let visible: Vec<u8> = replay.iter().copied().filter(|byte| *byte != 0).collect();
+        assert_eq!(visible, b"prompt  \x1b[?25l fim");
+        // Um comeco de consulta que nao se completa volta a valer como saida.
+        link.send(InvokeResponseBody::Raw(b"\x1b[".to_vec()));
+        link.send(InvokeResponseBody::Raw(b"1;1H".to_vec()));
+        let (again, rx) = sink();
+        link.attach(SubscriberKey::Remote(5), again);
+        let _ = rx.recv().unwrap();
+        let InvokeResponseBody::Raw(replay) = rx.recv().unwrap() else {
+            panic!("replay");
+        };
+        assert!(replay.ends_with(b"\x1b[1;1H"));
     }
 
     #[test]

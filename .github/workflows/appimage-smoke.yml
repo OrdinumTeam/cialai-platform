@@ -14,6 +14,8 @@ on:
       - apps/desktop/src-tauri/Cargo.lock
       - apps/desktop/src-tauri/tauri.conf.json
       - apps/desktop/src-tauri/tauri.linux.conf.json
+      # O smoke confere que o sidecar nasce de dentro da imagem; quem o localiza é o supervisor.
+      - apps/desktop/src-tauri/src/tunnel/**
   workflow_dispatch:
 
 permissions:

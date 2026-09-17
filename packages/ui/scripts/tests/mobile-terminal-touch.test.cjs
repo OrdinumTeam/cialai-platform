@@ -3,7 +3,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const load = () => import('../../src/terminals/touch-scroll.js');
 
-async function harness({ rowHeight = 16, scrollback = true } = {}) {
+async function harness({ rowHeight = 16, scrollback = true, mouseTracking = true } = {}) {
   const { createTouchScroll, ...constants } = await load();
   const calls = { scrolled: [], keys: [], wheel: [], frames: [] }; let nextFrame = 1;
   const scroll = createTouchScroll({
@@ -12,6 +12,7 @@ async function harness({ rowHeight = 16, scrollback = true } = {}) {
     sendKeys: (data) => calls.keys.push(data),
     sendWheel: (direction, count) => calls.wheel.push([direction, count]),
     hasScrollback: () => scrollback,
+    mouseTracking: () => mouseTracking,
     requestFrame: (callback) => { const id = nextFrame++; calls.frames.push({ id, callback }); return id; },
     cancelFrame: (id) => { calls.frames = calls.frames.filter((frame) => frame.id !== id); },
   });
@@ -49,4 +50,16 @@ test('no buffer alternativo o arrasto vira roda do mouse com teto e nunca setas'
 });
 test('a inercia no buffer alternativo nao manda roda nem setas', async () => {
   const { scroll, calls } = await harness({ rowHeight: 16, scrollback: false }); scroll.start(500, 0); for (let i = 1; i <= 5; i += 1) scroll.move(500 - i * 40, i * 16); assert.equal(scroll.end(80), false); assert.equal(scroll.flinging, false); assert.deepEqual(calls.keys, []);
+});
+test('sem rastreio de mouse revalidado o arrasto no buffer alternativo nao manda roda', async () => {
+  // O replay pode deixar o modo de mouse ligado por um programa ja encerrado.
+  // Com a marca revalidada em falso, o dedo nao injeta o relato de roda.
+  const { scroll, calls } = await harness({ rowHeight: 16, scrollback: false, mouseTracking: false });
+  scroll.start(400, 0); scroll.move(240, 16);
+  assert.deepEqual(calls.wheel, []); assert.deepEqual(calls.scrolled, []); assert.deepEqual(calls.keys, []);
+});
+test('com o rastreio revalidado o arrasto no buffer alternativo volta a mandar roda', async () => {
+  const { scroll, calls, MAX_WHEEL_PER_MOVE } = await harness({ rowHeight: 16, scrollback: false, mouseTracking: true });
+  scroll.start(400, 0); scroll.move(240, 16);
+  assert.deepEqual(calls.wheel, [[1, MAX_WHEEL_PER_MOVE]]);
 });

@@ -7,7 +7,13 @@
 // When the path manager switches paths, PathChanged closes the upstreams that
 // the previous path carried, WebSockets included. The page reconnects and asks
 // the bridge for a replay by offset; the proxy never writes a byte it already
-// forwarded a second time, because it neither buffers nor retries a stream.
+// forwarded a second time, because it neither buffers nor retries a stream. A
+// path adopted again to the same endpoint is not a switch and closes nothing.
+//
+// Two routes are answered by the proxy itself: HealthPath, which the native
+// shell polls without the cookie and which reports the path manager, and the
+// page root with the cookie, which is sent to BridgeLocation so every load of
+// the page carries the bridge.
 //
 // Failures the proxy can prove are reported to the path manager: a WebSocket
 // whose bridge stayed silent for the read timeout, which spans three lost
@@ -45,8 +51,18 @@ const (
 	LastReservedPort = 47409
 	// RevokedCloseCode is the WebSocket close status of the bridge after the
 	// desktop revoked this phone.
-	RevokedCloseCode   = 4401
-	defaultReadTimeout = 60 * time.Second
+	RevokedCloseCode = 4401
+	// HealthPath is the local health route the native shell polls. It is
+	// answered by the proxy itself, before the cookie gate, from the state of
+	// the path manager, and never reaches the desktop.
+	HealthPath = "/_cialai/health"
+	// HealthService is the service name of the local health route.
+	HealthService = "cialai"
+	// HealthTransportDirect and HealthTransportReserve name the active path in
+	// the local health route.
+	HealthTransportDirect  = "direct"
+	HealthTransportReserve = "reserve"
+	defaultReadTimeout     = 60 * time.Second
 	// maxPathDials bounds the dials of one upstream while the active path keeps
 	// changing under it.
 	maxPathDials = 3
@@ -74,6 +90,17 @@ type Config struct {
 	// OnRevoked runs once when the bridge closes a socket with
 	// RevokedCloseCode, before the path manager is revoked.
 	OnRevoked func()
+	// Health answers the local health route from the state of the path
+	// manager; nil derives it from Dialer.Active alone.
+	Health func() Health
+}
+
+// Health is what the local health route reports: the active path, whose zero
+// value means none, and the short reason no path is active, such as the phone
+// API error code of the manager or its state.
+type Health struct {
+	Active pathmgr.Path
+	Reason string
 }
 
 type OpenResult struct {
@@ -95,6 +122,7 @@ type Proxy struct {
 	nonce            string
 	nonceClaimed     bool
 	port             int
+	opening          OpenResult
 	listener         net.Listener
 	server           *http.Server
 
@@ -196,14 +224,33 @@ func (proxy *Proxy) Open(preferredPort int) (OpenResult, error) {
 	proxy.mu.Lock()
 	proxy.listener = listener
 	proxy.server = server
-	nonce := proxy.nonce
-	proxy.mu.Unlock()
-	go func() { _ = server.Serve(listener) }()
-	result := OpenResult{URL: "http://127.0.0.1:" + strconv.Itoa(port) + "/?k=" + url.QueryEscape(nonce), Port: port, Nonce: nonce}
+	result := OpenResult{URL: "http://127.0.0.1:" + strconv.Itoa(port) + "/?k=" + url.QueryEscape(proxy.nonce), Port: port, Nonce: proxy.nonce}
 	if fallback {
 		result.Warning = "As portas reservadas estavam ocupadas; foi usada uma porta local temporária."
 	}
+	proxy.opening = result
+	proxy.mu.Unlock()
+	go func() { _ = server.Serve(listener) }()
 	return result, nil
+}
+
+// Reuse hands out the opening of an open proxy once more, for the same desktop
+// and a page that may load again: the port, the nonce and the cookie the page
+// already holds stay the same, the device token is replaced by deviceToken
+// and the nonce may be claimed by one more first load. It fails when the
+// proxy is closed or the token is invalid.
+func (proxy *Proxy) Reuse(deviceToken string) (OpenResult, error) {
+	if !validDeviceToken(deviceToken) {
+		return OpenResult{}, errors.New("valid device token is required")
+	}
+	proxy.mu.Lock()
+	defer proxy.mu.Unlock()
+	if proxy.port == 0 || proxy.server == nil {
+		return OpenResult{}, errors.New("proxy is closed")
+	}
+	proxy.token = deviceToken
+	proxy.nonceClaimed = false
+	return proxy.opening, nil
 }
 
 func listenLoopback(preferredPort int) (net.Listener, bool, error) {
@@ -237,6 +284,10 @@ func (proxy *Proxy) ServeHTTP(response http.ResponseWriter, request *http.Reques
 	nonce := proxy.nonce
 	port := proxy.port
 	proxy.mu.RUnlock()
+	if request.URL.Path == HealthPath {
+		proxy.serveHealth(response, request, port != 0 && nonce != "")
+		return
+	}
 	if port == 0 || nonce == "" {
 		proxy.problem(response, http.StatusServiceUnavailable, "proxy_closed", "O proxy local não está aberto.")
 		return
@@ -256,6 +307,15 @@ func (proxy *Proxy) ServeHTTP(response http.ResponseWriter, request *http.Reques
 			proxy.upgrade.ServeHTTP(response, request.WithContext(context.WithValue(request.Context(), dialSlotKey{}, slot)))
 			return
 		}
+		if request.Method == http.MethodGet && request.URL.Path == "/" && !query.Has("bridge") {
+			// Every load of the page root carries the bridge, so a page loaded
+			// again with its cookie, after the WebView restarts or the shell
+			// opens the desktop once more, connects to the proxy socket.
+			query.Set("bridge", bridgeURL(port))
+			response.Header().Set("Location", "/?"+query.Encode())
+			response.WriteHeader(http.StatusFound)
+			return
+		}
 		proxy.reverse.ServeHTTP(response, request)
 		return
 	}
@@ -270,10 +330,52 @@ func (proxy *Proxy) ServeHTTP(response http.ResponseWriter, request *http.Reques
 	proxy.problem(response, http.StatusForbidden, "proxy_unauthorized", "Esta abertura local não é válida.")
 }
 
-// BridgeLocation is where the one-use opening redirects the WebView: the page
-// root with the loopback WebSocket of the proxy as its bridge.
+// BridgeLocation is where the one-use opening, and every later load of the
+// page root with the cookie, redirects the WebView: the page root with the
+// loopback WebSocket of the proxy as its bridge.
 func BridgeLocation(port int) string {
-	return "/?bridge=" + url.QueryEscape("ws://127.0.0.1:"+strconv.Itoa(port)+"/pty")
+	return "/?bridge=" + url.QueryEscape(bridgeURL(port))
+}
+
+func bridgeURL(port int) string {
+	return "ws://127.0.0.1:" + strconv.Itoa(port) + "/pty"
+}
+
+// serveHealth answers the local health route from the path manager, without
+// the cookie and without touching the desktop: 200 while a path is active and
+// 503 with the short reason otherwise.
+func (proxy *Proxy) serveHealth(response http.ResponseWriter, request *http.Request, open bool) {
+	if request.Method != http.MethodGet {
+		proxy.problem(response, http.StatusMethodNotAllowed, "method_invalid", "A rota de saúde local só aceita GET.")
+		return
+	}
+	health := Health{Reason: "proxy_closed"}
+	if open {
+		health = proxy.health()
+	}
+	response.Header().Set("Content-Type", "application/json")
+	if health.Active.Transport == "" {
+		reason := health.Reason
+		if reason == "" {
+			reason = pathmgr.CodeNoPath
+		}
+		response.WriteHeader(http.StatusServiceUnavailable)
+		_ = json.NewEncoder(response).Encode(map[string]string{"status": "offline", "service": HealthService, "reason": reason})
+		return
+	}
+	transportName := HealthTransportDirect
+	if health.Active.Kind == pathmgr.KindTor {
+		transportName = HealthTransportReserve
+	}
+	response.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(response).Encode(map[string]string{"status": "ok", "service": HealthService, "transport": transportName})
+}
+
+func (proxy *Proxy) health() Health {
+	if proxy.config.Health != nil {
+		return proxy.config.Health()
+	}
+	return Health{Active: proxy.config.Dialer.Active()}
 }
 
 func (proxy *Proxy) validCookie(request *http.Request, nonce string) bool {
@@ -398,12 +500,13 @@ func (proxy *Proxy) dialContext(ctx context.Context, network, address string) (n
 }
 
 // track registers conn as carried by the active path. Unless force is set, it
-// refuses conn when the active path is not the one seen before the dial.
+// refuses conn when the active path is not equivalent to the one seen before
+// the dial.
 func (proxy *Proxy) track(conn *upstreamConn, before pathmgr.Path, force bool) bool {
 	proxy.connMu.Lock()
 	defer proxy.connMu.Unlock()
 	after := proxy.config.Dialer.Active()
-	if !force && (after != before || after.Transport == "") {
+	if !force && (!after.Equivalent(before) || after.Transport == "") {
 		return false
 	}
 	conn.path = after
@@ -420,13 +523,16 @@ func (proxy *Proxy) untrack(conn *upstreamConn) {
 // PathChanged closes every upstream that the active path does not carry. The
 // path manager calls it, through its OnPath event, after each switch, so the
 // streams of the previous path end and the page reconnects over the new one.
-// It returns how many upstreams were closed.
+// Paths are compared by transport, kind and address: a path adopted again to
+// the same endpoint keeps its upstreams, WebSockets included, so the page
+// does not reconnect and replay every terminal. It returns how many upstreams
+// were closed.
 func (proxy *Proxy) PathChanged(pathmgr.PathEvent) int {
 	proxy.connMu.Lock()
 	active := proxy.config.Dialer.Active()
 	var stale []*upstreamConn
 	for conn := range proxy.upstreams {
-		if conn.path.Transport == "" || conn.path != active {
+		if conn.path.Transport == "" || !conn.path.Equivalent(active) {
 			stale = append(stale, conn)
 		}
 	}
@@ -504,7 +610,7 @@ func (proxy *Proxy) upgradeFailed(conn *upstreamConn, err error) {
 		return
 	}
 	proxy.connMu.Lock()
-	current := conn.path.Transport != "" && conn.path == proxy.config.Dialer.Active()
+	current := conn.path.Transport != "" && conn.path.Equivalent(proxy.config.Dialer.Active())
 	proxy.connMu.Unlock()
 	if current {
 		proxy.config.Dialer.ReportFailure(fmt.Errorf("desktop bridge silent for %s: %w", proxy.config.ReadTimeout, err))
@@ -651,6 +757,7 @@ func (proxy *Proxy) Close(ctx context.Context) error {
 	proxy.listener = nil
 	proxy.port = 0
 	proxy.nonce = ""
+	proxy.opening = OpenResult{}
 	proxy.mu.Unlock()
 	proxy.transport.CloseIdleConnections()
 	proxy.upgradeTransport.CloseIdleConnections()
