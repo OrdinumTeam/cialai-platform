@@ -35,6 +35,22 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.4 preview
+
+Preview dated 2026-09-18. The iOS and Android apps ship the phone connection, terminal and navigation work that landed in 0.2.3, which until now existed only on the desktop side. The desktop app is unchanged from 0.2.3 and does not need to be updated: every fix below is either inside the phone app or inside the page the desktop already serves.
+
+### Added
+
+* The mobile apps carry the home screen with the last computer, Computers, Pair, Terminal and Settings, and every back button leads to it
+* Core log lines reach the advanced diagnostics in the mobile settings and, on iOS, the macOS Console through `os_log`
+
+### Fixed
+
+* The phone connection no longer drops and reconnects every 20 to 30 s: the health probe uses a local route the loopback proxy answers without a cookie, losing health keeps the page behind a Reconnecting banner instead of unmounting it, the proxy is reused for the same computer, re-adopting the same path no longer closes the terminals, and network changes respect the reserve hysteresis
+* One retry ladder from 2 s to 16 s per computer, no longer restarting when the reason changes, and an immediate retry when the core announces a path
+* On iOS a healthy check after returning from the background no longer restarts a working session, and on Android the local discovery only restarts when the transport actually changed
+* QUIC uses a 20 s keepalive with a 45 s idle timeout and a 4 s direct dial budget for slow mobile networks
+
 ## 0.2.3 preview
 
 Preview dated 2026-09-17 with the AI bar, the phone terminal and connection fixes, the mobile home screen, the Windows console fix and the Linux sidecar fix on top of 0.2.2, whose desktop build was never published.
