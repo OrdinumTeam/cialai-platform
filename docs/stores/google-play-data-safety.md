@@ -1,8 +1,14 @@
 # Google Play Data Safety Answers
 
-Status: proposed answers for the first Android build
+Status: answered in Play Console on 16/09/2026 and sent for review
 
-Owner action required: verify these answers against the signed AAB and every included SDK, publish the privacy policy on a public URL and complete the Data safety form in Play Console.
+The form was filled with the answers below and the privacy policy URL points to
+`https://cialai.com.br/privacy-policy`. Answering no to the first question skips
+the data type and data handling steps, so no category is declared.
+
+Owner action still required: the audit at the end of this page was not performed
+against the signed AAB. The answers rest on the dependency list in the
+repository, not on an inspection of the shipped binary.
 
 ## Collection and sharing
 

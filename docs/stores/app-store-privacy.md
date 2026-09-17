@@ -1,8 +1,14 @@
 # App Store Privacy Answers
 
-Status: proposed answers for the first iOS build
+Status: answered and published in App Store Connect on 16/09/2026
 
-Owner action required: verify these answers against the archived binary and every included SDK, publish the privacy policy on a public URL, enter the answers in App Store Connect and publish them.
+The product page shows Data Not Collected. The privacy policy URL points to
+`https://cialai.com.br/privacy-policy` in the pt-BR localization. The User
+Privacy Choices URL stays empty, as planned.
+
+Owner action still required: the audit at the end of this page was not performed
+against the archived binary. The answers rest on the dependency list in the
+repository, not on an inspection of the shipped build.
 
 ## Privacy policy
 

@@ -1,6 +1,11 @@
 # Cialai para as lojas em pt-BR
 
-Status: texto preparado, publicação pendente
+Status: publicado nas duas lojas em 16/09/2026, em revisão
+
+Este texto está aplicado na ficha pt-BR do Google Play e do App Store Connect. A
+descrição completa entrou igual nas duas. As novidades da versão entraram só no
+Play: a Apple recusa o campo na primeira versão de um app, porque ele descreve
+mudanças em relação a uma versão anterior.
 
 ## Nome
 
@@ -87,11 +92,25 @@ Esta é a primeira versão do Cialai para celular:
 O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser configurado.
 ```
 
-## Campos dependentes do usuário
+## Palavras chave da App Store
 
-| Campo | Ação |
+<!-- ASC_KEYWORDS_START -->
+```text
+ssh,shell,console,cli,comandos,codigo,programar,desenvolvedor,remoto,git,arquivos,agente
+```
+<!-- ASC_KEYWORDS_END -->
+
+São 88 dos 100 caracteres. Nome e subtítulo ficam de fora porque a Apple já os
+indexa, e nenhuma marca de terceiro entra, o que causaria rejeição. Escolha
+feita junto com a categoria, ainda sem medição de desempenho na busca.
+
+## Campos resolvidos
+
+| Campo | Valor |
 | --- | --- |
-| URL de suporte | Publicar e informar |
-| URL de marketing | Publicar e informar |
-| URL da política de privacidade | Publicar `docs/legal/privacy-policy-pt-BR.md` e informar |
-| Palavras chave | Revisar após a definição da categoria final |
+| URL de suporte | `https://cialai.com.br` |
+| URL de marketing | `https://cialai.com.br` |
+| URL da política de privacidade | `https://cialai.com.br/privacy-policy` |
+| Categoria no Google Play | Ferramentas |
+| Categoria na App Store | Developer Tools, com Utilities como secundária |
+| Copyright da App Store | `2026 Ordinum Inovação e Tecnologia Ltda.` |
