@@ -245,9 +245,10 @@ workflows:
       - name: Gerar projeto Android
         script: |
           set -euo pipefail
-          # O AGP 8.12 pede o alvo android-37 por causa do tor-android, que exige minCompileSdk 37. O pacote
-          # da plataforma entra antes do Gradle; a listagem do SDK fica como artefato porque a máquina do
-          # Codemagic ainda não resolve esse alvo, ao contrário de um SDK local com o mesmo pacote.
+          # O tor-android exige minCompileSdk 37 e a API 37 só existe com versão menor, então o pacote da
+          # plataforma é android-37.0 e entra antes do Gradle. O alvo é apontado pelo plugin
+          # with-android-compile-sdk-minor, que informa compileSdkMinor ao AGP. A listagem do SDK fica como
+          # artefato para diagnosticar rápido se a máquina mudar o conjunto de plataformas.
           sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/share/android-sdk}}"
           sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
           [[ -x "$sdkmanager_bin" ]] || sdkmanager_bin="$(command -v sdkmanager)"
