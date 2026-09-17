@@ -1,0 +1,22 @@
+Image 1 is a real screenshot of the Cialai phone app in dark mode. Use it ONLY as the reference for typography (the San Francisco system font), text sizes, density, corner radii and the hot pink accent. Do NOT copy its content, do NOT reproduce its top bar with a computer name, and do not leave any ghost of it anywhere.
+
+Create a PURE APPLICATION SCREENSHOT of a different screen of the same app: the pairing confirmation screen, portrait, dark mode, pure black background #000000.
+
+Layout, top to bottom, all text in Brazilian Portuguese exactly as written:
+- The top of the canvas is empty black. No header bar, no navigation bar.
+- The content block sits in the upper-middle of the canvas with 24 px side margins.
+- Title in large bold white #F5F5F7, 28 pt, left aligned, wrapping to two lines: "Vincular a MacBook de Ana?"
+- Below it a rounded card, background #1C1C1E, hairline border, radius 18, padding 18, containing in order:
+  · small label 13 pt semibold gray #AEAEB2: "Impressão digital do computador"
+  · one monospace line 22 pt white #F5F5F7 with slight letter spacing: "7f3a 9c1e 42b8 d05e"
+  · hint 14 pt gray #8E8E93: "Confira se é a mesma exibida no computador antes de vincular."
+  · small label 13 pt semibold gray #AEAEB2: "Código de aprovação"
+  · the code in 28 pt semibold white #F5F5F7 with wide letter spacing: "7305"
+  · hint 14 pt gray #8E8E93: "Se o computador pedir aprovação, confira se ele mostra este mesmo código."
+- 24 px below the card, a full-width pill button, 50 pt tall, fully rounded, solid hot pink #FF7AB2, with centered text 17 pt semibold in deep plum #3A1B33: "Vincular"
+- Below it a centered text button, 17 pt semibold hot pink #FF7AB2, no background: "Ler outro código"
+- Everything below that is empty black surface down to the bottom of the canvas.
+
+TEXT RULE: reproduce every string listed above letter by letter, with the accents exactly as written, nothing more and nothing less. No other words, labels or numbers anywhere. No icons beyond the ones listed. No QR code, no address, no path, no token.
+
+SCREEN RULE: this is a pure application screenshot. The interface fills the ENTIRE canvas edge to edge: no phone, no device frame, no window, no bezel, no margins, no shadow, no rounded outer corners, no background around it, no status bar, no clock. Straight-on, pixel-crisp, flat, no glow, no gradient, no texture, no blur. No text outside the interface. No watermark.

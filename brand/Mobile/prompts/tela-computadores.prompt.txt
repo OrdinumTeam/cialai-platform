@@ -1,0 +1,17 @@
+Image 1 is a real screenshot of the Cialai phone app in dark mode. Use it ONLY as the reference for typography (the San Francisco system font), text sizes, density, corner radii and the hot pink accent. Do NOT copy its content, do NOT reproduce its top bar with a computer name, and do not leave any ghost of it anywhere.
+
+Create a PURE APPLICATION SCREENSHOT of a different screen of the same app: the "Computadores" screen, portrait, dark mode, pure black background #000000.
+
+Layout, top to bottom, all text in Brazilian Portuguese exactly as written:
+- About 60 px of empty black at the top. No status bar.
+- Header row with 24 px side margins: on the left the title "Computadores" in large bold white #F5F5F7, 34 pt, and directly under it the subtitle "Escolha onde deseja continuar" in 17 pt gray #AEAEB2. On the right, bottom aligned with the title, the word "Ajustes" in 17 pt medium hot pink #FF7AB2.
+- A vertical list of three cards with 20 px side margins and 12 px gaps. Each card: background #1C1C1E, hairline border, radius 16, padding 16. Inside each card, on the left a 10 px round status dot, then a text column: the computer name in 17 pt semibold white #F5F5F7; the state in 15 pt gray #AEAEB2; then a meta row with a small chip (background #26262A, radius 6, holding a 7 px dot and 12 pt semibold gray #AEAEB2 text) followed by 13 pt gray #8E8E93 text. In the bottom right corner of each card the word "Opções" in 15 pt semibold hot pink #FF7AB2.
+  · Card 1: green dot #3CCF76; "MacBook de Ana"; "Conectado"; chip with a green dot and "Direta"; "Último acesso 16/09/2026, 09:41"
+  · Card 2: gray dot #8E8E93; "Mac de demonstração"; "Não conectado"; chip with an amber dot #F0A629 and "Reserva"; "Último acesso 15/09/2026, 18:20"
+  · Card 3: red dot #FF5C5C; "Mac mini do estúdio"; "Fora de alcance"; chip with a green dot and "Direta"; "Último acesso 12/09/2026, 22:05"
+- Below the cards a full-width pill button, 50 pt tall, fully rounded, solid hot pink #FF7AB2, with centered text 17 pt semibold in deep plum #3A1B33: "Vincular outro"
+- Everything below that is empty black surface down to the bottom of the canvas.
+
+TEXT RULE: reproduce every string listed above letter by letter, with the accents exactly as written, nothing more and nothing less. No other words, labels or numbers anywhere. No icons beyond the ones listed. No QR code, no address, no path, no token.
+
+SCREEN RULE: this is a pure application screenshot. The interface fills the ENTIRE canvas edge to edge: no phone, no device frame, no window, no bezel, no margins, no shadow, no rounded outer corners, no background around it, no status bar, no clock. Straight-on, pixel-crisp, flat, no glow, no gradient, no texture, no blur. No text outside the interface. No watermark.

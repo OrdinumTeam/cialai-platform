@@ -1,0 +1,19 @@
+Image 1 is a real screenshot of the Cialai phone app in dark mode. Use it ONLY as the reference for typography (the San Francisco system font), text sizes, density, corner radii and the hot pink accent. Do NOT copy its content, do NOT reproduce its top bar with a computer name, and do not leave any ghost of it anywhere.
+
+Create a PURE APPLICATION SCREENSHOT of a different screen of the same app: the "Ajustes" screen, portrait, dark mode, pure black background #000000.
+
+Layout, top to bottom, all text in Brazilian Portuguese exactly as written:
+- About 60 px of empty black at the top. No status bar.
+- A 56 px navigation row: the word "Computadores" in 16 pt semibold hot pink #FF7AB2 sits at the far left, no chevron; the title "Ajustes" in 18 pt bold white #F5F5F7 sits exactly at the horizontal center of the row.
+- Content with 18 px side margins. Each section starts with a small label written in capital letters, 13 pt semibold gray #AEAEB2, with a 10 px top margin; the label text is only the words quoted below, nothing else, followed by a segmented control: a rounded container with background #1C1C1E, hairline border, radius 12 and 3 px inner padding, holding equal width segments 38 px tall with radius 9; the selected segment is solid hot pink #FF7AB2 with semibold text in deep plum #3A1B33; the other segments show semibold white #F5F5F7 text on the container. Sections in order:
+  1. Label "IDIOMA". Segments: "Português" selected, "English", "Español".
+  2. Label "APARÊNCIA". Segments: "Sistema", "Claro", "Escuro" selected.
+  3. Label "FACE ID OU BIOMETRIA". Segments: "Sempre" selected, "Só ao abrir", "Desligada". Directly under the control a hint in 13 pt gray #AEAEB2: "Confirma ao abrir o computador e em cada ação no terminal."
+  4. Label "NÍVEL DE LOG". Segments: "Erros", "Informações" selected, "Diagnóstico".
+  5. Label "DIAGNÓSTICO AVANÇADO". A card with background #1C1C1E, radius 16, holding one 44 px row with the text "Mostrar detalhes" in 15 pt semibold hot pink #FF7AB2.
+  6. Label "SOBRE". A card with background #1C1C1E, radius 16, padding 16, holding two lines: "Aplicativo 0.2.2" in 14 pt white #F5F5F7 and "Licenças de código aberto disponíveis no repositório do Cialai" in 14 pt gray #AEAEB2.
+- Any remaining space below is empty black surface.
+
+TEXT RULE: reproduce every string listed above letter by letter, with the accents exactly as written, nothing more and nothing less. No other words, labels or numbers anywhere. No icons beyond the ones listed. No QR code, no address, no path, no token.
+
+SCREEN RULE: this is a pure application screenshot. The interface fills the ENTIRE canvas edge to edge: no phone, no device frame, no window, no bezel, no margins, no shadow, no rounded outer corners, no background around it, no status bar, no clock. Straight-on, pixel-crisp, flat, no glow, no gradient, no texture, no blur. No text outside the interface. No watermark.
