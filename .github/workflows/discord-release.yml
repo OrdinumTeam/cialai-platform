@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Anúncio no Discord
+
+# Reenvio manual do anúncio de uma release. O envio automático fica no fim do
+# `release.yml`, porque a release é publicada com o `GITHUB_TOKEN` e um evento
+# assinado por ele não dispara outro workflow.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to announce, for example v0.2.5
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: discord-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  announce:
+    name: Announce on Discord
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Enviar o anúncio
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GH_REPO: ${{ github.repository }}
+        run: node tools/release/discord-notify.mjs "${{ inputs.tag }}"

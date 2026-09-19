@@ -36,6 +36,22 @@ espelho ser refeito.
 **iOS.** Sai do workflow `ios-testflight` no Codemagic e vai direto ao
 TestFlight. Não há arquivo para baixar.
 
+## Anúncio no Discord
+
+Toda release publicada é anunciada num canal do Discord. O texto vem desta
+pasta: `tools/release/discord-notify.mjs` lê o `Resumo` e os `Destaques` da
+página da versão e monta a mensagem. Por isso a página precisa existir antes da
+tag, e o portão `check:discord-release` recusa uma versão sem página.
+
+O envio automático é o último passo do `release.yml`, depois da publicação. Ele
+não usa o evento `release`, porque uma release publicada com o `GITHUB_TOKEN`
+não dispara outro workflow. Para reenviar à mão existe o workflow `Anúncio no
+Discord`, que recebe a tag.
+
+O endereço do webhook mora só no segredo `DISCORD_WEBHOOK` do repositório
+público. O mesmo portão varre os arquivos versionados e recusa qualquer endereço
+de webhook escrito em arquivo.
+
 ## Mudança de repositório
 
 Até a 0.2.0 as releases saíram de `Cialai/cialai`. Em 15/09/2026 a organização

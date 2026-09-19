@@ -1,76 +1,20 @@
 ## Cialai {{version}} preview
 
-This is an early preview of Cialai for macOS, Windows, Linux and Android. It is meant for people who want to try the terminal studio and report problems. Expect rough edges.
+An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect rough edges.
 
-**The macOS app is signed with the Ordinum Developer ID and notarized by Apple.** It opens like any other app downloaded from the internet. **The Windows installers are not signed with a code signing certificate yet**, so Windows will warn you before the first launch. In app updates are verified with the Cialai updater key on every system.
+**macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-**The studio now draws your documentation.** A tab in the central area shows every Markdown file of the folder you are working in, and only the folders that lead to them, as a graph you can move through. A project with a thousand folders and documentation in ten areas shows ten areas and the paths to them, nothing else. Open it from the work area header, from the command palette, with Shift Cmd D or Shift Ctrl D, or from Show in the documentation graph in the explorer menu. Clicking a document opens it in the same editor. The scan reads paths and dates only, never the contents of your files.
+* **The studio draws your documentation.** A tab shows every Markdown file of the folder you work in, and only the folders that lead to them. Open it with Shift Cmd D, from the command palette or from the explorer menu.
+* **Agent accounts are picked in the interface.** A screen lists every Claude Code and Codex profile with its plan and usage, and chooses which one new sessions use. It never moves or reads a credential.
+* **Session activity says what is happening.** It comes from the agent turn and the age of the last output, so an agent that already answered stops animating.
+* **A floating composer on the phone.** Write a long instruction with the device keyboard and send it only through Insert or Send.
+* **A session menu on the phone.** Rename, colour, pin, move, change folder, restart and close, by long press or the three dot button.
+* **A folder picker that reaches the disk.** Open a session in the project root itself and browse the rest with a trail.
+* **One path contract on Windows.** Going up from `C:/Users` reaches the drive root, and the explorer stops switching roots on its own.
 
-**Agent accounts are chosen in the interface, not typed into a terminal.** A screen lists every Claude Code and Codex profile found on the computer with its plan and its window usage, marks the one in use and lets you pick another one for new sessions. A task already running stays on the account it started on. Cialai only chooses which folder the agent uses: it never moves a credential file, never copies one and never reads one.
-
-**Session activity says what is actually happening.** An agent that already answered shows Answer delivered with a still dot instead of animating until you quit it, an idle `ssh` or `python` prompt shows Process open, and a quiet process never turns into finished. After a dropped connection the list corrects itself in one poll.
-
-**On the phone**, a floating composer lets a long instruction be written and reviewed with the device keyboard, selection, clipboard, autocorrect and dictation before it reaches the terminal, every session card has the same menu the computer has, and the folder picker reaches the whole disk within the limits the computer sets.
-
-**On Windows**, paths follow one contract on both sides: going up from `C:/Users` reaches the drive root, dropping a file from Explorer works and the explorer no longer keeps switching roots.
-
-### New in 0.2.4
-
-Your phone reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
-
-### New in 0.2.3
-
-* **AI bar.** A retractable panel on the right of the content shows one ring per Claude Code and Codex account found on the computer, with the current session usage of each plan, the weekly and per model windows in the detail, and the activity of the session that runs in the studio. Open, collapsed or hidden, with Shift Cmd N or Shift Ctrl N, the View menu and a section in Preferences. Usage is read from the tools' own files, the Claude Code CLI and the official endpoints, never written, and no alert is on by default.
-* The phone terminal no longer types by itself after switching sessions or computers or after a dropped connection: the replayed history never produces input, reattaching backs off from 500 ms to 8 s, and wheel reports are only sent while the program tracks the mouse.
-* Accented characters and ç typed on the phone come out once and correctly.
-* The phone connection is stable: the health probe uses a local route that the loopback proxy answers without a cookie, losing health shows a Reconnecting banner instead of unmounting the page, the proxy is reused for the same computer, readopting the same path no longer closes the terminals, and there is one retry ladder from 2 s to 16 s.
-* The mobile app has a home screen with the last computer, Computers, Pair, Terminal and Settings, and every back button leads to it. These mobile fixes ship with the next mobile build.
-* On Windows the app no longer opens console windows for Git, the tunnel core or the diagnostic, and the tunnel core is restarted at most ten times per ten minutes.
-* The Linux AppImage finds its tunnel core inside the mounted image, so the network is ready from the first launch on Arch Linux and every other distribution installed by `install.sh`, which now also creates the menu entry and icons, decides the package by `/etc/os-release` and updates with the app open.
-
-### New in 0.2.2
-
-* The phone screens follow the presentation of the Ordinum Control iPhone app: flat toolbar icons, a single scrolling row of keys starting with Esc and Enter, session cards with the session colour and a 13 px terminal.
-* The phone connection no longer restarts every few seconds while sessions produce output. The desktop bridge dropped the whole connection when its output queue filled, which happened on every replay of the session histories; a full queue now detaches only the lagging terminal, which the page reattaches on its own.
-* A short hide of the phone page, such as a Face ID prompt, keeps the connection instead of reconnecting.
-* Touch scrolling inside a program that uses the alternate screen no longer sends arrow keys, which recalled the prompt history in Claude Code.
-* Face ID or biometrics can be set in the mobile settings to always, only when opening the computer, or off.
-
-### Fixed in 0.2.1
-
-* The Linux AppImage no longer aborts on recent distributions with an EGL display error, and terminals opened from it no longer inherit the variables of the AppImage, which broke Python, Git over HTTPS and curl.
-* On Linux the session card follows the folder and command of each shell after `cd` and `exec`, and the AI usage shows the right Claude Code or Codex profile behind launcher scripts.
-* The terminal blends into the light and dark themes without a black frame, and the search and copy buttons that did nothing were removed from the session header. Cmd F or Ctrl F still searches the output.
-* The macOS disk image is notarized and stapled by Apple, not only the app inside it.
-
-### Pair your phone again
-
-Phones paired with a 0.1.x preview are not carried over. After updating the desktop and the Android app:
-
-1. Open Cialai on the computer and choose Pair phone.
-2. Scan the QR code with the Cialai app on the phone. The code changes every 90 seconds and expires after 10 minutes.
-3. If approval is enabled, check the code on the computer and click Authorize.
-
-On the same network the phone connects right away. From another network it waits until the backup connection is ready.
-
-### Public networks used
-
-Cialai runs no server of its own, and neither does Ordinum. The connection uses only these public networks:
-
-| Network | Purpose |
-| --- | --- |
-| Tor network | Meeting point and backup connection |
-| STUN servers from Cloudflare and Google | Optional, finds the public address for the direct connection |
-| DNS-SD on your local network | Lets the phone find the computer nearby |
-
-### Known limits
-
-* The computer must be on with Cialai open.
-* Networks that block both Tor and UDP leave the phone without a connection.
-* The backup through Tor is slower than a direct connection.
-* This preview passed automated tests, including tests against the real Tor network. Checks on real phones and networks are still pending.
+Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
 ### Which file to download
 
@@ -84,37 +28,23 @@ Cialai runs no server of its own, and neither does Ordinum. The connection uses 
 | Other Linux distributions | `Cialai_amd64.AppImage` |
 | Android 8 or newer | `Cialai_android_universal.apk` |
 
-iOS is coming soon through TestFlight.
+On iPhone the preview goes through TestFlight, so there is no file to download.
 
-### Open the app on macOS
+### Install
 
-1. Open the DMG and drag Cialai to Applications.
-2. Open Cialai. On the first launch macOS reminds you that the app was downloaded from the internet. Click Open.
+**macOS.** Open the DMG, drag Cialai to Applications, then open it and click Open on the first launch.
 
-### Install on Windows
+**Windows.** Run the setup or the MSI. On the SmartScreen warning click More info, then Run anyway.
 
-1. Run the setup or the MSI installer.
-2. If Microsoft Defender SmartScreen shows Windows protected your PC, click More info.
-3. Click Run anyway.
+**Linux.** `sudo apt install ./Cialai_amd64.deb`, `sudo dnf install ./Cialai_x86_64.rpm`, or make the AppImage executable with `chmod +x` and run it. The app updates itself in all three formats.
 
-### Install on Linux
+**Android.** Download the APK on the phone, allow installing unknown apps when Android asks, then open it.
 
-The DEB and RPM packages use the libraries of your system and are the best choice where they apply. The app updates itself in all three formats.
-
-* Debian and Ubuntu: `sudo apt install ./Cialai_amd64.deb`
-* Fedora: `sudo dnf install ./Cialai_x86_64.rpm`
-* openSUSE: `sudo zypper install ./Cialai_x86_64.rpm`
-* Other distributions: make the AppImage executable with `chmod +x Cialai_amd64.AppImage` and run it.
-
-### Install on Android
-
-1. Download the APK on the phone.
-2. Allow your browser or file manager to install unknown apps when Android asks.
-3. Open the APK and confirm the installation.
+**macOS and Linux in one line.** `curl -fsSL https://cialai.com.br/install.sh | bash`
 
 ### Verify your download
 
-`SHA256SUMS` lists the checksum of every file in this release.
+`SHA256SUMS` lists the checksum of every file here.
 
 ```sh
 shasum -a 256 -c SHA256SUMS --ignore-missing
@@ -122,6 +52,12 @@ shasum -a 256 -c SHA256SUMS --ignore-missing
 
 Use `sha256sum` instead of `shasum -a 256` on Linux.
 
+### Public networks and limits
+
+Cialai runs no server of its own, and neither does Ordinum. The connection uses the Tor network as meeting point and backup, optional STUN servers from Cloudflare and Google, and DNS-SD on your local network.
+
+The computer must be on with Cialai open. A network that blocks both Tor and UDP leaves the phone without a path, and the backup through Tor is slower than a direct connection.
+
 ### Report a problem
 
-Open an issue at https://github.com/Cialai/cialai/issues with your system, the file you installed and what happened.
+Open an issue at https://github.com/OrdinumTeam/cialai-platform/issues with your system, the file you installed and what happened.

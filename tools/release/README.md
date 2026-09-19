@@ -40,6 +40,29 @@ gh release upload v0.1.0 Cialai_android_universal.apk --repo Cialai/cialai --clo
 GH_REPO=Cialai/cialai node tools/release/release-assets.mjs checksums v0.1.0
 ```
 
+## Anúncio no Discord
+
+`discord-notify.mjs` monta o anúncio a partir de `docs/releases/<versao>.md`,
+com o `Resumo` e os `Destaques` da página, e envia ao webhook do canal.
+
+| Comando | Ação |
+| --- | --- |
+| `node tools/release/discord-notify.mjs v0.2.5 --dry-run` | Imprime o payload sem enviar |
+| `DISCORD_WEBHOOK=... node tools/release/discord-notify.mjs v0.2.5` | Envia |
+
+O envio automático é o último passo do `release.yml`, depois da publicação, e o
+workflow `discord-release.yml` reenvia à mão pela tag. O endereço do webhook
+existe só como segredo `DISCORD_WEBHOOK` do repositório, cadastrado sem exibir
+valor:
+
+```sh
+gh secret set DISCORD_WEBHOOK --repo OrdinumTeam/cialai-platform < caminho/do/arquivo
+```
+
+O portão `check:discord-release` exige que a versão do `package.json` tenha
+página em `docs/releases`, que toda página tenha as duas seções e que nenhum
+arquivo versionado carregue endereço de webhook.
+
 ## Builds móveis no Codemagic
 
 Os workflows em `codemagic.yaml` não têm disparo automático. Os atalhos desta pasta usam a API do Codemagic somente quando as variáveis locais são fornecidas de forma explícita.

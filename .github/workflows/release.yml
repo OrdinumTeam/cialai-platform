@@ -361,3 +361,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: node tools/release/release-assets.mjs publish "$RELEASE_TAG"
+      # Depois de publicada, não antes: o anúncio aponta para uma página que já
+      # existe. O endereço do webhook só existe como segredo do repositório.
+      - name: Anunciar no Discord
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          GH_REPO: ${{ github.repository }}
+        run: node tools/release/discord-notify.mjs "$RELEASE_TAG"
