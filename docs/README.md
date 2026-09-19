@@ -14,6 +14,7 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | `arquitetura/` | Desenho do sistema, desktop, mobile, rede, protocolo e diferenças entre sistemas |
 | `engenharia/` | Monorepo, CI e distribuição, progresso, credenciais e release da versão 1 |
 | `testes/` | Roteiros de validação em aparelhos, redes e máquinas reais |
+| `releases/` | Uma página por versão publicada, com ficha, mudanças e como atualizar |
 | `stores/` | Textos e metadados das lojas |
 | `review/` | Material para a revisão das lojas |
 | `legal/` | Política de privacidade e termos de uso |
@@ -49,6 +50,8 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | 09 | [Monorepo e ferramentas](./engenharia/09-monorepo-e-ferramentas.md) | Estrutura de pastas, toolchains, scripts, testes por pacote e convenções |
 | 10 | [CI/CD e distribuição](./engenharia/10-ci-cd-e-distribuicao.md) | GitHub Actions, Codemagic, identificadores, credenciais por referência, lojas e releases |
 | v1 | [Procedimento da versão 1](./engenharia/release-v1.md) | Portões e passos para publicar a primeira versão estável |
+
+Fora da numeração, [Releases publicadas](./releases/README.md) traz uma página por versão, com a ficha da entrega, o que mudou, quais arquivos foram publicados e como atualizar.
 
 Cada documento de 01 a 12 começa com um quadro datado. Os estados usados são `Implementado`, `Preparado` e `Pendente`. O roteiro não considera workflow escrito como workflow executado, binding gerado como aplicativo nativo compilado, nem material de loja como submissão.
 
