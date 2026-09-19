@@ -2732,7 +2732,11 @@ mod tests {
             .expect("spawn");
         let mut queries = LaterCursorQueries::new("age", &manager, info.id);
         let mut output = Vec::new();
-        manager.write(info.id, b"echo idade-da-saida\n").unwrap();
+        // Pelo `shell`, que sabe o comando e o fim de linha de cada sistema: o
+        // `cmd` nao envia a linha com `\n` sozinho.
+        manager
+            .write(info.id, &shell.print("idade-da-saida"))
+            .unwrap();
         assert!(collect_until_printed(
             &rx,
             &mut queries,
