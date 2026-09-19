@@ -6,7 +6,19 @@ This is an early preview of Cialai for macOS, Windows, Linux and Android. It is 
 
 ### What is new
 
-Your phone now reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
+**The studio now draws your documentation.** A tab in the central area shows every Markdown file of the folder you are working in, and only the folders that lead to them, as a graph you can move through. A project with a thousand folders and documentation in ten areas shows ten areas and the paths to them, nothing else. Open it from the work area header, from the command palette, with Shift Cmd D or Shift Ctrl D, or from Show in the documentation graph in the explorer menu. Clicking a document opens it in the same editor. The scan reads paths and dates only, never the contents of your files.
+
+**Agent accounts are chosen in the interface, not typed into a terminal.** A screen lists every Claude Code and Codex profile found on the computer with its plan and its window usage, marks the one in use and lets you pick another one for new sessions. A task already running stays on the account it started on. Cialai only chooses which folder the agent uses: it never moves a credential file, never copies one and never reads one.
+
+**Session activity says what is actually happening.** An agent that already answered shows Answer delivered with a still dot instead of animating until you quit it, an idle `ssh` or `python` prompt shows Process open, and a quiet process never turns into finished. After a dropped connection the list corrects itself in one poll.
+
+**On the phone**, a floating composer lets a long instruction be written and reviewed with the device keyboard, selection, clipboard, autocorrect and dictation before it reaches the terminal, every session card has the same menu the computer has, and the folder picker reaches the whole disk within the limits the computer sets.
+
+**On Windows**, paths follow one contract on both sides: going up from `C:/Users` reaches the drive root, dropping a file from Explorer works and the explorer no longer keeps switching roots.
+
+### New in 0.2.4
+
+Your phone reaches your computer with no server to set up. When Cialai opens, the computer prepares a direct encrypted connection and an embedded Tor onion service as backup. The phone tries the local network first, then a direct connection over the internet, then the backup through Tor, and moves to a direct connection when the network allows. The Devices screen and the phone show a **Direct** or **Backup** badge for each connection.
 
 ### New in 0.2.3
 

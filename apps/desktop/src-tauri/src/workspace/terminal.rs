@@ -2378,8 +2378,7 @@ mod tests {
     ) -> bool {
         let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
-            let seen = String::from_utf8_lossy(output).matches(text).count();
-            if seen >= 2 {
+            if printed_line(output, text) {
                 return true;
             }
             match rx.recv_timeout(Duration::from_millis(200)) {
@@ -2392,6 +2391,53 @@ mod tests {
             }
         }
         false
+    }
+
+    /// A resposta e a linha que comeca pelo texto, nao uma aparicao qualquer
+    /// dele na saida. O terminal ecoa o que foi escrito, e um shell que ainda
+    /// estava abrindo redesenha a mesma linha depois de imprimir o prompt,
+    /// entao contar aparicoes confunde a pergunta com a resposta e o teste
+    /// termina cedo quando a maquina esta carregada.
+    fn printed_line(output: &[u8], text: &str) -> bool {
+        without_escapes(&String::from_utf8_lossy(output))
+            .split(['\n', '\r'])
+            .any(|line| line.trim_start().starts_with(text))
+    }
+
+    /// Tira as sequencias de escape para a linha valer pelo que ela mostra.
+    fn without_escapes(text: &str) -> String {
+        let mut plain = String::with_capacity(text.len());
+        let mut chars = text.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch != '\u{1b}' {
+                plain.push(ch);
+                continue;
+            }
+            match chars.next() {
+                // CSI: parametros ate um final entre `@` e `~`.
+                Some('[') => {
+                    for next in chars.by_ref() {
+                        if ('\u{40}'..='\u{7e}').contains(&next) {
+                            break;
+                        }
+                    }
+                }
+                // OSC: termina em BEL ou em ESC seguido de barra invertida.
+                Some(']') => {
+                    while let Some(next) = chars.next() {
+                        if next == '\u{7}' {
+                            break;
+                        }
+                        if next == '\u{1b}' {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        plain
     }
 
     /// Esvazia o canal em segundo plano e devolve a mensagem de fim quando ela chega.
@@ -2630,7 +2676,13 @@ mod tests {
     /// que o explorador e os recentes guardavam.
     /// Conta escolhida na interface chega ao shell novo como variavel de
     /// ambiente. O cliente nunca manda caminho: a pasta sai da preferencia e
-    /// da pasta pessoal, e uma pasta sem marcador nao muda nada.
+    /// da pasta pessoal.
+    ///
+    /// A ida ao shell fica no POSIX porque a leitura da variavel e escrita na
+    /// sintaxe dele. Quais variaveis cada escolha produz, inclusive a pasta que
+    /// nao existe e a pasta sem marcador, e o `agent_profiles::env_for` que
+    /// responde, com teste proprio e em todo sistema.
+    #[cfg(unix)]
     #[test]
     fn the_active_profile_reaches_the_new_shell_as_environment() {
         let home = scratch("perfil-ativo");
@@ -2688,13 +2740,11 @@ mod tests {
         // padrao dele.
         let mut default = Preferences::default();
         default.agents.active_profile.set("codex", "codex");
-        assert!(echo(&default, "t_perfil_padrao").contains("casa=[]"));
-
-        // Sem escolha, e com pasta que nao existe, nada e tocado.
-        assert!(echo(&Preferences::default(), "t_sem_perfil").contains("casa=[]"));
-        let mut missing = Preferences::default();
-        missing.agents.active_profile.set("codex", "codex-sumiu");
-        assert!(echo(&missing, "t_perfil_sumido").contains("casa=[]"));
+        let seen = echo(&default, "t_perfil_padrao");
+        assert!(
+            seen.contains("casa=[]"),
+            "o perfil padrao tira a variavel: {seen}"
+        );
 
         let _ = std::fs::remove_dir_all(home);
     }

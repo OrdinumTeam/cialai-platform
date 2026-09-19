@@ -46,6 +46,28 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.5 preview
+
+Preview dated 2026-09-19. The studio gained a documentation graph, session activity that says what is actually happening, and agent account switching from the interface. The phone gained a floating composer, a session menu and a folder picker that reaches the whole disk. Windows paths follow one contract on both sides.
+
+### Added
+
+* A documentation graph in the central area of the studio. It draws every Markdown file of the session folder, and only the folders that lead to them, as a navigable force graph: a project with a thousand folders and documentation in ten areas shows ten areas and the paths to them, nothing else. It opens from the work area header, from the command palette, from Shift Cmd D or Shift Ctrl D and from Show in the documentation graph in the explorer context menu, opens documents in the same editor and refreshes through the same file watchers. The scan reads paths and metadata only, never file contents, and never follows a symbolic folder
+* An agent accounts screen that lists every Claude Code and Codex profile found on the computer with its plan and window usage, marks the one in use and offers to use another one for new sessions. It opens from the phone session list and from Preferences on the computer. Cialai only chooses which folder the agent uses: it never moves `auth.json`, never copies a credential and never reads one
+* A floating composer on the phone terminal, where a long instruction can be written, corrected and reviewed with the device keyboard, selection, clipboard, autocorrect and dictation, and reaches the terminal only through Insert or Send
+* A session menu on the phone with rename, subtitle, colour, pin, move, new session in this folder, change folder, copy path, restart and close, reached by a three dot button or a long press
+* A Windows test script and a diagnostic collector for the checks that need the real system
+
+### Fixed
+
+* Session activity is derived from the agent turn and the age of the last terminal output by a single pure function, so an agent that already answered shows Answer delivered with a still dot, an idle `ssh` or `python` prompt shows Process open, and a quiet process never turns into finished
+* Sessions no longer look busy or disconnected after the connection drops and comes back. Activity evidence is invalidated when the bridge falls, replayed history no longer counts as new output, and a parked session with a live terminal gets its state from the desktop without being reattached
+* A collapsed side column no longer disappears without a trace. The rail that brings it back is 28 px wide, clickable along its whole length, and shows the session count with a pending attention badge on the left and the Git change count on the right
+* The folder picker offers each project root itself, so a session can open in the root instead of only in its subfolders, and browses the rest of the disk with a trail, Folder above, Use this folder and tap to descend
+* The mobile app always opens on the Home screen, even when the last computer answers, and nothing connects before the first tap
+* Windows paths follow one contract on both sides. Going up from `C:/Users` reaches the drive root instead of an invalid `C:`, folders compare without case on a file system that ignores it, dropping a file from Explorer works, and the explorer no longer keeps switching roots
+* A desktop window that fails to paint is no longer a dead rectangle. The startup safety net acts on a positive signal from the interface, and after the deadline the window grows, becomes resizable again and gets the system frame so it can be moved and closed
+
 ## 0.2.4 preview
 
 Preview dated 2026-09-18. The iOS and Android apps ship the phone connection, terminal and navigation work that landed in 0.2.3, which until now existed only on the desktop side. The desktop app is unchanged from 0.2.3 and does not need to be updated: every fix below is either inside the phone app or inside the page the desktop already serves.
