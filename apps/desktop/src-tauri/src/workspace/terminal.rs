@@ -667,8 +667,9 @@ impl TerminalManager {
     }
 
     /// Troca a pasta pessoal do gerenciador, para um teste apontar para uma
-    /// arvore sintetica em vez do `HOME` de quem roda a suite.
-    #[cfg(test)]
+    /// arvore sintetica em vez do `HOME` de quem roda a suite. Existe onde
+    /// existe quem o chama, e quem o chama e um teste de shell POSIX.
+    #[cfg(all(test, unix))]
     fn with_home(mut self, home: PathBuf) -> Self {
         self.home = home;
         self
@@ -2370,6 +2371,11 @@ mod tests {
     /// Espera o texto aparecer duas vezes, no eco do comando e na saída. No Windows a
     /// saída de um comando seguido de exit na mesma linha pode se perder quando o ConPTY
     /// fecha, então o teste só sai depois de ver o texto.
+    /// Espera o texto aparecer na saida.
+    ///
+    /// Quem escreve manda o shell montar o texto a partir de dois pedacos, por
+    /// `TestShell::print` ou pelo proprio comando, entao o texto nao viaja no
+    /// eco do que foi escrito e a primeira aparicao dele ja e a resposta.
     fn collect_until_printed(
         rx: &Receiver<InvokeResponseBody>,
         queries: &mut LaterCursorQueries,
@@ -2378,7 +2384,7 @@ mod tests {
     ) -> bool {
         let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
-            if printed_line(output, text) {
+            if String::from_utf8_lossy(output).contains(text) {
                 return true;
             }
             match rx.recv_timeout(Duration::from_millis(200)) {
@@ -2391,53 +2397,6 @@ mod tests {
             }
         }
         false
-    }
-
-    /// A resposta e a linha que comeca pelo texto, nao uma aparicao qualquer
-    /// dele na saida. O terminal ecoa o que foi escrito, e um shell que ainda
-    /// estava abrindo redesenha a mesma linha depois de imprimir o prompt,
-    /// entao contar aparicoes confunde a pergunta com a resposta e o teste
-    /// termina cedo quando a maquina esta carregada.
-    fn printed_line(output: &[u8], text: &str) -> bool {
-        without_escapes(&String::from_utf8_lossy(output))
-            .split(['\n', '\r'])
-            .any(|line| line.trim_start().starts_with(text))
-    }
-
-    /// Tira as sequencias de escape para a linha valer pelo que ela mostra.
-    fn without_escapes(text: &str) -> String {
-        let mut plain = String::with_capacity(text.len());
-        let mut chars = text.chars().peekable();
-        while let Some(ch) = chars.next() {
-            if ch != '\u{1b}' {
-                plain.push(ch);
-                continue;
-            }
-            match chars.next() {
-                // CSI: parametros ate um final entre `@` e `~`.
-                Some('[') => {
-                    for next in chars.by_ref() {
-                        if ('\u{40}'..='\u{7e}').contains(&next) {
-                            break;
-                        }
-                    }
-                }
-                // OSC: termina em BEL ou em ESC seguido de barra invertida.
-                Some(']') => {
-                    while let Some(next) = chars.next() {
-                        if next == '\u{7}' {
-                            break;
-                        }
-                        if next == '\u{1b}' {
-                            chars.next();
-                            break;
-                        }
-                    }
-                }
-                _ => {}
-            }
-        }
-        plain
     }
 
     /// Esvazia o canal em segundo plano e devolve a mensagem de fim quando ela chega.
@@ -2642,7 +2601,10 @@ mod tests {
             .expect("spawn");
         let mut queries = LaterCursorQueries::new("age", &manager, info.id);
         let mut output = Vec::new();
-        manager.write(info.id, b"echo idade-da-saida\n").unwrap();
+        // O texto sai montado pelo shell, para nao viajar no eco do comando.
+        manager
+            .write(info.id, b"printf 'ida%s\\n' 'de-da-saida'\n")
+            .unwrap();
         assert!(collect_until_printed(
             &rx,
             &mut queries,
@@ -2714,8 +2676,9 @@ mod tests {
                 .expect("spawn");
             let mut queries = LaterCursorQueries::new(tag, &manager, info.id);
             let mut output = Vec::new();
+            // `casa=[` sai montado pelo shell, para nao viajar no eco do comando.
             manager
-                .write(info.id, b"echo \"casa=[$CODEX_HOME]\"\n")
+                .write(info.id, b"printf 'ca%s=[%s]\\n' 'sa' \"$CODEX_HOME\"\n")
                 .unwrap();
             assert!(
                 collect_until_printed(&rx, &mut queries, &mut output, "casa=["),

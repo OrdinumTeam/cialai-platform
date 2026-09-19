@@ -72,6 +72,19 @@ pub(crate) fn foreground_pid(
     backend::foreground_pid(master, shell_pid, source)
 }
 
+/// Corta o texto depois do primeiro caractere, respeitando a fronteira de
+/// UTF-8. Os dois pedacos entram citados no comando, que assim nunca carrega o
+/// texto inteiro.
+#[cfg(test)]
+fn split_in_two(text: &str) -> (&str, &str) {
+    let at = text
+        .char_indices()
+        .nth(1)
+        .map(|(index, _)| index)
+        .unwrap_or(text.len());
+    text.split_at(at)
+}
+
 /// Shell minimo e sem arquivos de inicializacao para testes por sistema.
 #[cfg(test)]
 #[derive(Clone, Debug)]
@@ -120,15 +133,36 @@ impl TestShell {
         }
     }
 
+    /// Manda o shell escrever o texto, montado por ele a partir de dois
+    /// pedacos.
+    ///
+    /// O terminal ecoa o que foi escrito, e quem espera pelo texto na saida
+    /// precisa saber se o que chegou e a pergunta ou a resposta. Contar
+    /// aparicoes nao resolve, porque um shell que ainda estava abrindo
+    /// redesenha a linha depois do prompt e o eco sozinho ja aparece duas
+    /// vezes, as vezes pela metade. Olhar o comeco da linha tambem nao
+    /// resolve, porque o `dash` escreve prompt e resposta na mesma linha. Com
+    /// o texto partido no comando, ele nunca viaja inteiro no eco, e a
+    /// primeira aparicao dele na saida ja e a resposta.
     pub(crate) fn print(&self, text: &str) -> Vec<u8> {
+        let (head, tail) = split_in_two(text);
         match self.spec.flavor {
-            ShellFlavor::Posix => {
-                format!("printf '%s\\n' '{}'\n", text.replace('\'', "'\\''")).into_bytes()
+            ShellFlavor::Posix => format!(
+                "printf '%s%s\\n' '{}' '{}'\n",
+                head.replace('\'', "'\\''"),
+                tail.replace('\'', "'\\''")
+            )
+            .into_bytes(),
+            ShellFlavor::Powershell => format!(
+                "Write-Output ('{}' + '{}')\r\n",
+                head.replace('\'', "''"),
+                tail.replace('\'', "''")
+            )
+            .into_bytes(),
+            // O `call` faz a segunda passada de expansao que junta os pedacos.
+            ShellFlavor::Cmd => {
+                format!("set \"h={head}\" & call echo %%h%%{tail}\r\n").into_bytes()
             }
-            ShellFlavor::Powershell => {
-                format!("Write-Output '{}'\r\n", text.replace('\'', "''")).into_bytes()
-            }
-            ShellFlavor::Cmd => format!("echo {text}\r\n").into_bytes(),
         }
     }
 

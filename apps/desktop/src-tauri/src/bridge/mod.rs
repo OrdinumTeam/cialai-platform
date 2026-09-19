@@ -1116,7 +1116,9 @@ mod tests {
             json!({"id":session, "data":print("cialai-antes")}),
         )
         .await;
-        old.read_until(&mut first, |channel| channel.printed("cialai-antes") >= 2)
+        // `TestShell::print` manda o shell montar o texto, entao ele nao viaja
+        // no eco do comando e uma aparicao ja e a saida do shell.
+        old.read_until(&mut first, |channel| channel.printed("cialai-antes") >= 1)
             .await;
         let (old_offset, _) = old.replay.unwrap();
         assert_eq!(old_offset, 0);
@@ -1136,7 +1138,7 @@ mod tests {
             String::from_utf8_lossy(&lock(&desktop))
                 .matches("cialai-fora")
                 .count()
-                >= 2
+                >= 1
         })
         .await;
 
@@ -1162,7 +1164,7 @@ mod tests {
             json!({"id":session, "data":print("cialai-depois")}),
         )
         .await;
-        new.read_until(&mut second, |channel| channel.printed("cialai-depois") >= 2)
+        new.read_until(&mut second, |channel| channel.printed("cialai-depois") >= 1)
             .await;
         second.close(None).await.unwrap();
         task.await.unwrap();
