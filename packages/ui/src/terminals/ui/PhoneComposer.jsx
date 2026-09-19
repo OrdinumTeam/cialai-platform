@@ -109,12 +109,21 @@ export default function PhoneComposer({
     writeDraft(sessionId, next, storage);
   };
 
+  // Fechar solta o foco antes de desmontar a caixa. Sem isso o campo sumia
+  // com o teclado ainda subindo, e o iOS ficava um tempo sem mandar a medida
+  // nova da area visivel. O rascunho fica gravado, entao reabrir volta ao
+  // ponto em que a pessoa parou.
+  const close = () => {
+    area.current?.blur();
+    onClose();
+  };
+
   return (
     <div className="phone-composer" role="dialog" aria-label={translate('terminal.phone.composer.title')}>
       <div className="phone-composer__head">
         <span className="phone-composer__title">{translate('terminal.phone.composer.title')}</span>
         <span className="phone-composer__count">{translate(lines === 1 ? 'terminal.phone.composer.lineOne' : 'terminal.phone.composer.lineMany', { count: lines })}</span>
-        <button type="button" className="phone-composer__close" aria-label={translate('terminal.phone.composer.close')} onClick={onClose}>
+        <button type="button" className="phone-composer__close" aria-label={translate('terminal.phone.composer.close')} onClick={close}>
           <X size={20} aria-hidden="true" />
         </button>
       </div>

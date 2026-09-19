@@ -83,6 +83,7 @@ export default Object.freeze({
   'native.error.shellBusy': 'O terminal está ocupado. Espere o processo terminar e tente de novo.',
   'native.error.presentationInvalid': 'Apresentação do terminal inválida.',
   'native.error.previewTooLarge': 'Arquivo com {size} MB, acima do limite de 40 MB da prévia. Abra no app padrão.',
+  'native.error.previewWindow': 'Não foi possível abrir a janela da prévia: {error}',
   'native.error.profileCreate': 'Não foi possível criar o perfil: {error}',
   'native.error.projectFolderNotFound': 'Pasta do projeto não encontrada',
   'native.error.projectsUnavailable': 'Pasta de projetos indisponível.',

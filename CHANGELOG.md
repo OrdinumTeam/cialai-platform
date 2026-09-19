@@ -46,6 +46,23 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.6 preview
+
+Preview dated 2026-09-19. Studio dialogs are sized by their content again, the documentation graph reads a document beside the map, the phone gets the whole screen back after the keyboard closes, the agent accounts have a door of their own and a layout that fits a phone, and Claude Code shows the same plan numbers Codex already showed.
+
+### Added
+
+* The documentation graph reads a document beside the map. Preview on a Markdown node opens the rendered document in a panel next to the graph, inside the same tab, split in half and resizable by the divider. Choosing another document swaps the content of the same panel, closing it gives the whole area back to the graph, and one explicit action moves the document to a window of its own. Open in the editor keeps opening the file for editing, and the graph keeps its selection, zoom and position through all of it
+* A door of its own for the agent accounts in the studio, next to the sessions, so switching account no longer goes through Preferences. The screen is the same one the phone already had, with the same list, the same actions and the same numbers
+
+### Fixed
+
+* Preview, Open in the editor and Reveal in the explorer did nothing in the documentation graph. The studio never handed the three path actions to the panel, so every click ended in `actions.previewPath is not a function`
+* Studio dialogs are sized by their content again. Pair phone, Preferences, agent accounts and the revoke confirmation took the full width of their breakpoint, which stretched the pairing dialog to 900 px and pushed the instructions away from the QR code, and let Preferences cover almost the whole window. Each size now has the width its content asks for, the paper never passes 660 px in height, the body scrolls inside, focus stays in the dialog and goes back to the control that opened it, and the application behind keeps its dimensions
+* The phone no longer keeps the height of the keyboard after it collapses. The shell follows the visual viewport at all times, instead of only while a shrink larger than 80 px lasts, so the native done button, a closed composer, a return from the background and a rotation all give the whole screen back. A lost intermediate measurement no longer leaves a grey band under the terminal and the session list, because every measurement is the visible height of that moment
+* The agent accounts fit the width of a phone. Each account is a card of three lines, with name and plan on the first, the plan usage on the second and a short Use button beside them, instead of one row where a repeated long button squeezed the name into a few letters. The explanation of what the button does appears once, at the top, and the list scrolls to the last account with the close button still in reach
+* Claude Code shows the plan and the usage percentage that Codex already showed, on the accounts screen and on the session cards, on the computer and on the phone. Both providers read from the same place as the AI bar, which reads the CLI, the official endpoint, the Claude Desktop cache and the status line hook, so an account without the hook is no longer left without a number. Every percentage carries the name of the window it belongs to, so two different periods never look like the same measure, a reading that failed says so, an old reading appears dimmed and says it is old, and a missing reading is never shown as zero per cent
+
 ## 0.2.5 preview
 
 Preview dated 2026-09-19. The studio gained a documentation graph, session activity that says what is actually happening, and agent account switching from the interface. The phone gained a floating composer, a session menu and a folder picker that reaches the whole disk. Windows paths follow one contract on both sides.

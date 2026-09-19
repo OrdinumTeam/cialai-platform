@@ -746,6 +746,82 @@ pub async fn fs_drag_out(window: WebviewWindow, paths: Vec<String>) -> FsResult<
     dragout::start(&window, paths)
 }
 
+/* ── previa de documento em janela separada ───────────────────────── */
+
+/// Rotulo da janela unica de previa. Uma so janela, reaproveitada: pedir
+/// outro documento troca o conteudo dela em vez de espalhar janelas.
+pub const DOC_PREVIEW_LABEL: &str = "doc-preview";
+/// Evento que leva o caminho novo a janela ja aberta.
+pub const DOC_PREVIEW_EVENT: &str = "docpreview://path";
+
+/// Documento que a janela de previa esta mostrando. Fica no Rust, e nao na
+/// URL, para o caminho nao passar por codificacao nem aparecer na barra.
+#[derive(Default)]
+pub struct DocPreviewState(std::sync::Mutex<Option<String>>);
+
+impl DocPreviewState {
+    pub fn get(&self) -> Option<String> {
+        self.0.lock().ok().and_then(|value| value.clone())
+    }
+
+    fn set(&self, path: &str) {
+        if let Ok(mut value) = self.0.lock() {
+            *value = Some(path.to_string());
+        }
+    }
+}
+
+/// Abre o documento numa janela separada, ou traz a que ja existe para a
+/// frente com o documento novo. A divisao interna do grafo e fechada por quem
+/// chama, entao a area volta inteira para o mapa.
+#[tauri::command(async)]
+pub fn doc_preview_window(
+    app: AppHandle,
+    state: State<'_, DocPreviewState>,
+    path: String,
+) -> Result<(), String> {
+    let target = PathBuf::from(&path);
+    if !target.is_file() {
+        return Err(t("native.error.fileNotFound"));
+    }
+    state.set(&path);
+    let title = target
+        .file_name()
+        .map(|name| name.to_string_lossy().to_string())
+        .unwrap_or_else(|| "Cialai".to_string());
+    if let Some(window) = app.get_webview_window(DOC_PREVIEW_LABEL) {
+        let _ = window.set_title(&title);
+        let _ = window.emit(DOC_PREVIEW_EVENT, path);
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        DOC_PREVIEW_LABEL,
+        tauri::WebviewUrl::App("index.html?docpreview=1".into()),
+    )
+    .title(title)
+    .inner_size(760.0, 860.0)
+    .min_inner_size(360.0, 320.0)
+    .resizable(true)
+    .build()
+    .map(|_| ())
+    .map_err(|error| {
+        tf(
+            "native.error.previewWindow",
+            &[("error", &error.to_string())],
+        )
+    })
+}
+
+/// Caminho que a janela de previa deve mostrar quando ela carrega.
+#[tauri::command]
+pub fn doc_preview_path(state: State<'_, DocPreviewState>) -> Option<String> {
+    state.get()
+}
+
 /// Uso do plano dos agentes de IA: Claude Code pelo arquivo publicado pelo
 /// hook de linha de estado, Codex pelo arquivo da propria sessao. Lista vazia
 /// quando nenhum dos dois deixou dado recente.
@@ -805,8 +881,8 @@ pub fn docgraph_cancel(scans: State<'_, DocScans>, key: String, token: Option<St
 /* ── contas dos agentes ───────────────────────────────────────────── */
 
 /// Uma conta que o agente pode usar, para a tela de troca. Nunca leva
-/// `account_key`, token nem conteúdo de arquivo de credencial: só o que a
-/// pessoa precisa ver para escolher.
+/// `account_key`, caminho de pasta, token nem conteúdo de arquivo de
+/// credencial: só o que a pessoa precisa ver para escolher.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentProfileView {
@@ -822,34 +898,49 @@ pub struct AgentProfileView {
     pub active: bool,
     /// A pasta ainda não tem credencial: o login do próprio CLI está pendente.
     pub needs_login: bool,
-    /// Janelas de uso do plano, como a Barra de IA as lê.
-    pub windows: Vec<crate::workspace::ai::UsageWindow>,
+    /// Conta logada, quando o perfil a publica em disco.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// Leitura de uso da conta, a mesma da Barra de IA: janelas com rótulo,
+    /// janela do anel, estado da leitura, fonte e instante. Vem do mesmo
+    /// lugar nos dois provedores, então Claude Code e Codex mostram o mesmo
+    /// tipo de número. `None` só quando nem placeholder existe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub usage: Option<crate::notch::usage::ProviderSnapshot>,
 }
 
 /// Contas de cada agente, com a marca do perfil ativo e o uso do plano.
+///
+/// O uso vem da loja da Barra de IA, e não mais de `workspace::ai`: aquela lê
+/// o Claude Code só pelo hook de linha de estado, então uma conta sem o hook
+/// aparecia sem plano e sem porcentagem enquanto o Codex mostrava as duas
+/// coisas. A loja lê CLI, endpoint oficial, cache do Claude Desktop e o
+/// próprio hook, e publica o estado de cada leitura em vez de um zero
+/// inventado.
 #[tauri::command(async)]
 pub fn agent_profiles(
     app: AppHandle,
     prefs: State<'_, PrefsState>,
-    cache: State<'_, UsageCache>,
-    terminals: State<'_, TerminalManager>,
+    notch: State<'_, crate::notch::NotchManager>,
 ) -> Result<Vec<AgentProfileView>, String> {
     let home = app.path().home_dir().map_err(|error| error.to_string())?;
-    let support = app
-        .path()
-        .app_data_dir()
-        .map_err(|error| error.to_string())?;
-    let usage = crate::workspace::ai::cached(&cache, &home, &support, &terminals.codex_homes());
+    let snapshots = notch.all_snapshots();
     let active = prefs.get().agents.active_profile.clone();
     Ok(crate::notch::profiles::discover(&home)
         .into_iter()
         .map(|profile| {
             let agent = profile.provider.as_str().to_string();
-            let windows = usage
+            let usage = snapshots
                 .iter()
-                .find(|item| item.profile == profile.id)
-                .map(|item| item.windows.clone())
-                .unwrap_or_default();
+                .find(|item| item.id == profile.id)
+                .cloned()
+                .map(|mut snapshot| {
+                    // A pasta de configuracao nunca sai daqui, nem para o
+                    // celular: para escolher a conta bastam o rotulo, a conta
+                    // logada, o plano e o uso.
+                    snapshot.config_dir = String::new();
+                    snapshot
+                });
             AgentProfileView {
                 active: active.get(&agent) == Some(profile.id.as_str()),
                 is_default: profile.slug.is_none(),
@@ -858,13 +949,26 @@ pub fn agent_profiles(
                     profile.slug.is_none(),
                 ),
                 label: profile.label.clone(),
-                plan: profile.plan.clone(),
+                // O plano da leitura vence o do arquivo de conta: o Claude
+                // Code só publica a assinatura na credencial, que a loja lê.
+                plan: usage
+                    .as_ref()
+                    .and_then(|item| item.plan.clone())
+                    .or_else(|| profile.plan.clone()),
+                account: profile.account.clone(),
                 id: profile.id,
                 agent,
-                windows,
+                usage,
             }
         })
         .collect())
+}
+
+/// Relê o uso de todas as contas agora, inclusive as escondidas da Barra de
+/// IA. É o que o botão de reler as contas chama antes de pedir a lista.
+#[tauri::command(async)]
+pub fn agent_profiles_refresh(notch: State<'_, crate::notch::NotchManager>) {
+    notch.refresh_scope(None, true);
 }
 
 /// Escolhe a conta que os terminais novos vão usar. Vazio volta a não
@@ -1021,13 +1125,31 @@ mod agent_profile_tests {
             is_default: false,
             active: true,
             needs_login: false,
-            windows: vec![crate::workspace::ai::UsageWindow {
-                id: "primary".into(),
-                label: "Sessão".into(),
-                used_percent: 41.0,
-                window_minutes: Some(300),
-                resets_at_ms: None,
-            }],
+            account: Some("work@exemplo.com".into()),
+            usage: Some(crate::notch::usage::ProviderSnapshot {
+                id: "codex-work".into(),
+                provider: "codex".into(),
+                label: "work".into(),
+                account: Some("work@exemplo.com".into()),
+                // A pasta de configuracao sai vazia antes de ir para a tela,
+                // como `agent_profiles` a limpa.
+                config_dir: String::new(),
+                plan: Some("plus".into()),
+                fidelity: crate::notch::usage::Fidelity::Official,
+                status: crate::notch::usage::ProviderStatus::Ok,
+                windows: vec![crate::notch::usage::LimitWindow {
+                    id: "primary".into(),
+                    group: None,
+                    label: "duration".into(),
+                    used_fraction: Some(0.41),
+                    resets_at_ms: None,
+                    duration_ms: Some(5 * 3_600_000),
+                }],
+                headline_id: Some("primary".into()),
+                weekly_id: None,
+                fetched_at_ms: 1,
+                source: Some("chatgptApi".into()),
+            }),
         };
         let wire = serde_json::to_value(&view).unwrap();
         let mut keys = wire
@@ -1040,6 +1162,7 @@ mod agent_profile_tests {
         assert_eq!(
             keys,
             [
+                "account",
                 "active",
                 "agent",
                 "id",
@@ -1047,8 +1170,13 @@ mod agent_profile_tests {
                 "label",
                 "needsLogin",
                 "plan",
-                "windows",
+                "usage",
             ]
+        );
+        // A pasta de configuracao nunca vai junto, nem dentro da leitura.
+        assert_eq!(
+            wire.pointer("/usage/configDir").and_then(|v| v.as_str()),
+            Some("")
         );
         let text = wire.to_string();
         for forbidden in [
@@ -1057,6 +1185,8 @@ mod agent_profile_tests {
             "token",
             "auth.json",
             "credential",
+            "/Users/",
+            ".codex-",
         ] {
             assert!(
                 !text.contains(forbidden),

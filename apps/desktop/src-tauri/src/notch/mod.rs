@@ -184,15 +184,32 @@ impl NotchManager {
         let _ = self.app.emit(EVENT_PREFS, self.preferences());
     }
 
-    /// Le o uso agora, de um perfil ou de todos.
+    /// Le o uso agora, de um perfil ou de todos os aneis visiveis.
     pub fn refresh(&self, only: Option<&str>) {
-        let visible = self.visible_profiles();
+        self.refresh_scope(only, false);
+    }
+
+    /// Uso de todas as contas da maquina, inclusive as escondidas da barra. A
+    /// tela de contas dos agentes mostra todas; sem isto, uma conta fora da
+    /// barra ficaria para sempre sem leitura.
+    pub fn all_snapshots(&self) -> Vec<ProviderSnapshot> {
+        self.store.for_profiles(&self.profiles())
+    }
+
+    /// Le o uso agora. `all_profiles` escolhe entre os aneis visiveis e todas
+    /// as contas da maquina.
+    pub fn refresh_scope(&self, only: Option<&str>, all_profiles: bool) {
+        let pool = if all_profiles {
+            self.profiles()
+        } else {
+            self.visible_profiles()
+        };
         let wanted: Vec<Profile> = match only {
-            Some(id) => visible
+            Some(id) => pool
                 .into_iter()
                 .filter(|profile| profile.id == id)
                 .collect(),
-            None => visible,
+            None => pool,
         };
         if wanted.is_empty() {
             return;

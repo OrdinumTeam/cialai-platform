@@ -17,7 +17,14 @@ await Promise.race([
   new Promise((resolve) => { setTimeout(resolve, PLATFORM_DEADLINE_MS); }),
 ]);
 if (new URLSearchParams(window.location.search).get('motion') === '0') document.documentElement.dataset.motion = 'none';
-createRoot(document.getElementById('root')).render(<DesktopApp />);
+// A janela separada da previa carrega a mesma pagina com `?docpreview=1`: so
+// o documento renderizado, sem estudio nem rede por tras.
+if (new URLSearchParams(window.location.search).get('docpreview') === '1') {
+  const { default: DocPreviewWindow } = await import('./DocPreviewWindow.jsx');
+  createRoot(document.getElementById('root')).render(<DocPreviewWindow />);
+} else {
+  createRoot(document.getElementById('root')).render(<DesktopApp />);
+}
 
 if (new URLSearchParams(window.location.search).get('cialai_selftest')) {
   import('../../../../tools/selftest/selftest-app.js').catch((error) => console.error('[autoteste]', error));

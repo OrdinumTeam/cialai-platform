@@ -133,10 +133,40 @@ export function useToast() {
 
 /* ── modal e drawer ───────────────────────────────────────────────── */
 
-export function AppModal({ open, title, onClose, children, footer, maxWidth = 'sm' }) {
+// Largura de cada tamanho de modal, em pixels. `fullWidth` do MUI esticava o
+// papel ate o ponto de quebra inteiro, entao o diálogo de vincular celular
+// nascia com 900 px e afastava o texto do QR, e Preferências chegava a ocupar
+// quase toda a janela. Aqui cada tamanho tem a largura que o conteúdo pede, e
+// o papel encolhe sozinho em janela estreita.
+export const MODAL_WIDTH = Object.freeze({ xs: 400, sm: 520, md: 700, lg: 880 });
+// Teto de altura do papel. Abaixo disto o corpo rola por dentro, e a folha
+// nunca cobre a janela de ponta a ponta.
+export const MODAL_MAX_HEIGHT = 'min(660px, calc(100% - 96px))';
+
+// Estilo do papel de um diálogo do estúdio. A folha do celular, em
+// mobile.css, sobrepoe largura e margem com `!important`, entao a mesma
+// função serve as duas plataformas.
+export function modalPaperSx({ maxWidth = 'sm', width, maxHeight } = {}) {
+  return {
+    width: width ?? MODAL_WIDTH[maxWidth] ?? MODAL_WIDTH.sm,
+    maxWidth: 'calc(100vw - 48px)',
+    maxHeight: maxHeight ?? MODAL_MAX_HEIGHT,
+  };
+}
+
+export function AppModal({ open, title, onClose, children, footer, maxWidth = 'sm', width, maxHeight }) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth={maxWidth} fullWidth>
-      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontWeight: 600 }}>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth={false}
+      // O corpo do app nunca rola: a trava de rolagem do MUI só teria como
+      // efeito mexer no `padding` do `body` e mudar a largura do conteúdo
+      // atrás do modal.
+      disableScrollLock
+      PaperProps={{ sx: modalPaperSx({ maxWidth, width, maxHeight }) }}
+    >
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, fontWeight: 600 }}>
         {title}
         <IconButton size="small" onClick={onClose} aria-label={translate('shared.action.close')}><X size={16} /></IconButton>
       </DialogTitle>
@@ -258,7 +288,7 @@ export function TextField({
 
 export function ConfirmDialog({ open, title = translate('shared.action.confirm'), message, onCancel, onConfirm, confirmLabel = translate('shared.action.confirm'), danger = false }) {
   return (
-    <Dialog open={open} onClose={onCancel} maxWidth="xs" fullWidth>
+    <Dialog open={open} onClose={onCancel} maxWidth={false} disableScrollLock PaperProps={{ sx: modalPaperSx({ maxWidth: 'xs' }) }}>
       <DialogTitle sx={{ fontWeight: 600 }}>{title}</DialogTitle>
       <DialogContent><Typography variant="body2">{message}</Typography></DialogContent>
       <DialogActions>

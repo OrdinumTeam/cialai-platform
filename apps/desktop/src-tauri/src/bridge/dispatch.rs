@@ -235,8 +235,11 @@ pub(super) fn dispatch(
             app.clone(),
             app.state(),
             app.state(),
-            app.state(),
         )?),
+        "agent_profiles_refresh" => {
+            commands::agent_profiles_refresh(app.state());
+            value(serde_json::Value::Null)
+        }
         "agent_profile_select" => value(commands::agent_profile_select(
             app.clone(),
             app.state(),

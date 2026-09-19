@@ -19,6 +19,8 @@ const ACCESS = Object.freeze({
   pty_presentation: 'session',
   list_dirs: 'session',
   agent_profiles: 'read',
+  // Reler o uso nao muda nada: so pede ao computador uma leitura nova.
+  agent_profiles_refresh: 'read',
   agent_profile_select: 'session',
   agent_profile_create: 'session',
   pty_launch_agent: 'terminal',

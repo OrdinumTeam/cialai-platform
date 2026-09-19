@@ -52,3 +52,28 @@ export function openDocGraphTab(sessionId, { focusPath = null, activate = true }
   emitDocgraphEvent(session.id);
   return tab;
 }
+
+/* ── prévia ao lado do grafo ───────────────────────────────────────── */
+
+// A prévia é um painel dentro da própria aba do grafo, não outra aba: a
+// pessoa lê o documento sem perder o mapa de vista. Um painel por sessão, que
+// troca de documento no lugar em vez de abrir outro.
+export function openDocGraphPreview(sessionId, path) {
+  const session = getSession(sessionId);
+  if (!session || !path) return null;
+  const current = session.docgraph.preview;
+  if (current?.path !== path) session.docgraph.preview = { path, at: Date.now() };
+  emitDocgraphEvent(session.id);
+  return session.docgraph.preview;
+}
+
+export function closeDocGraphPreview(sessionId) {
+  const session = getSession(sessionId);
+  if (!session || !session.docgraph.preview) return;
+  session.docgraph.preview = null;
+  emitDocgraphEvent(session.id);
+}
+
+export function docGraphPreview(sessionId) {
+  return getSession(sessionId)?.docgraph.preview || null;
+}

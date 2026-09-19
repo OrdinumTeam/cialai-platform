@@ -143,7 +143,10 @@ pub fn run() {
             commands::agent_profiles,
             commands::agent_profile_select,
             commands::agent_profile_create,
+            commands::agent_profiles_refresh,
             commands::pty_launch_agent,
+            commands::doc_preview_window,
+            commands::doc_preview_path,
             commands::detect_project_roots,
             commands::fs_list_dir,
             commands::fs_stat,
@@ -202,6 +205,7 @@ pub fn run() {
             app.manage(workspace::ai::UsageCache::default());
             app.manage(workspace::preview::PreviewRoots::default());
             app.manage(workspace::docgraph::DocScans::default());
+            app.manage(commands::DocPreviewState::default());
             app.manage(workspace::office::OfficeQueue::default());
             // A Barra de IA le os perfis e os arquivos que cada agente grava;
             // os dois relogios dela sobem aqui e param na saida.

@@ -10,6 +10,8 @@
 
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import {
   GROUP_TONES, ROOT_ID, absPath, ancestorsOf, attachIssues, buildTree, computeColorGroups, defaultExpansion,
   diffIndex, effectiveExpanded, foldKey, groupOf, idOfPath, isBroadRoot, parentId, pickWatchDirs, revealSet,
@@ -19,6 +21,9 @@ import { matchSet, searchDocs } from '../src/terminals/docgraph/search.js';
 import { OVERRIDE_LIMIT, ROOT_LIMIT, STORAGE_KEY, loadUi, saveUi } from '../src/terminals/docgraph/persist.js';
 import { DEBOUNCE_MS, MAX_WAIT_MS, createIndexer } from '../src/terminals/docgraph/indexer.js';
 import * as copy from '../src/terminals/docgraph/copy.js';
+import { LAYOUT_LIMITS } from '../src/terminals/layout.js';
+
+const source = (relative) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
 const scanOf = (paths, extra = {}) => ({ docs: paths.map((relative) => ({ relative, size: 10, modifiedMs: 1, symlink: false, target: null })), fingerprint: paths.join('|'), ...extra });
 const treeOf = (paths, extra) => buildTree(scanOf(paths, extra), { rootName: 'projeto' });
@@ -490,6 +495,52 @@ test('erro do pedido corrente chega a tela; sair do painel cancela e cala a resp
   assert.equal(h.calls.length, 2, 'descartado nao varre mais');
 });
 
+/* ── previa ao lado do grafo ──────────────────────────────────────── */
+
+test('as acoes por caminho do grafo existem no estudio', () => {
+  const pane = source('../src/terminals/ui/DocGraphPane.jsx');
+  const bench = source('../src/terminals/ui/Workbench.jsx');
+  // O cartao de detalhes e o menu do grafo chamam as tres por caminho. Sem
+  // elas no objeto de acoes, Visualizar e Abrir no editor nao faziam nada e
+  // o console ficava com `actions.previewPath is not a function`.
+  for (const action of ['openPath', 'previewPath', 'revealInExplorer']) {
+    assert.match(pane, new RegExp(`actions\\.${action}\\(`), `o grafo chama ${action}`);
+  }
+  assert.match(bench, /openPath,/);
+  assert.match(bench, /previewPath,/);
+  assert.match(bench, /revealInExplorer: revealPathInExplorer,/);
+  assert.match(bench, /openDocGraphPreview\(current\.id, path\)/, 'Visualizar abre a previa da sessao');
+  assert.match(bench, /openFile\(current\.id, path\)/, 'Abrir no editor continua abrindo o arquivo');
+});
+
+test('a divisao nasce meio a meio, e o divisor tem limites proprios', () => {
+  assert.equal(LAYOUT_LIMITS.docgraphRatio.default, 0.5);
+  assert.ok(LAYOUT_LIMITS.docgraphRatio.min > 0 && LAYOUT_LIMITS.docgraphRatio.min < 0.5);
+  assert.ok(LAYOUT_LIMITS.docgraphRatio.max > 0.5 && LAYOUT_LIMITS.docgraphRatio.max < 1);
+});
+
+test('um painel de previa por sessao, reaproveitado ao trocar de documento', () => {
+  const tab = source('../src/terminals/docgraph/tab.js');
+  // O documento fica na sessao, num campo so: escolher outro troca o
+  // conteudo no lugar em vez de empilhar painel.
+  assert.match(tab, /session\.docgraph\.preview = \{ path, at: Date\.now\(\) \}/);
+  assert.match(tab, /export function closeDocGraphPreview/);
+  const pane = source('../src/terminals/ui/DocGraphPane.jsx');
+  assert.match(pane, /closeDocGraphPreview\(session\.id\)/, 'fechar devolve a area ao grafo');
+  assert.match(pane, /if \(!previewPath\) return body;/, 'sem previa o grafo ocupa a aba inteira');
+});
+
+test('a previa trata documento apagado e leitura que falhou', () => {
+  const preview = source('../src/terminals/ui/DocGraphPreview.jsx');
+  assert.match(preview, /status: 'missing'/);
+  assert.match(preview, /status: 'error'/);
+  assert.match(preview, /previewMissing/);
+  assert.match(preview, /previewFailed/);
+  // O documento muda no disco enquanto esta aberto: a previa rele.
+  assert.match(preview, /watchPathAs\(owner, path\)/);
+  assert.match(preview, /unwatchPathAs\(owner, path\)/);
+});
+
 /* ── texto visivel ────────────────────────────────────────────────── */
 
 test('texto visivel sem parenteses, sem travessao separador e com plural certo', () => {
@@ -503,6 +554,8 @@ test('texto visivel sem parenteses, sem travessao separador e com plural certo',
     copy.nodeAnnouncement({ kind: 'doc', name: 'a.md', parent: 'docs' }),
     copy.nodeAnnouncement({ kind: 'root', name: '', docCount: 1 }, { rootName: 'projeto' }),
     copy.countsAnnouncement(977, 204), copy.fmtSize(1), copy.fmtSize(2048), copy.fmtSize(5 * 1024 * 1024), copy.fmtModified(1789000000000),
+    copy.previewOf('README.md'),
+    ...['preview', 'previewWidth', 'previewReload', 'previewClose', 'previewCloseTitle', 'previewDetach', 'previewDetachTitle', 'previewLoading', 'previewMissing', 'previewFailed'].map((key) => copy.STRINGS[key]),
   ];
   samples.forEach((text) => {
     assert.equal(typeof text, 'string');

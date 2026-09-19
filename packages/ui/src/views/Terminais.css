@@ -172,6 +172,9 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    quanto falta: discreto até 75%, atento depois, alarmado perto do teto. */
 .terminais-card__plan{flex:0 0 auto;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
 .terminais-card__plan--warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
+/* Leitura velha continua a vista, apagada: um numero antigo avisado vale
+   mais que nenhum numero, e menos que um numero de agora. */
+.terminais-card__plan.is-stale{opacity:.55}
 /* Modelo e perfil da conta numa linha propria sob o agente, chips neutros;
    o percentual, na linha do agente, e o unico com tom de alerta. */
 .terminais-card__agent-row{display:flex;align-items:center;gap:4px;min-width:0;padding-left:17px;overflow:hidden;animation:macRowIn 180ms var(--mac-ease) both}
@@ -212,6 +215,23 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    molde do popover da toolbar, vidro com fio e sombra de popover. */
 .terminais-tab.is-docgraph .terminais-tab__icon{flex:0 0 auto;color:var(--mac-label-3)}
 .terminais-tab.is-docgraph.is-active .terminais-tab__icon{color:var(--mac-accent-text)}
+/* Grafo com a previa do documento ao lado, na mesma aba. A divisao nasce meio
+   a meio e o divisor arrasta; fechar a previa devolve a area toda ao grafo. */
+.terminais-docgraph-split{display:flex;flex:1;min-height:0;min-width:0}
+.terminais-docgraph-split>.terminais-docgraph{flex:0 1 calc(var(--docgraph-ratio,.5) * 100%);min-width:200px}
+.terminais-docpreview{display:flex;flex-direction:column;flex:1 1 0;min-width:200px;min-height:0;border-left:1px solid var(--mac-separator);background:var(--mac-surface)}
+.terminais-docpreview__bar{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:5px 8px;border-bottom:1px solid var(--mac-separator);color:var(--mac-label-2)}
+.terminais-docpreview__bar>svg{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-docpreview__name{min-width:0;font-size:12.5px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-docpreview__body{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0}
+.terminais-docpreview__state{display:flex;flex-direction:column;gap:5px;margin:0;padding:28px 24px;font-size:12.5px;line-height:1.5;color:var(--mac-label-2);text-align:center}
+.terminais-docpreview__state.is-bad{color:var(--mac-bad)}
+.terminais-docpreview__detail{font-size:11.5px;color:var(--mac-label-3);overflow-wrap:anywhere}
+/* Janela separada da previa: a mesma pagina, sem estudio por tras. */
+.docpreview-window{display:flex;flex-direction:column;height:100%;background:var(--mac-bg);color:var(--mac-label)}
+.docpreview-window__bar{display:flex;align-items:center;gap:6px;flex:0 0 auto;padding:8px 12px;border-bottom:1px solid var(--mac-separator);color:var(--mac-label-2)}
+.docpreview-window__name{min-width:0;font-size:13px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.docpreview-window__body{display:flex;flex-direction:column;flex:1;min-height:0}
 .terminais-docgraph{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;container-type:inline-size;container-name:docgraph}
 .terminais-docgraph__bar{position:relative;z-index:8;display:flex;align-items:center;gap:4px;flex:0 0 auto;padding:5px 8px;border-bottom:1px solid var(--mac-separator)}
 .terminais-docgraph__searchbox{position:relative;flex:0 1 240px;min-width:130px}
@@ -651,7 +671,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* Caixa de texto: folha inferior que respeita o teclado do aparelho e deixa o
    terminal visivel atras. Fonte de 16 px para o iOS nao ampliar a pagina. */
 [data-form-factor="phone"] .phone-composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); box-shadow: var(--mac-shadow-popover); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
-[data-form-factor="phone"] .ios-shell--keyboard .phone-composer { bottom: calc(100dvh - var(--ios-keyboard-top, 0px) - var(--ios-keyboard-height, 100dvh)); padding-bottom: 12px; }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-composer { bottom: calc(100dvh - var(--ios-viewport-top, 0px) - var(--ios-viewport-height, 100dvh)); padding-bottom: 12px; }
 [data-form-factor="phone"] .phone-composer__head { display: flex; align-items: center; gap: 10px; }
 [data-form-factor="phone"] .phone-composer__title { font-size: 15px; font-weight: 600; color: var(--mac-label); }
 [data-form-factor="phone"] .phone-composer__count { font-size: 13px; color: var(--mac-label-3); font-variant-numeric: tabular-nums; }
@@ -712,28 +732,57 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* Contas dos agentes: uma linha por conta, com o uso do plano a direita. */
 .agent-profiles{display:flex;flex-direction:column;gap:14px}
 .agent-profiles__note{margin:0;font-size:13px;line-height:1.45;color:var(--mac-label-2)}
+.agent-profiles__note--quiet{font-size:12px;color:var(--mac-label-3)}
 .agent-profiles__error{margin:0;font-size:13px;line-height:1.45;color:var(--mac-bad)}
 .agent-profiles__empty{margin:0;font-size:13px;color:var(--mac-label-3)}
 .agent-profiles__group{display:flex;flex-direction:column;gap:6px}
 .agent-profiles__head{display:flex;align-items:center;gap:10px}
 .agent-profiles__head h3{margin:0;font-size:13px;font-weight:600;color:var(--mac-label-2);text-transform:uppercase;letter-spacing:.04em}
 .agent-profiles__create{margin-left:auto;display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
-.agent-profiles__row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border-radius:10px;background:var(--mac-surface-2)}
+/* Uma conta por linha no computador: identidade, uso e acao em colunas
+   proprias. A coluna do meio encolhe antes do nome, e a acao nunca some. */
+.agent-profiles__row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px 12px;min-height:44px;padding:8px 10px;border-radius:10px;background:var(--mac-surface-2)}
 .agent-profiles__row.is-active{box-shadow:inset 0 0 0 1.5px var(--mac-accent)}
-.agent-profiles__name{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
-.agent-profiles__tag{flex:0 0 auto;padding:0 6px;border-radius:6px;background:var(--mac-fill);color:var(--mac-label-3);font-size:11px;font-style:normal}
+.agent-profiles__identity{display:flex;flex-direction:column;gap:3px;min-width:0}
+.agent-profiles__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500}
+.agent-profiles__tags{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
+.agent-profiles__tag{flex:0 0 auto;max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:6px;background:var(--mac-fill);color:var(--mac-label-3);font-size:11px;font-style:normal}
+.agent-profiles__tag--plan{color:var(--mac-label-2)}
 .agent-profiles__tag.is-warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
-.agent-profiles__plan{flex:0 0 auto;font-size:12px;color:var(--mac-label-3)}
-.agent-profiles__used{flex:0 0 auto;margin-left:auto;font-size:13px;font-variant-numeric:tabular-nums;color:var(--mac-label-2)}
-.agent-profiles__used--warn{color:var(--mac-warn)}
-.agent-profiles__used--bad{color:var(--mac-bad);font-weight:600}
+/* Cada percentual vem com o nome da janela a que pertence, para dois numeros
+   de periodos diferentes nunca parecerem a mesma medida. */
+.agent-profiles__usage{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
+.agent-profiles__usage.is-stale{opacity:.6}
+.agent-profiles__window{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:0}
+.agent-profiles__window em{font-size:10.5px;font-style:normal;color:var(--mac-label-3);white-space:nowrap}
+.agent-profiles__window strong{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mac-label-2)}
+.agent-profiles__window--warn strong{color:var(--mac-warn)}
+.agent-profiles__window--bad strong{color:var(--mac-bad)}
+.agent-profiles__stale{font-size:10.5px;color:var(--mac-label-3)}
+.agent-profiles__state{flex:0 0 auto;font-size:12px;color:var(--mac-label-3);white-space:nowrap}
+.agent-profiles__state--needsLogin{color:var(--mac-warn)}
+.agent-profiles__state--error{color:var(--mac-bad)}
 .agent-profiles__current{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--mac-accent-text)}
-.agent-profiles__use{flex:0 0 auto;min-height:32px;padding:0 12px;border:0;border-radius:9px;background:var(--mac-gradient-button);color:#fff;font:inherit;font-size:13px;font-weight:600}
+/* Rotulo curto: a explicacao do efeito esta uma vez so, no topo do painel. */
+.agent-profiles__use{flex:0 0 auto;min-width:62px;min-height:30px;padding:0 14px;border:0;border-radius:9px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
 .agent-profiles__use:disabled{opacity:.5}
 .agent-profiles__refresh{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:13px}
-[data-form-factor="phone"] .agent-profiles__row{min-height:52px}
-[data-form-factor="phone"] .agent-profiles__use{min-height:40px;font-size:15px}
+.agent-profiles__refresh:disabled{opacity:.5}
+/* No celular a conta vira um cartao de tres linhas: nome e selos, uso, acao.
+   Nada de rolagem lateral e nada de nome cortado pelo botao. */
+[data-form-factor="phone"] .agent-profiles__row{grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px 10px;padding:12px;min-height:0}
+[data-form-factor="phone"] .agent-profiles__identity{grid-column:1;grid-row:1}
+[data-form-factor="phone"] .agent-profiles__name{white-space:normal;overflow-wrap:anywhere;font-size:16px}
+[data-form-factor="phone"] .agent-profiles__tag{max-width:none}
+[data-form-factor="phone"] .agent-profiles__usage,
+[data-form-factor="phone"] .agent-profiles__state{grid-column:1;grid-row:2;justify-content:flex-start}
+[data-form-factor="phone"] .agent-profiles__window{align-items:flex-start}
+[data-form-factor="phone"] .agent-profiles__window strong{font-size:15px}
+[data-form-factor="phone"] .agent-profiles__use,
+[data-form-factor="phone"] .agent-profiles__current{grid-column:2;grid-row:1 / span 2;align-self:center}
+[data-form-factor="phone"] .agent-profiles__use{min-height:40px;min-width:76px;font-size:15px}
 [data-form-factor="phone"] .agent-profiles__create{min-height:40px;font-size:15px}
+[data-form-factor="phone"] .agent-profiles__refresh{min-height:44px;font-size:15px}
 
 /* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
 [data-form-factor="phone"] .phone-menu { display: flex; flex-direction: column; margin: 0 -8px; }

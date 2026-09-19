@@ -16,7 +16,7 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { Bell, CheckCircle2, MoreHorizontal, Pin, Sparkles, XCircle } from 'lucide-react';
 import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, runningLabel, sessionAccent, sessionUsage } from '../runtime.js';
+import { describe, runningLabel, sessionAccent, sessionPlan, sessionUsage } from '../runtime.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
@@ -39,29 +39,33 @@ function AttentionIcon({ kind }) {
 // Quanto do plano do agente ja foi gasto. A janela mais curta, a da sessao,
 // e a que aparece no card; as outras ficam na dica, junto do perfil, da
 // pasta de configuracao e do modelo.
-function planTitle(usage, activity, model) {
+function planTitle(plan, activity, model) {
   const lines = [];
-  const profileName = activity?.profileName || usage.profileName;
-  const dir = usage.configDir || activity?.configDir;
+  const usage = activity?.usage || null;
+  const profileName = activity?.profileName || usage?.profileName;
+  const dir = usage?.configDir || activity?.configDir;
   lines.push(translate(dir ? 'terminal.plan.profilePath' : 'terminal.plan.profile', {
-    profile: profileName || usage.profile,
+    profile: profileName || usage?.profile || activity?.profile,
     path: shortPath(dir),
   }));
-  lines.push(translate(usage.plan ? 'terminal.plan.named' : 'terminal.plan.usage', {
-    agent: usage.agent,
-    plan: usage.plan,
+  lines.push(translate(plan.plan ? 'terminal.plan.named' : 'terminal.plan.usage', {
+    agent: activity?.agent || usage?.agent,
+    plan: plan.plan,
   }));
   lines.push('');
-  usage.windows.forEach((window) => {
+  plan.windows.forEach((window) => {
     const reset = fmtResetAt(window.resetsAtMs);
     lines.push(translate(reset ? 'terminal.plan.renews' : 'terminal.plan.window', {
       label: window.label,
-      usage: fmtPlan(window.usedPercent),
+      usage: fmtPlan(window.percent),
       reset,
     }));
   });
   if (model) lines.push('', translate('terminal.plan.model', { model }));
-  if (usage.updatedAtMs) lines.push(translate('terminal.plan.updated', { time: fmtAgo(usage.updatedAtMs) }));
+  // Leitura velha aparece apagada e diz que esta velha: um numero antigo sem
+  // aviso vale menos que nenhum numero.
+  if (plan.stale) lines.push('', translate('terminal.profiles.stale'));
+  if (plan.updatedAtMs) lines.push(translate('terminal.plan.updated', { time: fmtAgo(plan.updatedAtMs) }));
   return lines.join('\n');
 }
 
@@ -154,15 +158,19 @@ function SessionCard({
   const metricsUnavailable = session.status === 'running' && activity && !activity.available;
   // O uso e do agente, entao acompanha o nome dele na linha do que esta
   // rodando. A janela mais curta e a mostrada; as outras ficam na dica.
-  const usage = activity?.agent && activity.usage?.windows?.length ? activity.usage : null;
-  const planWindow = usage ? usage.windows[0] : null;
-  const detail = usage ? sessionUsage(activity) : null;
+  // O plano da conta vem da mesma leitura da tela de contas, entao Claude
+  // Code e Codex mostram o mesmo tipo de numero. O arquivo do proprio agente
+  // continua sendo a fonte de modelo, contexto e custo.
+  const plan = activity?.agent ? sessionPlan(activity) : null;
+  const planWindow = plan?.windows?.[0] || null;
+  const usage = activity?.usage?.windows?.length ? activity.usage : null;
+  const detail = activity?.usage ? sessionUsage(activity) : null;
   const model = detail?.model || null;
   const context = detail?.contextUsedPercent != null ? fmtPlan(detail.contextUsedPercent) : null;
   const cost = detail?.costUsd != null ? fmtCost(detail.costUsd) : null;
-  const missing = Boolean(activity?.agent && activity.profile && !usage);
+  const missing = Boolean(activity?.agent && activity.profile && !planWindow);
   const showInstall = missing && activity.agent === 'Claude Code' && !touch && session.status === 'running';
-  const showProfile = Boolean(usage && activity.profileName && usage.profile && !['claude', 'codex'].includes(usage.profile));
+  const showProfile = Boolean(activity?.profileName && activity.profile && !['claude', 'codex'].includes(activity.profile));
   const elapsed = session.jobStartedAt && session.status === 'running' ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
   const attention = session.attention;
 
@@ -247,8 +255,8 @@ function SessionCard({
         <div className="terminais-card__running-row">
           <span className={`terminais-card__running${running.agent ? ' is-agent' : ''}`} title={running.agent && missing ? missingTitle(activity) : undefined}>{running.text}</span>
           {running.agent && planWindow ? (
-            <span className={`terminais-card__plan terminais-card__plan--${planTone(planWindow.usedPercent)}`} title={planTitle(usage, activity, model)}>
-              {fmtPlan(planWindow.usedPercent)}
+            <span className={`terminais-card__plan terminais-card__plan--${planTone(planWindow.percent)}${plan.stale ? ' is-stale' : ''}`} title={planTitle(plan, activity, model)}>
+              {fmtPlan(planWindow.percent)}
             </span>
           ) : null}
           {running.agent && showInstall ? <InstallHook activity={activity} /> : null}
@@ -261,7 +269,7 @@ function SessionCard({
           {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
           {context ? <span className={`terminais-card__chip terminais-card__chip--${planTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
           {cost ? <span className="terminais-card__chip" title={translate('terminal.session.costTitle', { amount: cost })}>{translate('terminal.session.cost', { amount: cost })}</span> : null}
-          {showProfile ? <span className="terminais-card__profile" title={translate(usage.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage.configDir) })}>{activity.profileName}</span> : null}
+          {showProfile ? <span className="terminais-card__profile" title={translate(usage?.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage?.configDir) })}>{activity.profileName}</span> : null}
         </div>
       ) : null}
       <div className="terminais-card__state">

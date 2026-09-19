@@ -13,6 +13,9 @@ export const LAYOUT_LIMITS = {
   sessions: { min: 200, max: 360, default: 240 },
   explorer: { min: 220, max: 440, default: 260 },
   editorRatio: { min: 0.2, max: 0.85, default: 0.55 },
+  // Quanto da aba do grafo fica com o grafo quando a previa esta aberta. A
+  // divisao nasce meio a meio, como o pedido de 19/09/2026.
+  docgraphRatio: { min: 0.25, max: 0.8, default: 0.5 },
   fontSize: { min: 10, max: 20, default: 12 },
 };
 
@@ -22,6 +25,7 @@ const DEFAULTS = {
   sessionsCollapsed: false,
   explorerCollapsed: false,
   editorRatio: LAYOUT_LIMITS.editorRatio.default,
+  docgraphRatio: LAYOUT_LIMITS.docgraphRatio.default,
   fontSize: LAYOUT_LIMITS.fontSize.default,
   focus: false,
   // Painel cujo aviso de onde reabrir ja foi mostrado uma vez. Recolher uma
@@ -41,6 +45,7 @@ function sanitize(raw) {
   if (Number.isFinite(raw.sessionsWidth)) next.sessionsWidth = clamp(raw.sessionsWidth, LAYOUT_LIMITS.sessions);
   if (Number.isFinite(raw.explorerWidth)) next.explorerWidth = clamp(raw.explorerWidth, LAYOUT_LIMITS.explorer);
   if (Number.isFinite(raw.editorRatio)) next.editorRatio = clamp(raw.editorRatio, LAYOUT_LIMITS.editorRatio);
+  if (Number.isFinite(raw.docgraphRatio)) next.docgraphRatio = clamp(raw.docgraphRatio, LAYOUT_LIMITS.docgraphRatio);
   if (Number.isFinite(raw.fontSize)) next.fontSize = clamp(Math.round(raw.fontSize), LAYOUT_LIMITS.fontSize);
   next.sessionsCollapsed = Boolean(raw.sessionsCollapsed);
   next.explorerCollapsed = Boolean(raw.explorerCollapsed);

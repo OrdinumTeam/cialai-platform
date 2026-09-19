@@ -12,7 +12,7 @@ import {
   ArrowDown, ArrowUp, Bell, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
   FilePlus2, Network, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput, UserRound,
 } from 'lucide-react';
-import { useToast } from '../../components/ui.jsx';
+import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { registerPaletteProvider } from '../../desktop/palette-registry.js';
@@ -25,12 +25,13 @@ import {
 } from '../runtime.js';
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
 import { copyPort, openBrowserTab, reconcileBrowsers, stopBrowser } from '../browser/runtime.js';
-import { docGraphTabId, openDocGraphTab } from '../docgraph/tab.js';
+import { closeDocGraphPreview, docGraphTabId, openDocGraphPreview, openDocGraphTab } from '../docgraph/tab.js';
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
 import { INITIAL_PANELS, choosePanel, panelCollapsed, resizePanels } from '../panels.js';
 import { baseName, fs, isPreviewable, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
+import AgentProfiles from './AgentProfiles.jsx';
 import SessionsPane from './SessionsPane.jsx';
 import WorkArea, { ToolbarSlot } from './WorkArea.jsx';
 import ExplorerPane from './ExplorerPane.jsx';
@@ -68,6 +69,8 @@ export default function Workbench() {
   const [deleteRequest, setDeleteRequest] = useState(null);
   const [nameRequest, setNameRequest] = useState(null);
   const [quickOpen, setQuickOpen] = useState(false);
+  // Contas dos agentes com porta propria no estudio, fora de Configuracoes.
+  const [accountsOpen, setAccountsOpen] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
   const [revealRequest, setRevealRequest] = useState(null);
   const [editorFocusKey, setEditorFocusKey] = useState(0);
@@ -92,6 +95,11 @@ export default function Workbench() {
       }), 'info');
     }
   };
+  // `showPanel` nasce de novo a cada desenho; o ref deixa as acoes por
+  // caminho chamarem a versao atual sem entrar na lista de dependencias e
+  // desestabilizar `editorActions`, que o painel memoizado compara.
+  const showPanelRef = useRef(showPanel);
+  showPanelRef.current = showPanel;
   const native = hasBridge() || isDemo();
 
   const { selected, hydrated } = getState();
@@ -349,9 +357,47 @@ export default function Workbench() {
     }
   }, [notify]);
 
+  // Acoes por caminho, e nao por aba: o grafo da documentacao trabalha com o
+  // caminho do documento e nao tem aba por tras. Sem elas, `Abrir no editor`,
+  // `Visualizar` e `Revelar no explorador` do grafo caiam em
+  // `actions.openPath is not a function`.
+  const openPath = useCallback((path) => {
+    const current = getState().selected;
+    if (!current || !path) return;
+    openFile(current.id, path).then(() => setEditorFocusKey((value) => value + 1)).catch((error) => notify(error?.message || String(error), 'warning'));
+  }, [notify]);
+
+  const previewPath = useCallback((path) => {
+    const current = getState().selected;
+    if (!current || !path) return;
+    openDocGraphPreview(current.id, path);
+  }, []);
+
+  const revealPathInExplorer = useCallback((path) => {
+    const current = getState().selected;
+    if (!current || !path) return;
+    showPanelRef.current?.('explorer', true);
+    setRevealRequest({ sessionId: current.id, path, at: Date.now() });
+  }, []);
+
+  // Janela separada do documento, quando o app nativo pode abrir uma. A
+  // divisao interna fecha junto: a area volta inteira para o grafo, e
+  // `Visualizar` de novo traz a divisao de volta.
+  const detachPreview = useCallback((path) => {
+    const current = getState().selected;
+    if (!current || !path) return;
+    invoke('doc_preview_window', { path })
+      .then(() => closeDocGraphPreview(current.id))
+      .catch((error) => notify(error?.message || String(error), 'warning'));
+  }, [notify]);
+
   // Acoes do editor num objeto estavel: o painel e memoizado e so redesenha
   // nos eventos de editor da propria sessao.
   const editorActions = useMemo(() => ({
+    openPath,
+    previewPath,
+    revealInExplorer: revealPathInExplorer,
+    detachPreview: hasBridge() ? detachPreview : undefined,
     activate: (tab) => { if (tab.session) activateTab(tab.session.id, tab.id); setEditorFocusKey((value) => value + 1); },
     close: requestCloseTab,
     setMode: (tab, mode) => setTabMode(tab, mode),
@@ -364,7 +410,7 @@ export default function Workbench() {
     reveal: (tab) => fs.reveal(tab.path).catch((error) => notify(error.message, 'warning')),
     reconvert: (tab) => reconvertTab(tab).catch((error) => notify(error?.message || String(error), 'warning')),
     viewAsPdf: (tab) => viewAsPdf(tab).catch((error) => notify(error?.message || String(error), 'warning')),
-  }), [requestCloseTab, notify]);
+  }), [requestCloseTab, notify, openPath, previewPath, revealPathInExplorer, detachPreview]);
 
   // ⌘W fecha o que esta mais por dentro: a aba ativa do editor enquanto
   // houver abas, e so depois a sessao, com a confirmacao que couber.
@@ -375,6 +421,21 @@ export default function Workbench() {
     return true;
   }, [selected, activeTab, requestCloseTab, requestCloseSession]);
   closeShortcutRef.current = closeShortcut;
+
+  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
+  // proprio programa, num terminal ja aberto naquele perfil. O Cialai nunca
+  // toca em credencial. E o mesmo caminho do celular.
+  const createAgentProfile = useCallback(async (request, name) => {
+    try {
+      const id = await invoke('agent_profile_create', { agent: request.agent, name });
+      request.reload?.();
+      notify(translate('terminal.profiles.created', { name }), 'success');
+      const current = getState().selected;
+      if (current?.ptyId != null) await invoke('pty_launch_agent', { id: current.ptyId, agent: request.agent, profile: id });
+    } catch (error) {
+      notify(error?.message || String(error), 'warning');
+    }
+  }, [notify]);
 
   const openInEditor = useCallback((path) => {
     const current = getState().selected;
@@ -639,6 +700,7 @@ export default function Workbench() {
             onJumpAttention={selectNextAttention}
             disconnectedCount={disconnected}
             onReopenAll={reopenAll}
+            onAccounts={native ? () => setAccountsOpen(true) : null}
             onCollapse={() => showPanel('sessions', false)}
           />
           <Splitter orientation="vertical" label={translate('terminal.work.sessionsWidth')} onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
@@ -749,9 +811,29 @@ export default function Workbench() {
         onConfirm={(value) => {
           const request = nameRequest;
           setNameRequest(null);
-          if (request?.kind === 'subtitle') setSessionSubtitle(request.sessionId, value);
+          if (request?.kind === 'subtitle') { setSessionSubtitle(request.sessionId, value); return; }
+          if (request?.kind === 'profile') createAgentProfile(request, value);
         }}
       />
+      <AppModal
+        open={accountsOpen}
+        title={translate('terminal.profiles.title')}
+        onClose={() => setAccountsOpen(false)}
+        maxWidth="md"
+        footer={<button type="button" className="btn btn-quiet" onClick={() => setAccountsOpen(false)}>{translate('terminal.common.close')}</button>}
+      >
+        <AgentProfiles
+          onCreate={(agent, reload) => setNameRequest({
+            kind: 'profile',
+            agent,
+            reload,
+            title: translate('terminal.profiles.createTitle'),
+            description: translate('terminal.profiles.createDescription'),
+            required: true,
+            confirmLabel: translate('terminal.profiles.create'),
+          })}
+        />
+      </AppModal>
     </div>
   );
 }

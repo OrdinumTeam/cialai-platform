@@ -11,7 +11,7 @@
 // metade da altura, e abaixo do ultimo card e o fim do grupo.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, PanelLeftClose, Plus, RotateCcw, Search, X } from 'lucide-react';
+import { Bell, PanelLeftClose, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
 import SessionCard from './SessionCard.jsx';
 import { deliverPaths, moveSession, moveSessionBy } from '../runtime.js';
 import { beginDrag, inside, onDrag } from '../drag.js';
@@ -32,7 +32,7 @@ function sameTarget(a, b) {
 
 export default function SessionsPane({
   sessions, selectedId, onSelect, onNew, onMenu, renamingId, onRename, onRenameDone, attentionCount,
-  onJumpAttention, disconnectedCount, onReopenAll, onCollapse,
+  onJumpAttention, disconnectedCount, onReopenAll, onAccounts, onCollapse,
 }) {
   useI18n();
   const [query, setQuery] = useState('');
@@ -170,6 +170,11 @@ export default function SessionsPane({
           </button>
         ) : null}
         <span className="terminais-pane__spacer" />
+        {onAccounts ? (
+          <button type="button" className="terminais-pane__tool" onClick={onAccounts} aria-label={translate('terminal.profiles.title')} title={translate('terminal.profiles.title')}>
+            <UserRound size={15} strokeWidth={1.75} aria-hidden="true" />
+          </button>
+        ) : null}
         <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label={translate('terminal.session.new')} title={translate('terminal.session.newShortcut', { shortcut: shortcutLabel('Mod+T') })}>
           <Plus size={15} strokeWidth={2} aria-hidden="true" />
         </button>

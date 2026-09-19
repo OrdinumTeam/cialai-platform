@@ -48,7 +48,9 @@ simulação de forças com a raiz fixa, expansão progressiva e foco animado.
 | Abrir já focado num item | Menu de contexto do explorador, em pastas e arquivos `.md`: Mostrar no grafo da documentação |
 | Expandir ou recolher pasta | Clique na pasta. A pasta recolhida é um disco cheio com o total de documentos abaixo dela |
 | Ver detalhes | Clique no nó. O cartão mostra nome, caminho e contagens. Passar o ponteiro mostra nome e caminho |
-| Abrir um documento | Duplo clique, Enter ou Abrir no editor no cartão. ⌥Enter ou Visualizar abre já na visualização |
+| Abrir um documento para editar | Duplo clique, Enter ou Abrir no editor no cartão. O arquivo entra numa aba própria do editor |
+| Ler um documento ao lado do grafo | ⌥Enter ou Visualizar no cartão. A prévia renderizada abre num painel ao lado do mapa, na mesma aba |
+| Levar a prévia para uma janela separada | Botão de janela no cabeçalho da prévia. A divisão interna fecha, e Visualizar de novo a traz de volta |
 | Revelar no explorador | Botão do cartão ou menu de contexto do nó |
 | Buscar | Campo da barra, `/` ou ⌘F com o grafo em foco. Escolher um resultado expande as pastas do caminho, seleciona e centraliza |
 | Navegar | Arrastar o fundo desloca, a roda e a pinça dão zoom, arrastar uma marca move o agrupamento. Na barra: mais e menos zoom, Ajustar à área, Centralizar na seleção, expandir e recolher tudo, Reagrupar cores e Atualizar |
@@ -62,7 +64,7 @@ Teclado, com o grafo em foco:
 | → | Expande a pasta ou desce para o primeiro filho |
 | Home e End | Primeiro e último nó |
 | Enter | Abre o documento ou alterna a pasta |
-| ⌥Enter | Abre o documento na visualização |
+| ⌥Enter | Abre a prévia do documento ao lado do grafo |
 | Espaço | Alterna a pasta |
 | `+` e `-` | Zoom |
 | `0` | Ajustar à área |
@@ -188,12 +190,39 @@ da sessão, e sobrevivem à troca de aba e de seção.
 Os comandos ficam fora da lista da ponte do iPhone, como o editor e o Dev
 Browser.
 
+### Prévia ao lado do mapa, não em outra aba
+
+`Visualizar` abre a prévia renderizada num painel ao lado do grafo, dentro da
+mesma aba, com a divisão em metades e um divisor arrastável. A proporção fica
+em `docgraphRatio`, no mesmo armazenamento de layout das outras colunas, com
+mínimo de 0,25 e máximo de 0,8.
+
+A alternativa era abrir a aba do editor em modo de visualização, que é o que
+`Abrir no editor` já faz. Ler um documento assim tira o mapa da tela, e o mapa
+é justamente o que dá contexto a ele. As duas ações passam a ter significados
+distintos e estáveis: editar abre o arquivo, ler abre a prévia.
+
+O documento aberto mora na sessão, em `session.docgraph.preview`, e não no
+painel, que desmonta a cada troca de aba. Por isso a prévia sobrevive a ir e
+voltar, e por isso escolher outro documento troca o conteúdo do mesmo painel
+em vez de empilhar painéis. Fechar devolve a área inteira ao grafo. Nada disso
+mexe na seleção, no zoom nem na posição da câmera.
+
+A janela separada é uma janela só, reaproveitada, criada pelo Rust em
+`doc_preview_window` com a mesma página e `?docpreview=1`. O caminho não vai na
+URL: fica no estado `DocPreviewState` e chega por `doc_preview_path` e pelo
+evento `docpreview://path`. A janela tem capacidade própria em
+`capabilities/doc-preview.json`, com o mínimo para ler um arquivo e abrir link
+fora.
+
 ## Comandos e eventos
 
 | Comando | Argumentos | Devolve |
 | --- | --- | --- |
 | `docgraph_scan` | `key`, `token`, `root` | `DocScan` com `root` como foi pedido, `canonicalRoot`, `docs` de `relative`, `size`, `modifiedMs`, `symlink` e `target`, `dirs`, `visited`, `elapsedMs`, `partial`, `stopped`, `issues` de `relative` e `code`, `issuesTotal`, `excluded` e `fingerprint` |
 | `docgraph_cancel` | `key`, `token` opcional | Verdadeiro quando cancelou |
+| `doc_preview_window` | `path` | Nada. Abre a janela da prévia ou traz a existente para a frente com o documento novo |
+| `doc_preview_path` | Nenhum | Caminho que a janela da prévia deve mostrar, ou nada |
 
 `key` é a sessão e `token` identifica o pedido. Um pedido novo da mesma chave
 cancela o anterior no Rust. Erros chegam como `{ code, message }`: `invalid`,

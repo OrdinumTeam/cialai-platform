@@ -83,6 +83,7 @@ export default Object.freeze({
   'native.error.shellBusy': 'The terminal is busy. Wait for the process to finish and try again.',
   'native.error.presentationInvalid': 'Invalid terminal presentation.',
   'native.error.previewTooLarge': 'The file has {size} MB, above the 40 MB preview limit. Open it in the default app.',
+  'native.error.previewWindow': 'The preview window could not be opened: {error}',
   'native.error.profileCreate': 'Could not create the profile: {error}',
   'native.error.projectFolderNotFound': 'Project folder not found',
   'native.error.projectsUnavailable': 'Projects folder unavailable.',

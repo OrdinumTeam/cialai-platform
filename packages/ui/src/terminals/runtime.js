@@ -49,6 +49,8 @@ import { baseName, fs, isInside, shellQuote } from './files.js';
 import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
 import { platform } from '../lib/platform.js';
+import { windowLabel } from '../notch/copy.js';
+import { demoProfiles } from './agent-profiles-demo.js';
 import { translate } from '../shared/i18n.js';
 
 export { NATIVE_ONLY_MESSAGE };
@@ -113,6 +115,11 @@ const state = {
   parking: null,
   metricsTimer: null,
   aiUsage: new Map(),
+  // Contas dos agentes lidas pelo computador, por id de perfil. E a mesma
+  // leitura da tela de contas e da Barra de IA, e vale igual para os dois
+  // provedores: o card nao depende mais do hook do Claude Code para ter
+  // porcentagem.
+  agentAccounts: new Map(),
   usageAt: 0,
   metricsBusy: false,
   viewMounted: false,
@@ -565,6 +572,10 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     // controlador vive em docgraph/controller.js.
     docgraph: {
       restoreOpen: Boolean(docgraph?.open),
+      // Documento aberto na previa ao lado do grafo, ou `null` com a previa
+      // fechada. Mora na sessao, e nao no painel, porque o painel desmonta
+      // toda vez que outra aba e ativada.
+      preview: null,
     },
   };
 
@@ -1307,6 +1318,48 @@ export function usageFor(agent, profile) {
   return state.aiUsage.get(usageKey(agent, profile)) || null;
 }
 
+export function accountFor(profile) {
+  if (!profile) return null;
+  return state.agentAccounts.get(profile) || null;
+}
+
+// Uso do plano da conta do agente da sessao, ja normalizado para o card.
+//
+// A leitura preferida e a das contas, porque e uma so para Claude Code e
+// Codex: sem ela o card do Claude Code ficava sem numero enquanto o do Codex
+// mostrava o dele, e a diferenca era so a fonte. O arquivo que o proprio
+// agente publica entra como reserva e continua sendo o unico que traz modelo,
+// contexto e custo.
+//
+// Cada janela sai com o rotulo dela; duas janelas de periodos diferentes
+// nunca aparecem como a mesma medida.
+export function sessionPlan(activity) {
+  const account = accountFor(activity?.profile);
+  const snapshot = account?.usage;
+  const windows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
+  const headline = snapshot?.headlineId ? windows.find((window) => window.id === snapshot.headlineId) : null;
+  if (headline && Number.isFinite(headline.usedFraction)) {
+    return {
+      plan: account.plan || null,
+      stale: snapshot.status?.kind === 'stale',
+      source: snapshot.source || null,
+      updatedAtMs: snapshot.fetchedAtMs || 0,
+      windows: windows
+        .filter((window) => Number.isFinite(window.usedFraction))
+        .map((window) => ({ id: window.id, label: windowLabel(window), percent: window.usedFraction * 100, resetsAtMs: window.resetsAtMs || null })),
+    };
+  }
+  const usage = activity?.usage;
+  if (!usage?.windows?.length) return null;
+  return {
+    plan: usage.plan || null,
+    stale: Boolean(usage.stale),
+    source: usage.source || null,
+    updatedAtMs: usage.updatedAtMs || 0,
+    windows: usage.windows.map((window) => ({ id: window.id, label: window.label, percent: window.usedPercent, resetsAtMs: window.resetsAtMs || null })),
+  };
+}
+
 // Sessao do agente que roda nesta pasta: a sessao do perfil cuja pasta bate
 // com a do processo, senao a mais recente do perfil. Traz o modelo e, quando
 // o hook publica, quanto da janela de contexto ja foi usado e o custo
@@ -1365,6 +1418,12 @@ async function sampleUsage() {
   } catch (_error) {
     // Sem o comando ou sem dado publicado, os cards ficam so com CPU e memoria.
     state.aiUsage = new Map();
+  }
+  try {
+    const accounts = await invoke('agent_profiles');
+    if (Array.isArray(accounts)) state.agentAccounts = new Map(accounts.map((account) => [account.id, account]));
+  } catch (_error) {
+    // A leitura das contas e opcional: o card cai no arquivo do proprio agente.
   }
   state.sessions.forEach((session) => {
     const activity = session.activity;
@@ -2339,6 +2398,10 @@ export function setMaximized(id, target) {
 
 function seedDemo() {
   const home = `${platform().home}/Projects`;
+  // Contas de exemplo, as mesmas da tela de contas: e por elas que o card do
+  // Codex ganha a porcentagem do plano sem arquivo do proprio agente, que e
+  // o caminho novo de 19/09/2026.
+  state.agentAccounts = new Map(demoProfiles().map((account) => [account.id, account]));
   // Uso do plano de exemplo, para o card mostrar o chip nas capturas.
   state.aiUsage = new Map([
     ['Claude Code|claude-main', {

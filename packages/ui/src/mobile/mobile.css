@@ -35,10 +35,13 @@
 [data-form-factor="phone"] .ios-header--strip-incompatible { background: var(--mac-bad-bg); }
 [data-form-factor="phone"] .ios-shell--terminal .ios-content { overflow: hidden; padding: 0; }
 [data-form-factor="phone"] .ios-shell--terminal .ios-tabbar { position: static; flex: none; }
-/* Teclado aberto: o WebKit nao encolhe a pagina, so o visualViewport. A casca
-   passa a ocupar exatamente a area visivel e a barra de abas sai, para o
-   prompt e as teclas do terminal ficarem acima do teclado. */
-[data-form-factor="phone"] .ios-shell--keyboard { position: fixed; left: 0; right: 0; top: var(--ios-keyboard-top, 0px); height: var(--ios-keyboard-height, 100dvh); }
+/* O WebKit nao encolhe a pagina quando o teclado abre, so o visualViewport. A
+   casca ocupa exatamente a area visivel de agora, com teclado ou sem: a
+   medida vale sempre, entao nenhuma medida perdida deixa a pagina presa numa
+   altura que ja passou. Sem a medida, 100dvh. */
+[data-form-factor="phone"] .ios-shell--viewport { position: fixed; left: 0; right: 0; top: var(--ios-viewport-top, 0px); height: var(--ios-viewport-height, 100dvh); }
+/* Com o teclado aberto a barra de abas sai, para o prompt e as teclas do
+   terminal ficarem acima dele. */
 [data-form-factor="phone"] .ios-shell--keyboard .ios-tabbar { display: none; }
 [data-form-factor="phone"] .ios-header__heading > div { flex: 1; min-width: 0; }
 [data-form-factor="phone"] .ios-header h1 { font-size: 1.375rem; line-height: 1.2; margin: 0; font-weight: 600; }
@@ -78,6 +81,9 @@
 /* Dialogos do MUI no celular: folha colada embaixo, largura toda, raio de
    painel e botoes de toque. */
 [data-form-factor="phone"] .MuiDialog-container { align-items: flex-end; }
-[data-form-factor="phone"] .MuiDialog-paper { width: 100% !important; max-width: none !important; margin: 0 !important; border-radius: 20px 20px 0 0 !important; padding-bottom: env(safe-area-inset-bottom); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .MuiDialog-paper { width: 100% !important; max-width: none !important; max-height: 88dvh !important; margin: 0 !important; border-radius: 20px 20px 0 0 !important; padding-bottom: env(safe-area-inset-bottom); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+/* O corpo da folha rola por dentro: com muitas contas, o rodape com Fechar
+   precisa continuar ao alcance do polegar. */
+[data-form-factor="phone"] .MuiDialogContent-root { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 @media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 [data-motion="none"][data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; }

@@ -15,7 +15,7 @@
 // Rust como codigo, no molde de tunnel-model.js. O que nao e codigo e nome
 // proprio, como o de um modelo, e vai para a tela como veio.
 
-import { getLocale, translate } from '../desktop/i18n.js';
+import { getLocale, translate } from '../shared/i18n.js';
 
 export const DASH = '—';
 

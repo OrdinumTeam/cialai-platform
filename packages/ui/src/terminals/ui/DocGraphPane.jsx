@@ -24,6 +24,10 @@ import { motionOff } from '../motion.js';
 import { changeDirectory, isDemo } from '../runtime.js';
 import { isDarkTheme, watchTheme } from '../theme.js';
 import Menu from './Menu.jsx';
+import DocGraphPreview from './DocGraphPreview.jsx';
+import Splitter from './Splitter.jsx';
+import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
+import { closeDocGraphPreview } from '../docgraph/tab.js';
 import { DetailCard, GraphState, HoverTip, IssuesPopover, Legend, SearchBox, TreeMirror, countsLabel } from './DocGraphOverlays.jsx';
 
 const WORLD = { w: 1, h: 1 };
@@ -327,9 +331,29 @@ function DocGraphPane({ session, actions }) {
   }, []);
   const readRoot = useCallback(() => session.explorer.root, [session]);
   const root = useRuntimeValue(['explorer'], session.id, readRoot);
+  // A previa mora na sessao: trocar de aba e voltar reencontra o documento
+  // aberto, e o grafo continua com a selecao, o zoom e a posicao que tinha.
+  const readPreview = useCallback(() => session.docgraph.preview?.path || null, [session]);
+  const previewPath = useRuntimeValue(['docgraph'], session.id, readPreview);
+  const layout = useLayout();
+  const splitRef = useRef(null);
 
-  if (failed || !engine) {
-    return (
+  const dragSplit = useCallback((delta, event) => {
+    const box = splitRef.current;
+    if (!box) return;
+    if (delta === null) {
+      const current = parseFloat(box.style.getPropertyValue('--docgraph-ratio'));
+      if (Number.isFinite(current)) setLayout({ docgraphRatio: current });
+      return;
+    }
+    const rect = box.getBoundingClientRect();
+    if (!rect.width) return;
+    const next = Math.min(LAYOUT_LIMITS.docgraphRatio.max, Math.max(LAYOUT_LIMITS.docgraphRatio.min, (event.clientX - rect.left) / rect.width));
+    box.style.setProperty('--docgraph-ratio', String(next));
+  }, []);
+
+  const body = failed || !engine
+    ? (
       <div className="terminais-docgraph">
         <div className="terminais-docgraph__view">
           <div className="terminais-docgraph__overlay" role={failed ? 'alert' : 'status'}>
@@ -338,9 +362,30 @@ function DocGraphPane({ session, actions }) {
           </div>
         </div>
       </div>
-    );
-  }
-  return <DocGraphView key={root} engine={engine} session={session} root={root} actions={actions} />;
+    )
+    : <DocGraphView key={root} engine={engine} session={session} root={root} actions={actions} />;
+
+  if (!previewPath) return body;
+  return (
+    <div className="terminais-docgraph-split" ref={splitRef} style={{ '--docgraph-ratio': layout.docgraphRatio }}>
+      {body}
+      <Splitter
+        orientation="vertical"
+        label={STRINGS.previewWidth}
+        onDrag={dragSplit}
+        onReset={() => setLayout({ docgraphRatio: LAYOUT_LIMITS.docgraphRatio.default })}
+        onStep={(step) => setLayout({ docgraphRatio: Math.min(LAYOUT_LIMITS.docgraphRatio.max, Math.max(LAYOUT_LIMITS.docgraphRatio.min, layout.docgraphRatio + step / 600)) })}
+      />
+      <DocGraphPreview
+        sessionId={session.id}
+        path={previewPath}
+        detachable={Boolean(actions.detachPreview)}
+        onOpenInEditor={() => actions.openPath(previewPath)}
+        onDetach={() => actions.detachPreview(previewPath)}
+        onClose={() => closeDocGraphPreview(session.id)}
+      />
+    </div>
+  );
 }
 
 export default memo(DocGraphPane);

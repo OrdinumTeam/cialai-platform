@@ -12,7 +12,7 @@ import { isMobileShell, onShellTheme, shellTheme } from '../lib/shell.js';
 import { VIEW_COMPONENTS } from '../views/registry.js';
 import MobileHeader from './MobileHeader.jsx';
 import { translate } from './i18n.js';
-import { useKeyboardBox } from './keyboard-viewport.js';
+import { useViewportBox } from './keyboard-viewport.js';
 
 function ErrorNotice() {
   const notify = useToast();
@@ -28,7 +28,8 @@ export default function MobileApp() {
   const appearance = useAppearance();
   const theme = useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
   const connection = useSyncExternalStore(remote.subscribeState, remote.state);
-  const keyboard = useKeyboardBox(true);
+  // A casca ocupa exatamente a area visivel de agora, com teclado ou sem.
+  const viewport = useViewportBox(true);
   const inShell = isMobileShell();
   useEffect(() => { installShellBridge({ navigate() {}, setSidebarHidden() {}, openPalette() {} }, { sidebarHidden: true }); }, []);
   // A aparencia escolhida nos ajustes do aplicativo vale tambem na pagina:
@@ -39,5 +40,5 @@ export default function MobileApp() {
     return onShellTheme((mode) => appearance.setMode(mode));
   }, [appearance.setMode]);
   const desktopName = connection.desktop?.name || window.__CIALAI_SHELL__?.desktopName || translate('desktop.fallback');
-  return <AppearanceContext.Provider value={appearance}><ThemeProvider theme={theme}><CssBaseline enableColorScheme /><ToastProvider><ErrorNotice /><div className={`ios-shell ios-shell--terminal${keyboard ? ' ios-shell--keyboard' : ''}${inShell ? ' ios-shell--native' : ''}`} style={keyboard ? { '--ios-keyboard-top': `${keyboard.top}px`, '--ios-keyboard-height': `${keyboard.height}px` } : undefined}><MobileHeader desktopName={desktopName} connection={connection.status} compact={inShell} /><main className="ios-content" id="content"><ContentArea ViewComponent={VIEW_COMPONENTS.terminais} viewId="terminais" /></main></div></ToastProvider></ThemeProvider></AppearanceContext.Provider>;
+  return <AppearanceContext.Provider value={appearance}><ThemeProvider theme={theme}><CssBaseline enableColorScheme /><ToastProvider><ErrorNotice /><div className={`ios-shell ios-shell--terminal${viewport ? ' ios-shell--viewport' : ''}${viewport?.keyboard ? ' ios-shell--keyboard' : ''}${inShell ? ' ios-shell--native' : ''}`} style={viewport ? { '--ios-viewport-top': `${viewport.top}px`, '--ios-viewport-height': `${viewport.height}px` } : undefined}><MobileHeader desktopName={desktopName} connection={connection.status} compact={inShell} /><main className="ios-content" id="content"><ContentArea ViewComponent={VIEW_COMPONENTS.terminais} viewId="terminais" /></main></div></ToastProvider></ThemeProvider></AppearanceContext.Provider>;
 }

@@ -1,0 +1,12 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "doc-preview",
+  "description": "Permissions for the separate document preview window, which only reads one Markdown file and opens links outside",
+  "windows": ["doc-preview"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-close",
+    "core:window:allow-set-theme",
+    "opener:default"
+  ]
+}

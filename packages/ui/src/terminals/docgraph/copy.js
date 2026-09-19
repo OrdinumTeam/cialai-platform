@@ -55,6 +55,11 @@ export function badgeCount(count) {
   return translate('terminal.docgraph.badgeThousands', { count: Math.floor(value / 1000).toLocaleString(getLocale()) });
 }
 
+// Rotulo acessivel do painel de previa, com o nome do documento.
+export function previewOf(name) {
+  return translate('terminal.docgraph.previewOf', { name });
+}
+
 export function issueReason(code) {
   if (code === 'denied') return STRINGS.reasonDenied;
   if (code === 'depth') return STRINGS.reasonDepth;

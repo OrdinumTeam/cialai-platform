@@ -6,13 +6,13 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **The studio draws your documentation.** A tab shows every Markdown file of the folder you work in, and only the folders that lead to them. Open it with Shift Cmd D, from the command palette or from the explorer menu.
-* **Agent accounts are picked in the interface.** A screen lists every Claude Code and Codex profile with its plan and usage, and chooses which one new sessions use. It never moves or reads a credential.
-* **Session activity says what is happening.** It comes from the agent turn and the age of the last output, so an agent that already answered stops animating.
-* **A floating composer on the phone.** Write a long instruction with the device keyboard and send it only through Insert or Send.
-* **A session menu on the phone.** Rename, colour, pin, move, change folder, restart and close, by long press or the three dot button.
-* **A folder picker that reaches the disk.** Open a session in the project root itself and browse the rest with a trail.
-* **One path contract on Windows.** Going up from `C:/Users` reaches the drive root, and the explorer stops switching roots on its own.
+* **Studio dialogs are sized by their content again.** Pair phone, Preferences, agent accounts and the revoke confirmation no longer take the full width of their breakpoint, the body scrolls inside, and the application behind keeps its dimensions.
+* **The documentation graph reads a document beside the map.** Preview opens the rendered Markdown in a panel next to the graph, split in half and resizable, and one explicit action moves it to a window of its own.
+* **The phone gets the whole screen back after the keyboard closes.** The shell follows the visible area at all times, so the native done button, a closed composer and a return from the background no longer leave a grey band under the terminal.
+* **The agent accounts have a door of their own,** next to the sessions on the computer, and a card layout that fits the width of a phone.
+* **Claude Code shows the plan and the usage percentage** that Codex already showed, on the accounts screen and on the session cards, with the name of the window beside each percentage and a clear state when there is no reading.
+
+This preview ships Linux and iOS only. macOS, Windows and Android stay on 0.2.5 until the next full release.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

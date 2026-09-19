@@ -83,6 +83,7 @@ export default Object.freeze({
   'native.error.shellBusy': 'El terminal está ocupado. Espera a que el proceso termine e inténtalo de nuevo.',
   'native.error.presentationInvalid': 'La presentación del terminal no es válida.',
   'native.error.previewTooLarge': 'El archivo tiene {size} MB, por encima del límite de 40 MB de la vista previa. Ábrelo en la aplicación predeterminada.',
+  'native.error.previewWindow': 'No se pudo abrir la ventana de la previsualización: {error}',
   'native.error.profileCreate': 'No se pudo crear el perfil: {error}',
   'native.error.projectFolderNotFound': 'Carpeta del proyecto no encontrada',
   'native.error.projectsUnavailable': 'Carpeta de proyectos no disponible.',

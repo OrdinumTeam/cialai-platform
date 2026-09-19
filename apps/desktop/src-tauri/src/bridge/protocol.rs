@@ -126,6 +126,7 @@ pub fn allowed_command(cmd: &str) -> bool {
             | "agent_profiles"
             | "agent_profile_select"
             | "agent_profile_create"
+            | "agent_profiles_refresh"
             | "pty_launch_agent"
     )
 }
@@ -295,6 +296,7 @@ mod tests {
             "agent_profiles",
             "agent_profile_select",
             "agent_profile_create",
+            "agent_profiles_refresh",
             "pty_launch_agent",
         ] {
             assert!(allowed_command(cmd));

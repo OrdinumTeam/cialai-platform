@@ -5,11 +5,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { build } from 'esbuild';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
+
+const source = (relative) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
 const mocks = {
   renderer: `const off = () => ({dispose(){}}); export class Terminal {
@@ -159,4 +162,27 @@ test('amostra de antes da reconexao nao anima o card', () => {
     sampleAt: NOW - 90_000, evidenceSince: NOW - 10_000,
   }) });
   assert.doesNotMatch(html, /terminais-activity/);
+});
+
+test('o uso do plano no card vem da leitura das contas, igual para os dois provedores', () => {
+  const card = source('../src/terminals/ui/SessionCard.jsx');
+  const runtime = source('../src/terminals/runtime.js');
+  assert.match(card, /sessionPlan\(activity\)/, 'o card pede o plano normalizado ao runtime');
+  assert.match(runtime, /export function sessionPlan/);
+  const body = runtime.slice(runtime.indexOf('export function sessionPlan'));
+  // A leitura das contas vem primeiro: e a unica que serve Claude Code e
+  // Codex do mesmo jeito. O arquivo que o proprio agente publica e reserva,
+  // e continua sendo o unico com modelo, contexto e custo.
+  assert.ok(body.indexOf('accountFor(activity?.profile)') < body.indexOf('activity?.usage'), 'a conta e consultada antes do arquivo do agente');
+  assert.match(body, /windowLabel\(window\)/, 'cada percentual sai com o rotulo da janela dele');
+  // Sem fracao publicada nao ha numero, e muito menos zero por cento.
+  assert.match(body, /Number\.isFinite\(headline\.usedFraction\)/);
+});
+
+test('leitura velha do plano fica a vista e apagada, com o aviso na dica', () => {
+  const card = source('../src/terminals/ui/SessionCard.jsx');
+  assert.match(card, /plan\.stale \? ' is-stale' : ''/);
+  assert.match(card, /terminal\.profiles\.stale/);
+  const css = source('../src/views/Terminais.css');
+  assert.match(css, /\.terminais-card__plan\.is-stale\{opacity:/);
 });
