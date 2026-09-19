@@ -10,7 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
-| [0.2.6](0.2.6.md) | 19/09/2026 | Sem tag | Somente Linux e iOS, pelo workflow de pacotes Linux e pelo Codemagic |
+| [0.2.6](0.2.6.md) | 19/09/2026 | `v0.2.6` | `OrdinumTeam/cialai-platform` |
 | [0.2.5](0.2.5.md) | 19/09/2026 | `v0.2.5` | `OrdinumTeam/cialai-platform` |
 | [0.2.4](0.2.4.md) | 18/09/2026 | Sem tag | Somente celular, pelo Codemagic |
 | [0.2.3](0.2.3.md) | 17/09/2026 | `v0.2.3` | `OrdinumTeam/cialai-platform` |

@@ -12,8 +12,6 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 * **The agent accounts have a door of their own,** next to the sessions on the computer, and a card layout that fits the width of a phone.
 * **Claude Code shows the plan and the usage percentage** that Codex already showed, on the accounts screen and on the session cards, with the name of the window beside each percentage and a clear state when there is no reading.
 
-This preview ships Linux and iOS only. macOS, Windows and Android stay on 0.2.5 until the next full release.
-
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
 ### Which file to download
