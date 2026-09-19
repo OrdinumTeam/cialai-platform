@@ -224,9 +224,13 @@ fn claude_session(
     home: &Path,
 ) -> Option<Detected> {
     let profile = procs::agent_profile(command, CLAUDE, home)?;
-    let path = Path::new(&profile.config_dir)
-        .join("sessions")
-        .join(format!("{pid}.json"));
+    // `config_dir` ja vem portatil; o `join` acrescentaria a barra do sistema e
+    // deixaria o caminho com os dois separadores misturados.
+    let path = PathBuf::from(crate::platform::to_portable(
+        Path::new(&profile.config_dir)
+            .join("sessions")
+            .join(format!("{pid}.json")),
+    ));
     let file: ClaudeSessionFile = serde_json::from_str(&read_small(&path)?).ok()?;
     if file.pid.is_some_and(|value| value != pid)
         || file
@@ -1022,7 +1026,9 @@ mod tests {
                 },
                 // O caminho do registro acompanha a conversa: e dele que o
                 // estudio le o estado do turno a cada amostra de metricas.
-                evidence: AgentEvidence::ClaudeRecord(sessions.join(format!("{pid}.json"))),
+                evidence: AgentEvidence::ClaudeRecord(PathBuf::from(crate::platform::to_portable(
+                    sessions.join(format!("{pid}.json"))
+                ),)),
             })
         );
         assert!(claude_session(&command, pid, start_sec + 3600, &home).is_none());

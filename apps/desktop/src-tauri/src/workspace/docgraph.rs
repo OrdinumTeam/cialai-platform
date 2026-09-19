@@ -379,7 +379,11 @@ pub fn scan(root: &str, cancel: &AtomicBool, options: &ScanOptions) -> FsResult<
                 excluded.invalid_names += 1;
                 continue;
             };
-            if files::is_noise(&name) {
+            // `files::is_noise` escolhe a lista pelo sistema que roda. O
+            // `._nome` do AppleDouble entra aqui a mais, em qualquer sistema:
+            // ele viaja junto quando a pasta e copiada de um Mac, e um
+            // `._guia.md` num Windows continua sendo metadado, nunca documento.
+            if files::is_noise(&name) || name.starts_with("._") {
                 continue;
             }
             if depth > 0 && name == CACHE_TAG {

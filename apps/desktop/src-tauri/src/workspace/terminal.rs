@@ -1923,7 +1923,10 @@ mod tests {
         manager
             .attach_for(id, key, Channel::new(|_| Ok(())))
             .unwrap();
-        assert_eq!(manager.subscribed_cwd(id, key).unwrap(), shell.cwd());
+        assert_eq!(
+            manager.subscribed_cwd(id, key).unwrap(),
+            crate::platform::to_portable(shell.cwd())
+        );
         let view = manager.view_claim(id, key, 40, 20).unwrap();
         let local = manager.clone();
         let resize = thread::spawn(move || {
@@ -2371,11 +2374,7 @@ mod tests {
     /// Espera o texto aparecer duas vezes, no eco do comando e na saída. No Windows a
     /// saída de um comando seguido de exit na mesma linha pode se perder quando o ConPTY
     /// fecha, então o teste só sai depois de ver o texto.
-    /// Espera o texto aparecer na saida.
-    ///
-    /// Quem escreve manda o shell montar o texto a partir de dois pedacos, por
-    /// `TestShell::print` ou pelo proprio comando, entao o texto nao viaja no
-    /// eco do que foi escrito e a primeira aparicao dele ja e a resposta.
+    /// Espera a resposta do shell aparecer na saida.
     fn collect_until_printed(
         rx: &Receiver<InvokeResponseBody>,
         queries: &mut LaterCursorQueries,
@@ -2384,7 +2383,7 @@ mod tests {
     ) -> bool {
         let deadline = Instant::now() + Duration::from_secs(20);
         while Instant::now() < deadline {
-            if String::from_utf8_lossy(output).contains(text) {
+            if answered(output, text) {
                 return true;
             }
             match rx.recv_timeout(Duration::from_millis(200)) {
@@ -2397,6 +2396,138 @@ mod tests {
             }
         }
         false
+    }
+
+    /// A resposta e a linha que comeca pelo texto.
+    ///
+    /// Contar aparicoes nao distingue pergunta de resposta, porque o terminal
+    /// ecoa o que foi escrito e um shell que ainda estava abrindo redesenha a
+    /// mesma linha depois do prompt, as vezes pela metade: o eco sozinho ja da
+    /// duas aparicoes e o teste segue antes da resposta chegar. Olhar so o
+    /// comeco da linha tambem nao basta, porque o `dash` escreve o prompt e a
+    /// resposta na mesma linha. Entao o texto tem que abrir a linha, ou abrir o
+    /// que vem logo depois do fim de um prompt.
+    fn answered(output: &[u8], text: &str) -> bool {
+        visible_lines(&String::from_utf8_lossy(output))
+            .iter()
+            .any(|line| opens_the_line(line, text))
+    }
+
+    fn opens_the_line(line: &str, text: &str) -> bool {
+        let line = line.trim_start();
+        if line.starts_with(text) {
+            return true;
+        }
+        // Fim de prompt: `$ ` e `# ` do POSIX, `>` do `cmd`. O espaco depois do
+        // cifrao evita confundir com `$VARIAVEL` dentro do comando ecoado.
+        ["$ ", "# ", ">"]
+            .iter()
+            .filter_map(|mark| line.find(mark).map(|at| at + mark.len()))
+            .min()
+            .is_some_and(|at| line[at..].trim_start().starts_with(text))
+    }
+
+    /// Quebra a saida crua nas linhas que ela mostra.
+    ///
+    /// Tira as sequencias de escape e trata a que move o cursor como quebra de
+    /// linha, porque o `cmd` posiciona o cursor em vez de escrever uma quebra e
+    /// sem isso o banner, o prompt e a resposta virariam uma linha so.
+    fn visible_lines(text: &str) -> Vec<String> {
+        let mut lines = vec![String::new()];
+        let mut chars = text.chars().peekable();
+        while let Some(ch) = chars.next() {
+            if ch == '\n' || ch == '\r' {
+                lines.push(String::new());
+                continue;
+            }
+            if ch != '\u{1b}' {
+                lines.last_mut().expect("sempre ha uma linha").push(ch);
+                continue;
+            }
+            match chars.next() {
+                // CSI: parametros ate um final entre `@` e `~`. `H` e `f`
+                // posicionam o cursor, o que na pratica abre outra linha.
+                Some('[') => {
+                    let mut last = '\0';
+                    for next in chars.by_ref() {
+                        if ('\u{40}'..='\u{7e}').contains(&next) {
+                            last = next;
+                            break;
+                        }
+                    }
+                    if last == 'H' || last == 'f' {
+                        lines.push(String::new());
+                    }
+                }
+                // OSC: termina em BEL ou em ESC seguido de barra invertida.
+                Some(']') => {
+                    while let Some(next) = chars.next() {
+                        if next == '\u{7}' {
+                            break;
+                        }
+                        if next == '\u{1b}' {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        lines
+    }
+
+    /// A regra de `answered` vale contra saida gravada de verdade, de cada
+    /// shell que a suite abre. As tres transcricoes vieram de execucao real: o
+    /// `cmd` do runner `windows-2022`, o `dash` do Ubuntu e o `bash` que o
+    /// macOS instala como `/bin/sh`. Sem elas, cada engano sobre eco, prompt e
+    /// redesenho de linha so aparece uma plataforma por vez, e cada volta custa
+    /// uma rodada inteira de CI.
+    #[test]
+    fn the_answer_is_told_apart_from_the_echo_in_every_shell() {
+        // `cmd`: o banner, o prompt e a resposta sao separados por sequencias
+        // que movem o cursor, nao por quebra de linha, e o eco do comando vem
+        // colado no prompt.
+        let cmd = concat!(
+            "\u{1b}[m\u{1b}]0;C:\\Windows\\system32\\cmd.exe\u{7}\u{1b}[?25h\u{1b}[?25l",
+            "Microsoft Windows [Version 10.0.20348.5622]\r\n",
+            "(c) Microsoft Corporation. All rights reserved.",
+            "\u{1b}[4;1HC:\\Users\\RUNNER~1\\AppData\\Local\\Temp>echo pty-ok-42\r\n",
+            "pty-ok-42",
+            "\u{1b}[7;1HC:\\Users\\RUNNER~1\\AppData\\Local\\Temp>",
+        );
+        assert!(answered(cmd.as_bytes(), "pty-ok-42"), "cmd: {cmd:?}");
+
+        // `dash`: o eco sai numa linha propria e o prompt abre a linha da
+        // resposta.
+        let dash = "printf '%s\\n' 'pty-ok-42'\r\n$ pty-ok-42\r\n$ ";
+        assert!(answered(dash.as_bytes(), "pty-ok-42"), "dash: {dash:?}");
+
+        // `bash`: redesenha a linha depois de escrever o prompt, entao o eco
+        // aparece duas vezes, a segunda as vezes pela metade.
+        let bash_half = concat!(
+            "echo \"casa=[$CODEX_HOME]\"\r\n",
+            "\u{1b}[?1034hsh-3.2$ echo \"casa=[",
+        );
+        assert!(
+            !answered(bash_half.as_bytes(), "casa=["),
+            "o eco do bash nao pode passar por resposta: {bash_half:?}"
+        );
+        let bash = format!("{bash_half}$CODEX_HOME]\"\r\ncasa=[]\r\nsh-3.2$ ");
+        assert!(answered(bash.as_bytes(), "casa=["), "bash: {bash:?}");
+
+        // O eco sozinho nunca conta, em nenhum dos tres.
+        for eco in [
+            "C:\\Users\\RUNNER~1>echo pty-ok-42\r\n",
+            "printf '%s\\n' 'pty-ok-42'\r\n",
+            "$ echo idade-da-saida\r\n",
+        ] {
+            assert!(
+                !answered(eco.as_bytes(), "pty-ok-42")
+                    && !answered(eco.as_bytes(), "idade-da-saida"),
+                "so eco: {eco:?}"
+            );
+        }
     }
 
     /// Esvazia o canal em segundo plano e devolve a mensagem de fim quando ela chega.
@@ -2601,10 +2732,7 @@ mod tests {
             .expect("spawn");
         let mut queries = LaterCursorQueries::new("age", &manager, info.id);
         let mut output = Vec::new();
-        // O texto sai montado pelo shell, para nao viajar no eco do comando.
-        manager
-            .write(info.id, b"printf 'ida%s\\n' 'de-da-saida'\n")
-            .unwrap();
+        manager.write(info.id, b"echo idade-da-saida\n").unwrap();
         assert!(collect_until_printed(
             &rx,
             &mut queries,
@@ -2676,9 +2804,8 @@ mod tests {
                 .expect("spawn");
             let mut queries = LaterCursorQueries::new(tag, &manager, info.id);
             let mut output = Vec::new();
-            // `casa=[` sai montado pelo shell, para nao viajar no eco do comando.
             manager
-                .write(info.id, b"printf 'ca%s=[%s]\\n' 'sa' \"$CODEX_HOME\"\n")
+                .write(info.id, b"echo \"casa=[$CODEX_HOME]\"\n")
                 .unwrap();
             assert!(
                 collect_until_printed(&rx, &mut queries, &mut output, "casa=["),
@@ -2881,9 +3008,11 @@ mod tests {
         });
         let info = spawn_test_shell(&manager, &shell, "s_journal", SubscriberKey::Webview, sink);
         let saved = manager.saved("s_journal").expect("estado gravado ao abrir");
+        // A pasta e publicada na forma portatil, o mesmo contrato do
+        // `the_session_publishes_its_folder_in_the_portable_form`.
         assert_eq!(
             (saved.cwd.as_str(), saved.cols, saved.rows),
-            (shell.cwd(), 80, 24)
+            (crate::platform::to_portable(shell.cwd()).as_str(), 80, 24)
         );
         assert!(saved.resume.is_none());
         assert_eq!(manager.live_count(), 1);

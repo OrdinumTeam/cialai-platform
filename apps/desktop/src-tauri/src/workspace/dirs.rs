@@ -253,6 +253,12 @@ mod tests {
         let _ = fs::remove_dir_all(home);
     }
 
+    /// Ponto de partida nao tem pai, e fora de todos eles a listagem e
+    /// recusada. Quais sao os pontos muda por sistema, e por isso o que fica
+    /// de fora tambem muda: no Windows cada unidade montada e um ponto de
+    /// partida, entao a pasta acima da pessoal continua dentro de `C:\` e e
+    /// listavel de proposito. O que nao existe la e uma pasta fora de toda
+    /// unidade, e o limite aparece na unidade que nao esta montada.
     #[test]
     fn the_starting_points_have_no_parent_and_nothing_climbs_above_them() {
         let home = scratch("limites");
@@ -263,10 +269,31 @@ mod tests {
         assert_eq!(at_home.parent, None, "a pasta pessoal e um limite");
 
         let above = home.parent().unwrap().to_path_buf();
+
+        #[cfg(not(target_os = "windows"))]
         assert!(
             list(&home, &roots, Some(&to_portable(&above))).is_err(),
             "acima do limite e recusado"
         );
+
+        #[cfg(target_os = "windows")]
+        {
+            let inside = list(&home, &roots, Some(&to_portable(&above)))
+                .expect("a unidade e um ponto de partida, entao o caminho acima esta dentro dela");
+            assert!(inside.parent.is_some(), "abaixo da unidade ainda ha pai");
+
+            let drive = starting_points(&home, &roots)
+                .into_iter()
+                .find(|point| point.parent().is_none())
+                .expect("ao menos uma unidade montada");
+            let at_drive = list(&home, &roots, Some(&to_portable(&drive))).unwrap();
+            assert_eq!(at_drive.parent, None, "a raiz da unidade e um limite");
+
+            assert!(
+                list(&home, &roots, Some("Q:/fora-de-tudo")).is_err(),
+                "fora de toda unidade e recusado"
+            );
+        }
 
         let _ = fs::remove_dir_all(home);
     }
