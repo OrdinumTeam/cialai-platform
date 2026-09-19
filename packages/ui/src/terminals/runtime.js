@@ -83,6 +83,11 @@ const FIT_DEBOUNCE_MS = 50;
 // segundos e revarre as pastas do Codex a cada quinze, entao a leitura
 // frequente custa pouco.
 const USAGE_MS = 5000;
+// As contas custam mais que o uso: no macOS a checagem de credencial consulta
+// o chaveiro por um processo `security` para cada perfil. Elas mudam devagar,
+// entao uma leitura por minuto basta para o card. A tela de contas pede a
+// lista fresca toda vez que abre, e tem botao proprio para reler.
+const ACCOUNTS_MS = 60_000;
 const METRICS_VISIBLE_MS = 2000;
 const METRICS_HIDDEN_MS = 6000;
 // Saida recente conta como "recebendo saida" por este tempo.
@@ -120,6 +125,7 @@ const state = {
   // provedores: o card nao depende mais do hook do Claude Code para ter
   // porcentagem.
   agentAccounts: new Map(),
+  accountsAt: 0,
   usageAt: 0,
   metricsBusy: false,
   viewMounted: false,
@@ -1419,11 +1425,14 @@ async function sampleUsage() {
     // Sem o comando ou sem dado publicado, os cards ficam so com CPU e memoria.
     state.aiUsage = new Map();
   }
-  try {
-    const accounts = await invoke('agent_profiles');
-    if (Array.isArray(accounts)) state.agentAccounts = new Map(accounts.map((account) => [account.id, account]));
-  } catch (_error) {
-    // A leitura das contas e opcional: o card cai no arquivo do proprio agente.
+  if (Date.now() - state.accountsAt > ACCOUNTS_MS) {
+    state.accountsAt = Date.now();
+    try {
+      const accounts = await invoke('agent_profiles');
+      if (Array.isArray(accounts)) state.agentAccounts = new Map(accounts.map((account) => [account.id, account]));
+    } catch (_error) {
+      // A leitura das contas e opcional: o card cai no arquivo do proprio agente.
+    }
   }
   state.sessions.forEach((session) => {
     const activity = session.activity;

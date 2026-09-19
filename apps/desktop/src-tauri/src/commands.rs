@@ -944,10 +944,7 @@ pub fn agent_profiles(
             AgentProfileView {
                 active: active.get(&agent) == Some(profile.id.as_str()),
                 is_default: profile.slug.is_none(),
-                needs_login: !crate::notch::usage::credentials::exists(
-                    &profile.dir(),
-                    profile.slug.is_none(),
-                ),
+                needs_login: needs_login(&profile, usage.as_ref()),
                 label: profile.label.clone(),
                 // O plano da leitura vence o do arquivo de conta: o Claude
                 // Code só publica a assinatura na credencial, que a loja lê.
@@ -962,6 +959,27 @@ pub fn agent_profiles(
             }
         })
         .collect())
+}
+
+/// A conta ainda não fez login. A leitura de uso já responde isso na maioria
+/// dos casos, e responder por ela importa: no macOS a checagem direta consulta
+/// o chaveiro por um processo `security` para cada pasta, e esta lista é
+/// pedida também pelos cards das sessões.
+fn needs_login(
+    profile: &crate::notch::profiles::Profile,
+    usage: Option<&crate::notch::usage::ProviderSnapshot>,
+) -> bool {
+    use crate::notch::usage::ProviderStatus;
+    match usage.map(|item| &item.status) {
+        Some(ProviderStatus::NeedsAuth) | Some(ProviderStatus::SignedOutByOwner) => true,
+        // Qualquer outro estado vem de uma leitura que achou credencial. Só
+        // `Stale` pode ser o marcador de quem nunca foi lido, e aí vale
+        // perguntar ao chaveiro.
+        Some(ProviderStatus::Stale { .. }) | None => {
+            !crate::notch::usage::credentials::exists(&profile.dir(), profile.slug.is_none())
+        }
+        Some(_) => false,
+    }
 }
 
 /// Relê o uso de todas as contas agora, inclusive as escondidas da Barra de
