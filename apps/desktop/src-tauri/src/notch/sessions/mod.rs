@@ -26,30 +26,9 @@ const REUSE_TOLERANCE_SEC: u64 = 5 * 60;
 /// Ate onde subir na arvore de processos procurando o app dono.
 pub const ANCESTRY_LIMIT: usize = 8;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SessionState {
-    /// Trabalhando agora.
-    Busy,
-    /// Parou para perguntar alguma coisa.
-    Waiting,
-    /// Terminou o turno.
-    Success,
-    /// Aberta e parada.
-    Idle,
-}
-
-impl SessionState {
-    /// Ordem de exibicao: quem precisa de voce primeiro.
-    pub fn rank(self) -> u8 {
-        match self {
-            SessionState::Waiting => 0,
-            SessionState::Busy => 1,
-            SessionState::Success => 2,
-            SessionState::Idle => 3,
-        }
-    }
-}
+/// O enum e os leitores puros moram em [`crate::workspace::agent_state`],
+/// para a Barra de IA e o estudio dizerem a mesma coisa sobre a mesma sessao.
+pub use crate::workspace::agent_state::SessionState;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

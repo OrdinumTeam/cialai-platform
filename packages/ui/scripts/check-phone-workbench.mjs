@@ -10,12 +10,18 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 const boundaries = {
   runtime: `export const getSession=()=>fixture.session, getState=()=>({hydrated:true}), orderedSessions=()=>[fixture.session], isDemo=()=>fixture.demo, supportsPhoneTerminal=()=>true, describe=()=>({label:'Em execução'});
-    export const closeSession=async()=>{}, fitAndResize=()=>{}, focusTerminal=()=>{}, hostTerminal=()=>{}, hydrate=async()=>{}, insertText=()=>{}, openSession=()=>{}, pasteText=()=>false, releaseTerminal=()=>{}, reopen=()=>{}, requestTerminalControl=async()=>{}, scrollToBottom=()=>{}, selectSession=()=>{}, sendKey=()=>false, subscribe=()=>()=>{}, terminalHasFocus=()=>false, viewMounted=()=>{}, watchTail=()=>()=>{};`,
-  native: `export const hasBridge=()=>true, NATIVE_ONLY_MESSAGE='';`,
+    export const SESSION_COLORS=[{id:'verde',light:'#1f9d5b',dark:'#3ccf76'}], canMoveSession=()=>true, changeDirectory=async()=>{}, moveSessionBy=()=>{}, renameSession=()=>{}, restart=async()=>{}, setSessionColor=()=>{}, setSessionSubtitle=()=>{}, togglePinned=()=>{};
+  export const bracketedPaste=()=>true, closeSession=async()=>{}, fitAndResize=()=>{}, focusTerminal=()=>{}, hostTerminal=()=>{}, hydrate=async()=>{}, insertText=()=>{}, openSession=()=>{}, pasteText=()=>false, releaseTerminal=()=>{}, reopen=()=>{}, requestTerminalControl=async()=>{}, scrollToBottom=()=>{}, selectSession=()=>{}, sendKey=()=>false, submitText=async()=>true, subscribe=()=>()=>{}, terminalHasFocus=()=>false, viewMounted=()=>{}, watchTail=()=>()=>{};`,
+  native: `export const hasBridge=()=>true, NATIVE_ONLY_MESSAGE='', invoke=async()=>[];`,
+  AgentProfiles: `export default ()=>null;`,
   'phone-navigation': `export const initialPhoneRoute=()=>({pane:'terminal',sessionId:'fixture',path:null}), phoneRoute=state=>state, phoneRouteStorage=()=>null, readPhoneRoute=()=>({pane:'terminal',sessionId:'fixture',path:null}), writePhoneRoute=()=>{};`,
   hooks: `export const useRuntimeEvents=()=>{};`,
   ui: `export const useToast=()=>()=>{}; export const AppModal=()=>null;`,
   NewSessionPopover: `export default ()=>null;`,
+  // O menu de acoes e o dialogo de nome sobem o MUI, que exige um tema; os
+  // dois tem gate proprio.
+  PhoneSessionMenu: `export default ()=>null;`,
+  dialogs: `export const NameDialog=()=>null; export const Sheet=()=>null;`,
   SessionCard: `export default ()=>null;`,
   PhoneFiles: `export default ()=>null;`,
 };
@@ -53,4 +59,31 @@ test('exited and failed phone sessions show read-only history with all terminal 
     assert.doesNotMatch(html,/terminal está em outro dispositivo|Ajustar à tela e assumir controle/);
     for(const key of ['Esc','Tab','Shift Tab','Ctrl C','Seta para cima','Seta para baixo','Enter','Ctrl D','Ctrl L']) assert.ok(html.includes(`disabled="" aria-label="${key}"`));
   }
+});
+
+test('a tela do terminal traz o balao que abre a caixa de texto, acima da pilula de voltar ao fim',()=>{
+  const html=render({owned:true});
+  assert.match(html,/phone-terminal__compose/);
+  assert.match(html,/aria-label="Escrever texto para o terminal"/);
+  // A caixa so aparece depois do toque; o balao nasce sozinho.
+  assert.doesNotMatch(html,/phone-composer__area/);
+});
+test('sem terminal interativo o balao continua na tela, desabilitado',()=>{
+  for(const options of [{},{status:'exited'},{status:'error'}]) {
+    const html=render(options);
+    const button=html.match(/<button[^>]*phone-terminal__compose[^>]*>/)?.[0];
+    assert.ok(button,'o balao nao pode sumir');
+    assert.ok(button.includes('disabled=""'),'sem sessao viva o balao nao escreve nada');
+  }
+});
+test('a fileira de nove teclas continua intacta ao lado do balao',()=>{
+  const html=render({owned:true});
+  for(const key of ['Esc','Tab','Shift Tab','Ctrl C','Seta para cima','Seta para baixo','Enter','Ctrl D','Ctrl L']) assert.ok(html.includes(`aria-label="${key}"`),`tecla ausente: ${key}`);
+});
+
+test('o cabecalho do terminal aberto abre o mesmo menu de acoes, no lugar do icone solto de energia',()=>{
+  const html=render({owned:true});
+  assert.match(html,/aria-label="Ações de Projeto"/);
+  assert.doesNotMatch(html,/aria-label="Encerrar sessão"/,'o botao de energia sai do cabecalho e vira item do menu');
+  assert.match(html,/aria-label="Arquivos da sessão"/,'o botao de arquivos continua');
 });

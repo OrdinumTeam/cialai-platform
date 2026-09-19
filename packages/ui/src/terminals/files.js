@@ -7,9 +7,12 @@
 import { invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { getLocale, translate } from '../shared/i18n.js';
+import { baseName, dirName, isAbsolutePath, isInsideWith, joinPath, pathRoot, portablePath } from '../lib/paths.js';
 import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind } from './kinds.js';
+import { buildDemoScan } from './docgraph/fixture.js';
 
 export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
+export { baseName, dirName, isAbsolutePath, joinPath, pathRoot, portablePath };
 
 /* ── invokes ──────────────────────────────────────────────────────── */
 
@@ -81,6 +84,8 @@ function demoCall(command, args) {
   if (command === 'office_convert') throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   if (command === 'fs_find') return { root, items: [], truncated: false };
   if (command === 'fs_watch') return 1;
+  if (command === 'docgraph_scan') return buildDemoScan(args.root);
+  if (command === 'docgraph_cancel') return false;
   if (command === 'fs_rename' || command === 'fs_copy') return { path: args.to, exists: true, kind: 'file', size: 32, modifiedMs: Date.now() };
   return undefined;
 }
@@ -105,6 +110,13 @@ export const fs = {
   unwatch: (id) => call('fs_unwatch', { id }),
 };
 
+// Varredura do grafo da documentacao. `cancel` aceita token nulo, que cancela
+// o pedido em andamento seja qual for.
+export const docgraph = {
+  scan: (key, token, root) => call('docgraph_scan', { key, token, root }),
+  cancel: (key, token) => call('docgraph_cancel', { key, token: token ?? null }),
+};
+
 export const git = {
   status: (dir) => call('git_status', { dir }),
   diff: (root, path) => call('git_diff', { root, path }),
@@ -120,28 +132,6 @@ export function nativeAvailable() {
 }
 
 /* ── caminhos ─────────────────────────────────────────────────────── */
-
-export function baseName(path) {
-  const trimmed = portablePath(path).replace(/\/+$/, '');
-  return trimmed.split('/').pop() || trimmed || '';
-}
-
-export function dirName(path) {
-  const trimmed = portablePath(path).replace(/\/+$/, '');
-  const index = trimmed.lastIndexOf('/');
-  if (index <= 0) return '/';
-  return trimmed.slice(0, index);
-}
-
-export function joinPath(dir, name) {
-  return `${portablePath(dir).replace(/\/+$/, '')}/${name}`;
-}
-
-export function portablePath(path) {
-  const value = String(path || '').replace(/\\/g, '/');
-  if (value.startsWith('//?/UNC/')) return `//${value.slice(8)}`;
-  return value.replace(/^\/\/\?\//, '');
-}
 
 export function displayPath(path) {
   const value = portablePath(path);
@@ -183,10 +173,14 @@ export async function freeName(dir, name) {
   return `${stem} ${Date.now()}${extension}`;
 }
 
+// No Windows o sistema de arquivos não diferencia maiúsculas, então
+// `C:/Users` e `c:/users` são a mesma pasta e precisam comparar como iguais.
+function fold(value) {
+  return platform().os === 'windows' ? value.toLowerCase() : value;
+}
+
 export function isInside(root, path) {
-  const base = portablePath(root).replace(/\/+$/, '');
-  const target = portablePath(path);
-  return target === base || target.startsWith(`${base}/`);
+  return isInsideWith(root, path, fold);
 }
 
 export function relativePath(root, path) {

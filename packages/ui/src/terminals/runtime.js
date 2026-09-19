@@ -46,6 +46,7 @@ import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE, invoke, listen, createChannel,
 import { openExternal } from '../lib/downloads.js';
 import { buildTheme, terminalFont, watchTheme } from './theme.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
+import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
 import { platform } from '../lib/platform.js';
 import { translate } from '../shared/i18n.js';
@@ -55,6 +56,7 @@ import * as remote from '../lib/remote.js';
 import { isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
+import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
 import { restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
@@ -82,7 +84,6 @@ const USAGE_MS = 5000;
 const METRICS_VISIBLE_MS = 2000;
 const METRICS_HIDDEN_MS = 6000;
 // Saida recente conta como "recebendo saida" por este tempo.
-const STREAMING_WINDOW_MS = 1500;
 // Um job que durou menos que isto nao vira "concluido" no card.
 const FINISHED_MIN_MS = 4000;
 // Teto de redesenhos do card por saida do terminal.
@@ -99,6 +100,9 @@ const state = {
   selectedId: null,
   hydrated: false,
   connectionEpoch: 0,
+  // Epoca da ultima medicao disparada; serve para medir na hora depois de
+  // reconectar em vez de esperar o proximo ciclo do laco.
+  metricsEpoch: -1,
   hydrating: null,
   listeners: new Set(),
   themeWatcher: null,
@@ -162,6 +166,15 @@ function emitEditor(session) { emitSoon({ type: 'editor', id: session.id }); }
 function emitExplorer(session) { emitSoon({ type: 'explorer', id: session.id }); }
 function emitActivity(session) { emitSoon({ type: 'activity', id: session.id }); }
 export function emitBrowserEvent(id) { emitSoon({ type: 'browser', id }); }
+export function emitDocgraphEvent(id) { emitSoon({ type: 'docgraph', id }); }
+
+// O grafo da documentacao vive em `docgraph/controller.js` e se registra aqui
+// para saber quando uma sessao fecha. Assim o runtime nao precisa importar o
+// pedaco carregado sob demanda.
+const docgraphHooks = { sessionClosed: null };
+export function registerDocgraphHooks(hooks) {
+  Object.assign(docgraphHooks, hooks);
+}
 
 // Um aviso curto para a interface, sem ser erro.
 export function announce(message) {
@@ -242,6 +255,10 @@ function serializeSession(session) {
       open: session.editor.tabs.some((tab) => tab.kind === 'browser') || Boolean(session.browser?.restoreOpen),
       url: session.browser?.url || '',
     },
+    // O grafo tambem nao tem caminho: so lembra que estava aberto.
+    docgraph: {
+      open: session.editor.tabs.some((tab) => tab.kind === 'docgraph') || Boolean(session.docgraph?.restoreOpen),
+    },
   };
 }
 
@@ -254,7 +271,12 @@ export function persist() {
     store.sessions = state.order.map((id) => state.sessions.get(id)).filter(Boolean).map(serializeSession);
     store.selectedId = state.selectedId;
     writeStore(store);
-    if (isTauri() && !state.demo) state.order.forEach((id, order) => {
+    // A apresentacao do card tem o Rust como fonte de verdade, e os dois
+    // lados publicam. Cada um so manda o que mudou localmente, e a revisao que
+    // volta e guardada: quem le adota a apresentacao quando a revisao recebida
+    // e maior que a conhecida, entao um `persist` do computador nao desfaz um
+    // nome dado pelo celular.
+    if (hasBridge() && !state.demo) state.order.forEach((id, order) => {
       const session = state.sessions.get(id);
       if (session?.ptyId == null) return;
       const presentation = { name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order };
@@ -263,8 +285,10 @@ export function persist() {
       if (session.publishedPresentation === signature) return;
       const request = {};
       session.presentationRequest = request;
-      invoke('pty_presentation', { id: session.ptyId, presentation }).then(() => {
-        if (session.presentationRequest === request && terminalIdentity(session) === identity) session.publishedPresentation = signature;
+      invoke('pty_presentation', { id: session.ptyId, presentation }).then((revision) => {
+        if (session.presentationRequest !== request || terminalIdentity(session) !== identity) return;
+        session.publishedPresentation = signature;
+        if (typeof revision === 'number') session.presentationRevision = revision;
       }).catch(() => {});
     });
   }, 120);
@@ -423,8 +447,13 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
-function createSession({ id, cwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser, shellFlavor } = {}) {
+function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
+  // Toda pasta guardada na sessao usa a forma portatil. O Rust ja devolve
+  // assim; o que vem do armazenamento antigo ou de um caminho digitado pode
+  // trazer barra invertida, e duas formas do mesmo caminho viram duas
+  // sessoes, dois itens em recentes e uma raiz de explorador que nunca casa.
+  const cwd = portablePath(rawCwd);
   const session = {
     id: id || newId(),
     cwd,
@@ -462,10 +491,27 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
     ackTimer: null,
     fitTimer: null,
     lastOutputAt: 0,
+    // Promessa da ultima escrita no PTY, para quem precisa de ordem entre duas
+    // escritas seguidas, como Enviar do compositor do celular.
+    lastWrite: null,
     activityTimer: null,
     idleTimer: null,
     activity: null,
     metricsAt: 0,
+    // Revisao da apresentacao publicada, atribuida pelo Rust. Adota-se a
+    // apresentacao recebida so quando ela e maior que esta.
+    presentationRevision: 0,
+    // Estado do turno do agente e idade da ultima saida, medidos no relogio
+    // do computador e trazidos por `pty_metrics`. Zerados na queda da ponte,
+    // porque evidencia velha nao sustenta animacao nenhuma.
+    agentTurn: null,
+    outputAgeMs: null,
+    // Epoca da conexao atual: amostra anterior a ela nao vale.
+    evidenceSince: 0,
+    // Epoca em que `pty_list` viu este PTY vivo pela ultima vez. Igual a
+    // epoca atual significa processo vivo no computador agora, anexado ou
+    // estacionado.
+    ptyAliveEpoch: -1,
     jobStartedAt: null,
     jobLabel: null,
     attention: null,
@@ -514,6 +560,11 @@ function createSession({ id, cwd, name, customName = false, subtitle = '', color
       epoch: 0,
       // Andamento da instalacao automatica do Chromium; `null` fora dela.
       install: null,
+    },
+    // O que a aba do grafo precisa saber antes do pedaco sob demanda subir. O
+    // controlador vive em docgraph/controller.js.
+    docgraph: {
+      restoreOpen: Boolean(docgraph?.open),
     },
   };
 
@@ -577,11 +628,13 @@ function scheduleAck(session) {
   session.ackTimer = setTimeout(() => { session.ackTimer = null; flushAck(session); }, ACK_DELAY_MS);
 }
 
-// Saida chegou. Com o shell em prompt nada redesenha: o eco do que se digita
-// nao muda o card. Com um processo rodando, o card acompanha a etiqueta
-// "Recebendo saida" com no maximo dois redesenhos por segundo e um ultimo
-// quando a saida para.
+// Saida chegou. O replay do historico nao conta: ele reenvia bytes antigos, e
+// contar como saida nova faria o card dizer Em execucao logo depois de
+// reanexar. Com o shell em prompt nada redesenha: o eco do que se digita nao
+// muda o card. Com um processo rodando, o card acompanha o estado com no
+// maximo dois redesenhos por segundo e um ultimo quando a saida para.
 function touchOutput(session) {
+  if (session.replaying) return;
   session.lastOutputAt = Date.now();
   if (!session.activity?.foreground) return;
   if (!session.activityTimer) {
@@ -589,7 +642,7 @@ function touchOutput(session) {
     session.activityTimer = setTimeout(() => { session.activityTimer = null; }, ACTIVITY_THROTTLE_MS);
   }
   if (session.idleTimer) clearTimeout(session.idleTimer);
-  session.idleTimer = setTimeout(() => { session.idleTimer = null; emitActivity(session); }, STREAMING_WINDOW_MS + 100);
+  session.idleTimer = setTimeout(() => { session.idleTimer = null; emitActivity(session); }, OUTPUT_WINDOW_MS + 100);
 }
 
 function handleMessage(session, token, message) {
@@ -604,6 +657,9 @@ function handleMessage(session, token, message) {
     // Enquanto o quadro do replay não terminou de ser processado, a marca
     // continua ligada. Ela desliga só no callback do term.write, depois que o
     // xterm reparseou os bytes e já disparou as respostas às consultas.
+    // A decisão sobre a saída é tomada antes do write, porque esse callback
+    // pode rodar na hora e desligar a marca antes de `touchOutput` olhar.
+    const replaying = session.replaying;
     const closesReplay = session.replaying && (session.replayRemaining -= bytes.byteLength) <= 0;
     session.term.write(output, () => {
       if (closesReplay) { session.replaying = false; session.replayRemaining = 0; }
@@ -612,7 +668,7 @@ function handleMessage(session, token, message) {
       if (session.pendingAck >= ACK_THRESHOLD) flushAck(session);
       else scheduleAck(session);
     });
-    touchOutput(session);
+    if (!replaying) touchOutput(session);
     return;
   }
   if (message?.type === 'replay') {
@@ -998,18 +1054,29 @@ export async function requestTerminalControl(id) {
   await viewportFor(session)?.claim(size);
 }
 
+// Escreve no PTY e guarda a promessa na sessao. Quem precisa de ordem, como o
+// compositor do celular, espera a escrita anterior antes de mandar a proxima:
+// as chamadas de terminal ja rodam numa fila ordenada no Rust, mas a espera
+// pelo controle do terminal acontece aqui e pode reordenar duas escritas
+// disparadas juntas. Nunca rejeita: devolve `false` quando nada foi escrito.
 function writeTerminal(session, data, binary = false) {
   const identity = terminalIdentity(session);
-  (async () => {
+  const pending = (async () => {
     // Na demonstracao nao ha PTY nem concessao de largura: a escrita segue
     // direto, para as verificacoes fora do app observarem o que seria
     // enviado.
     if (supportsPhoneTerminal() && !state.demo) {
       await requestTerminalControl(session.id);
-      if (terminalIdentity(session) !== identity || !session.host || !session.viewport?.owned) return;
+      if (terminalIdentity(session) !== identity || !session.host || !session.viewport?.owned) return false;
     }
     await invoke('pty_write', { id: session.ptyId, data, ...(binary ? { binary: true } : {}) });
-  })().catch((error) => dispatch({ type: 'error', message: messageOf(error) }));
+    return true;
+  })().catch((error) => {
+    dispatch({ type: 'error', message: messageOf(error) });
+    return false;
+  });
+  session.lastWrite = pending;
+  return pending;
 }
 
 // Trocar de tela muda a razao de pixels e o tamanho da celula; o terminal
@@ -1052,46 +1119,78 @@ export function clearAttention(session) {
   emitSessions();
 }
 
-export function isStreaming(session) {
-  return session.status === 'running' && Date.now() - session.lastOutputAt < STREAMING_WINDOW_MS;
+// O que a ultima amostra de metricas trouxe sobre esta sessao, no formato
+// que `deriveActivity` espera. O relogio local de bytes so refina a idade da
+// saida de uma sessao anexada, com canal vivo, e fora de replay: o replay do
+// historico nao e saida nova, e uma sessao estacionada nao recebe bytes.
+function activitySample(session) {
+  const sampleAt = session.metricsAt || null;
+  let outputAgeMs = session.outputAgeMs;
+  if (sampleAt && session.spawnToken && !session.replaying && session.lastOutputAt) {
+    const localAge = Math.max(0, sampleAt - session.lastOutputAt);
+    outputAgeMs = typeof outputAgeMs === 'number' ? Math.min(outputAgeMs, localAge) : localAge;
+  }
+  return {
+    agentTurn: session.agentTurn,
+    foreground: session.activity?.foreground || null,
+    outputAgeMs,
+    cpuPercent: session.activity?.cpu ?? null,
+    sampleAt,
+    evidenceSince: session.evidenceSince || 0,
+  };
 }
 
-// Ha um processo em primeiro plano alem do shell.
+// Estado de atividade da sessao, sempre pela mesma funcao pura. Card, cabecalho
+// do computador e cabecalho do celular leem daqui, entao os tres concordam.
+export function activityOf(session) {
+  if (session.status !== 'running' && !measurable(session)) {
+    return { code: 'idle', tone: 'ok', animated: false, waitingFor: null, sinceMs: null };
+  }
+  return deriveActivity(activitySample(session));
+}
+
+// A animacao acompanha o estado derivado, nunca a simples existencia de um
+// processo em primeiro plano.
 export function isWorking(session) {
-  const foreground = session.activity?.foreground;
-  return session.status === 'running' && Boolean(foreground) && !foreground.stopped;
+  return activityOf(session).animated;
 }
 
 // Estado em linguagem simples, derivado so do que foi observado.
 export function describe(session) {
-  if (session.status === 'starting') return { code: 'starting', label: translate('terminal.session.openingShell'), tone: 'busy' };
-  if (session.status === 'error') return { code: 'error', label: translate('terminal.session.openFailed'), tone: 'bad' };
-  if (session.status === 'disconnected') return { code: 'disconnected', label: translate('terminal.session.disconnected'), tone: 'muted' };
+  if (session.status === 'starting') return { code: 'starting', label: translate('terminal.session.openingShell'), tone: 'busy', animated: true };
+  if (session.status === 'error') return { code: 'error', label: translate('terminal.session.openFailed'), tone: 'bad', animated: false };
+  // Sessao estacionada so e desconectada de verdade quando o computador nao
+  // declara mais o PTY vivo. Com a ponte de pe e o processo vivo, o estado e o
+  // que `pty_metrics` informa, sem abrir o terminal e sem repetir o replay.
+  if (session.status === 'disconnected' && !measurable(session)) return { code: 'disconnected', label: translate('terminal.session.disconnected'), tone: 'muted', animated: false };
   if (session.status === 'exited') {
-    if (session.exitCode === 0) return { code: 'exited', label: translate('terminal.session.processFinished'), tone: 'muted' };
+    if (session.exitCode === 0) return { code: 'exited', label: translate('terminal.session.processFinished'), tone: 'muted', animated: false };
     return {
       code: 'failed',
       label: session.signal
         ? translate('terminal.session.endedSignal', { signal: session.signal })
         : translate('terminal.session.endedCode', { code: session.exitCode }),
       tone: 'bad',
+      animated: false,
     };
   }
-  const foreground = session.activity?.foreground || null;
-  if (foreground) {
-    if (foreground.stopped) return { code: 'stopped', label: translate('terminal.session.processStopped'), tone: 'warn' };
-    if (isStreaming(session)) return { code: 'streaming', label: translate('terminal.session.receivingOutput'), tone: 'busy' };
-    return { code: 'busy', label: translate('terminal.session.processRunning'), tone: 'busy' };
-  }
-  if (session.activity === null) return { code: 'running', label: translate('terminal.session.shellOpen'), tone: 'ok' };
-  return { code: 'idle', label: translate('terminal.session.ready'), tone: 'ok' };
+  // Sem uma amostra sequer a sessao ainda esta sendo medida.
+  if (session.activity === null) return { code: 'running', label: translate('terminal.session.shellOpen'), tone: 'ok', animated: false };
+  const activity = activityOf(session);
+  return {
+    code: activity.code,
+    label: translate(`terminal.session.activity.${activity.code}`),
+    tone: activity.tone,
+    animated: activity.animated,
+    waitingFor: activity.waitingFor,
+  };
 }
 
 // Nome do que esta rodando: o agente, quando reconhecido pela linha de
 // comando, senao o programa em primeiro plano.
 export function runningLabel(session) {
   const activity = session.activity;
-  if (!activity || session.status !== 'running') return null;
+  if (!activity || !(session.status === 'running' || measurable(session))) return null;
   if (activity.foreground) {
     if (activity.foreground.agent) return { text: activity.foreground.agent, agent: true };
     return { text: activity.foreground.command || activity.foreground.name, agent: false };
@@ -1117,11 +1216,15 @@ function applyMetrics(list) {
   const now = Date.now();
   const byTag = new Map(list.map((item) => [item.tag, item]));
   state.sessions.forEach((session) => {
-    if (session.status !== 'running' || session.ptyId == null) return;
+    if (!measurable(session)) return;
     const metrics = byTag.get(session.id) || list.find((item) => item.id === session.ptyId);
     if (!metrics) return;
     const before = session.activity;
-    const foreground = metrics.foreground || null;
+    // A pasta do processo em primeiro plano tambem entra na forma portatil: no
+    // Windows ela chega com barra invertida, e e por ela que o card acha a
+    // conversa do agente.
+    const raw = metrics.foreground || null;
+    const foreground = raw && raw.cwd ? { ...raw, cwd: portablePath(raw.cwd) } : raw;
     const agent = metrics.agent || null;
     // O perfil vem do processo do agente: o do primeiro plano quando e ele o
     // agente, senao o do agente encontrado na arvore.
@@ -1139,11 +1242,14 @@ function applyMetrics(list) {
       profile,
       profileName,
       configDir,
-      shellCwd: metrics.shellCwd || null,
+      shellCwd: metrics.shellCwd ? portablePath(metrics.shellCwd) : null,
       usage: usageFor(agent, profile),
     };
+    const turnBefore = session.agentTurn;
     session.activity = next;
     session.metricsAt = now;
+    session.agentTurn = metrics.agentTurn || null;
+    session.outputAgeMs = typeof metrics.outputAgeMs === 'number' ? metrics.outputAgeMs : null;
     const hadJob = Boolean(before?.foreground);
     const hasJob = Boolean(foreground);
     if (!hadJob && hasJob) {
@@ -1173,6 +1279,8 @@ function applyMetrics(list) {
       || before.usage !== next.usage
       || before.shellCwd !== next.shellCwd
       || !sameForeground(before.foreground, next.foreground)
+      || turnBefore?.state !== session.agentTurn?.state
+      || turnBefore?.waitingFor !== session.agentTurn?.waitingFor
       || Boolean(session.jobStartedAt);
     if (changed) emitActivity(session);
     // O explorador acompanha o diretorio do shell quando a sessao pediu.
@@ -1201,18 +1309,20 @@ export function usageFor(agent, profile) {
 
 // Sessao do agente que roda nesta pasta: a sessao do perfil cuja pasta bate
 // com a do processo, senao a mais recente do perfil. Traz o modelo e, quando
-// o hook publica, o esforco, quanto da janela de contexto ja foi usado e o
-// custo estimado da sessao.
+// o hook publica, quanto da janela de contexto ja foi usado e o custo
+// estimado da sessao.
 export function sessionUsage(activity) {
   const usage = activity?.usage;
   if (!usage) return null;
   const cwd = activity.foreground?.cwd || activity.shellCwd || null;
   const sessions = Array.isArray(usage.sessions) ? usage.sessions : [];
-  const match = (cwd && sessions.find((session) => session.cwd === cwd)) || null;
+  // Os dois lados passam pela forma portatil: o hook publica o caminho como o
+  // sistema o escreve, e no Windows isso e barra invertida.
+  const target = cwd ? portablePath(cwd) : null;
+  const match = (target && sessions.find((session) => portablePath(session.cwd) === target)) || null;
   const number = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
   return {
     model: match?.model || usage.model || null,
-    effort: typeof match?.effort === 'string' && match.effort ? match.effort : null,
     contextUsedPercent: number(match?.contextUsedPercent),
     costUsd: number(match?.costUsd),
     matched: Boolean(match),
@@ -1225,7 +1335,7 @@ export function sessionModel(activity) {
 
 function usageSignature(usage) {
   if (!usage) return '';
-  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.cwd}:${session.model}:${session.effort || ''}:${session.contextUsedPercent ?? ''}:${session.costUsd ?? ''}`).join(',') : '';
+  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.cwd}:${session.model}:${session.contextUsedPercent ?? ''}:${session.costUsd ?? ''}`).join(',') : '';
   return `${usage.windows.map((window) => `${window.id}:${window.usedPercent}`).join('|')}#${usage.model || ''}#${sessions}`;
 }
 
@@ -1267,10 +1377,18 @@ async function sampleUsage() {
   return true;
 }
 
+// Sessao cujo PTY o computador declarou vivo nesta conexao. O vinculo do
+// fluxo de saida e assunto de cada cliente; o estado e do computador, e vale
+// para sessao anexada e para sessao estacionada.
+function measurable(session) {
+  if (session.ptyId == null) return false;
+  if (session.status === 'running') return true;
+  return session.status === 'disconnected' && session.ptyAliveEpoch === state.connectionEpoch;
+}
+
 async function sampleMetrics() {
   if (state.metricsBusy || !hasBridge() || state.demo) return;
-  const running = [...state.sessions.values()].some((session) => session.status === 'running' && session.ptyId != null);
-  if (!running) return;
+  if (![...state.sessions.values()].some(measurable)) return;
   state.metricsBusy = true;
   try {
     const list = await invoke('pty_metrics');
@@ -1278,7 +1396,7 @@ async function sampleMetrics() {
   } catch (_error) {
     // Kernel recusou a leitura: os cards mostram o dado como indisponivel.
     state.sessions.forEach((session) => {
-      if (session.status === 'running' && session.activity) {
+      if (measurable(session) && session.activity) {
         session.activity = { ...session.activity, available: false, cpu: null, memory: null };
         emitActivity(session);
       }
@@ -1293,8 +1411,7 @@ function ensureMetrics() {
   const tick = async () => {
     state.metricsTimer = null;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    const running = [...state.sessions.values()].some((session) => session.status === 'running');
-    if (!running) return;
+    if (![...state.sessions.values()].some(measurable)) return;
     if (!hidden) await sampleMetrics();
     if (!hidden && Date.now() - state.usageAt > USAGE_MS) {
       if (await sampleUsage()) state.usageAt = Date.now();
@@ -1415,6 +1532,7 @@ async function syncSharedSessions() {
   state.sessionsSyncing = true;
   const connectionEpoch = state.connectionEpoch;
   const observed = new Map([...state.sessions.values()].map((session) => [session.id, { ptyId: session.ptyId, token: session.spawnToken }]));
+  const adopted = [];
   try {
     const alive = await invoke('pty_list') || [];
     if (connectionEpoch !== state.connectionEpoch) return;
@@ -1434,15 +1552,21 @@ async function syncSharedSessions() {
         session.outputOffset = 0; session.receivedOffset = 0;
         session.spawnToken = null;
       }
-      if (!isTauri() && info.presentation) {
-        const value = info.presentation;
-        if (typeof value.name === 'string') session.name = value.name;
-        session.subtitle = typeof value.subtitle === 'string' ? value.subtitle : '';
-        session.color = validColor(value.color);
-        session.pinned = Boolean(value.pinned);
-        session.remoteOrder = value.order;
+      // Adota a apresentacao publicada quando ela e mais nova que a conhecida
+      // aqui. Vale para o computador e para o celular: quem gravou por ultimo
+      // tem a revisao maior, e o outro lado se alinha sem apagar nada.
+      const shared = info.presentation;
+      if (shared && Number(shared.revision || 0) > (session.presentationRevision || 0)) {
+        session.presentationRevision = Number(shared.revision || 0);
+        if (typeof shared.name === 'string' && shared.name) session.name = shared.name;
+        session.subtitle = typeof shared.subtitle === 'string' ? shared.subtitle : '';
+        session.color = validColor(shared.color);
+        session.pinned = Boolean(shared.pinned);
+        session.remoteOrder = shared.order;
+        adopted.push(session);
       }
       applyTerminalInfo(session, info);
+      session.ptyAliveEpoch = connectionEpoch;
       if (!session.spawnToken || session.status !== 'running') {
         // Não reattachar sessão em erro nem repetir o replay de uma sessão
         // estacionada fora da tela; ela reattacha quando for exibida.
@@ -1451,6 +1575,19 @@ async function syncSharedSessions() {
       }
     }
     if (!isTauri()) state.order.sort((a, b) => (state.sessions.get(a)?.remoteOrder ?? Infinity) - (state.sessions.get(b)?.remoteOrder ?? Infinity));
+    // Quem adotou a apresentacao guarda a assinatura ja com a ordem final,
+    // depois da ordenacao, para o proximo `persist` nao republicar o que
+    // acabou de receber. E o armazenamento local precisa acompanhar, senao a
+    // proxima abertura volta ao nome antigo.
+    if (adopted.length) {
+      adopted.forEach((session) => {
+        const order = state.order.indexOf(session.id);
+        session.publishedPresentation = JSON.stringify([terminalIdentity(session), {
+          name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order,
+        }]);
+      });
+      persist();
+    }
     state.sessions.forEach((session) => {
       const previous = observed.get(session.id);
       if (!session.spawning && previous?.ptyId != null && previous.ptyId === session.ptyId && previous.token === session.spawnToken && !alive.some((info) => info.id === session.ptyId)) markExited(session, { code: 0 });
@@ -1458,6 +1595,12 @@ async function syncSharedSessions() {
     if (!state.selectedId) state.selectedId = state.order[0] || null;
     persist();
     emitSessions();
+    // Primeira sincronizacao desta conexao: mede na hora, para a lista se
+    // corrigir sem esperar um ciclo inteiro do laco.
+    if (state.metricsEpoch !== connectionEpoch) {
+      state.metricsEpoch = connectionEpoch;
+      sampleMetrics().catch(() => {});
+    }
     ensureMetrics();
   } finally { state.sessionsSyncing = false; }
 }
@@ -1493,10 +1636,17 @@ export function hydrate() {
       if (value.status === 'connected') syncSharedSessions().catch(() => {});
       else {
         state.connectionEpoch += 1;
+        const since = Date.now();
         state.sessions.forEach(session => {
           invalidateTerminalIdentity(session);
           session.spawnToken = null;
           session.spawning = false;
+          // A evidencia de atividade morre com a conexao: o primeiro plano de
+          // antes da queda nao prova nada agora, e sem amostra nova nada anima.
+          session.agentTurn = null;
+          session.outputAgeMs = null;
+          session.metricsAt = 0;
+          session.evidenceSince = since;
           if (session.ptyId != null) setStatus(session, 'disconnected');
         });
       }
@@ -1697,6 +1847,7 @@ export async function closeSession(id) {
   if (session.idleTimer) clearTimeout(session.idleTimer);
   session.outputChannel?.dispose?.();
   try { browserHooks.sessionClosed?.(session); } catch (_error) { /* sem browser */ }
+  try { docgraphHooks.sessionClosed?.(session); } catch (_error) { /* sem grafo */ }
   session.editor.tabs.forEach((tab) => disposeTab(tab));
   releaseSessionWatches(session);
   session.disposables.forEach((disposable) => { try { disposable.dispose(); } catch (_error) { /* ja descartado */ } });
@@ -1848,6 +1999,39 @@ export function pasteText(id, text) {
   return true;
 }
 
+// O programa em primeiro plano ligou a colagem entre colchetes, modo 2004. Com
+// ela, um texto de varias linhas chega como um bloco so; sem ela, cada quebra
+// executa a linha anterior.
+export function bracketedPaste(id) {
+  const session = state.sessions.get(id || state.selectedId);
+  return Boolean(session?.term?.modes?.bracketedPasteMode);
+}
+
+// Entrega um texto escrito fora do terminal, com duas acoes separadas.
+// Inserir escreve e para ali; enviar espera a escrita terminar e so entao
+// manda o Enter, numa segunda escrita, para o agente nunca receber meia
+// mensagem. Devolve falso sem escrever nada quando a sessao nao esta viva,
+// esta em replay ou o celular nao tem o controle do terminal.
+export async function submitText(id, text, { enter = false } = {}) {
+  const session = state.sessions.get(id || state.selectedId);
+  if (!session || session.ptyId == null || session.status !== 'running' || !text) return false;
+  if (session.replaying) return false;
+  if (supportsPhoneTerminal() && !state.demo) {
+    // Uma concessao negada nao e erro de uso: o texto fica na caixa e a pessoa
+    // tenta de novo depois de assumir o controle.
+    try { await requestTerminalControl(session.id); } catch (_error) { return false; }
+    if (!session.host || !session.viewport?.owned) return false;
+  }
+  session.lastWrite = null;
+  // O paste do xterm respeita a colagem entre colchetes e converte as quebras
+  // de linha; escrever o texto cru executaria linha por linha.
+  session.term.paste(text);
+  const written = await (session.lastWrite || false);
+  if (!written) return false;
+  if (!enter) return true;
+  return writeTerminal(session, '\r');
+}
+
 // Rolagem afastada do fim, para a interface oferecer a volta e avisar de
 // saida nova enquanto a pessoa le o historico. So o buffer normal tem
 // historico; na tela alternativa nada e sinalizado.
@@ -1967,29 +2151,51 @@ export function subscribeChanges(listener) {
   return () => state.changeListeners.delete(listener);
 }
 
-// Observa um caminho para a sessao. O mesmo caminho observado por duas
-// sessoes vira um observador so, aqui e no Rust.
-export function watchPath(session, path) {
-  if (!isTauri() || state.demo || !path) return;
+// Observa um caminho para um dono. O mesmo caminho observado por dois donos
+// vira um observador so, aqui e no Rust. O dono costuma ser a sessao; o grafo
+// da documentacao usa `docgraph:<sessao>`, senao o explorador, ao recolher uma
+// pasta, soltaria o observador que o grafo ainda usa.
+export function watchPathAs(ownerId, path) {
+  if (!isTauri() || state.demo || !path || !ownerId) return;
   let entry = state.watches.get(path);
   if (!entry) {
     entry = { id: null, owners: new Set(), pending: fs.watch(path).then((id) => { entry.id = id; return id; }).catch(() => null) };
     state.watches.set(path, entry);
   }
-  entry.owners.add(session.id);
+  entry.owners.add(ownerId);
 }
 
-export function unwatchPath(session, path) {
+export function unwatchPathAs(ownerId, path) {
   const entry = state.watches.get(path);
   if (!entry) return;
-  entry.owners.delete(session.id);
+  entry.owners.delete(ownerId);
   if (entry.owners.size > 0) return;
   state.watches.delete(path);
   entry.pending.then((id) => { if (id != null) fs.unwatch(id).catch(() => {}); });
 }
 
+export function watchPath(session, path) {
+  watchPathAs(session.id, path);
+}
+
+export function unwatchPath(session, path) {
+  unwatchPathAs(session.id, path);
+}
+
+// Quantos caminhos um dono observa, para as verificacoes de vazamento.
+export function watchCountOf(ownerId) {
+  let count = 0;
+  state.watches.forEach((entry) => { if (entry.owners.has(ownerId)) count += 1; });
+  return count;
+}
+
+// Solta o que a sessao observa e o que foi observado em nome dela, com dono
+// `<recurso>:<sessao>`. O id de uma sessao nunca tem dois-pontos.
 function releaseSessionWatches(session) {
-  [...state.watches.keys()].forEach((path) => unwatchPath(session, path));
+  const suffix = `:${session.id}`;
+  state.watches.forEach((entry, path) => {
+    [...entry.owners].forEach((owner) => { if (owner === session.id || owner.endsWith(suffix)) unwatchPathAs(owner, path); });
+  });
 }
 
 export function setExplorerRoot(id, root, { keepFollow = false } = {}) {
@@ -2141,7 +2347,7 @@ function seedDemo() {
       profileName: translate('terminal.demo.profileMain'),
       configDir: '/Users/exemplo/.claude-main',
       model: 'Fable 5.1',
-      sessions: [{ sessionId: 'demo', cwd: `${home}/cialai-platform`, model: 'Fable 5.1', effort: 'max', contextUsedPercent: 42, costUsd: 1.83, updatedAtMs: Date.now() }],
+      sessions: [{ sessionId: 'demo', cwd: `${home}/cialai-platform`, model: 'Fable 5.1', contextUsedPercent: 42, costUsd: 1.83, updatedAtMs: Date.now() }],
       plan: 'max',
       source: 'statusline',
       stale: false,
@@ -2161,21 +2367,44 @@ function seedDemo() {
     usage: usageFor('Claude Code', 'claude-main'),
   };
   first.lastOutputAt = Date.now();
+  // O agente esta no meio de um turno: e o unico card que anima.
+  first.agentTurn = { state: 'busy', sinceMs: Date.now() - 12000 };
+  first.outputAgeMs = 400;
+  first.metricsAt = Date.now();
   first.jobStartedAt = Date.now() - 154000;
   first.term.write(`\x1b[2m$ claude --resume\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.reading')}\r\n\x1b[2m  ⎿  Read 612 lines\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.adjustCard')}\r\n`);
   first.explorer.git = { isRepo: true, branch: 'main', ahead: 2, behind: 0, changes: [{ path: 'packages/ui/src/terminals/runtime.js', status: 'modified', staged: false, worktree: true }, { path: 'packages/ui/src/views/Terminais.css', status: 'modified', staged: false, worktree: true }, { path: 'docs/arquitetura/04-desktop.md', status: 'untracked', staged: false, worktree: true }] };
   const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'verde', subtitle: translate('terminal.demo.devServer') });
   second.status = 'running';
   second.activity = { available: true, cpu: 0.6, memory: 96 * 1024 * 1024, processes: 2, foreground: { pid: 5100, name: 'node', command: 'npm', agent: null, stopped: false }, agent: null, shellCwd: `${home}/site-exemplo` };
-  second.lastOutputAt = Date.now() - 20000;
+  // Sem sinal proprio, com saida chegando agora: Em execucao.
+  second.lastOutputAt = Date.now();
+  second.outputAgeMs = 600;
+  second.metricsAt = Date.now();
   second.term.write('$ npm run dev\r\n\r\n  VITE v7.3.6  ready in 412 ms\r\n\r\n  ➜  Local:   http://127.0.0.1:5173/\r\n');
   second.jobStartedAt = Date.now() - 3600000;
   const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', subtitle: translate('terminal.demo.backendTests') });
   third.status = 'running';
   third.activity = { available: true, cpu: 0, memory: 14 * 1024 * 1024, processes: 1, foreground: null, agent: null, shellCwd: `${home}/api-exemplo` };
+  // Shell em prompt: Pronto para comando, sem animacao.
   third.lastOutputAt = Date.now() - 400000;
+  third.outputAgeMs = 400000;
+  third.metricsAt = Date.now();
   third.term.write('$ git pull\r\nAlready up to date.\r\n$ ');
   third.attention = { kind: 'finished', message: translate('terminal.session.finishedNamed', { name: 'pytest' }), at: Date.now() - 60000 };
+  // Codex que ja entregou a resposta e espera a proxima instrucao.
+  const codex = createSession({ cwd: `${home}/relatorios`, name: 'relatórios', subtitle: translate('terminal.demo.codexAnswered') });
+  codex.status = 'running';
+  codex.activity = {
+    available: true, cpu: 0.2, memory: 180 * 1024 * 1024, processes: 3, shellCwd: `${home}/relatorios`,
+    foreground: { pid: 6120, name: 'codex', command: 'codex', agent: 'Codex', stopped: false, cwd: `${home}/relatorios`, profile: 'codex' },
+    agent: 'Codex', profile: 'codex', profileName: null, configDir: null, usage: null,
+  };
+  codex.agentTurn = { state: 'done', sinceMs: Date.now() - 45000 };
+  codex.outputAgeMs = 45000;
+  codex.metricsAt = Date.now();
+  codex.lastOutputAt = Date.now() - 45000;
+  codex.term.write(`$ codex\r\n\r\n${translate('terminal.demo.codexAnswer')}\r\n`);
   const fourth = createSession({ cwd: `${home}/rascunho`, name: 'rascunho', color: 'laranja' });
   fourth.status = 'exited';
   fourth.exitCode = 1;
@@ -2183,7 +2412,7 @@ function seedDemo() {
   fourth.attention = { kind: 'error', message: translate('terminal.session.endedCode', { code: 1 }), at: Date.now() - 5000 };
   const fifth = createSession({ cwd: `${home}/automacoes`, name: 'automações', customName: true });
   fifth.status = 'disconnected';
-  state.order = [first.id, second.id, third.id, fourth.id, fifth.id];
+  state.order = [first.id, second.id, codex.id, third.id, fourth.id, fifth.id];
   state.selectedId = first.id;
 }
 

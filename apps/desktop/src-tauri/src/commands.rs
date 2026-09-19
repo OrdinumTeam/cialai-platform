@@ -10,7 +10,7 @@ use std::time::Duration;
 use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::i18n::{t, tf};
@@ -19,6 +19,7 @@ use crate::prefs::{Preferences, PrefsState};
 use crate::tunnel::{Awake, RpcProblem, Supervisor};
 use crate::workspace::ai::{self, AgentUsage, UsageCache};
 use crate::workspace::browser::{BrowserInfo, BrowserManager};
+use crate::workspace::docgraph::{self, DocScan, DocScans, ScanOptions};
 use crate::workspace::dragout;
 use crate::workspace::files::{
     self, FileStat, FindCache, FindResult, FsError, FsResult, ImageFile, Listing, TextFile,
@@ -58,6 +59,9 @@ pub fn set_preferences(
     // O bloco da Barra de IA so muda pelos comandos `notch_*`: o dialogo de
     // Preferencias monta o objeto do zero e o zeraria.
     next.notch = previous.notch;
+    // O mesmo vale para o perfil ativo de cada agente: ele so muda por
+    // `agent_profile_select`.
+    next.agents = previous.agents;
     next.save(&app)?;
     if let Some(browsers) = app.try_state::<BrowserManager>() {
         browsers.set_chromium_path(next.dev_browser.chromium_path.clone());
@@ -147,6 +151,7 @@ pub async fn tunnel_doctor(
 /// Roda fora da thread principal porque a coreografia espera giros do loop.
 #[tauri::command(async)]
 pub fn splash_ready(window: WebviewWindow) {
+    crate::window::mark_interface_ready();
     crate::window::show_splash(&window);
 }
 
@@ -154,6 +159,7 @@ pub fn splash_ready(window: WebviewWindow) {
 /// thread principal e responde quando a animacao termina.
 #[tauri::command(async)]
 pub fn window_grow(window: WebviewWindow) -> bool {
+    crate::window::mark_interface_ready();
     crate::window::grow(&window)
 }
 
@@ -271,7 +277,7 @@ pub fn pty_presentation(
     terminals: State<'_, TerminalManager>,
     id: u32,
     presentation: TerminalPresentation,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     terminals.presentation(id, presentation)
 }
 
@@ -403,6 +409,20 @@ pub fn app_selftest_paths(app: AppHandle) -> Result<SelftestPaths, String> {
 pub fn list_repo_dirs(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<RepoListing, String> {
     let home = app.path().home_dir().map_err(|error| error.to_string())?;
     Ok(repos::list(&home, &prefs.get().project_roots))
+}
+
+/// Subpastas de uma pasta, para o seletor de nova sessão navegar. Sem caminho,
+/// devolve os pontos de partida: pasta pessoal, raízes de projeto e volumes.
+/// Só nomes de pasta saem daqui, nunca conteúdo de arquivo.
+#[tauri::command]
+pub fn list_dirs(
+    app: AppHandle,
+    prefs: State<'_, PrefsState>,
+    path: Option<String>,
+) -> Result<crate::workspace::dirs::DirListing, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let roots = repos::project_roots(&home, &prefs.get().project_roots);
+    crate::workspace::dirs::list(&home, &roots, path.as_deref())
 }
 
 /// Candidatas documentadas para o primeiro uso, com existência conferida sem
@@ -744,6 +764,162 @@ pub fn ai_usage(
     ai::cached(&cache, &home, &support, &terminals.codex_homes())
 }
 
+/* ── grafo da documentação ────────────────────────────────────────── */
+
+/// Varre a raiz do projeto atrás de arquivos Markdown, para o grafo da
+/// documentação do estúdio. `key` é a sessão e `token` identifica o pedido: um
+/// pedido novo da mesma chave cancela o anterior. Pode durar até o prazo de
+/// [`docgraph::SCAN_TIME_BUDGET`], por isso roda numa thread de bloqueio e não
+/// num worker do runtime.
+#[tauri::command]
+pub async fn docgraph_scan(
+    scans: State<'_, DocScans>,
+    key: String,
+    token: String,
+    root: String,
+) -> FsResult<DocScan> {
+    let guard = scans.begin(&key, &token);
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let result = docgraph::scan(&root, guard.flag(), &ScanOptions::default());
+        drop(guard);
+        result
+    })
+    .await
+    .map_err(|error| FsError {
+        code: "io".into(),
+        message: crate::i18n::tf("native.error.scanFailed", &[("error", &error.to_string())]),
+    })?;
+    outcome.map(|mut scan| {
+        scan.key = key;
+        scan.token = token;
+        scan
+    })
+}
+
+/// Cancela a varredura da chave. Com `token`, só se for a desse pedido.
+#[tauri::command]
+pub fn docgraph_cancel(scans: State<'_, DocScans>, key: String, token: Option<String>) -> bool {
+    scans.cancel(&key, token.as_deref())
+}
+
+/* ── contas dos agentes ───────────────────────────────────────────── */
+
+/// Uma conta que o agente pode usar, para a tela de troca. Nunca leva
+/// `account_key`, token nem conteúdo de arquivo de credencial: só o que a
+/// pessoa precisa ver para escolher.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentProfileView {
+    /// `claude`, `claude-webrota`, `codex`, `codex-amorim`.
+    pub id: String,
+    /// `claude` ou `codex`.
+    pub agent: String,
+    pub label: String,
+    pub plan: Option<String>,
+    /// A pasta sem sufixo, que o agente usa quando nada é escolhido.
+    pub is_default: bool,
+    /// Conta que as sessões novas vão usar.
+    pub active: bool,
+    /// A pasta ainda não tem credencial: o login do próprio CLI está pendente.
+    pub needs_login: bool,
+    /// Janelas de uso do plano, como a Barra de IA as lê.
+    pub windows: Vec<crate::workspace::ai::UsageWindow>,
+}
+
+/// Contas de cada agente, com a marca do perfil ativo e o uso do plano.
+#[tauri::command(async)]
+pub fn agent_profiles(
+    app: AppHandle,
+    prefs: State<'_, PrefsState>,
+    cache: State<'_, UsageCache>,
+    terminals: State<'_, TerminalManager>,
+) -> Result<Vec<AgentProfileView>, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let support = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| error.to_string())?;
+    let usage = crate::workspace::ai::cached(&cache, &home, &support, &terminals.codex_homes());
+    let active = prefs.get().agents.active_profile.clone();
+    Ok(crate::notch::profiles::discover(&home)
+        .into_iter()
+        .map(|profile| {
+            let agent = profile.provider.as_str().to_string();
+            let windows = usage
+                .iter()
+                .find(|item| item.profile == profile.id)
+                .map(|item| item.windows.clone())
+                .unwrap_or_default();
+            AgentProfileView {
+                active: active.get(&agent) == Some(profile.id.as_str()),
+                is_default: profile.slug.is_none(),
+                needs_login: !crate::notch::usage::credentials::exists(
+                    &profile.dir(),
+                    profile.slug.is_none(),
+                ),
+                label: profile.label.clone(),
+                plan: profile.plan.clone(),
+                id: profile.id,
+                agent,
+                windows,
+            }
+        })
+        .collect())
+}
+
+/// Escolhe a conta que os terminais novos vão usar. Vazio volta a não
+/// interferir. Tarefa em execução continua na conta em que começou.
+#[tauri::command(async)]
+pub fn agent_profile_select(
+    app: AppHandle,
+    prefs: State<'_, PrefsState>,
+    agent: String,
+    id: String,
+) -> Result<(), String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let kind = crate::workspace::agent_profiles::Agent::parse(&agent)
+        .ok_or_else(|| crate::i18n::t("native.error.agentUnknown"))?;
+    if !id.is_empty() {
+        let valid = crate::workspace::agent_profiles::dir_of(&home, kind, &id)
+            .is_some_and(|dir| crate::workspace::agent_profiles::is_profile_dir(&dir, kind));
+        if !valid {
+            return Err(crate::i18n::t("native.error.profileUnknown"));
+        }
+    }
+    let mut next = prefs.get();
+    if !next.agents.active_profile.set(&agent, &id) {
+        return Err(crate::i18n::t("native.error.agentUnknown"));
+    }
+    next.save(&app)?;
+    prefs.set(next);
+    let _ = app.emit("agents://profiles", ());
+    Ok(())
+}
+
+/// Cria a pasta de uma conta nova, vazia e só para o dono. O login é feito
+/// pelo próprio CLI, no terminal que a interface abre em seguida.
+#[tauri::command(async)]
+pub fn agent_profile_create(app: AppHandle, agent: String, name: String) -> Result<String, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let kind = crate::workspace::agent_profiles::Agent::parse(&agent)
+        .ok_or_else(|| crate::i18n::t("native.error.agentUnknown"))?;
+    crate::workspace::agent_profiles::create(&home, kind, &name)?;
+    let _ = app.emit("agents://profiles", ());
+    Ok(format!("{agent}-{name}"))
+}
+
+/// Abre o agente numa conta escolhida, no terminal já aberto. Só escreve com o
+/// shell no prompt e sem processo em primeiro plano.
+#[tauri::command(async)]
+pub fn pty_launch_agent(
+    terminals: State<'_, TerminalManager>,
+    id: u32,
+    agent: String,
+    profile: String,
+) -> Result<(), String> {
+    terminals.launch_agent(id, &agent, &profile)
+}
+
 /// Instala a linha de estado do Claude Code nos perfis da pasta pessoal. E
 /// ela que publica o uso do plano, o modelo, o esforco, o contexto e o custo
 /// que `ai_usage` le para os cards.
@@ -826,4 +1002,66 @@ pub fn browser_list(browsers: State<'_, BrowserManager>) -> Vec<BrowserInfo> {
 #[tauri::command]
 pub fn preview_register(roots: State<'_, PreviewRoots>, root: String) -> Result<String, String> {
     roots.register(&root)
+}
+
+#[cfg(test)]
+mod agent_profile_tests {
+    use super::*;
+
+    /// A tela de troca precisa do que a pessoa vê para escolher, e de nada
+    /// além disso. `accountKey`, token e conteúdo de credencial nunca saem
+    /// daqui, nem para o computador nem para o celular.
+    #[test]
+    fn the_profile_view_carries_no_account_key_and_no_credential() {
+        let view = AgentProfileView {
+            id: "codex-work".into(),
+            agent: "codex".into(),
+            label: "work".into(),
+            plan: Some("plus".into()),
+            is_default: false,
+            active: true,
+            needs_login: false,
+            windows: vec![crate::workspace::ai::UsageWindow {
+                id: "primary".into(),
+                label: "Sessão".into(),
+                used_percent: 41.0,
+                window_minutes: Some(300),
+                resets_at_ms: None,
+            }],
+        };
+        let wire = serde_json::to_value(&view).unwrap();
+        let mut keys = wire
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>();
+        keys.sort();
+        assert_eq!(
+            keys,
+            [
+                "active",
+                "agent",
+                "id",
+                "isDefault",
+                "label",
+                "needsLogin",
+                "plan",
+                "windows",
+            ]
+        );
+        let text = wire.to_string();
+        for forbidden in [
+            "accountKey",
+            "account_key",
+            "token",
+            "auth.json",
+            "credential",
+        ] {
+            assert!(
+                !text.contains(forbidden),
+                "{forbidden} nao pode sair: {text}"
+            );
+        }
+    }
 }

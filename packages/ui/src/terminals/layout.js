@@ -24,6 +24,11 @@ const DEFAULTS = {
   editorRatio: LAYOUT_LIMITS.editorRatio.default,
   fontSize: LAYOUT_LIMITS.fontSize.default,
   focus: false,
+  // Painel cujo aviso de onde reabrir ja foi mostrado uma vez. Recolher uma
+  // coluna esconde a lista inteira, e sem o aviso a pessoa fica sem saber para
+  // onde ela foi.
+  noticedSessions: false,
+  noticedExplorer: false,
 };
 
 function clamp(value, limits) {
@@ -39,6 +44,8 @@ function sanitize(raw) {
   if (Number.isFinite(raw.fontSize)) next.fontSize = clamp(Math.round(raw.fontSize), LAYOUT_LIMITS.fontSize);
   next.sessionsCollapsed = Boolean(raw.sessionsCollapsed);
   next.explorerCollapsed = Boolean(raw.explorerCollapsed);
+  next.noticedSessions = Boolean(raw.noticedSessions);
+  next.noticedExplorer = Boolean(raw.noticedExplorer);
   // Modo foco nao sobrevive a reabertura: o app volta com a navegacao.
   next.focus = false;
   return next;

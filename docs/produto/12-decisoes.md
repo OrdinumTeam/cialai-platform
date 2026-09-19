@@ -43,6 +43,12 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 033 | Preparado | Soak curto registrado; execução contínua de 24 horas permanece pendente |
 | 034 | Preparado | Dependências externas e critérios de aceite continuam explícitos |
 | 035 | Implementado | Português do Brasil, inglês e espanhol neutro adotados nas interfaces, no núcleo nativo do desktop e nos metadados do app móvel |
+| 038 | Implementado | Estado de atividade derivado de `agentTurn` e `outputAgeMs`, com leitor único no Rust e função pura única na interface |
+| 039 | Implementado | Caixa de texto do celular com Inserir e Enviar como ações separadas, na página e sem passar pelas lojas |
+| 040 | Implementado | Apresentação do card com o Rust como fonte de verdade, e `list_dirs` devolvendo só nomes de pasta dentro de limites do servidor |
+| 041 | Implementado | O app móvel abre sempre no início, substituindo o trecho Abertura do app da decisão 037 |
+| 042 | Implementado | Troca de conta dos agentes por escolha de pasta, sem tocar em credencial, valendo para sessões novas |
+| 043 | Implementado | Grafo da documentação numa aba do estúdio, só com Markdown e as pastas que levam até eles |
 
 ## 001 Nome Cialai
 
@@ -233,3 +239,63 @@ Ir ao início não derruba a conexão: `App.tsx` guarda o proxy por `HOME_PROXY_
 Ícones: glifos simples desenhados só com `View` no acento da paleta, em `Home.tsx`, para monitor, código QR, janela de terminal e controles. Alternativa rejeitada: uma dependência de ícones, porque o app não tinha nenhuma e quatro glifos não justificam uma biblioteca nem o peso no build nativo.
 
 Consequência: `docs/arquitetura/05-mobile.md` e os roteiros de teste citam o início como raiz da navegação; a chave `mobile.offline.switchDesktop` e as chaves `mobile.shell.desktops` e `mobile.shell.showDesktops` saem dos dicionários, e as chaves `mobile.home.*`, `mobile.loading.detail` e o novo valor de `mobile.pair.back` entram nos três idiomas. Capturas antes e depois em `docs/evidence/` continuam pendentes até existir aparelho ou simulador com o build.
+
+## 038 O computador é a fonte única do estado de atividade da sessão
+
+Data: 18/09/2026. Contexto: o card lia dois fatos de processo, existe processo em primeiro plano e chegou byte nos últimos 1500 ms pelo relógio local de cada cliente. Para um agente interativo esses fatos dizem o contrário do que a pessoa lê: o `claude` continua em primeiro plano depois de entregar a resposta, então as barras animavam do início até o `/exit`, e uma sessão `ssh` parada ou um REPL do `python` no prompt apareciam como Processo em execução. Depois de perder e recuperar a conexão o card continuava animando, porque a evidência de atividade era a de antes da queda, e a lista dizia Sessão desconectada para terminais vivos no computador enquanto cada um não fosse aberto.
+
+Decisão: o computador passa a publicar o estado. `SessionMetrics` ganha `agentTurn`, lido dos arquivos que o próprio agente grava, e `outputAgeMs`, medido no relógio do computador. Os leitores puros saem da Barra de IA para `workspace/agent_state.rs`, e a Barra de IA passa a reexportá-los, então anel e card leem a mesma coisa. Na interface, `deriveActivity` em `packages/ui/src/terminals/activity-state.js` é a única função que decide rótulo, tom e animação, e o card, o cabeçalho do computador e o cabeçalho do celular usam o mesmo componente de indicador. Quando o turno do agente existe, ele decide sozinho; sem ele valem saída recente e CPU acima do piso. Silêncio nunca vira concluído e, sem amostra nova desde a conexão atual, nada anima. Métricas passam a valer para toda sessão com PTY vivo segundo `pty_list`, anexada ou estacionada, então a lista se corrige sem reanexar e sem repetir o replay.
+
+Alternativa rejeitada: manter a inferência no cliente e apenas alargar a janela de saída. Ela não distingue um agente que terminou de um comando longo e quieto, e continuaria discordando entre computador e celular por usar dois relógios.
+
+Consequência: as chaves `terminal.session.receivingOutput`, `terminal.session.processRunning`, `terminal.session.processStopped` e `terminal.session.ready` saem dos três dicionários e entram as oito chaves `terminal.session.activity.*`. O cabeçalho do terminal no celular ganha o indicador que não tinha. `packages/ui/scripts/tests/terminal-activity-state.test.cjs` cobre cada linha da tabela de estados, `packages/ui/scripts/check-session-card.mjs` confere o card real e `packages/ui/scripts/check-terminal-sync.mjs` cobre a queda e a volta da ponte com uma sessão selecionada e uma estacionada. A matriz manual no macOS, a conferência em aparelho e as capturas de evidência continuam pendentes.
+
+## 039 Inserir e Enviar como ações separadas na caixa de texto do celular
+
+Data: 18/09/2026. Contexto: digitar direto no terminal pelo celular é desconfortável e um Enter sem querer executa o que ainda estava sendo escrito. A página do celular não tinha compositor nem caixa de várias linhas: existiam a fileira de nove teclas, o botão Colar e a pílula de voltar ao fim. Também não estava claro se uma caixa de texto deveria entregar o conteúdo já executando ou apenas escrevendo.
+
+Decisão: a caixa mora na página, em `packages/ui/src/terminals/ui/PhoneComposer.jsx`, e usa um `textarea` do próprio aparelho, que traz teclado, seleção, copiar e colar, autocorreção e o ditado do sistema sem nenhuma dependência nova. Duas ações separadas: Inserir escreve o texto e para ali; Enviar escreve o texto e, só depois de confirmada a escrita, manda o Enter numa segunda escrita. Dentro da caixa, Enter sempre quebra linha. A entrega passa pelo `paste` do xterm, que respeita a colagem entre colchetes e converte as quebras de linha, e um texto de várias linhas indo para um programa sem esse modo pede uma segunda confirmação, porque cada quebra executaria a linha anterior.
+
+Alternativa rejeitada: uma ação única que sempre envia. Ela reintroduz exatamente o acidente que motivou o pedido, e não existe forma de revisar o texto no terminal depois que ele chega lá.
+
+Consequência: a caixa chega ao celular com uma versão nova do desktop, sem build nativo e sem revisão de loja, porque a página é servida pelo computador. `submitText` e `bracketedPaste` entram em `runtime.js`, `writeTerminal` passa a devolver a promessa da escrita e a guardar em `session.lastWrite`, e a fileira de teclas continua igual. As chaves `terminal.phone.composer.*` entram nos três idiomas. `packages/ui/scripts/check-submit-text.mjs` exercita a entrega com o xterm de verdade e `check-phone-composer.mjs` cobre a caixa, o aviso de várias linhas e o rascunho por sessão. A conferência em aparelho continua pendente. Esta decisão é também o pré-requisito do ditado por voz, que entregará o texto transcrito nesta mesma caixa.
+
+## 040 Apresentação do card no Rust e navegação de pastas por nome
+
+Data: 18/09/2026. Contexto: as ações de terminal do computador não existiam no celular, porque o card no modo toque desligava menu de contexto, arraste, duplo clique e o botão de três pontos. Duas coisas impediam simplesmente ligá las. A apresentação do card era publicada só pelo computador e guardada em memória no Rust, então um nome dado pelo celular seria apagado pelo próximo `persist` do computador. E o seletor de pasta listava só as subpastas de primeiro nível de cada raiz de projeto: com a raiz apontando para Documentos, não havia como abrir uma sessão na própria Documentos nem subir um nível, que foi o caso relatado.
+
+Decisão: o Rust passa a ser a fonte de verdade da apresentação, com uma `revision` atribuída a cada gravação. Quem grava recebe a revisão nova; quem lê adota a apresentação quando a revisão recebida é maior que a conhecida. `pty_presentation` entra na lista da ponte com nível de sessão, porque é apresentação de card e não toca em processo nenhum. Para a navegação entra um comando novo, `list_dirs`, que devolve o caminho normalizado, o pai quando permitido, as subpastas e a marca de truncado, com teto de 200. Os limites são do servidor: a árvore da pasta pessoal, as raízes de projeto e, no macOS, `/Volumes`; no Windows, as unidades montadas. Pasta oculta, nome com cara de segredo e link simbólico ficam de fora, e `..`, caminho relativo e caminho fora dos limites são recusados. Só nome de pasta sai daqui, nunca conteúdo de arquivo.
+
+Alternativa rejeitada: deixar o celular publicar a apresentação sem revisão e resolver a disputa por quem escreveu por último no relógio. Os dois relógios não concordam, e o resultado seria o nome piscando entre as duas formas.
+
+Consequência: o celular ganha o botão de três pontos com alvo de 44 px, o toque longo de 500 ms e a folha de ações com renomear, subtítulo, cor, fixar, mover, nova sessão nesta pasta, alterar pasta, copiar caminho, reiniciar e encerrar. O cabeçalho do terminal aberto usa o mesmo menu. O seletor passa a oferecer cada raiz e o modo navegar, nos dois lados. Listar nomes de pasta não amplia o que o celular alcança, porque ele já podia abrir um shell em qualquer pasta por `pty_spawn`; o limite existe para o seletor não virar um explorador do disco inteiro. `tools/check/desktop-extraction.mjs` passou a exigir que todo comando liberado na ponte tenha braço no despacho e nível em `sensitive.js`, nos dois sentidos. A conferência em aparelho continua pendente.
+
+## 041 O app móvel abre sempre no início
+
+Data: 18/09/2026. Contexto: a decisão 037 fez do início um hub, mas manteve a abertura condicional: sem `lastDesktopId` ou com a marca `cialai.lastConnectionFailed` o app começava no início, e nos demais casos ia direto ao terminal. Isso deixava a abertura imprevisível, montava a WebView e abria a conexão antes de qualquer toque, e escondia Computadores, Vincular e Ajustes atrás de um voltar.
+
+Decisão: com pelo menos um computador vinculado, o app despacha sempre `show-home`. Sem computador nenhum continua indo para o pareamento, e depois de parear continua indo ao terminal. A marca `cialai.lastConnectionFailed` perde a função e é apagada do Secure Store uma vez, junto com `rememberLastConnection` e as chamadas dela. Este trecho substitui Abertura do app da decisão 037; o resto da 037 continua valendo.
+
+Alternativa rejeitada: manter a abertura condicional e só melhorar o caminho de volta. Ela não resolve a imprevisibilidade, que é o incômodo relatado, e mantém a conexão sendo aberta sem a pessoa pedir.
+
+Consequência: nenhuma conexão é aberta antes do toque em Continuar, o que também economiza bateria e tráfego quando o app é aberto por engano. `App.test.js` ganhou um auxiliar que toca em Continuar antes de esperar a WebView, mais dois casos: a abertura no início com o último computador saudável e sem WebView montada, e a limpeza única da marca antiga. `05-mobile.md` acompanha. A conferência em aparelho continua pendente.
+
+## 042 Troca de conta dos agentes por escolha de pasta
+
+Data: 18/09/2026. Contexto: quando o limite de uma conta é atingido, a única saída era abrir um terminal e exportar `CODEX_HOME` ou `CLAUDE_CONFIG_DIR` na mão. Esta máquina tem cinco pastas do Codex e sete do Claude, e nada na interface dizia qual delas cada sessão estava usando nem permitia trocar. O Codex CLI também não tem troca de conta embutida, e trocar o `auth.json` com uma sessão rodando arrisca a renovação de token gravar no perfil errado.
+
+Decisão: o Cialai escolhe qual pasta o agente vai usar e nada além disso. Nunca move `auth.json`, nunca copia credencial e nunca lê o conteúdo de um arquivo de credencial. A conta ativa de cada agente vira a preferência `agents.activeProfile`, e um terminal novo nasce com as variáveis dela, aplicadas no Rust depois da limpeza de marcadores herdados. Conta padrão ativa remove as variáveis; uma nomeada as define. O cliente nunca envia variável nem caminho: manda o id do perfil, e o servidor resolve a pasta a partir da própria pasta pessoal e confere os marcadores. Um terminal já aberto não muda de ambiente; para ele existe a ação Abrir o agente neste perfil, que digita a linha montada por `resume::launch_command`, com a mesma citação por sabor de shell da retomada, e só com o shell no prompt. Uma tarefa em execução continua na conta em que começou.
+
+Alternativa rejeitada: trocar o `auth.json` de lugar para o agente usar sempre a mesma pasta. Além de mexer em credencial, ela corrompe o perfil quando uma renovação de token chega no meio da troca.
+
+Consequência: entram quatro comandos, `agent_profiles` como `read`, `agent_profile_select` e `agent_profile_create` como `session` e `pty_launch_agent` como `terminal`. `AgentProfileView` não carrega `accountKey`, token nem caminho de credencial, e um teste afirma exatamente o conjunto de campos que ela leva. Criar perfil cria a pasta vazia com permissão 0700 e abre um terminal já nela, onde o login é feito pelo próprio CLI; até os marcadores aparecerem, a conta fica listada como aguardando login. O card continua mostrando o perfil lido do processo real, então um arquivo de inicialização do shell que exporte a variável vence o valor injetado e o card mostra a verdade. A conferência com contas de teste de cada agente e no aparelho continua pendente, e o login do Codex pode depender de navegador no próprio computador.
+
+## 043 Grafo da documentação numa aba do estúdio
+
+Data: 19/09/2026. Contexto: um projeto com mil pastas e documentação espalhada em dez áreas não cabe na cabeça de ninguém pelo explorador, que mostra uma pasta por vez e não diz onde a documentação está. O Ordinum Control, o protótipo interno de onde este estúdio foi extraído, resolveu isso com um grafo de forças e o recurso ficou bom o bastante para virar produto.
+
+Decisão: o grafo vem para o Cialai inteiro, com a mesma experiência. Mora numa aba virtual da área central, no molde do Dev Browser, e não numa janela nem numa seção da casca. Os nós são a união dos Markdown com seus ancestrais até a raiz: ramo que não leva a nenhum `.md` fica fora. A varredura é do Rust, em `workspace/docgraph.rs`, por caminhos e metadados, sem abrir arquivo nenhum; a hierarquia podada é montada na interface por função pura. O motor é o `d3-force` sobre canvas, carregado por `import()` só quando o painel monta, e a câmera veio do mapa do protótipo.
+
+Alternativa rejeitada: ler os links entre os Markdown e desenhar o grafo de referências. Ela responde outra pergunta, exige abrir todo arquivo e não mostra onde a documentação mora. Ficou no roadmap, por cima da hierarquia física.
+
+Consequência: entram dois comandos locais, `docgraph_scan` e `docgraph_cancel`, que **não** são liberados na ponte: o grafo é do computador, como o editor e o Dev Browser. `.gitignore` não é aplicado, porque os projetos da casa guardam documentação legítima fora do Git, como `_INTERNO_ORDINUM/`. Pasta simbólica nunca é percorrida, o que também elimina ciclos, e uma varredura parcial nunca se passa por completa. A `files.rs` abriu `SKIP_DIRS`, `is_noise`, `absolute` e os construtores de `FsError` para o módulo novo, sem refatorar o `build_index`. O `runtime.js` ganhou `watchPathAs` com dono, para o explorador não soltar um observador que o grafo ainda usa. São 107 chaves `terminal.docgraph.*` nos três idiomas, 24 testes do Rust e 29 verificações em `check-docgraph.mjs`. O documento canônico é `docs/arquitetura/16-grafo-da-documentacao.md`.

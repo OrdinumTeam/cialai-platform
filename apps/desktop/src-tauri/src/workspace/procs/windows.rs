@@ -100,11 +100,14 @@ impl Backend {
             .filter(|path| !path.is_empty())
     }
 
+    /// Contrato de `docs/arquitetura/14-diferencas-por-plataforma.md`: todo
+    /// caminho entregue a interface usa barra normal. O PEB devolve a forma do
+    /// sistema, entao a conversao acontece aqui, na fronteira.
     pub(super) fn cwd(&self, pid: u32) -> Option<String> {
         lock(&self.system)
             .process(Pid::from_u32(pid))?
             .cwd()
-            .map(|path| path.to_string_lossy().to_string())
+            .map(crate::platform::to_portable)
             .filter(|path| !path.is_empty())
     }
 

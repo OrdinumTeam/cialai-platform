@@ -41,6 +41,7 @@ cialai-platform/
     selftest/                        selftest-app.js e fixtures
     spikes/                          preparação e execução local dos experimentos
     release/                         updater, checklist, cm-*.sh, APIs das lojas e check do ícone
+    windows/                         collect-diagnostics.ps1, coleta de registros e de ambiente no Windows
     build-tunnel-mobile.sh           gera o xcframework e o aar
     build-tunnel.mjs                 gera e verifica os sidecars
     run.mjs                          orquestra checks desktop, túnel e integrações
@@ -121,7 +122,7 @@ O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`,
 
 | Pacote | Suítes | Origem |
 | --- | --- | --- |
-| `packages/ui` | `terminal-restore`, `mobile-terminal-touch`, `mobile-terminal-route`, `mobile-keyboard-viewport` em Node; `check-file-kinds`, `check-terminal-sync` com 17 casos, `check-phone-terminal`, `check-phone-workbench`, `check-mobile` com 14 casos, `check-mobile-readonly-ui`; `check-studio-browser`, `check-explorer-drop-browser`, `check-terminal-drop-browser` por Playwright | `$CONTROL/backend/node/tests`, `$CONTROL/frontend/scripts` |
+| `packages/ui` | `terminal-restore`, `terminal-reattach`, `terminal-replay-silence`, `terminal-activity-state`, `terminal-ime-input`, `windows-paths`, `mobile-terminal-touch`, `mobile-terminal-route`, `mobile-keyboard-viewport` em Node; `check-file-kinds`, `check-panels`, `check-terminal-sync`, `check-phone-terminal`, `check-phone-workbench`, `check-session-card`, `check-phone-composer`, `check-phone-session-menu`, `check-new-session-popover`, `check-agent-profiles`, `check-docgraph`, `check-submit-text`, `check-mobile-shell`, `check-platform`, `check-preferences`, `check-brand`; `check-studio-browser`, `check-explorer-drop-browser`, `check-terminal-drop-browser` por Playwright | `$CONTROL/backend/node/tests`, `$CONTROL/frontend/scripts` |
 | `packages/protocol` | Validação das fixtures contra o esquema; `remote.js` com 4401 sem retentativa e URL por `location.host` | Novo, mais `check-mobile.mjs` |
 | `apps/desktop` | A suíte Rust elegível do Control sem falhas e com ignores justificados, mais `TestShell` e `TestChild` por sistema, ponte com segredo da borda, supervisor do sidecar, `resume` por sabor, `files` por sistema, `watch` por backend, `journal` no Windows; `selftest-app.js` por `tauri-driver` no Linux e no Windows e por `tauri dev` no macOS | `$CONTROL/macos/src-tauri`, `$CONTROL/frontend/scripts/selftest-app.js` |
 | `packages/tunnel-core` | Unitários de `identity`, `transport`, `tor`, `rendezvous`, `mdns`, `pathmgr`, `pairing`, `sidecar`, `proxy` e `edge`, com testes em processo contra a rede Tor real; os pacotes do modo Headscale seguem inertes e a integração com Headscale em Docker ficou histórica, sem compilar desde o sidecar v2 | Novo |

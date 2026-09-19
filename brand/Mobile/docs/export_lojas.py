@@ -12,7 +12,9 @@ esticar ou preencher com margem o master 9:16, o que empurraria o aparelho para 
 Sem iPad: o app declara `supportsTablet: false`. Tablets do Google Play ficam como
 pendência na MATRIZ.
 
-Uso:  <venv>/bin/python docs/export_lojas.py
+Uso:  <venv>/bin/python docs/export_lojas.py [--idioma pt-BR|en]
+
+O inglês sai em `slides-en/play` e `slides-en/iOS`, nas mesmas medidas.
 """
 import pathlib
 import sys
@@ -20,7 +22,7 @@ import sys
 from PIL import Image
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-from compose_device import BASE, SLIDES, compor  # noqa: E402
+from compose_device import BASE, IDIOMAS, SLIDES, compor, variante  # noqa: E402
 
 # frac controla a largura do aparelho no layout "full". O retrato da Apple é mais alto
 # que o 9:16, então lá o aparelho cresce para ocupar a folga em vez de sobrar fundo.
@@ -30,19 +32,24 @@ DESTINOS = [
 ]
 
 
-def main():
+def main(idioma="pt-BR"):
+    raiz = "slides" if idioma == "pt-BR" else "slides-en"
     for dst in DESTINOS:
-        out = BASE / "slides" / dst["pasta"]
+        out = BASE / raiz / dst["pasta"]
         out.mkdir(parents=True, exist_ok=True)
         for key in list(SLIDES):
-            cfg = dict(SLIDES[key])
+            cfg = variante(key, idioma)
             kw = dict(cw=dst["w"] * 2, ch=dst["h"] * 2)
             if dst["frac"]:
                 kw["phone_frac"] = dst["frac"]
             im = compor(cfg, **kw).resize((dst["w"], dst["h"]), Image.LANCZOS)
             im.save(out / f"{key}.png", "PNG")
-            print("SAVED slides/%s/%s.png  %dx%d" % (dst["pasta"], key, dst["w"], dst["h"]))
+            print("SAVED %s/%s/%s.png  %dx%d" % (raiz, dst["pasta"], key, dst["w"], dst["h"]))
 
 
 if __name__ == "__main__":
-    main()
+    escolha = "pt-BR"
+    if "--idioma" in sys.argv:
+        escolha = sys.argv[sys.argv.index("--idioma") + 1]
+    assert escolha in IDIOMAS, "idioma fora de %s" % (IDIOMAS,)
+    main(escolha)

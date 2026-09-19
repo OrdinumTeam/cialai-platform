@@ -220,6 +220,45 @@ pub(super) fn dispatch(
             Ok(Value::Null)
         }
         "list_repo_dirs" => value(commands::list_repo_dirs(app.clone(), app.state())?),
+        // A apresentacao e do card, nao do processo: renomear ou mudar a cor
+        // pelo celular nao toca em nada que esteja rodando.
+        // Navegacao de pastas: o servidor decide os limites, e o cliente so
+        // pede um caminho absoluto que precisa cair dentro deles.
+        "list_dirs" => value(commands::list_dirs(
+            app.clone(),
+            app.state(),
+            arg(&args, "path")?,
+        )?),
+        // Contas dos agentes. Nenhum caminho de credencial trafega: o cliente
+        // manda o id do perfil e o servidor resolve o resto.
+        "agent_profiles" => value(commands::agent_profiles(
+            app.clone(),
+            app.state(),
+            app.state(),
+            app.state(),
+        )?),
+        "agent_profile_select" => value(commands::agent_profile_select(
+            app.clone(),
+            app.state(),
+            arg(&args, "agent")?,
+            arg(&args, "id")?,
+        )?),
+        "agent_profile_create" => value(commands::agent_profile_create(
+            app.clone(),
+            arg(&args, "agent")?,
+            arg(&args, "name")?,
+        )?),
+        "pty_launch_agent" => value(commands::pty_launch_agent(
+            app.state(),
+            arg(&args, "id")?,
+            arg(&args, "agent")?,
+            arg(&args, "profile")?,
+        )?),
+        "pty_presentation" => value(commands::pty_presentation(
+            app.state(),
+            arg(&args, "id")?,
+            arg(&args, "presentation")?,
+        )?),
         _ => Err(t("native.error.desktopOnly")),
     }
 }

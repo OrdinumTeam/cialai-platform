@@ -12,7 +12,9 @@ cento da própria altura de respiro antes da headline.
 
 A headline da capa usa Outfit 500, um peso abaixo do 600 dos slides.
 
-Uso:  <venv>/bin/python docs/capa.py
+Uso:  <venv>/bin/python docs/capa.py [--idioma pt-BR|en]
+
+O inglês usa a tela traduzida de `real-en/` e sai em `slides-en/`.
 """
 import pathlib
 import sys
@@ -21,15 +23,18 @@ from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from compose_device import (  # noqa: E402
-    BASE, BG, PHONE, TEXTO, TEXTO2, composite_device, fonte,
+    BASE, BG, IDIOMAS, PHONE, TEXTO, TEXTO2, composite_device, fonte,
 )
 
 CW, CH = 2048, 1000                     # 2,048 por 1, reduzido para 1024x500
 
 LOCKUP = BASE / "brand/logos/cialai-lockup-1-4k.png"
-SCREEN = "real/lista-escuro.png"
-HEAD = "Todos os seus terminais."
-SUB = "No computador e no celular."
+TEXTOS = {
+    "pt-BR": dict(screen="real/lista-escuro.png", raiz="slides",
+                  head="Todos os seus terminais.", sub="No computador e no celular."),
+    "en": dict(screen="real-en/lista-escuro.png", raiz="slides-en",
+               head="All your terminals.", sub="On your computer and your phone."),
+}
 
 PESO_HEAD_CAPA = 500
 HEAD_SZ, SUB_SZ = 92, 46
@@ -41,7 +46,9 @@ LOCKUP_W = 0.27                         # largura do lockup, fração do canvas
 RESPIRO = 0.30                          # do lockup antes da headline, em altura do lockup
 
 
-def main():
+def main(idioma="pt-BR"):
+    cfg = TEXTOS[idioma]
+    SCREEN, HEAD, SUB, raiz = cfg["screen"], cfg["head"], cfg["sub"], cfg["raiz"]
     canvas = Image.new("RGB", (CW, CH), BG)
 
     device = composite_device(PHONE, SCREEN, BG).convert("RGBA")
@@ -73,11 +80,15 @@ def main():
     y += hh + gap2
     d.text((x, y), SUB, font=fs, fill=TEXTO2, anchor="la")
 
-    (BASE / "slides").mkdir(exist_ok=True)
-    canvas.save(BASE / "slides/capa.png", "PNG")
-    canvas.resize((1024, 500), Image.LANCZOS).save(BASE / "slides/capa-1024x500.png", "PNG")
-    print("SAVED slides/capa.png 2048x1000 e slides/capa-1024x500.png")
+    (BASE / raiz).mkdir(exist_ok=True)
+    canvas.save(BASE / ("%s/capa.png" % raiz), "PNG")
+    canvas.resize((1024, 500), Image.LANCZOS).save(BASE / ("%s/capa-1024x500.png" % raiz), "PNG")
+    print("SAVED %s/capa.png 2048x1000 e %s/capa-1024x500.png" % (raiz, raiz))
 
 
 if __name__ == "__main__":
-    main()
+    escolha = "pt-BR"
+    if "--idioma" in sys.argv:
+        escolha = sys.argv[sys.argv.index("--idioma") + 1]
+    assert escolha in IDIOMAS, "idioma fora de %s" % (IDIOMAS,)
+    main(escolha)

@@ -77,7 +77,10 @@ export const HOME_PROXY_GRACE_MS = 90_000;
 
 // Marca gravada quando a última conexão falhou: a próxima abertura do app começa
 // no início em vez de tentar o último computador de novo.
-export const LAST_CONNECTION_FAILED_KEY = 'cialai.lastConnectionFailed';
+/// Marca de uma versão anterior, quando a abertura escolhia entre o início e o
+/// terminal. O app abre sempre no início, então ela deixou de ter função e é
+/// apagada do Secure Store uma vez.
+const LEGACY_LAST_CONNECTION_FAILED_KEY = 'cialai.lastConnectionFailed';
 
 const connectionPorts: ConnectionPorts = {
   readToken: desktopId => readDeviceToken(desktopId),
@@ -124,7 +127,6 @@ function AppContent() {
   const shellReconnect = useRef<ShellReconnect | null>(null);
   const keptShell = useRef<KeptShell | null>(null);
   const [keptDesktopId, setKeptDesktopId] = useState<string | null>(null);
-  const lastConnectionFailed = useRef<boolean | null>(null);
   const backgroundedAt = useRef<number | null>(null);
   const appVersion = getAppVersion();
   const device = deviceIdentity(appVersion, t);
@@ -194,13 +196,6 @@ function AppContent() {
     shellReconnect.current = null;
   }, []);
 
-  // A marca só é regravada quando muda; a leitura fica no bootstrap.
-  const rememberLastConnection = useCallback((failed: boolean) => {
-    if (lastConnectionFailed.current === failed) return;
-    lastConnectionFailed.current = failed;
-    SecureStore.setItemAsync(LAST_CONNECTION_FAILED_KEY, failed ? 'true' : 'false').catch(() => undefined);
-  }, []);
-
   // Solta o proxy guardado ao sair do terminal sem fechá-lo e devolve o computador
   // dele, para quem chama decidir se ele continua como página aberta ou fecha.
   const releaseKeptShell = useCallback((): string | null => {
@@ -237,10 +232,9 @@ function AppContent() {
   // Tela sem conexão com o motivo registrado no anel, para a causa ser lida no aparelho.
   const goOffline = useCallback((desktopId: string, reason: OfflineReason, cause: string) => {
     logApp('info', `offline ${reason}: ${cause}`);
-    rememberLastConnection(true);
     endShellReconnect();
     dispatch({ type: 'desktop-offline', desktopId, reason });
-  }, [dispatch, endShellReconnect, rememberLastConnection]);
+  }, [dispatch, endShellReconnect]);
 
   // Marca a faixa de reconexão sem desmontar a página. O prazo garante que a
   // faixa não fica para sempre: vencido, a tela vira sem conexão e a escada de
@@ -275,10 +269,9 @@ function AppContent() {
     setFailure(desktopId, 'removed');
     dropKeptShell(desktopId);
     if (navigate) goOffline(desktopId, 'removed', 'the computer revoked this phone');
-    else rememberLastConnection(true);
     await closeDesktop(desktopId).catch(() => undefined);
     await deleteDeviceToken(desktopId).catch(() => undefined);
-  }, [dropKeptShell, goOffline, rememberLastConnection, setFailure]);
+  }, [dropKeptShell, goOffline, setFailure]);
 
   const applyOutcome = useCallback(async (outcome: ConnectionOutcome, navigate = true): Promise<boolean> => {
     const { desktopId } = outcome;
@@ -286,7 +279,6 @@ function AppContent() {
       case 'opened': {
         setFailure(desktopId, null);
         endShellReconnect();
-        rememberLastConnection(false);
         // O mesmo computador retoma o proxy guardado; outro computador o fecha.
         const kept = releaseKeptShell();
         if (kept && kept !== desktopId) void closeDesktop(kept).catch(() => undefined);
@@ -323,7 +315,7 @@ function AppContent() {
         return false;
       }
     }
-  }, [dispatch, dropKeptShell, endShellReconnect, goOffline, keepsShell, refreshStatus, releaseKeptShell, rememberLastConnection, revoke, setFailure, t, updateStore]);
+  }, [dispatch, dropKeptShell, endShellReconnect, goOffline, keepsShell, refreshStatus, releaseKeptShell, revoke, setFailure, t, updateStore]);
 
   // Uma tentativa por computador de cada vez; a troca de tela invalida resultados atrasados.
   // Com a página desse computador aberta, pede o mesmo proxy para ela não recarregar.
@@ -419,13 +411,8 @@ function AppContent() {
     let cancelled = false;
     const bootstrap = async () => {
       await hydrateLocale();
-      let lastFailed = false;
-      try {
-        lastFailed = (await SecureStore.getItemAsync(LAST_CONNECTION_FAILED_KEY)) === 'true';
-      } catch {
-        // Sem a marca, a abertura segue direto para o último computador.
-      }
-      lastConnectionFailed.current = lastFailed;
+      // Limpeza única da marca que a abertura antiga usava.
+      SecureStore.deleteItemAsync(LEGACY_LAST_CONNECTION_FAILED_KEY).catch(() => undefined);
       try {
         const storedTheme = await SecureStore.getItemAsync(THEME_STORAGE_KEY);
         if (!cancelled && storedTheme) setThemeMode(normalizeThemeMode(storedTheme));
@@ -457,15 +444,10 @@ function AppContent() {
         dispatch({ type: 'needs-pairing', ...(loaded.legacyDiscarded ? { notice: t('mobile.pair.notice.legacy') } : {}) });
         return;
       }
-      const last = findDesktop(loaded.store, loaded.store.lastDesktopId);
-      // Começa no início sem último computador ou quando a última conexão falhou;
-      // senão vai direto ao terminal, que é onde a pessoa quer chegar.
-      if (!last || lastFailed) {
-        dispatch({ type: 'show-home' });
-        return;
-      }
-      dispatch({ type: 'desktop-offline', desktopId: last.id, reason: 'reconnecting' });
-      await openSelected(last.id);
+      // O app abre sempre no início, mesmo com o último computador respondendo.
+      // O início é o hub: de lá o card Continuar leva ao terminal num toque, e
+      // Computadores, Vincular e Ajustes ficam à mão sem passar pelo terminal.
+      dispatch({ type: 'show-home' });
     };
     void bootstrap();
     return () => { cancelled = true; };

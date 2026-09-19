@@ -88,7 +88,16 @@ Uma sessão só aparece como aguardando quando a própria ferramenta grava isso.
 No Claude Code é o campo `status` do registro da sessão, que só a interface de
 terminal escreve; o transcript distingue apenas trabalhando de parado e nunca
 afirma espera. O Codex nunca aparece como aguardando: não existe evento que
-diga isso. É a mesma regra do estúdio.
+diga isso. É a mesma regra do estúdio, e agora é literalmente o mesmo código.
+
+### O leitor é um só
+
+Os leitores puros moram em `apps/desktop/src-tauri/src/workspace/agent_state.rs`:
+o enum `SessionState`, `parse_record` do registro do Claude Code e `state_in`
+com `state_of` do rollout do Codex. A Barra de IA os reexporta em
+`notch/sessions/claude.rs` e `notch/sessions/codex.rs`, e o estúdio lê daí para
+preencher `agentTurn` em `pty_metrics`. Assim o anel e o card nunca discordam
+sobre a mesma sessão, e a regra do silêncio vale nos dois por construção.
 
 ### Nenhum barulho
 
@@ -179,7 +188,38 @@ Eventos: `notch://usage` com a lista de snapshots a cada leitura,
 `ptyTag` para a casca selecionar a sessão do estúdio, `notch://open-settings`.
 
 O comando `set_preferences` preserva o bloco `notch` gravado: o diálogo de
-Preferências monta o objeto do zero e só os comandos `notch_*` o alteram.
+Preferências monta o objeto do zero e só os comandos `notch_*` o alteram. O
+mesmo vale para o bloco `agents`, que só muda por `agent_profile_select`.
+
+### Conta ativa de cada agente
+
+Uma conta é uma pasta de configuração. O Cialai **só escolhe qual pasta o
+agente vai usar**: nunca troca `auth.json` de lugar, nunca copia credencial e
+nunca lê o conteúdo de arquivo de credencial nenhum.
+
+| Comando | Faz | Nível na ponte |
+| --- | --- | --- |
+| `agent_profiles` | Lista as contas de cada agente com rótulo, plano, marca de ativo, marca de padrão, estado de login e as janelas de uso. Nunca inclui `accountKey`, token nem conteúdo de credencial | `read` |
+| `agent_profile_select` | Grava a conta que as sessões novas vão usar e emite `agents://profiles` | `session` |
+| `agent_profile_create` | Cria `~/.claude-<nome>` ou `~/.codex-<nome>` vazia e com permissão 0700, recusando pasta existente e nome fora de letras minúsculas, dígitos e hífen | `session` |
+| `pty_launch_agent` | Abre o agente numa conta escolhida no terminal já aberto, digitando a linha montada no Rust, só com o shell no prompt | `terminal` |
+
+Terminal novo nasce com as variáveis da conta ativa, aplicadas em
+`spawn_for_with_spec` depois da limpeza de marcadores de sessão herdados. Conta
+padrão ativa remove `CLAUDE_CONFIG_DIR` e `CLAUDE_PROFILE`, ou `CODEX_HOME` e
+`CODEX_PROFILE`; uma conta nomeada as define. O cliente nunca envia variável
+nem caminho: ele manda o id do perfil e o servidor resolve a pasta a partir da
+própria pasta pessoal, conferindo os marcadores antes.
+
+Terminal já aberto não muda de ambiente. Para ele existe a ação de menu Abrir o
+agente neste perfil, que digita a linha montada por `resume::launch_command`,
+com a mesma citação por sabor de shell da retomada, e só com o shell no prompt
+e sem processo em primeiro plano. Uma tarefa em execução continua na conta em
+que começou, e a tela diz isso.
+
+Se o arquivo de inicialização do shell exportar a variável, ele vence o valor
+injetado, e o card mostra a verdade lida do processo. Apelidos de shell que
+definem a variável continuam funcionando.
 
 ### Bloco `notch` em `preferences.json`
 

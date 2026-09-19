@@ -1,6 +1,11 @@
 # Cialai para as lojas em pt-BR
 
-Status: publicado nas duas lojas em 16/09/2026, em revisão
+Status: publicado nas duas lojas em 16/09/2026; produção do Google Play enviada à revisão em 17/09/2026
+
+O Google Play recebeu em 17/09/2026 a versão 0.2.4, versionCode 16, na faixa de
+produção, com implantação completa e 177 países mais o resto do mundo. A
+publicação gerenciada está desativada, então o app vai ao ar assim que a revisão
+aprovar.
 
 Este texto está aplicado na ficha pt-BR do Google Play e do App Store Connect. A
 descrição completa entrou igual nas duas. As novidades da versão entraram só no

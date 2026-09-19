@@ -3,6 +3,7 @@ import * as remote from './remote.js';
 import { createNativeBridge, NATIVE_ONLY_MESSAGE } from '@cialai/protocol/native';
 import { authorizeNative, resetTerminalAuthorization } from './sensitive.js';
 import { platform } from './platform.js';
+import { portablePath } from './paths.js';
 import { localizeError } from './errors.js';
 export { NATIVE_ONLY_MESSAGE };
 remote.subscribeState((value) => { if (value.status !== 'connected') resetTerminalAuthorization(); });
@@ -156,18 +157,21 @@ export async function setWindowTheme(theme) {
   await getCurrentWindow().setTheme(theme);
 }
 
+// O diálogo do sistema devolve o caminho na forma do sistema, e no Windows
+// isso é barra invertida. A forma portátil é fixada aqui, na fronteira, para o
+// estúdio inteiro comparar caminhos de um jeito só.
 export async function chooseDirectory(options = {}) {
   if (!isTauri()) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ directory: true, multiple: false, ...options });
-  return typeof picked === 'string' ? picked : null;
+  return typeof picked === 'string' ? portablePath(picked) : null;
 }
 
 export async function chooseFile(options = {}) {
   if (!isTauri()) return null;
   const { open } = await import('@tauri-apps/plugin-dialog');
   const picked = await open({ directory: false, multiple: false, ...options });
-  return typeof picked === 'string' ? picked : null;
+  return typeof picked === 'string' ? portablePath(picked) : null;
 }
 
 // Painel de salvar do sistema, para um arquivo temporario que ainda nao tem
@@ -177,7 +181,7 @@ export async function chooseSavePath(options = {}) {
   if (!isTauri()) return null;
   const { save } = await import('@tauri-apps/plugin-dialog');
   const picked = await save(options);
-  return typeof picked === 'string' ? picked : null;
+  return typeof picked === 'string' ? portablePath(picked) : null;
 }
 
 // Canal do Tauri para receber dados continuos de um comando Rust, como a

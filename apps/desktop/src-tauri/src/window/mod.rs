@@ -20,6 +20,7 @@
 //! fisicos; `generic` anima posicao e tamanho no X11 e, no Wayland, onde o
 //! compositor controla a posicao, salta direto ao tamanho final.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -53,6 +54,41 @@ const DEFAULT_WIDTH: f64 = 1380.0;
 const DEFAULT_HEIGHT: f64 = 880.0;
 /// Se o frontend nao sinalizar a abertura ate aqui, a janela aparece mesmo assim.
 const SHOW_FALLBACK: Duration = Duration::from_secs(6);
+
+/// A interface sinalizou que montou alguma coisa, por `splash_ready` ou por
+/// `window_grow`. E a unica prova positiva de que o webview esta vivo.
+static INTERFACE_READY: AtomicBool = AtomicBool::new(false);
+
+/// Chamado pelos comandos que so existem depois que o React montou.
+pub fn mark_interface_ready() {
+    INTERFACE_READY.store(true, Ordering::Relaxed);
+}
+
+/// O que a rede de seguranca faz quando o prazo vence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RescuePlan {
+    /// Cresce a janela ate o tamanho de trabalho e libera o redimensionamento.
+    pub grow: bool,
+    /// Liga a moldura do sistema. So faz sentido numa janela sem decoracao:
+    /// sem ela e sem a regiao de arraste que o React desenha, a janela nao
+    /// pode ser movida nem fechada.
+    pub system_frame: bool,
+}
+
+/// A guarda antiga era `is_visible`, e como toda configuracao de janela nasce
+/// com `visible: true` a rede de seguranca nunca agia. No Windows isso deixava
+/// uma janela de 440 por 320, sem moldura, imovel e sem botao de fechar,
+/// sempre que a pagina nao montava. Agora a prova e positiva: sem sinal da
+/// interface dentro do prazo, a janela e resgatada.
+pub fn rescue_plan(interface_ready: bool, decorated: bool) -> Option<RescuePlan> {
+    if interface_ready {
+        return None;
+    }
+    Some(RescuePlan {
+        grow: true,
+        system_frame: !decorated,
+    })
+}
 /// Espera maxima por um giro da thread principal.
 const MAIN_THREAD_TIMEOUT: Duration = Duration::from_millis(2500);
 /// A posicao lembrada e aplicada pelo tao no giro seguinte do loop principal.
@@ -76,13 +112,28 @@ pub fn decorate(window: &WebviewWindow, backdrop: &str) {
 
     let _ = window.set_title("Cialai");
 
-    // Se o webview falhar antes de montar a abertura, a janela ainda aparece e
-    // cresce, para o erro ficar visivel em vez de um app invisivel.
+    // Se o webview falhar antes de montar a abertura, a janela ainda aparece,
+    // cresce e volta a ser redimensionavel, para o erro ficar visivel numa
+    // janela utilizavel em vez de um retangulo preso.
     let handle = window.clone();
     thread::spawn(move || {
         thread::sleep(SHOW_FALLBACK);
-        if !handle.is_visible().unwrap_or(true) {
-            eprintln!("[window] o frontend nao sinalizou a abertura; mostrando a janela");
+        let decorated = handle.is_decorated().unwrap_or(true);
+        let Some(plan) = rescue_plan(INTERFACE_READY.load(Ordering::Relaxed), decorated) else {
+            return;
+        };
+        eprintln!(
+            "[window] o frontend nao sinalizou a abertura em {SHOW_FALLBACK:?}; resgatando a janela {plan:?}"
+        );
+        if plan.system_frame {
+            // Ultimo recurso: sem a barra que o React desenha, a moldura do
+            // sistema e a unica forma de mover e fechar a janela.
+            let framed = handle.clone();
+            let _ = handle.run_on_main_thread(move || {
+                let _ = framed.set_decorations(true);
+            });
+        }
+        if plan.grow {
             grow(&handle);
         }
     });
@@ -520,6 +571,36 @@ mod tests {
     use std::ffi::OsStr;
 
     use super::*;
+
+    /// A guarda antiga olhava `is_visible`. Como `tauri.windows.conf.json` e as
+    /// outras configuracoes nascem com `visible: true`, a rede de seguranca
+    /// nunca agia, e uma janela sem moldura e sem a barra que o React desenha
+    /// ficava presa em 440 por 320, imovel e sem botao de fechar.
+    #[test]
+    fn the_rescue_acts_on_a_positive_signal_and_never_on_visibility() {
+        assert_eq!(
+            rescue_plan(true, false),
+            None,
+            "com sinal da interface nada acontece"
+        );
+        assert_eq!(rescue_plan(true, true), None);
+        assert_eq!(
+            rescue_plan(false, true),
+            Some(RescuePlan {
+                grow: true,
+                system_frame: false,
+            }),
+            "janela com moldura do sistema so precisa crescer e voltar a redimensionar"
+        );
+        assert_eq!(
+            rescue_plan(false, false),
+            Some(RescuePlan {
+                grow: true,
+                system_frame: true,
+            }),
+            "sem moldura, a do sistema e o unico caminho para mover e fechar"
+        );
+    }
 
     const SCREEN: Rect = Rect {
         x: 0.0,

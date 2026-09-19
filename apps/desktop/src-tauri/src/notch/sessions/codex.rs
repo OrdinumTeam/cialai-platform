@@ -13,13 +13,13 @@
 //! conclusao, e um comando longo tambem fica quieto: por isso o silencio some
 //! da tela em vez de virar "terminou".
 
-use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use super::{AgentSession, SessionState};
+// Os leitores puros do rollout moram em `workspace::agent_state`, para o
+// estudio ler o mesmo estado sem passar pela Barra de IA.
+pub use crate::workspace::agent_state::{state_in, state_of};
 
-/// Cauda lida do arquivo de sessao.
-const TAIL_BYTES: u64 = 256 * 1024;
 /// Acima disto sem escrever, a sessao sai da lista.
 pub const STALE_MS: u64 = 8_000;
 /// Pastas de dia visitadas.
@@ -60,38 +60,6 @@ pub fn scan(
         cwd: None,
         pty_tag: None,
     }]
-}
-
-/// Ultimo evento que diz alguma coisa sobre o turno.
-///
-/// `item_completed` nao conta: subitens tambem o emitem no meio do trabalho.
-pub fn state_of(path: &Path) -> Option<SessionState> {
-    let tail = read_tail(path)?;
-    state_in(&tail)
-}
-
-pub fn state_in(tail: &str) -> Option<SessionState> {
-    let mut found: Option<SessionState> = None;
-    for line in tail.lines() {
-        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(line) else {
-            continue;
-        };
-        if parsed.get("type").and_then(|value| value.as_str()) != Some("event_msg") {
-            continue;
-        }
-        match parsed
-            .pointer("/payload/type")
-            .and_then(|value| value.as_str())
-        {
-            Some("task_started") => found = Some(SessionState::Busy),
-            Some("task_complete") => found = Some(SessionState::Success),
-            // Turno abortado nao e conclusao, e tambem nao e trabalho: a
-            // sessao sai da lista quando o arquivo esfriar.
-            Some("turn_aborted") => found = None,
-            _ => continue,
-        }
-    }
-    found
 }
 
 fn newest_rollout(config_dir: &Path) -> Option<(PathBuf, u64)> {
@@ -150,16 +118,6 @@ fn recent_days(sessions: &Path) -> Vec<PathBuf> {
         }
     }
     days
-}
-
-fn read_tail(path: &Path) -> Option<String> {
-    let mut file = std::fs::File::open(path).ok()?;
-    let size = file.metadata().ok()?.len();
-    file.seek(SeekFrom::Start(size.saturating_sub(TAIL_BYTES)))
-        .ok()?;
-    let mut buffer = Vec::new();
-    file.read_to_end(&mut buffer).ok()?;
-    Some(String::from_utf8_lossy(&buffer).to_string())
 }
 
 #[cfg(test)]

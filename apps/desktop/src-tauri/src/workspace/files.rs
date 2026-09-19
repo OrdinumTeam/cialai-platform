@@ -40,7 +40,7 @@ const FIND_CACHE_TTL: Duration = Duration::from_secs(20);
 
 /// Pastas que a busca por nome pula. Sao geradas ou pesadas demais para
 /// valer a varredura.
-const SKIP_DIRS: &[&str] = &[
+pub(crate) const SKIP_DIRS: &[&str] = &[
     ".git",
     "node_modules",
     "target",
@@ -109,7 +109,7 @@ fn is_noise_for(os: &str, name: &str) -> bool {
     }
 }
 
-fn is_noise(name: &str) -> bool {
+pub(crate) fn is_noise(name: &str) -> bool {
     is_noise_for(std::env::consts::OS, name)
 }
 
@@ -121,14 +121,14 @@ pub struct FsError {
 }
 
 impl FsError {
-    fn new(code: &str, message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: &str, message: impl Into<String>) -> Self {
         Self {
             code: code.to_string(),
             message: message.into(),
         }
     }
 
-    fn io(error: std::io::Error, what: &str) -> Self {
+    pub(crate) fn io(error: std::io::Error, what: &str) -> Self {
         let code = match error.kind() {
             std::io::ErrorKind::NotFound => "not_found",
             std::io::ErrorKind::PermissionDenied => "denied",
@@ -223,7 +223,7 @@ pub struct Found {
     pub kind: EntryKind,
 }
 
-fn absolute(path: &str) -> FsResult<PathBuf> {
+pub(crate) fn absolute(path: &str) -> FsResult<PathBuf> {
     let trimmed = path.trim();
     if trimmed.is_empty() {
         return Err(FsError::new("invalid", t("native.error.pathEmpty")));

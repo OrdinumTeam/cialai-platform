@@ -159,7 +159,7 @@ export default function SessionsPane({
   };
 
   return (
-    <aside className="terminais-sessions" aria-label={translate('terminal.session.sessions')}>
+    <aside className="terminais-sessions" id="terminais-sessions" aria-label={translate('terminal.session.sessions')}>
       <div className="terminais-pane__head">
         <span className="terminais-pane__title">{translate('terminal.session.sessions')}</span>
         <span className="terminais-pane__count">{sessions.length.toLocaleString(getLocale())}</span>
@@ -174,7 +174,7 @@ export default function SessionsPane({
           <Plus size={15} strokeWidth={2} aria-hidden="true" />
         </button>
         <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.session.collapse')} title={translate('terminal.session.collapseShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}>
-          <PanelLeftClose size={14} strokeWidth={1.75} aria-hidden="true" />
+          <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
       <div className="terminais-search">

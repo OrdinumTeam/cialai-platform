@@ -11,8 +11,10 @@
 // redesenham.
 
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, Network, RefreshCw, X } from 'lucide-react';
 import BrowserPane from './BrowserPane.jsx';
+import DocGraphPane from './DocGraphPane.jsx';
+import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { DataState } from '../../components/ui.jsx';
 import { fmtBytes } from '../../lib/helpers.js';
 import { openExternal } from '../../lib/downloads.js';
@@ -22,7 +24,7 @@ import { canConvertToPdf, dirName, isInside, isPreviewable, isViewerKind, relati
 import { useRuntimeEvents } from '../hooks.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
-const tabName = (tab) => tab.kind === 'browser' ? translate('terminal.browser.tabName') : tab.name;
+const tabName = (tab) => (tab.kind === 'browser' ? translate('terminal.browser.tabName') : tab.kind === 'docgraph' ? DOCGRAPH.name : tab.name);
 
 // Linhas mostradas por vez numa planilha; "Mostrar mais" acrescenta outra
 // leva, para uma aba grande nao montar milhares de celulas de uma vez.
@@ -293,13 +295,14 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
               role="tab"
               aria-selected={active}
               tabIndex={active ? 0 : -1}
-              className={`terminais-tab${active ? ' is-active' : ''}${tab.dirty ? ' is-dirty' : ''}${tab.kind === 'diff' ? ' is-diff' : ''}${tab.kind === 'browser' ? ' is-browser' : ''}`}
+              className={`terminais-tab${active ? ' is-active' : ''}${tab.dirty ? ' is-dirty' : ''}${tab.kind === 'diff' ? ' is-diff' : ''}${tab.kind === 'browser' ? ' is-browser' : ''}${tab.kind === 'docgraph' ? ' is-docgraph' : ''}`}
               onClick={() => actions.activate(tab)}
               onAuxClick={(event) => { if (event.button === 1) { event.preventDefault(); actions.close(tab); } }}
               onKeyDown={(event) => { if (event.key === 'Enter') actions.activate(tab); }}
-              title={shortPath(tab.path)}
+              title={tab.path ? shortPath(tab.path) : tabName(tab)}
             >
               {tab.kind === 'browser' ? <Globe size={12} strokeWidth={1.75} aria-hidden="true" className="terminais-tab__icon" /> : null}
+              {tab.kind === 'docgraph' ? <Network size={12} strokeWidth={1.75} aria-hidden="true" className="terminais-tab__icon" /> : null}
               <span className="terminais-tab__name">{tabName(tab)}</span>
               <button
                 type="button"
@@ -332,6 +335,7 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           ) : null}
           {viewer ? <ViewerBar tab={activeTab} actions={actions} /> : null}
           {activeTab.kind === 'browser' ? <BrowserPane session={session} /> : null}
+          {activeTab.kind === 'docgraph' ? <DocGraphPane session={session} actions={actions} /> : null}
           <ConflictBanner tab={activeTab} actions={actions} />
           {activeTab.loading ? (
             <DataState type="loading" message={translate(activeTab.kind === 'office' ? 'terminal.editor.convertingOffice' : 'terminal.editor.openingFile')} />

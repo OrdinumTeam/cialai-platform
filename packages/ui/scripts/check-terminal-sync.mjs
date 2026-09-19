@@ -50,11 +50,18 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     if (cmd === 'pty_list') return this.alive.map(item => ({...item}));
     if (cmd === 'pty_attach') { const info=this.alive.find(item=>item.id===args.id); if (!info) throw new Error('exited'); return {...info}; }
     if (cmd === 'pty_kill') { this.alive=this.alive.filter(item=>item.id!==args.id); return; }
-    if (cmd === 'pty_presentation') return;
+    if (cmd === 'pty_presentation') {
+      // O Rust atribui a revisao e devolve; o cliente nunca a escolhe.
+      const info = this.alive.find(item => item.id === args.id);
+      const revision = ((info?.presentation?.revision) || 0) + 1;
+      if (info) info.presentation = {...args.presentation, revision};
+      return revision;
+    }
     if (cmd === 'pty_spawn') { const id = Math.max(0,...this.alive.map(item=>item.id))+1; const info={id,pid:1000+id,tag:args.tag,cwd:args.cwd,cols:120,rows:32,view:{id,cols:120,rows:32,owner:'local',leaseId:1,revision:1}}; this.alive.push(info); return {...info}; }
     if (cmd === 'pty_view_claim' || cmd === 'pty_view_renew') { const info=this.alive.find(item=>item.id===args.id); if (!info) throw new Error('exited'); info.view={id:args.id,cols:args.cols,rows:args.rows,owner:'remote',leaseId:cmd==='pty_view_claim' ? (info.view?.leaseId||0)+1 : args.leaseId,revision:(info.view?.revision||0)+1}; return {...info.view}; }
     if (cmd === 'pty_view_release') return;
-    if (cmd === 'pty_metrics' || cmd === 'ai_usage') return [];
+    if (cmd === 'pty_metrics') return this.metrics || [];
+    if (cmd === 'ai_usage') return [];
     if (cmd === 'pty_saved') return this.saved?.[args.tag] ?? null;
     if (cmd === 'pty_saved_history') return new Uint8Array(this.history?.[args.tag] || []).buffer;
     if (cmd === 'pty_write' || cmd === 'pty_prune' || cmd === 'pty_forget') return;
@@ -220,14 +227,14 @@ test('an initially empty desktop discovers the first PTY opened on the phone', a
 
 test('phone adopts the Mac card presentation and order, without publishing over it', async () => {
   const s = scenario({desktop:false,alive:[
-    {...mac,presentation:{name:'Geral',subtitle:'Equipe',color:'ordinum',pinned:true,order:1}},
-    {...phone,presentation:{name:'Servidor',subtitle:'Plantão',color:'verde',pinned:false,order:0}},
+    {...mac,presentation:{name:'Geral',subtitle:'Equipe',color:'ordinum',pinned:true,order:1,revision:3}},
+    {...phone,presentation:{name:'Servidor',subtitle:'Plantão',color:'verde',pinned:false,order:0,revision:2}},
   ]});
   await s.runtime.hydrate(); await s.advance(150);
   const sessions = s.runtime.orderedSessions();
   assert.equal(sessions[0].name, 'Geral'); assert.equal(sessions[0].subtitle, 'Equipe');
   assert.equal(sessions[0].pinned, true); assert.equal(sessions[1].name, 'Servidor');
-  assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_presentation'), false);
+  assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_presentation'), false, 'adotar não republica por cima');
 });
 
 test('desktop publishes only card presentation with local metadata authoritative', async () => {
@@ -347,4 +354,178 @@ test('an existing Cialai store wins over stale Control data', async () => {
   await s.runtime.hydrate();
   assert.equal(JSON.stringify(s.runtime.getRecent()), JSON.stringify(['/fixture/current']));
   assert.equal(s.storage.get('cialai_terminals'), current);
+});
+
+/* ── estado depois de reconectar, EST-02.5 ─────────────────────────── */
+
+// Duas sessoes de agente no celular, uma selecionada e uma estacionada. A
+// ponte cai, o turno termina no computador durante a queda e a ponte volta.
+// A lista tem de se corrigir sozinha, sem abrir a sessao estacionada e sem o
+// replay da selecionada passar por Em execucao.
+test('depois de reconectar as duas sessoes mostram a resposta entregue sem animar', async () => {
+  const one = {id:1,pid:1001,tag:'agente-um',cwd:'/fixture/um',cols:80,rows:24,view:{id:1,owner:'local',leaseId:1,revision:1,cols:80,rows:24}};
+  const two = {id:2,pid:1002,tag:'agente-dois',cwd:'/fixture/dois',cols:80,rows:24,view:{id:2,owner:'local',leaseId:1,revision:1,cols:80,rows:24}};
+  const busy = (tag, id, cwd) => ({id,tag,pid:1000+id,available:true,cpuPercent:0.4,memoryBytes:1024,processes:3,
+    foreground:{pid:2000+id,name:'claude',command:'claude',agent:'Claude Code',stopped:false,cwd},
+    agent:'Claude Code',agentProfile:'claude',agentConfigDir:'/fixture/.claude',agentProfileName:null,shellCwd:cwd,
+    agentTurn:{state:'busy',sinceMs:1},outputAgeMs:120});
+  const done = (tag, id, cwd) => ({...busy(tag,id,cwd), agentTurn:{state:'done',sinceMs:2}, outputAgeMs:120_000});
+
+  const s = scenario({desktop:false, alive:[one, two]});
+  s.fixture.metrics = [busy('agente-um',1,'/fixture/um'), busy('agente-dois',2,'/fixture/dois')];
+  await s.runtime.hydrate();
+  await s.advance(400);
+  await settle();
+
+  const selected = s.runtime.getSession('agente-um');
+  const parked = s.runtime.getSession('agente-dois');
+  assert.ok(selected && parked, 'as duas sessoes entram na lista');
+  s.runtime.selectSession(selected.id);
+  s.runtime.hostTerminal(selected.id, host());
+  await settle();
+  assert.equal(s.runtime.describe(selected).code, 'agent-busy');
+  assert.equal(s.runtime.describe(selected).animated, true, 'enquanto o turno corre o card anima');
+
+  // A ponte cai. A evidencia de atividade morre junto: nada pode continuar
+  // animando com o primeiro plano de antes da queda.
+  s.fixture.remoteState = {status:'reconnecting',features:[]};
+  s.fixture.remoteListener({status:'reconnecting'});
+  await settle();
+  assert.equal(s.runtime.describe(selected).animated, false, 'sem ponte nada anima');
+  assert.equal(s.runtime.describe(parked).animated, false);
+
+  // O turno termina no computador enquanto a ponte esta fora.
+  s.fixture.metrics = [done('agente-um',1,'/fixture/um'), done('agente-dois',2,'/fixture/dois')];
+  const attachesBefore = s.fixture.calls.filter(call => call.cmd === 'pty_attach' && call.args.id === 2).length;
+
+  s.fixture.remoteState = {status:'connected',features:['terminal-mobile-v1']};
+  s.fixture.remoteListener({status:'connected'});
+  await settle();
+  await s.advance(3200);
+  await settle();
+
+  for (const session of [selected, parked]) {
+    const state = s.runtime.describe(session);
+    assert.equal(state.code, 'agent-done', `${session.id} mostra a resposta entregue`);
+    assert.equal(state.animated, false, `${session.id} para de animar`);
+  }
+  assert.equal(
+    s.fixture.calls.filter(call => call.cmd === 'pty_attach' && call.args.id === 2).length,
+    attachesBefore,
+    'a sessao estacionada nao foi reanexada so para saber o estado',
+  );
+
+  // O replay da selecionada nao pode contar como saida nova.
+  const replayed = s.runtime.getSession('agente-um');
+  const before = replayed.lastOutputAt;
+  replayed.outputChannel.onmessage({type:'replay', offset:0, length:8});
+  replayed.outputChannel.onmessage(new Uint8Array([104,105,115,116,111,114,105,99]));
+  await settle();
+  assert.equal(replayed.lastOutputAt, before, 'o historico reenviado nao envelhece nem rejuvenesce a saida');
+  assert.equal(s.runtime.describe(replayed).code, 'agent-done', 'o replay nao passa por Em execucao');
+});
+
+/* ── caminhos do Windows na interface, WIN-01.4 ────────────────────── */
+
+test('um caminho do Windows entra uma vez em recentes, na raiz e no uso do plano', async () => {
+  const windowsPath = 'C:\\Users\\ana\\Documents';
+  const portable = 'C:/Users/ana/Documents';
+  const s = scenario({desktop:true, alive:[]});
+  await s.runtime.hydrate();
+
+  // Primeira abertura pelo dialogo do sistema, que devolve barra invertida.
+  const first = s.runtime.openSession(windowsPath);
+  await settle();
+  // Segunda abertura pelo caminho que o Rust devolve, ja portatil.
+  s.runtime.openSession(portable);
+  await settle();
+
+  assert.deepEqual([...s.runtime.getRecent()], [portable], 'as duas formas do mesmo caminho sao um item so');
+  const session = s.runtime.getSession(first);
+  assert.equal(session.cwd, portable, 'a sessao guarda a forma portatil');
+  assert.equal(session.explorer.root, portable, 'a raiz do explorador nasce igual ao caminho da sessao');
+
+  // O uso do plano vem publicado com o caminho na forma do sistema.
+  s.fixture.metrics = [{id:session.ptyId, tag:session.id, pid:4242, available:true, cpuPercent:1, memoryBytes:1024, processes:2,
+    foreground:{pid:99, name:'claude', command:'claude', agent:'Claude Code', stopped:false, cwd:windowsPath, profile:'claude'},
+    agent:'Claude Code', agentProfile:'claude', agentConfigDir:'C:\\Users\\ana\\.claude', agentProfileName:null,
+    shellCwd:windowsPath}];
+  s.runtime.__applyMetricsForTest
+    ? s.runtime.__applyMetricsForTest(s.fixture.metrics)
+    : await s.advance(3000);
+  await settle();
+
+  assert.equal(session.activity?.shellCwd, portable, 'a pasta do shell chega portatil ao card');
+  assert.equal(session.explorer.root, portable, 'a raiz do explorador nao troca a cada amostra');
+  assert.equal(
+    s.runtime.sessionUsage({...session.activity, usage:{windows:[{id:'session',label:'Sessão',usedPercent:10}],
+      sessions:[{cwd:portable, model:'Fable 5.1', contextUsedPercent:20, costUsd:1}]}}).matched,
+    true,
+    'a conversa do agente casa mesmo com as duas formas do mesmo caminho',
+  );
+});
+
+/* ── apresentacao com o Rust como fonte de verdade, MOB-03.2 ───────── */
+
+test('o computador adota o nome dado pelo celular e um persist posterior nao o desfaz', async () => {
+  const s = scenario({
+    alive: [{...mac, presentation: {name:'Terminal do Mac', subtitle:'', color:null, pinned:false, order:0, revision:1}}],
+    saved: [{id:'mac-session', cwd:'/fixture/mac', name:'Terminal do Mac', subtitle:'', customName:true}],
+  });
+  await s.runtime.hydrate();
+  await s.advance(150);
+  const session = s.runtime.getSession('mac-session');
+  assert.equal(session.name, 'Terminal do Mac');
+
+  // O celular renomeia: o Rust grava e a revisao sobe.
+  s.fixture.alive[0].presentation = {name:'Relatórios', subtitle:'Fechamento', color:'verde', pinned:true, order:0, revision:2};
+  await s.advance(3200);
+  await settle();
+  assert.equal(session.name, 'Relatórios', 'o computador adota o nome mais novo');
+  assert.equal(session.subtitle, 'Fechamento');
+  assert.equal(session.pinned, true);
+
+  // Um persist posterior do computador nao pode republicar o nome antigo.
+  const before = s.fixture.calls.filter(call => call.cmd === 'pty_presentation').length;
+  s.runtime.persist();
+  await s.advance(200);
+  await settle();
+  assert.equal(
+    s.fixture.calls.filter(call => call.cmd === 'pty_presentation').length,
+    before,
+    'nada e republicado depois de adotar',
+  );
+  assert.equal(session.name, 'Relatórios');
+
+  // Renomear no proprio computador continua publicando, com revisao maior.
+  s.runtime.renameSession(session.id, 'Nome local');
+  await s.advance(200);
+  await settle();
+  const published = s.fixture.calls.filter(call => call.cmd === 'pty_presentation').at(-1);
+  assert.equal(published?.args.presentation.name, 'Nome local');
+  assert.equal(s.fixture.alive[0].presentation.revision, 3, 'o Rust atribuiu a revisao seguinte');
+});
+
+/* ── outra sessao na mesma pasta, SES-02.1 ─────────────────────────── */
+
+test('abrir outra sessao na mesma pasta deixa a primeira intacta', async () => {
+  const s = scenario({desktop:false, alive:[{...mac, cwd:'/fixture/documentos', view:{id:1,owner:'local',leaseId:1,revision:1,cols:120,rows:32}}]});
+  await s.runtime.hydrate();
+  await settle();
+  const first = s.runtime.getSession('mac-session');
+  assert.ok(first, 'a sessão viva entra na lista');
+  const firstPty = first.ptyId;
+
+  // A ação Nova sessão nesta pasta chama `openSession` com o cwd da sessão.
+  const secondId = s.runtime.openSession(first.cwd);
+  await settle();
+  const second = s.runtime.getSession(secondId);
+  assert.ok(second, 'a segunda sessão foi criada');
+  assert.notEqual(second.id, first.id, 'ids diferentes');
+  assert.equal(second.cwd, first.cwd, 'mesma pasta');
+  assert.notEqual(second.ptyId, firstPty, 'PTYs diferentes');
+  assert.equal(s.runtime.getSession(first.id)?.ptyId, firstPty, 'a primeira segue com o mesmo PTY');
+  assert.equal(first.status, 'running', 'e continua rodando');
+  // Nenhuma das duas foi encerrada para a outra nascer.
+  assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_kill'), false);
 });

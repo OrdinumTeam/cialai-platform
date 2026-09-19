@@ -60,6 +60,17 @@ Quadros de texto são JSON. Quadros binários carregam saída de PTY com cabeça
 
 Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há dispositivo. Os ids seguem o registro v2, `dev_` para o celular e `d_` para o computador, e os nomes vêm do que o supervisor entregou à ponte: o computador pelo `NetStatus` de `net.start` e por `net.state`, os celulares por `devices.list` logo depois de `net.start`, por `pair.completed` e pela renomeação em `devices.changed`. O nome do celular só aparece quando a chave do cabeçalho confere com a do registro; celular revogado ou chave diferente mostra o id no lugar do nome; `token` quando a credencial veio como subprotocolo ou Bearer no plano B; `open` só com `--dev-open-bridge`. Campos novos são opcionais na desserialização, com `#[serde(default)]` como o protótipo já faz em `protocol.rs:10-16`, para a página do protótipo continuar funcionando em desenvolvimento.
 
+## Estado de atividade em `pty_metrics`
+
+`SessionMetrics` leva dois campos além das medições de processo, e os dois são opcionais.
+
+| Campo | Conteúdo |
+| --- | --- |
+| `agentTurn` | `state` com `busy`, `waiting`, `done` ou `idle`, mais `sinceMs` e `waitingFor`. Vem do arquivo que o próprio agente grava: `<perfil>/sessions/<pid>.json` no Claude Code e o rollout da conversa no Codex, achados por `workspace::resume::detect` e lidos por `workspace::agent_state`. Ausente quando não há agente na árvore ou quando o arquivo não diz nada que se entenda |
+| `outputAgeMs` | Milissegundos desde a última saída do PTY, medidos no relógio do computador. Ausente enquanto a sessão não produziu nada |
+
+Os dois existem para que todo cliente concorde sobre o mesmo estado. O relógio local de cada cliente só refina `outputAgeMs` de uma sessão anexada e fora de replay. Nenhum caminho de credencial e nenhum conteúdo de arquivo de sessão sai nesses campos.
+
 ## Mapa dos comandos
 
 | Comando | Na ponte | Confirmação na casca |
@@ -74,15 +85,33 @@ Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há
 | `pty_view_renew`, `pty_view_release` | Permitido ao dono da concessão válida | Sem novo prompt |
 | `pty_files_list`, `pty_file_read` | Leitura restrita ao projeto da sessão assinada, assinatura conferida antes e depois do disco | Livre |
 | `list_repo_dirs` | Permitido, só devolve caminhos das raízes configuradas | Livre |
-| `pty_presentation`, `pty_resize` | Recusados; a apresentação é publicada só pelo IPC local e o celular usa a concessão | |
+| `list_dirs` | Permitido, só nomes de subpasta dentro dos limites do servidor | Sessão |
+| `pty_presentation` | Permitido; a apresentação é do card e não toca no processo | Sessão |
+| `agent_profiles` | Permitido, só o que a pessoa vê para escolher; nunca chave de conta, token ou conteúdo de credencial | Livre |
+| `agent_profile_select` | Permitido, grava a conta que as sessões novas vão usar | Sessão |
+| `agent_profile_create` | Permitido, cria a pasta vazia com permissão restrita | Sessão |
+| `pty_launch_agent` | Permitido, digita a linha montada no servidor, só com o shell no prompt | Autorização por terminal, a mesma da digitação |
+| `pty_resize` | Recusado; o celular usa a concessão de largura | |
 | `fs_*`, `git_*`, `fs_watch`, `fs_unwatch`, `preview_register`, `office_convert`, `browser_*` | Recusados com `Disponível só no computador.` | |
 | Comandos de janela, preferências e ciclo de vida | Recusados | |
+
+### `list_dirs`
+
+Recebe um caminho absoluto opcional e devolve o caminho normalizado, o pai quando ele continua permitido, as subpastas e a marca de truncado, com teto de 200. Sem caminho, devolve os pontos de partida: pasta pessoal, raízes de projeto e, no macOS, `/Volumes`; no Windows, as unidades montadas. O servidor decide os limites e recusa `..`, caminho relativo, link simbólico, pasta oculta, nome com cara de segredo e qualquer caminho fora da árvore de um ponto de partida. Só nome de pasta sai daqui, nunca conteúdo de arquivo.
+
+### Contas dos agentes
+
+Os quatro comandos `agent_*` e `pty_launch_agent` estão descritos em `docs/arquitetura/15-barra-de-ia.md`, seção Conta ativa de cada agente. O que vale repetir aqui: o cliente manda o id do perfil e mais nada. Nenhuma variável de ambiente e nenhum caminho de pasta sobem pela ponte; o servidor resolve a pasta a partir da própria pasta pessoal, confere os marcadores e decide o ambiente do shell.
+
+### `pty_presentation`
+
+O Rust é a fonte de verdade de nome, subtítulo, cor, fixação e ordem de um card. Cada gravação recebe uma `revision` atribuída pelo servidor, e o cliente nunca a escolhe. Quem lê adota a apresentação quando a revisão recebida é maior que a conhecida, então computador e celular convergem sem um apagar o nome dado pelo outro. Renomear não toca no processo da sessão.
 
 `vpn_*`, `meetings_*` e `stack_*` deixam de existir. `sensitive.js` na página continua rejeitando comandos remotos fora da lista antes de pedir biometria ou enviar a chamada; a recusa na ponte independe da página.
 
 ## Extensão `terminal-mobile-v1`
 
-`pty_list` inclui `presentation` e `view`. O desktop publica a apresentação por `pty_presentation` local; o celular a consome para nome, subtítulo, cor, fixação e ordem dos cards, sem escrita remota.
+`pty_list` inclui `presentation` e `view`. Os dois lados publicam por `pty_presentation` e adotam a apresentação recebida quando a `revision` dela é maior que a conhecida, então renomear pelo celular não é desfeito pelo próximo `persist` do computador. `presentation` traz nome, subtítulo, cor, fixação, ordem e a revisão atribuída pelo servidor.
 
 | Comando | Argumentos | Resposta |
 | --- | --- | --- |

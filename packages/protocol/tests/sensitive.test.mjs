@@ -6,7 +6,7 @@ import { SENSITIVE_REASONS, createSensitiveAuthorizer, remoteCommandAccess } fro
 test('unknown and desktop-only commands fail closed before authorization', async () => {
   let prompts = 0;
   const authorizer = createSensitiveAuthorizer({ requireSensitive: async () => { prompts += 1; } });
-  for (const command of ['unknown', 'set_preferences', 'fs_reveal', 'git_diff', 'browser_start', 'pty_resize', 'pty_presentation']) {
+  for (const command of ['unknown', 'set_preferences', 'fs_reveal', 'git_diff', 'browser_start', 'pty_resize']) {
     await assert.rejects(authorizer.authorize(command, { id: 9 }), { code: 'MOBILE_READ_ONLY' });
   }
   assert.equal(prompts, 0);
@@ -14,6 +14,8 @@ test('unknown and desktop-only commands fail closed before authorization', async
   assert.equal(remoteCommandAccess('pty_write'), 'terminal');
   assert.equal(remoteCommandAccess('pty_kill'), 'action');
   assert.equal(remoteCommandAccess('pty_spawn'), 'session');
+  // A apresentação do card é publicada pelos dois lados; o processo não é tocado.
+  assert.equal(remoteCommandAccess('pty_presentation'), 'session');
   assert.equal(remoteCommandAccess('set_preferences'), null);
 });
 

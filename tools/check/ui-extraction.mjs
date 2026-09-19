@@ -53,7 +53,9 @@ for (const [body, current, legacy] of [
 }
 assert.match(read(`${source}/lib/shell.js`), /__CIALAI_SHELL__/);
 assert.match(read(`${source}/desktop/main.jsx`), /cialai_selftest/);
-assert.match(read(`${source}/desktop/main.jsx`), /await initPlatform\(\)/);
+// A plataforma continua sendo pedida antes de montar, mas com prazo: um
+// `await initPlatform()` solto trava a interface quando a promessa não resolve.
+assert.match(read(`${source}/desktop/main.jsx`), /Promise\.race\(\[\s*initPlatform\(\)/);
 assert.match(runtime, /info\.shellFlavor/);
 assert.match(runtime, /shellQuote\(path, session\.shellFlavor\)/);
 assert.match(read(`${source}/desktop/Sidebar.jsx`), /cialai_groups_closed/);

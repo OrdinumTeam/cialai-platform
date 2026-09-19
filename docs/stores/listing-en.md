@@ -1,6 +1,12 @@
 # Cialai Store Listing in English
 
-Status: copy prepared, publication pending
+Status: live on Google Play as the en-US listing since 17/09/2026; App Store Connect pending
+
+The name, the short description and the full description below were written to
+the Play `en-US` listing through the Android Publisher API and went into the same
+review as the production release. Google Play sends listing changes for review
+automatically, so they could not be staged. The
+App Store side stays untouched while the first iOS submission is in review.
 
 ## Name
 

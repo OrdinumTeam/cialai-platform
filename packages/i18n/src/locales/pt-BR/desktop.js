@@ -366,7 +366,7 @@ export default Object.freeze({
   'desktop.preferences.systemLanguage': 'Vazio usa o idioma do sistema.',
   'desktop.preferences.terminal': 'Terminal',
   'desktop.preferences.claudeHook': 'Uso do plano do Claude Code',
-  'desktop.preferences.claudeHookDescription': 'Instala a linha de estado do Cialai nos perfis do Claude Code. Os cards passam a mostrar modelo, esforço, contexto usado, custo e uso do plano.',
+  'desktop.preferences.claudeHookDescription': 'Instala a linha de estado do Cialai nos perfis do Claude Code. Os cards passam a mostrar modelo, contexto usado, custo e uso do plano.',
   'desktop.preferences.claudeHookInstall': 'Instalar nos perfis',
   'desktop.preferences.claudeHookInstalling': 'Instalando…',
   'desktop.preferences.claudeHookDone': 'Linha de estado instalada em {count} perfil ou perfis. Reinicie as sessões do Claude Code.',

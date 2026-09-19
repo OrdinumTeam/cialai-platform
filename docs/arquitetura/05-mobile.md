@@ -52,11 +52,11 @@ type AppScreen =
   | { kind: 'offline'; desktopId: string; reason: OfflineReason };
 ```
 
-Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincular de novo quando perfis antigos do Headscale foram apagados; sem `lastDesktopId` ou com a marca `cialai.lastConnectionFailed` gravada no Secure Store, `home`; com o último computador, `Connect` e `OpenDesktop`, `shell` com a URL devolvida; falha do caminho, `offline`, que grava a marca para a próxima abertura começar no início; o proxy aberto apaga a marca. Depois do pareamento o app vai ao terminal. A tela `loading` mostra o nome Cialai e um texto curto sob o spinner. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; quando ela responde, `notifyHealthy` avisa o módulo iOS que o proxy sobreviveu à suspensão e a próxima conexão não recomeça do zero. Ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente.
+Bootstrap: lê `desktops.json`; sem computador, `pair`, com o aviso para vincular de novo quando perfis antigos do Headscale foram apagados; com pelo menos um computador vinculado, `home`, sempre, mesmo com o último computador respondendo. Nenhuma WebView é montada e nenhuma conexão é aberta antes do toque em Continuar. A marca `cialai.lastConnectionFailed`, que a regra anterior usava para escolher entre o início e o terminal, perdeu a função e é apagada do Secure Store uma vez. Depois do pareamento o app vai ao terminal. A tela `loading` mostra o nome Cialai e um texto curto sob o spinner. Voltar ao primeiro plano chama `NotifyForeground(true)` e a sondagem imediata; quando ela responde, `notifyHealthy` avisa o módulo iOS que o proxy sobreviveu à suspensão e a próxima conexão não recomeça do zero. Ir ao segundo plano chama `NotifyForeground(false)` e o bloqueio biométrico existente.
 
 ### Início como hub e destino do voltar
 
-A ação `show-home` leva ao estado `home` de qualquer tela. A tela inicial mostra o card Continuar com o último computador, o ponto de estado de `describeDesktop` e o chip de transporte, e quatro cards: Computadores com a contagem, Vincular, Terminal e Ajustes. Todos os botões de volta apontam para o início com o rótulo Início: a barra do terminal, o `navigate-back` do Android na lista de sessões, Ajustes, Sem conexão, Vincular e o voltar novo da lista de computadores. Sair do terminal não chama `closeDesktop`: `App.tsx` guarda o proxy por `HOME_PROXY_GRACE_MS`, 90 s, e um temporizador o fecha se a pessoa não voltar. Voltar ao terminal dentro do prazo refaz `Connect` e `OpenDesktop`; o núcleo devolve a mesma URL, porta e nonce para o mesmo computador, então a página recarrega com o cookie que já tem. Abrir outro computador fecha o proxy guardado na hora. Enquanto o proxy está guardado, o card Continuar mostra Desconectar, que fecha o proxy de propósito; a tela sem conexão também oferece Início e os atalhos Computadores, Ajustes e Vincular, e sair dela cancela a escada de tentativas. Os glifos dos cards são desenhados com `View`, sem dependência de ícones, pela decisão 037.
+A ação `show-home` leva ao estado `home` de qualquer tela. A tela inicial mostra o card Continuar com o último computador, o ponto de estado de `describeDesktop` e o chip de transporte, e quatro cards: Computadores com a contagem, Vincular, Terminal e Ajustes. Todos os botões de volta apontam para o início com o rótulo Início: a barra do terminal, o `navigate-back` do Android na lista de sessões, Ajustes, Sem conexão, Vincular e o voltar novo da lista de computadores. Sair do terminal não chama `closeDesktop`: `App.tsx` guarda o proxy por `HOME_PROXY_GRACE_MS`, 90 s, e um temporizador o fecha se a pessoa não voltar. Voltar ao terminal dentro do prazo refaz `Connect` e `OpenDesktop`; o núcleo devolve a mesma URL, porta e nonce para o mesmo computador, então a página recarrega com o cookie que já tem. Abrir outro computador fecha o proxy guardado na hora. Enquanto o proxy está guardado, o card Continuar mostra Desconectar, que fecha o proxy de propósito; a tela sem conexão também oferece Início e os atalhos Computadores, Ajustes e Vincular, e sair dela cancela a escada de tentativas. Os glifos dos cards são desenhados com `View`, sem dependência de ícones, pela decisão 037. A abertura sempre no início é da decisão 041, que substitui o trecho Abertura do app da 037.
 
 ### Reconexão sem desmontar a página
 
@@ -163,6 +163,39 @@ A ponte não sabe de biometria; a defesa contra página adulterada é o token po
 ## Página do celular
 
 Em `packages/ui/src/mobile`: `MobileApp` fica com uma seção só, Terminais, e um cabeçalho compacto com o nome do desktop e o estado da ponte; `TabBar` e `MoreSheet` saem ou ficam vazios; `links.js` e `keyboard-viewport.js` permanecem; `main.jsx` deriva a ponte de `location` como hoje. `PhoneWorkbench` e `PhoneFiles` preservam lista, terminal, arquivos e prévia, uma tela por vez. A fileira mantém Esc, Tab, Shift Tab, Ctrl C, setas, Enter, Ctrl D, Ctrl L e Colar, numa linha só que rola de lado. A apresentação é a do telefone do Ordinum Control, de onde a página veio: barra de título com ícones planos, título de 20 px, cards com o tom da sessão e nome de 17 px, terminal a 13 px e teclas de 44 px; os tamanhos ficam declarados no CSS, sem depender do ajuste automático de texto do WebKit, para o Android mostrar o mesmo resultado. A casca nativa acompanha com a barra de 44 px do Control, o transporte como chip e Computadores em texto no acento, sobre os neutros do iOS. Toque vira rolagem por `touch-scroll.js`, `viewport.js` concede a largura e sessões encerradas conservam o histórico local. Todos os rótulos compartilhados usam o idioma enviado pela casca ou a escolha persistida na página.
+
+### Caixa de texto do terminal
+
+Digitar direto no terminal pelo celular é desconfortável e um Enter sem querer executa o que ainda estava sendo escrito. Um balão flutuante no canto inferior direito da área do terminal, com alvo de 52 px e acima da pílula de voltar ao fim, abre `PhoneComposer`: uma folha inferior com um `textarea` do próprio aparelho, que traz o teclado, a seleção, o copiar e colar, a autocorreção e o ditado nativos. A caixa mora em `packages/ui`, então chega ao celular com uma versão nova do desktop e sem passar pelas lojas.
+
+| Regra | Como |
+| --- | --- |
+| Enter dentro da caixa | Quebra linha, sempre. Nenhuma tecla entrega o texto |
+| Inserir | Escreve o texto no terminal e para ali |
+| Enviar | Escreve o texto e, depois de confirmada a escrita, manda o Enter numa segunda escrita |
+| Texto de várias linhas sem colagem entre colchetes | Aviso e segunda confirmação, porque cada quebra executaria a linha anterior |
+| Rascunho | Guardado por sessão em `sessionStorage`, apagado ao inserir ou enviar |
+| Sem o controle do terminal | Nada é escrito e a caixa avisa, com o texto preservado |
+
+A entrega é de `submitText` em `runtime.js`, que usa o `paste` do xterm para respeitar a colagem entre colchetes e converter as quebras de linha, e espera a promessa da escrita anterior antes de mandar o Enter. A caixa usa fonte de 16 px, senão o iOS amplia a página inteira ao focar o campo, e respeita `--ios-keyboard-height` para o terminal continuar visível atrás.
+
+### Ações de terminal
+
+O card no modo toque desligava menu de contexto, arraste, duplo clique e o botão de três pontos, então nenhuma ação do menu do computador existia no aparelho. O botão de três pontos volta, com alvo de 44 px, e o toque longo de 500 ms é o atalho; os dois abrem a mesma folha inferior, `PhoneSessionMenu`. O cabeçalho do terminal aberto trocou o ícone solto de energia por esse mesmo menu e manteve o botão de arquivos.
+
+| Ação | O que faz |
+| --- | --- |
+| Renomear e Subtítulo | Diálogo de nome. O processo da sessão não é tocado |
+| Cor e Fixar | Mesma paleta e mesma fixação do computador |
+| Mover para cima e para baixo | Reordena, desabilitado nos extremos |
+| Nova sessão nesta pasta | Abre outra sessão no mesmo `cwd`; a existente segue intacta |
+| Alterar pasta | Navegador de pastas; encerra o processo, e a escolha é a confirmação |
+| Copiar caminho | Área de transferência do aparelho |
+| Reiniciar terminal e Encerrar sessão | Iguais às do computador |
+
+Ficam de fora as que só fazem sentido no computador: abrir e parar o Dev Browser e abrir a pasta no gerenciador de arquivos.
+
+A barra da lista ganhou também um botão que abre as contas dos agentes, `AgentProfiles`, numa folha inferior: a mesma tela que o computador mostra nas Preferências, descrita em `docs/arquitetura/15-barra-de-ia.md`. A apresentação do card tem o Rust como fonte de verdade, com uma revisão por gravação, então renomear pelo celular não é desfeito pelo próximo `persist` do computador. E o seletor de pasta ganhou o modo navegar, servido por `list_dirs`, com trilha, Pasta acima, Usar esta pasta e descida por toque, além de cada raiz de projeto passar a se oferecer: com a raiz apontando para Documentos, abrir uma sessão na própria Documentos não tinha caminho nenhum.
 
 ## Testes
 

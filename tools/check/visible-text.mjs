@@ -21,6 +21,9 @@ export function separatorProblems(text) {
 // Markdown e HTML visíveis sem código, destinos de links, URLs e marcação.
 export function proseOf(source) {
   return source
+    // Folha de estilo e script não são texto visível. As linhas viram espaços
+    // em vez de sumir, para o número da linha continuar apontando o lugar certo.
+    .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, (block) => block.replace(/[^\n]/g, ' '))
     .replace(/```[\s\S]*?```/g, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/`[^`]*`/g, '')
@@ -32,6 +35,7 @@ export function proseOf(source) {
 // Contrato do próprio check.
 assert.deepEqual(separatorProblems('Vincular celular'), []);
 assert.deepEqual(separatorProblems('Sign-up e X-Cialai'), []);
+assert.deepEqual(proseOf('<style>\n#root:not(:empty){display:none}\n</style>\nCialai').split('\n').map((line) => line.trim()), ['', '', '', 'Cialai']);
 assert.deepEqual(separatorProblems('Cialai (prévia)'), ['parênteses']);
 assert.deepEqual(separatorProblems('Cialai - prévia'), ['hífen isolado como separador']);
 assert.deepEqual(separatorProblems('Cialai — prévia'), ['meia-risca ou travessão']);
@@ -68,6 +72,7 @@ const documents = [
   'tools/release/notes/preview.md',
   'tools/release/notes/stable.md',
   'docs/testes/roteiro-conectividade.md',
+  'docs/testes/roteiro-windows.md',
 ];
 for (const path of documents) {
   proseOf(read(path)).split('\n').forEach((line, index) => {

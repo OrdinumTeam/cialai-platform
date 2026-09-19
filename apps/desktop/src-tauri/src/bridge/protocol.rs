@@ -121,6 +121,12 @@ pub fn allowed_command(cmd: &str) -> bool {
             | "pty_files_list"
             | "pty_file_read"
             | "list_repo_dirs"
+            | "pty_presentation"
+            | "list_dirs"
+            | "agent_profiles"
+            | "agent_profile_select"
+            | "agent_profile_create"
+            | "pty_launch_agent"
     )
 }
 
@@ -279,6 +285,17 @@ mod tests {
             "pty_view_release",
             "pty_files_list",
             "pty_file_read",
+            // O Rust e a fonte de verdade da apresentacao, e o celular publica
+            // nome, subtitulo, cor, fixacao e ordem como o computador.
+            "pty_presentation",
+            // Navegacao de pastas do seletor de nova sessao: so nomes de pasta.
+            "list_dirs",
+            // Conta de cada agente, escolhida pela interface. O cliente manda o
+            // id do perfil; o servidor resolve a pasta e decide o ambiente.
+            "agent_profiles",
+            "agent_profile_select",
+            "agent_profile_create",
+            "pty_launch_agent",
         ] {
             assert!(allowed_command(cmd));
         }
@@ -286,7 +303,6 @@ mod tests {
             "fs_reveal",
             "git_diff",
             "pty_resize",
-            "pty_presentation",
             "vpn_resize",
             "stack_state",
             "stack_restart",

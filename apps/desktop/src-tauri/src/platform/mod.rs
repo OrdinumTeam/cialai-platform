@@ -76,7 +76,12 @@ impl PlatformInfo {
             home: to_portable(home),
             file_manager: FILE_MANAGER.into(),
             default_shell_flavor: default_shell(preferences).flavor,
-            sep: MAIN_SEPARATOR.into(),
+            // O mesmo objeto anunciava `home` com barra normal e `sep` com
+            // barra invertida, e quem juntasse os dois montava um caminho
+            // misturado. O separador dos caminhos que a interface manipula e
+            // sempre a barra normal; para mostrar no estilo do sistema existe
+            // `displayPath`.
+            sep: "/".into(),
         }
     }
 }
@@ -94,11 +99,6 @@ const FILE_MANAGER: &str = "Finder";
 const FILE_MANAGER: &str = "Explorer";
 #[cfg(all(unix, not(target_os = "macos")))]
 const FILE_MANAGER: &str = "Arquivos";
-
-#[cfg(target_os = "windows")]
-const MAIN_SEPARATOR: &str = "\\";
-#[cfg(not(target_os = "windows"))]
-const MAIN_SEPARATOR: &str = "/";
 
 pub fn to_portable(path: impl AsRef<Path>) -> String {
     let value = path.as_ref().to_string_lossy().replace('\\', "/");
@@ -381,6 +381,29 @@ pub fn path_env(preferences: &Preferences, home: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// O contrato de `docs/arquitetura/14-diferencas-por-plataforma.md` diz que
+    /// todo caminho entregue a interface usa barra normal. O mesmo objeto
+    /// anunciava `home` assim e `sep` com barra invertida, e quem juntasse os
+    /// dois montava um caminho misturado que nenhuma comparacao casava.
+    #[test]
+    fn the_platform_announces_one_separator_and_it_is_the_portable_one() {
+        let prefs = Preferences::default();
+        let info = PlatformInfo::detect(Path::new("/tmp/casa"), &prefs);
+        assert_eq!(info.sep, "/");
+        assert!(!info.home.contains('\\'), "home tambem sai portatil");
+    }
+
+    #[test]
+    fn to_portable_unwraps_the_windows_extended_prefixes() {
+        assert_eq!(to_portable("C:\\Users\\ana"), "C:/Users/ana");
+        assert_eq!(to_portable("\\\\?\\C:\\Users\\ana"), "C:/Users/ana");
+        assert_eq!(
+            to_portable("\\\\?\\UNC\\servidor\\publico\\ana"),
+            "//servidor/publico/ana"
+        );
+        assert_eq!(to_portable("/Users/ana"), "/Users/ana");
+    }
 
     #[test]
     fn shell_flavor_recognizes_all_three_contract_values() {

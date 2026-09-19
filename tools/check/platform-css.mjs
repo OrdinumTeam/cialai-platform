@@ -17,10 +17,19 @@ const shell = read('desktop/shell.css');
 assert.ok(shell.includes(`${SHELL}{\n  --mac-font:`), 'tokens da casca devem valer para data-shell="desktop"');
 const bare = bareMac(shell);
 assert.deepEqual(bare, [
+  // Fundo transparente do vibrancy, nas duas metades do mesmo seletor.
+  '[data-platform="macos"],[data-platform="macos"] body',
+  '[data-platform="macos"] body',
+  // Suavização de fonte.
   '[data-platform="macos"] body',
   '[data-platform="macos"] .mac-sidebar__drag',
   '[data-platform="macos"] .mac-toolbar.is-sidebar-hidden',
-], 'somente semáforos e suavização de fonte ficam restritos ao macOS');
+], 'somente fundo transparente, semáforos e suavização de fonte ficam restritos ao macOS');
+// O fundo da casca é opaco em todo sistema e só o macOS o torna transparente,
+// para o vibrancy aparecer. No Windows a janela nasce transparente e sem
+// moldura, então uma página que ainda não pintou deixaria um retângulo vazado.
+assert.match(shell, /:is\(\[data-shell="desktop"\],\[data-platform="macos"\]\),:is\(\[data-shell="desktop"\],\[data-platform="macos"\]\) body\{background:var\(--mac-bg\)\}/, 'a casca precisa de fundo opaco por padrão');
+assert.match(shell, /\[data-platform="macos"\],\[data-platform="macos"\] body\{background:transparent!important\}/, 'só o macOS zera o fundo');
 assert.match(shell, /\[data-platform="macos"\] body\{-webkit-font-smoothing:antialiased\}/);
 assert.doesNotMatch(shell.replace(/\[data-platform="macos"\] body\{-webkit-font-smoothing:antialiased\}/, ''), /font-smoothing/, 'suavização de fonte só no macOS');
 

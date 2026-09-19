@@ -124,6 +124,8 @@ Estados, todos derivados do observado, em `runtime.js:944-960`:
 
 As barras de atividade só animam com um processo em primeiro plano além do shell ou enquanto o shell abre. Com o shell em prompt o card mostra um ponto parado.
 
+Divergência deliberada desde 18/09/2026, decisão 038: o Cialai não preserva esta tabela. Os códigos `streaming` e `busy` saíram, porque para um agente interativo eles diziam o contrário do que a pessoa lia, e entraram oito estados derivados de `agentTurn` e `outputAgeMs`, publicados pelo computador em `pty_metrics`. A tabela em vigor está em `docs/arquitetura/04-desktop.md`, seção Estados da sessão.
+
 ### Atenção
 
 Três fontes, em `runtime.js:492-500`, `1024-1031` e `596-597`, mantidas no card até a sessão ser consultada e sem trocar o foco:
@@ -287,7 +289,7 @@ Ambiente do shell em `terminal.rs:524-545`: `TERM=xterm-256color`, `COLORTERM=tr
 | `pty_list` | | lista de `TerminalInfo` |
 | `pty_metrics` | | lista de `SessionMetrics` |
 | `pty_view_claim`, `pty_view_renew`, `pty_view_release` | `id`, `leaseId`, `cols`, `rows` | `TerminalView` |
-| `pty_presentation` | `id`, `presentation` | nada; só local |
+| `pty_presentation` | `id`, `presentation` | a revisão gravada. No protótipo era só local; desde 18/09/2026, decisão 040, o celular também publica |
 | `pty_saved`, `pty_saved_history`, `pty_forget`, `pty_prune` | `tag`; `keep` | `SavedTerminal`; corpo binário; nada |
 | `pty_files_list`, `pty_file_read` | `id`, `path` relativo | listagem restrita; texto; só pela ponte |
 | `fs_list_dir`, `fs_stat`, `fs_read_text`, `fs_read_image`, `fs_read_bytes`, `fs_write_text`, `fs_create_file`, `fs_create_dir`, `fs_rename`, `fs_copy`, `fs_trash`, `fs_find`, `fs_reveal`, `fs_open_default`, `fs_drag_out`, `fs_watch`, `fs_unwatch` | caminhos e opções | estruturas de `files.rs` ou `FsError` |

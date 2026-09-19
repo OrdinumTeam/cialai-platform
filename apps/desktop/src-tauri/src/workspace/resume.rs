@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
@@ -60,6 +60,25 @@ pub struct AgentSession {
     pub profile_name: Option<String>,
     /// Opcoes da linha de comando original que valem de novo na retomada.
     pub args: Vec<String>,
+}
+
+/// Arquivo do proprio agente que prova o estado do turno desta conversa.
+/// Fica fora de [`AgentSession`] porque e caminho de maquina: serve ao
+/// estudio, que le o arquivo, e nunca ao cliente remoto.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AgentEvidence {
+    /// `<perfil>/sessions/<pid>.json`, a unica fonte que sabe dizer que o
+    /// Claude Code parou para perguntar.
+    ClaudeRecord(PathBuf),
+    /// `<CODEX_HOME>/sessions/AAAA/MM/DD/rollout-<data>-<id>.jsonl`.
+    CodexRollout(PathBuf),
+}
+
+/// Conversa encontrada mais o arquivo que a prova.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Detected {
+    pub session: AgentSession,
+    pub evidence: AgentEvidence,
 }
 
 /// Opcoes repassadas na retomada, cada uma com a forma longa usada no
@@ -140,9 +159,9 @@ pub fn detect(
     tree: &[u32],
     commands: &mut CommandCache,
     home: &Path,
-) -> Option<AgentSession> {
+) -> Option<Detected> {
     let mut parents = HashMap::new();
-    let mut best: Option<(usize, AgentSession)> = None;
+    let mut best: Option<(usize, Detected)> = None;
     let mut found = Vec::new();
     for &pid in tree {
         let Some(info) = procs::info(pid) else {
@@ -203,7 +222,7 @@ fn claude_session(
     pid: u32,
     start_sec: u64,
     home: &Path,
-) -> Option<AgentSession> {
+) -> Option<Detected> {
     let profile = procs::agent_profile(command, CLAUDE, home)?;
     let path = Path::new(&profile.config_dir)
         .join("sessions")
@@ -225,43 +244,44 @@ fn claude_session(
         return None;
     }
     let session_id = file.session_id.filter(|id| is_session_id(id))?;
-    Some(AgentSession {
-        agent: CLAUDE.to_string(),
-        session_id,
-        cwd: file
-            .cwd
-            .filter(|cwd| valid_value(cwd))
-            .or_else(|| procs::cwd(pid)),
-        config_dir: profile.explicit.then_some(profile.config_dir),
-        profile_name: profile.name,
-        args: keep_flags(program_args(&command.argv), &CLAUDE_FLAGS),
+    Some(Detected {
+        session: AgentSession {
+            agent: CLAUDE.to_string(),
+            session_id,
+            cwd: file
+                .cwd
+                .filter(|cwd| valid_value(cwd))
+                .or_else(|| procs::cwd(pid)),
+            config_dir: profile.explicit.then_some(profile.config_dir),
+            profile_name: profile.name,
+            args: keep_flags(program_args(&command.argv), &CLAUDE_FLAGS),
+        },
+        evidence: AgentEvidence::ClaudeRecord(path),
     })
 }
 
-fn codex_session(
-    command: &CommandLine,
-    pid: u32,
-    start_sec: u64,
-    home: &Path,
-) -> Option<AgentSession> {
+fn codex_session(command: &CommandLine, pid: u32, start_sec: u64, home: &Path) -> Option<Detected> {
     let profile = procs::agent_profile(command, CODEX, home)?;
     let sessions = Path::new(&profile.config_dir).join("sessions");
     let cwd = procs::cwd(pid);
-    let session_id = procs::open_files(pid)
+    let (rollout, session_id) = procs::open_files(pid)
         .iter()
         .filter(|path| Path::new(path.as_str()).starts_with(&sessions))
-        .find_map(|path| rollout_session_id(path))
+        .find_map(|path| rollout_session_id(path).map(|id| (PathBuf::from(path.as_str()), id)))
         .or_else(|| {
             cwd.as_deref()
                 .and_then(|cwd| newest_codex_rollout(&sessions, cwd, start_sec))
         })?;
-    Some(AgentSession {
-        agent: CODEX.to_string(),
-        session_id,
-        cwd,
-        config_dir: profile.explicit.then_some(profile.config_dir),
-        profile_name: profile.name,
-        args: keep_flags(program_args(&command.argv), &CODEX_FLAGS),
+    Some(Detected {
+        session: AgentSession {
+            agent: CODEX.to_string(),
+            session_id,
+            cwd,
+            config_dir: profile.explicit.then_some(profile.config_dir),
+            profile_name: profile.name,
+            args: keep_flags(program_args(&command.argv), &CODEX_FLAGS),
+        },
+        evidence: AgentEvidence::CodexRollout(rollout),
     })
 }
 
@@ -282,11 +302,11 @@ struct CodexSessionMeta {
 /// escolhe o rollout mais recente criado depois do processo e cuja primeira
 /// linha `session_meta` aponta para o mesmo cwd. Dois Codex simultaneos na
 /// mesma pasta continuam sendo uma ambiguidade conhecida.
-fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<String> {
+fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(PathBuf, String)> {
     let expected_cwd = dunce::canonicalize(cwd).ok()?;
     let mut pending = vec![sessions.to_path_buf()];
     let mut inspected = 0usize;
-    let mut best: Option<(u64, String)> = None;
+    let mut best: Option<(u64, PathBuf, String)> = None;
     while let Some(dir) = pending.pop() {
         let Ok(entries) = fs::read_dir(dir) else {
             continue;
@@ -294,7 +314,7 @@ fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<St
         for entry in entries.flatten() {
             inspected += 1;
             if inspected > CODEX_FILE_LIMIT {
-                return best.map(|(_, id)| id);
+                return best.map(|(_, path, id)| (path, id));
             }
             let path = entry.path();
             let Ok(file_type) = entry.file_type() else {
@@ -339,13 +359,13 @@ fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<St
             }
             if best
                 .as_ref()
-                .is_none_or(|(known_modified, _)| modified_sec > *known_modified)
+                .is_none_or(|(known_modified, _, _)| modified_sec > *known_modified)
             {
-                best = Some((modified_sec, id));
+                best = Some((modified_sec, path, id));
             }
         }
     }
-    best.map(|(_, id)| id)
+    best.map(|(_, path, id)| (path, id))
 }
 
 fn first_codex_record(path: &Path) -> Option<CodexRecord> {
@@ -566,6 +586,54 @@ pub fn resume_command(
     Some(parts.join(" "))
 }
 
+/// Linha que abre um agente numa conta escolhida, sem retomar conversa
+/// nenhuma. E a mesma montagem de [`resume_command`], com a mesma citacao por
+/// sabor de shell, mas sem `--resume` e sem opcoes herdadas: um terminal ja
+/// aberto nao muda de ambiente, entao a troca de conta nele acontece abrindo o
+/// agente com as variaveis na propria linha.
+pub fn launch_command(
+    agent: &str,
+    config_dir: Option<&str>,
+    profile_name: Option<&str>,
+    flavor: ShellFlavor,
+) -> Option<String> {
+    let (program, dir_key, name_key) = match agent {
+        CLAUDE => ("claude", "CLAUDE_CONFIG_DIR", "CLAUDE_PROFILE"),
+        CODEX => ("codex", "CODEX_HOME", "CODEX_PROFILE"),
+        _ => return None,
+    };
+    let mut environment = Vec::new();
+    if let Some(dir) = config_dir {
+        if !valid_value(dir) || !Path::new(dir).is_absolute() {
+            return None;
+        }
+        environment.push((dir_key, dir));
+    }
+    if let Some(name) = profile_name.filter(|name| valid_value(name)) {
+        environment.push((name_key, name));
+    }
+    let mut parts = Vec::new();
+    match flavor {
+        ShellFlavor::Posix => parts.extend(
+            environment
+                .iter()
+                .map(|(key, value)| format!("{key}={}", shell_quote(value, flavor))),
+        ),
+        ShellFlavor::Powershell => parts.extend(
+            environment
+                .iter()
+                .map(|(key, value)| format!("$env:{key}={};", shell_quote_always(value, flavor))),
+        ),
+        ShellFlavor::Cmd => parts.extend(
+            environment
+                .iter()
+                .map(|(key, value)| format!("set \"{key}={}\" &&", cmd_inner(value))),
+        ),
+    }
+    parts.push(program.to_string());
+    Some(parts.join(" "))
+}
+
 /// Cita um argumento para o sabor do shell. `=` no inicio viraria expansao
 /// de comando no zsh; PowerShell dobra apostrofos em literais; cmd usa aspas
 /// duplas e dobra as aspas internas, o mesmo contrato do frontend.
@@ -729,6 +797,68 @@ mod tests {
         );
     }
 
+    /// Abrir o agente numa conta escolhida usa a mesma citacao da retomada,
+    /// nos tres sabores de shell. Um nome de perfil com espaco ou com tentativa
+    /// de injecao sai citado, nunca executado.
+    #[test]
+    fn launch_command_quotes_the_profile_in_every_shell_flavor() {
+        let home = scratch("launch");
+        let dir = home.join("codex conta");
+        fs::create_dir_all(&dir).unwrap();
+        let dir_text = dir.to_string_lossy().to_string();
+
+        assert_eq!(
+            launch_command(CODEX, Some(&dir_text), Some("work"), ShellFlavor::Posix).unwrap(),
+            format!(
+                "CODEX_HOME={} CODEX_PROFILE=work codex",
+                shell_quote(&dir_text, ShellFlavor::Posix)
+            )
+        );
+        assert_eq!(
+            launch_command(
+                CLAUDE,
+                Some(&dir_text),
+                Some("work"),
+                ShellFlavor::Powershell
+            )
+            .unwrap(),
+            format!(
+                "$env:CLAUDE_CONFIG_DIR={}; $env:CLAUDE_PROFILE='work'; claude",
+                shell_quote_always(&dir_text, ShellFlavor::Powershell)
+            )
+        );
+        assert_eq!(
+            launch_command(CLAUDE, Some(&dir_text), Some("work"), ShellFlavor::Cmd).unwrap(),
+            format!(
+                "set \"CLAUDE_CONFIG_DIR={}\" && set \"CLAUDE_PROFILE=work\" && claude",
+                cmd_inner(&dir_text)
+            )
+        );
+
+        // Perfil padrao abre o agente sem variavel nenhuma.
+        assert_eq!(
+            launch_command(CODEX, None, None, ShellFlavor::Posix).unwrap(),
+            "codex"
+        );
+
+        // Tentativa de injecao sai citada.
+        let nasty = launch_command(
+            CODEX,
+            Some(&dir_text),
+            Some("work; rm -rf ~"),
+            ShellFlavor::Posix,
+        )
+        .unwrap();
+        assert!(nasty.contains("CODEX_PROFILE='work; rm -rf ~'"), "{nasty}");
+        assert!(!nasty.contains("&& rm"), "{nasty}");
+
+        // Agente desconhecido e caminho relativo nao montam linha nenhuma.
+        assert!(launch_command("outro", None, None, ShellFlavor::Posix).is_none());
+        assert!(launch_command(CODEX, Some("relativo"), None, ShellFlavor::Posix).is_none());
+
+        let _ = fs::remove_dir_all(home);
+    }
+
     #[test]
     fn resume_command_quotes_values_and_restores_the_profile() {
         let cwd = scratch("command");
@@ -881,13 +1011,18 @@ mod tests {
         );
         assert_eq!(
             claude_session(&command, pid, start_sec, &home),
-            Some(AgentSession {
-                agent: CLAUDE.into(),
-                session_id: ID.into(),
-                cwd: Some("/projeto".into()),
-                config_dir: None,
-                profile_name: None,
-                args: strings(&["--dangerously-skip-permissions"]),
+            Some(Detected {
+                session: AgentSession {
+                    agent: CLAUDE.into(),
+                    session_id: ID.into(),
+                    cwd: Some("/projeto".into()),
+                    config_dir: None,
+                    profile_name: None,
+                    args: strings(&["--dangerously-skip-permissions"]),
+                },
+                // O caminho do registro acompanha a conversa: e dele que o
+                // estudio le o estado do turno a cada amostra de metricas.
+                evidence: AgentEvidence::ClaudeRecord(sessions.join(format!("{pid}.json"))),
             })
         );
         assert!(claude_session(&command, pid, start_sec + 3600, &home).is_none());
@@ -923,15 +1058,23 @@ mod tests {
         };
         let found = codex_session(&command, std::process::id(), 0, &home)
             .expect("rollout aberto pelo proprio teste");
-        assert_eq!(found.session_id, ID);
+        assert_eq!(found.session.session_id, ID);
         assert_eq!(
-            found.config_dir.as_deref(),
+            found.session.config_dir.as_deref(),
             Some(codex_home.to_string_lossy().as_ref())
         );
-        assert_eq!(found.profile_name.as_deref(), Some("Work"));
+        assert_eq!(found.session.profile_name.as_deref(), Some("Work"));
         assert_eq!(
-            found.args,
+            found.session.args,
             strings(&["--dangerously-bypass-approvals-and-sandbox"])
+        );
+        // O caminho completo do rollout, e nao so o id, para o estudio ler o
+        // turno dessa conversa e nao o da mais recente do perfil.
+        assert_eq!(
+            found.evidence,
+            AgentEvidence::CodexRollout(
+                day.join(format!("rollout-2026-09-10T15-55-50-{ID}.jsonl"))
+            )
         );
         drop(open_rollout);
         let _ = fs::remove_dir_all(home);
@@ -963,9 +1106,8 @@ mod tests {
                 &home.join("sessions"),
                 project.to_string_lossy().as_ref(),
                 0
-            )
-            .as_deref(),
-            Some(ID)
+            ),
+            Some((rollout.clone(), ID.to_string()))
         );
         assert!(
             newest_codex_rollout(&home.join("sessions"), other.to_string_lossy().as_ref(), 0)

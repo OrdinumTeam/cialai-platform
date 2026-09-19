@@ -26,6 +26,59 @@ use tauri::{Manager, RunEvent};
 /// Evita repetir a limpeza quando o Tauri emite `ExitRequested` e `Exit`.
 static APP_STOPPED: AtomicBool = AtomicBool::new(false);
 
+/// Peças da rede que o app gerencia quando tudo sobe.
+struct Network {
+    site: tunnel::MobileSite,
+    supervisor: tunnel::Supervisor,
+}
+
+/// Estado da montagem da rede. Quando ela falha, o app segue como estúdio
+/// local e o motivo fica registrado, em vez de o celular simplesmente nunca
+/// conectar sem explicação.
+#[derive(Clone, Debug, Default)]
+pub struct NetworkSetup {
+    problem: Option<String>,
+}
+
+impl NetworkSetup {
+    fn ready() -> Self {
+        Self { problem: None }
+    }
+
+    fn failed(reason: impl Into<String>) -> Self {
+        Self {
+            problem: Some(reason.into()),
+        }
+    }
+
+    /// Motivo de a rede não ter subido, quando ela não subiu.
+    pub fn problem(&self) -> Option<&str> {
+        self.problem.as_deref()
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.problem.is_none()
+    }
+}
+
+/// Monta a rede na ordem em que uma peça depende da anterior. Cada passo
+/// devolve o próprio motivo da falha, e nenhum deles derruba o app.
+fn start_network(app: &tauri::AppHandle, awake: tunnel::Awake) -> Result<Network, String> {
+    let site = tunnel::MobileSite::resolve(app)?;
+    let bridge_config = bridge::BridgeConfig::from_process(
+        tunnel::BridgeSession::generate(bridge::DEFAULT_BRIDGE_PORT)?
+            .secret()
+            .into(),
+    );
+    let bridge_secret = bridge_config.proxy_secret.clone().unwrap_or_default();
+    let bridge_control = bridge::start(app.clone(), bridge_config)?;
+    // O sidecar recebe a porta em que a ponte realmente abriu.
+    let bridge_session = tunnel::BridgeSession::new(bridge_control.port(), bridge_secret);
+    let supervisor =
+        tunnel::Supervisor::for_app(app, &site, bridge_session, bridge_control, awake)?;
+    Ok(Network { site, supervisor })
+}
+
 pub fn run() {
     let app = tauri::Builder::default()
         // O menu localizado entra no setup, quando o idioma gravado ja foi lido.
@@ -84,6 +137,13 @@ pub fn run() {
             commands::app_set_locale,
             commands::app_selftest_paths,
             commands::list_repo_dirs,
+            commands::list_dirs,
+            commands::docgraph_scan,
+            commands::docgraph_cancel,
+            commands::agent_profiles,
+            commands::agent_profile_select,
+            commands::agent_profile_create,
+            commands::pty_launch_agent,
             commands::detect_project_roots,
             commands::fs_list_dir,
             commands::fs_stat,
@@ -126,9 +186,6 @@ pub fn run() {
             }
             #[cfg(target_os = "macos")]
             menu::install(app.handle())?;
-            let mobile_site =
-                tunnel::MobileSite::resolve(app.handle()).map_err(std::io::Error::other)?;
-            app.manage(mobile_site.clone());
             let preferences = prefs::Preferences::load(app.handle());
             let chromium = preferences.dev_browser.chromium_path.clone();
             let backdrop = preferences.window.backdrop().to_string();
@@ -144,6 +201,7 @@ pub fn run() {
             app.manage(workspace::files::FindCache::default());
             app.manage(workspace::ai::UsageCache::default());
             app.manage(workspace::preview::PreviewRoots::default());
+            app.manage(workspace::docgraph::DocScans::default());
             app.manage(workspace::office::OfficeQueue::default());
             // A Barra de IA le os perfis e os arquivos que cada agente grava;
             // os dois relogios dela sobem aqui e param na saida.
@@ -165,26 +223,22 @@ pub fn run() {
                 chromium,
             ));
 
-            let bridge_config = bridge::BridgeConfig::from_process(
-                tunnel::BridgeSession::generate(bridge::DEFAULT_BRIDGE_PORT)
-                    .map_err(std::io::Error::other)?
-                    .secret()
-                    .into(),
-            );
-            let bridge_secret = bridge_config.proxy_secret.clone().unwrap_or_default();
-            let bridge_control = bridge::start(app.handle().clone(), bridge_config)
-                .map_err(std::io::Error::other)?;
-            // O sidecar recebe a porta em que a ponte realmente abriu.
-            let bridge_session = tunnel::BridgeSession::new(bridge_control.port(), bridge_secret);
-            let supervisor = tunnel::Supervisor::for_app(
-                app.handle(),
-                &mobile_site,
-                bridge_session,
-                bridge_control,
-                awake,
-            )
-            .map_err(std::io::Error::other)?;
-            app.manage(supervisor);
+            // Rede: pagina do celular, ponte e supervisor do tunel. Numa
+            // instalacao incompleta qualquer uma das tres pode faltar, e
+            // derrubar o `setup` por isso matava o app inteiro com um `panic`
+            // que, em release, so aparece no `app.log`. A falha vira registro e
+            // estado, e o estudio local continua utilizavel sem o celular.
+            match start_network(app.handle(), awake) {
+                Ok(network) => {
+                    app.manage(network.site);
+                    app.manage(network.supervisor);
+                    app.manage(NetworkSetup::ready());
+                }
+                Err(reason) => {
+                    diagnostics::note(&format!("[rede] indisponivel: {reason}"));
+                    app.manage(NetworkSetup::failed(reason));
+                }
+            }
 
             if let Some(main_window) = app.get_webview_window("main") {
                 window::decorate(&main_window, &backdrop);
@@ -231,4 +285,36 @@ pub fn run() {
             }
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Com a rede de pé o app não guarda problema nenhum, e o celular aparece.
+    #[test]
+    fn a_healthy_network_setup_reports_no_problem() {
+        let setup = NetworkSetup::ready();
+        assert!(setup.is_ready());
+        assert_eq!(setup.problem(), None);
+    }
+
+    /// Antes, a falha de qualquer peça da rede virava `?` dentro do `setup`, o
+    /// Tauri dava `panic` e, em release, o app abria uma janela morta e o
+    /// motivo só existia no `app.log`. Agora o motivo vira estado.
+    #[test]
+    fn a_broken_network_setup_keeps_the_reason_instead_of_killing_the_app() {
+        let setup = NetworkSetup::failed("bundle da página do celular não encontrado");
+        assert!(!setup.is_ready());
+        assert_eq!(
+            setup.problem(),
+            Some("bundle da página do celular não encontrado")
+        );
+    }
+
+    /// O padrão nunca pode parecer saudável por acidente.
+    #[test]
+    fn the_default_setup_is_the_ready_one() {
+        assert!(NetworkSetup::default().is_ready());
+    }
 }

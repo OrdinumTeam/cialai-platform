@@ -13,7 +13,7 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | `produto/` | Visão, protótipo de origem, marca, roadmap e decisões |
 | `arquitetura/` | Desenho do sistema, desktop, mobile, rede, protocolo e diferenças entre sistemas |
 | `engenharia/` | Monorepo, CI e distribuição, progresso, credenciais e release da versão 1 |
-| `testes/` | Roteiros de validação em aparelhos e redes reais |
+| `testes/` | Roteiros de validação em aparelhos, redes e máquinas reais |
 | `stores/` | Textos e metadados das lojas |
 | `review/` | Material para a revisão das lojas |
 | `legal/` | Política de privacidade e termos de uso |
@@ -40,6 +40,7 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | 07 | [Protocolo da ponte](./arquitetura/07-protocolo-da-ponte.md) | A ponte WebSocket entre a página do celular e o desktop, preservada e estendida |
 | 14 | [Diferenças por plataforma](./arquitetura/14-diferencas-por-plataforma.md) | Como preparar e validar o desktop e quais comportamentos mudam entre macOS, Linux e Windows |
 | 15 | [Barra de IA](./arquitetura/15-barra-de-ia.md) | O painel com um anel por conta de Claude Code e Codex: de onde vem o uso do plano e a atividade das sessões, o contrato com a interface e o que muda por sistema |
+| 16 | [Grafo da documentação](./arquitetura/16-grafo-da-documentacao.md) | A aba que mostra os Markdown do projeto num grafo de forças: varredura, poda, layout, interação, atualização e limites |
 
 ## Engenharia
 

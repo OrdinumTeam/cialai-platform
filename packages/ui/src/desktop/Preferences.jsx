@@ -17,6 +17,7 @@ import {
 } from './preferences-model.js';
 import AccessPanel from './AccessPanel.jsx';
 import NotchPreferences from './NotchPreferences.jsx';
+import AgentProfiles from '../terminals/ui/AgentProfiles.jsx';
 import { notchActions } from './notch-runtime.js';
 import { useTunnel } from './TunnelContext.jsx';
 import { DESKTOP_NAME_MAX } from './tunnel-model.js';
@@ -63,6 +64,22 @@ export default function Preferences({ open, onClose, appearance, section = null 
   const [saving, setSaving] = useState(false);
   const [installingHook, setInstallingHook] = useState(false);
   const [error, setError] = useState('');
+
+  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
+  // proprio programa, num terminal aberto ja naquele perfil. O Cialai nunca
+  // toca em credencial.
+  const createProfile = async (agent) => {
+    const name = typeof window !== 'undefined'
+      ? window.prompt(translate('terminal.profiles.createDescription'), '')
+      : null;
+    if (!name) return;
+    try {
+      await invoke('agent_profile_create', { agent, name: name.trim() });
+      notify(translate('terminal.profiles.created', { name: name.trim() }), 'success');
+    } catch (createError) {
+      notify(createError?.message || String(createError), 'warning');
+    }
+  };
 
   // Linha de estado do Claude Code: copia o hook para ~/.cialai e aponta o
   // statusLine de cada perfil para ele. O card das sessoes passa a ler o uso.
@@ -224,6 +241,10 @@ export default function Preferences({ open, onClose, appearance, section = null 
 
       <section className="mac-prefs__section" id="prefs-notch"><h3 className="mac-prefs__heading">{translate('desktop.notch.title')}</h3>
         <NotchPreferences value={draft.notch} profiles={notchProfiles} onChange={(notch) => setDraft((current) => ({ ...current, notch }))} onVisibility={changeNotchVisibility} disabled={saving} />
+      </section>
+
+      <section className="mac-prefs__section" id="prefs-agents"><h3 className="mac-prefs__heading">{translate('terminal.profiles.title')}</h3>
+        <AgentProfiles onCreate={(agent) => createProfile(agent)} />
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">Dev Browser</h3>

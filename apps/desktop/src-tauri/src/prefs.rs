@@ -20,6 +20,48 @@ pub struct Preferences {
     /// Barra de IA: visibilidade, perfis, limiares e avisos. Gravado pelos
     /// comandos `notch_*`; `set_preferences` preserva o bloco.
     pub notch: crate::notch::prefs::NotchPreferences,
+    /// Perfil ativo de cada agente. Gravado pelos comandos `agent_profile_*`;
+    /// `set_preferences` preserva o bloco, como faz com o da Barra de IA.
+    pub agents: AgentPreferences,
+}
+
+/// Conta que os terminais novos vao usar, por agente. Valor vazio significa
+/// nao interferir: o shell nasce sem as variaveis e o agente escolhe sozinho,
+/// como sempre fez.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AgentPreferences {
+    pub active_profile: ActiveProfiles,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ActiveProfiles {
+    /// Id do perfil do Claude Code, como `claude` ou `claude-webrota`.
+    pub claude: String,
+    /// Id do perfil do Codex, como `codex` ou `codex-amorim`.
+    pub codex: String,
+}
+
+impl ActiveProfiles {
+    /// Perfil ativo do agente, ou `None` quando nao ha escolha.
+    pub fn get(&self, agent: &str) -> Option<&str> {
+        let value = match agent {
+            "claude" => self.claude.as_str(),
+            "codex" => self.codex.as_str(),
+            _ => return None,
+        };
+        (!value.is_empty()).then_some(value)
+    }
+
+    pub fn set(&mut self, agent: &str, id: &str) -> bool {
+        match agent {
+            "claude" => self.claude = id.to_string(),
+            "codex" => self.codex = id.to_string(),
+            _ => return false,
+        }
+        true
+    }
 }
 
 impl Default for Preferences {
@@ -32,6 +74,7 @@ impl Default for Preferences {
             window: WindowPreferences::default(),
             network: NetworkPreferences::default(),
             notch: crate::notch::prefs::NotchPreferences::default(),
+            agents: AgentPreferences::default(),
         }
     }
 }
@@ -256,6 +299,40 @@ impl PrefsState {
 mod tests {
     use super::*;
     use serde_json::{Value, json};
+
+    /// O bloco de contas nasce vazio, que e nao interferir, e sobrevive a um
+    /// arquivo antigo que nao o tinha.
+    #[test]
+    fn the_active_profile_block_defaults_to_no_choice_and_survives_an_old_file() {
+        let prefs = Preferences::default();
+        assert_eq!(prefs.agents, AgentPreferences::default());
+        assert_eq!(prefs.agents.active_profile.get("claude"), None);
+        assert_eq!(prefs.agents.active_profile.get("codex"), None);
+
+        let old: Preferences = serde_json::from_value(json!({"appearance": "dark"})).unwrap();
+        assert_eq!(old.agents, AgentPreferences::default());
+
+        let mut active = ActiveProfiles::default();
+        assert!(active.set("codex", "codex-work"));
+        assert_eq!(active.get("codex"), Some("codex-work"));
+        assert_eq!(active.get("claude"), None);
+        assert!(
+            !active.set("outro", "x"),
+            "agente desconhecido nao grava nada"
+        );
+        // Voltar ao vazio e voltar a nao interferir.
+        assert!(active.set("codex", ""));
+        assert_eq!(active.get("codex"), None);
+
+        let round: Preferences =
+            serde_json::from_value(serde_json::to_value(Preferences::default()).unwrap()).unwrap();
+        assert_eq!(round.agents, AgentPreferences::default());
+        let wire = serde_json::to_value(Preferences::default()).unwrap();
+        assert!(
+            wire["agents"]["activeProfile"].is_object(),
+            "camelCase no fio"
+        );
+    }
 
     #[test]
     fn defaults_match_the_documented_schema() {

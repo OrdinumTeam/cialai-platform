@@ -126,6 +126,24 @@ Caminhos enviados à interface usam barras normais em todos os sistemas. Entrada
 Windows aceitam barras normais e invertidas. Links são recriados somente no
 Unix; no Windows, a operação evita seguir reparse points.
 
+### Onde o contrato é aplicado
+
+O contrato tem duas fronteiras, e nenhuma delas fica no meio do código.
+
+| Lado | Fronteira | O que faz |
+| --- | --- | --- |
+| Rust | `platform::to_portable` | Todo caminho que sai para a interface passa por ela: `workspace::files`, o `cwd` do processo em `workspace::procs`, o `cwd` da sessão em `workspace::terminal` e a pasta pessoal de `PlatformInfo`. `sep` também é a barra normal, para o mesmo objeto não anunciar duas formas |
+| Rust | `dunce::canonicalize` | Todo caminho resolvido que sai do crate sem passar por `to_portable`, como o `staticDir` entregue ao sidecar Go em `tunnel::MobileSite`. O `canonicalize` da biblioteca padrão devolve o prefixo `\\?\` no Windows, que o sidecar não entende |
+| Interface | `packages/ui/src/lib/paths.js` | `portablePath` normaliza o que entra por outra porta, e o diálogo nativo do Windows é a única que existe. `chooseDirectory`, `chooseFile` e `chooseSavePath` normalizam o que devolvem, e `createSession` normaliza a pasta que guarda |
+
+`pathRoot` reconhece a raiz de uma unidade, `C:/`, a de um compartilhamento de rede, `//servidor/pasta`, e a do Unix. `dirName` devolve `null` na raiz, em vez de subir para um caminho que o Rust recusa por não ser absoluto, e `isInside` não diferencia maiúsculas no Windows. Para mostrar um caminho no estilo do sistema existe `displayPath`.
+
+### Abertura da janela
+
+A rede de segurança da abertura decide por sinal positivo da interface, `splash_ready` ou `window_grow`, e não pela visibilidade da janela: toda configuração nasce com `visible: true`, então a guarda antiga nunca agia. Sem sinal dentro do prazo, a janela cresce, volta a ser redimensionável e, quando não tem moldura própria, ganha a do sistema, para poder ser movida e fechada.
+
+`apps/desktop/index.html` traz um estado inicial estático com fundo opaco da marca e região de arraste, visível enquanto `#root` está vazio. O fundo transparente da casca ficou restrito ao macOS, onde o vibrancy precisa dele. `initPlatform` disputa com um prazo, para uma promessa que nunca resolve não impedir a montagem do React. E a montagem da rede, que é a página do celular, a ponte e o supervisor do túnel, degrada com o motivo registrado em vez de derrubar o `setup`.
+
 O Dev Browser procura Chromium e Chrome nos locais conhecidos e no cache do
 Playwright. Se não encontrar um executável, instale com `npx playwright install
 chromium` ou indique o binário em Preferências. O LibreOffice é descoberto em

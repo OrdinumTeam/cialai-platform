@@ -59,8 +59,9 @@ fn validate_mobile_static_dir(resources: &Path) -> Result<PathBuf, String> {
     if !directory.join(MOBILE_ENTRY).is_file() {
         return Err("bundle da página do celular não encontrado".into());
     }
-    directory
-        .canonicalize()
+    // `dunce` evita o prefixo `\\?\` do Windows, que vazaria para o
+    // `staticDir` entregue ao sidecar Go.
+    dunce::canonicalize(&directory)
         .map_err(|error| format!("bundle da página do celular inválido: {error}"))
 }
 

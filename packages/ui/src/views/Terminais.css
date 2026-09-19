@@ -64,15 +64,21 @@
 body.is-col-resizing,body.is-col-resizing *{cursor:col-resize!important}
 body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 
-/* alca fina na lateral do centro para reabrir um painel recolhido */
-.terminais-edge{position:relative;flex:0 0 14px;width:14px}
-.terminais-edge__btn{position:absolute;top:50%;z-index:3;display:inline-flex;align-items:center;justify-content:center;width:14px;height:40px;margin-top:-20px;border:0;border-radius:6px;background:transparent;color:var(--mac-label-3);cursor:default;transition:color var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease)}
-.terminais-edge--left .terminais-edge__btn{left:0}
-.terminais-edge--right .terminais-edge__btn{right:0}
-.terminais-edge__btn:hover{background:var(--mac-surface-2);color:var(--mac-label)}
-.terminais-page.is-focus .terminais-edge{width:6px;flex-basis:6px}
-.terminais-page.is-focus .terminais-edge__btn{opacity:0}
-.terminais-page.is-focus .terminais-edge:hover .terminais-edge__btn,.terminais-page.is-focus .terminais-edge__btn:focus-visible{opacity:1}
+/* Faixa do painel recolhido: a faixa inteira e o botao, com o icone no topo e
+   um resumo do que esta escondido. `display:none` some com a coluna toda, e
+   uma faixa de 14 px com uma seta nao dizia o que havia ali. Largura nao
+   anima, pela regra de docs/produto/08-design-e-marca.md. */
+.terminais-edge{position:relative;flex:0 0 28px;width:28px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0;border:0;background:var(--mac-surface-2);color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-edge:hover{background:var(--mac-surface-3,var(--mac-fill));color:var(--mac-label)}
+.terminais-edge:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-edge__summary{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-variant-numeric:tabular-nums;line-height:1.2}
+.terminais-edge__count{color:var(--mac-label-3)}
+.terminais-edge__badge{min-width:16px;padding:0 4px;border-radius:999px;background:var(--mac-warn-bg);color:var(--mac-warn);font-weight:600}
+/* No modo foco a faixa continua discreta, mas nunca some: os alternadores do
+   cabecalho seguem alcancaveis por teclado, e a faixa tambem. */
+.terminais-page.is-focus .terminais-edge{background:transparent;color:var(--mac-label-4)}
+.terminais-page.is-focus .terminais-edge__summary{opacity:0;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-page.is-focus .terminais-edge:hover .terminais-edge__summary,.terminais-page.is-focus .terminais-edge:focus-visible .terminais-edge__summary{opacity:1}
 
 /* ── cabecalhos de painel ──────────────────────────────────────────── */
 
@@ -199,6 +205,80 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 @keyframes terminaisBars{0%,100%{height:3px;opacity:.55}50%{height:10px;opacity:1}}
 @media (prefers-reduced-motion:reduce){.terminais-activity i{animation:none;height:7px}}
 [data-motion="none"] .terminais-activity i{animation:none;height:7px}
+
+/* ── grafo da documentacao ────────────────────────────────────────────
+   Aba `docgraph` da area central. So tokens da casca: o canvas le as cores
+   daqui e da paleta compartilhada. Cartao, legenda, dica e listas usam o
+   molde do popover da toolbar, vidro com fio e sombra de popover. */
+.terminais-tab.is-docgraph .terminais-tab__icon{flex:0 0 auto;color:var(--mac-label-3)}
+.terminais-tab.is-docgraph.is-active .terminais-tab__icon{color:var(--mac-accent-text)}
+.terminais-docgraph{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;container-type:inline-size;container-name:docgraph}
+.terminais-docgraph__bar{position:relative;z-index:8;display:flex;align-items:center;gap:4px;flex:0 0 auto;padding:5px 8px;border-bottom:1px solid var(--mac-separator)}
+.terminais-docgraph__searchbox{position:relative;flex:0 1 240px;min-width:130px}
+.terminais-docgraph__search{margin:0}
+.terminais-docgraph__results{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:min(420px,80cqw);max-height:min(360px,50vh);overflow:auto;padding:5px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);animation:macPop 160ms var(--mac-ease);transform-origin:top left}
+.terminais-docgraph__results ul{display:flex;flex-direction:column;gap:1px;margin:0;padding:0;list-style:none}
+.terminais-docgraph__results .terminais-result{animation:none}
+.terminais-docgraph__results .terminais-result.is-active{background:var(--mac-accent-soft)}
+.terminais-docgraph__results-title{padding:4px 8px 6px;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__results-empty{padding:8px;font-size:12.5px;color:var(--mac-label-3)}
+.terminais-docgraph__counts{position:absolute;top:8px;left:8px;z-index:3;padding:2px 7px;border-radius:6px;background:color-mix(in srgb,var(--mac-surface) 84%,transparent);font-size:11.5px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;pointer-events:none}
+.terminais-docgraph__chip{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:18px;padding:0 7px;border:0;border-radius:6px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11px;font-weight:600;white-space:nowrap;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-docgraph__chip--warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
+button.terminais-docgraph__chip:hover{opacity:.82}
+.terminais-docgraph__anchor{position:relative;display:inline-flex}
+.terminais-docgraph__zoom{flex:0 0 auto;min-width:36px;text-align:center;font-size:11px;color:var(--mac-label-2);font-variant-numeric:tabular-nums}
+.terminais-docgraph__progress{flex:0 0 2px;height:2px;background:transparent;overflow:hidden}
+.terminais-docgraph__progress.is-loading{background:linear-gradient(90deg,transparent 0%,var(--mac-accent) 50%,transparent 100%);background-size:40% 100%;animation:terminaisBrowserLoad 1.1s linear infinite}
+.terminais-docgraph__overlay .terminais-docgraph__progress{width:160px;margin-top:10px;border-radius:2px}
+.terminais-docgraph__view{position:relative;flex:1;min-height:0;min-width:0;overflow:hidden;background:var(--mac-surface);container-type:size;container-name:docgraphview}
+.terminais-docgraph__host{position:absolute;inset:0;outline:none;touch-action:none;-webkit-user-select:none;user-select:none}
+.terminais-docgraph__host:focus-visible{box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-docgraph__canvas{display:block;width:100%;height:100%}
+.terminais-docgraph__overlay{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;background:var(--mac-surface);animation:macFade 180ms var(--mac-ease) both}
+.terminais-docgraph__overlay svg{color:var(--mac-label-4);margin-bottom:4px}
+.terminais-docgraph__overlay strong{font-size:13px;font-weight:600;color:var(--mac-label)}
+.terminais-docgraph__overlay span{max-width:46ch;font-size:12.5px;color:var(--mac-label-2);text-wrap:balance;overflow-wrap:anywhere}
+.terminais-docgraph__overlay .btn{margin-top:8px}
+.terminais-docgraph__overlay-actions{display:inline-flex;gap:6px}
+.terminais-docgraph__card{position:absolute;left:12px;bottom:12px;z-index:5;width:min(320px,calc(100% - 24px));padding:12px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);animation:macPop 160ms var(--mac-ease);transform-origin:bottom left}
+.terminais-docgraph__card-head{display:flex;align-items:center;gap:6px;color:var(--mac-label-2)}
+.terminais-docgraph__card-head svg{flex:0 0 auto}
+.terminais-docgraph__card-title{flex:1;min-width:0;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-docgraph__card-kind{margin-top:2px;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__card-path{margin-top:4px;font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label-2);overflow-wrap:anywhere}
+.terminais-docgraph__facts{display:flex;flex-wrap:wrap;gap:8px 18px;margin-top:10px}
+.terminais-docgraph__fact{display:flex;flex-direction:column;gap:1px;min-width:0}
+.terminais-docgraph__fact span{font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__fact strong{font-size:12px;font-weight:500;color:var(--mac-label);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.terminais-docgraph__card-warn{display:flex;align-items:center;gap:5px;margin-top:8px;font-size:11.5px;color:var(--mac-warn)}
+.terminais-docgraph__card-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.terminais-docgraph__card-actions .btn{margin:0}
+.terminais-docgraph__legend{position:absolute;right:12px;bottom:12px;z-index:4;display:flex;flex-direction:column;gap:1px;max-width:220px;padding:5px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover)}
+.terminais-docgraph__legend-item{display:flex;align-items:center;gap:7px;width:100%;height:22px;padding:0 7px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:11.5px;color:var(--mac-label);text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
+.terminais-docgraph__legend-item em{margin-left:auto;padding-left:10px;font-style:normal;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+.terminais-docgraph__legend-name{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-docgraph__swatch{flex:0 0 8px;width:8px;height:8px;border-radius:50%}
+.terminais-docgraph__tip{position:absolute;z-index:6;display:flex;flex-direction:column;gap:1px;max-width:320px;padding:6px 8px;border-radius:8px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);pointer-events:none}
+.terminais-docgraph__tip strong{font-size:12px;font-weight:600;color:var(--mac-label)}
+.terminais-docgraph__tip span{font-family:var(--mac-font-mono);font-size:11px;color:var(--mac-label-2);overflow-wrap:anywhere}
+.terminais-docgraph__tip em{font-style:normal;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__issues{position:absolute;top:calc(100% + 6px);left:0;z-index:30;width:min(320px,80cqw);max-height:50vh;overflow:auto;padding:10px 12px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);animation:macPop 160ms var(--mac-ease);transform-origin:top left}
+.terminais-docgraph__issues strong{font-size:13px;font-weight:600;color:var(--mac-label)}
+.terminais-docgraph__issues p{margin:6px 0 0;font-size:12px;color:var(--mac-label-2)}
+.terminais-docgraph__issues-title{margin-top:10px;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__issues ul{display:flex;flex-direction:column;gap:4px;margin:6px 0 0;padding:0;list-style:none}
+.terminais-docgraph__issues li{display:flex;flex-direction:column;gap:1px;min-width:0}
+.terminais-docgraph__issues li span{font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label);overflow-wrap:anywhere}
+.terminais-docgraph__issues li em{font-style:normal;font-size:11px;color:var(--mac-label-3)}
+/* Paineis pequenos: o grafo fica, o que esta por cima dele sai. */
+@container docgraph (max-width:560px){.terminais-docgraph__zoom{display:none}}
+@container docgraphview (max-width:520px){.terminais-docgraph__legend{display:none}}
+@container docgraphview (max-height:220px){.terminais-docgraph__legend{display:none}.terminais-docgraph__facts,.terminais-docgraph__card-kind,.terminais-docgraph__card-path{display:none}.terminais-docgraph__card{padding:8px 10px}.terminais-docgraph__card-actions{margin-top:6px}}
+@container docgraphview (max-height:140px){.terminais-docgraph__card,.terminais-docgraph__tip,.terminais-docgraph__counts{display:none}}
+@media (prefers-reduced-motion:reduce){.terminais-docgraph__progress.is-loading{animation:none;background:var(--mac-accent)}}
+[data-motion="none"] .terminais-docgraph__progress.is-loading{animation:none;background:var(--mac-accent)}
 
 /* ── area de trabalho ──────────────────────────────────────────────── */
 
@@ -470,6 +550,14 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-pop__name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .terminais-pop__meta{font-size:11px;color:var(--mac-label-3);white-space:nowrap}
 .terminais-pop__empty{padding:18px;text-align:center;font-size:13px;color:var(--mac-label-2)}
+
+/* Modo navegar: trilha com a pasta atual e o caminho de volta. */
+.terminais-pop__trail{display:flex;align-items:center;gap:8px;flex:0 0 auto;padding:6px 8px;border-bottom:1px solid var(--mac-separator)}
+.terminais-pop__up{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;min-height:26px;padding:0 8px;border:0;border-radius:7px;background:var(--mac-surface-2);color:var(--mac-label);font:inherit;font-size:12px}
+.terminais-pop__up:disabled{opacity:.4}
+.terminais-pop__crumb{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--mac-label-2)}
+[data-form-factor="phone"] .terminais-pop__up{min-height:44px;font-size:15px;padding:0 12px}
+[data-form-factor="phone"] .terminais-pop__crumb{font-size:14px}
 .terminais-pop__foot{padding:8px;border-top:1px solid var(--mac-separator)}
 
 /* ── busca rapida e dialogos ───────────────────────────────────────── */
@@ -554,6 +642,29 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal__keys { padding-top: 0; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal__keys button { min-height: 40px; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal { padding-bottom: 6px; }
+/* Balao flutuante que abre a caixa de texto, no canto inferior direito e
+   acima da pilula de voltar ao fim. Alvo de toque de 52 px. */
+[data-form-factor="phone"] .phone-terminal__compose { position: absolute; right: 12px; bottom: 58px; z-index: 3; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border: 0; border-radius: 999px; background: var(--mac-gradient-button); color: #fff; box-shadow: var(--mac-shadow-primary); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-terminal__compose:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-terminal__compose:not(:disabled):active { transform: scale(.94); }
+
+/* Caixa de texto: folha inferior que respeita o teclado do aparelho e deixa o
+   terminal visivel atras. Fonte de 16 px para o iOS nao ampliar a pagina. */
+[data-form-factor="phone"] .phone-composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); box-shadow: var(--mac-shadow-popover); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-composer { bottom: calc(100dvh - var(--ios-keyboard-top, 0px) - var(--ios-keyboard-height, 100dvh)); padding-bottom: 12px; }
+[data-form-factor="phone"] .phone-composer__head { display: flex; align-items: center; gap: 10px; }
+[data-form-factor="phone"] .phone-composer__title { font-size: 15px; font-weight: 600; color: var(--mac-label); }
+[data-form-factor="phone"] .phone-composer__count { font-size: 13px; color: var(--mac-label-3); font-variant-numeric: tabular-nums; }
+[data-form-factor="phone"] .phone-composer__close { margin-left: auto; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label-2); }
+[data-form-factor="phone"] .phone-composer__area { width: 100%; min-height: 76px; max-height: 40dvh; padding: 10px 12px; border: 0; border-radius: 12px; background: var(--mac-surface-2); color: var(--mac-label); font-family: inherit; line-height: 1.45; resize: none; outline: none; }
+[data-form-factor="phone"] .phone-composer__area:focus-visible { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-composer__warning { margin: 0; font-size: 13px; line-height: 1.45; color: var(--mac-warn); }
+[data-form-factor="phone"] .phone-composer__actions { display: flex; gap: 8px; }
+[data-form-factor="phone"] .phone-composer__action { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--mac-surface-2); color: var(--mac-label); font: inherit; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-composer__action--primary { background: var(--mac-gradient-button); color: #fff; box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .phone-composer__action:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-composer__action:not(:disabled):active { transform: scale(.96); }
+
 /* Fora do fim: atalho para voltar e aviso de saida nova enquanto se le. */
 [data-form-factor="phone"] .phone-terminal__tail { position: absolute; left: 50%; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px 0 12px; border: 0; border-radius: 999px; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); color: var(--mac-label); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; transform: translateX(-50%); animation: macPop 160ms var(--mac-ease); }
 [data-form-factor="phone"] .phone-terminal__tail.is-fresh { color: var(--mac-accent-text); }
@@ -594,6 +705,49 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__chip,
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__profile { font-size: 12px; line-height: 20px; padding: 0 7px; border-radius: 6px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__dot { width: 8px; height: 8px; }
+/* Botao de tres pontos do card no toque: alvo de 44 px no canto da linha. */
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label-3); flex: 0 0 auto; }
+[data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu:active { background: var(--mac-fill); }
+
+/* Contas dos agentes: uma linha por conta, com o uso do plano a direita. */
+.agent-profiles{display:flex;flex-direction:column;gap:14px}
+.agent-profiles__note{margin:0;font-size:13px;line-height:1.45;color:var(--mac-label-2)}
+.agent-profiles__error{margin:0;font-size:13px;line-height:1.45;color:var(--mac-bad)}
+.agent-profiles__empty{margin:0;font-size:13px;color:var(--mac-label-3)}
+.agent-profiles__group{display:flex;flex-direction:column;gap:6px}
+.agent-profiles__head{display:flex;align-items:center;gap:10px}
+.agent-profiles__head h3{margin:0;font-size:13px;font-weight:600;color:var(--mac-label-2);text-transform:uppercase;letter-spacing:.04em}
+.agent-profiles__create{margin-left:auto;display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
+.agent-profiles__row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 10px;border-radius:10px;background:var(--mac-surface-2)}
+.agent-profiles__row.is-active{box-shadow:inset 0 0 0 1.5px var(--mac-accent)}
+.agent-profiles__name{display:flex;align-items:center;gap:6px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px}
+.agent-profiles__tag{flex:0 0 auto;padding:0 6px;border-radius:6px;background:var(--mac-fill);color:var(--mac-label-3);font-size:11px;font-style:normal}
+.agent-profiles__tag.is-warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
+.agent-profiles__plan{flex:0 0 auto;font-size:12px;color:var(--mac-label-3)}
+.agent-profiles__used{flex:0 0 auto;margin-left:auto;font-size:13px;font-variant-numeric:tabular-nums;color:var(--mac-label-2)}
+.agent-profiles__used--warn{color:var(--mac-warn)}
+.agent-profiles__used--bad{color:var(--mac-bad);font-weight:600}
+.agent-profiles__current{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--mac-accent-text)}
+.agent-profiles__use{flex:0 0 auto;min-height:32px;padding:0 12px;border:0;border-radius:9px;background:var(--mac-gradient-button);color:#fff;font:inherit;font-size:13px;font-weight:600}
+.agent-profiles__use:disabled{opacity:.5}
+.agent-profiles__refresh{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:13px}
+[data-form-factor="phone"] .agent-profiles__row{min-height:52px}
+[data-form-factor="phone"] .agent-profiles__use{min-height:40px;font-size:15px}
+[data-form-factor="phone"] .agent-profiles__create{min-height:40px;font-size:15px}
+
+/* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
+[data-form-factor="phone"] .phone-menu { display: flex; flex-direction: column; margin: 0 -8px; }
+[data-form-factor="phone"] .phone-menu__item { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label); font: inherit; font-size: 16px; text-align: left; }
+[data-form-factor="phone"] .phone-menu__item:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-menu__item:not(:disabled):active { background: var(--mac-fill); }
+[data-form-factor="phone"] .phone-menu__item.is-danger { color: var(--mac-bad); }
+[data-form-factor="phone"] .phone-menu__swatch { width: 18px; height: 18px; border-radius: 6px; flex: 0 0 auto; }
+[data-form-factor="phone"] .phone-menu__swatch--none { box-shadow: inset 0 0 0 1.5px var(--mac-label-3); }
+/* O cabecalho do terminal no celular mostra o mesmo indicador do card, ao lado
+   do estado escrito, em vez de so mudar a cor do texto. */
+[data-form-factor="phone"] .phone-terminal__heading span { display: inline-flex; align-items: center; gap: 6px; }
+[data-form-factor="phone"] .phone-terminal__activity { width: 7px; height: 7px; }
+[data-form-factor="phone"] span.terminais-activity.phone-terminal__activity { width: 11px; height: 10px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-activity { width: 13px; height: 12px; gap: 2px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-activity i { width: 3px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__attention svg { width: 14px; height: 14px; }

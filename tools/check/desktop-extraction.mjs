@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const rust = `${root}/apps/desktop/src-tauri/src`;
@@ -44,12 +44,33 @@ for (const prefix of ['stack_', 'vpn_', 'meetings_']) {
   assert.ok(!allowlist.includes(`"${prefix}`), `Ponte ainda permite ${prefix}*`);
 }
 
-assert.match(lib, /MobileSite::resolve\(app\.handle\(\)\)/);
-assert.match(lib, /app\.manage\(mobile_site(\.clone\(\))?\)/);
+// Todo comando liberado na ponte precisa ter braço no despacho e nível na
+// política do celular: liberar sem despachar devolve desktopOnly, e despachar
+// sem nível reprova fechado antes de qualquer autorização.
+const allowed = [...allowlist.matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
+assert.ok(allowed.length >= 14, `lista de comandos da ponte parece incompleta: ${allowed.length}`);
+const { REMOTE_COMMANDS } = await import(pathToFileURL(`${root}packages/protocol/sensitive.js`).href);
+for (const command of allowed) {
+  assert.match(dispatch, new RegExp(`"${command}"`), `Ponte libera ${command} sem braço no despacho`);
+  assert.ok(REMOTE_COMMANDS.includes(command), `Ponte libera ${command} sem nível em sensitive.js`);
+}
+for (const command of REMOTE_COMMANDS) {
+  assert.ok(allowed.includes(command), `sensitive.js dá nível a ${command}, que a ponte não libera`);
+}
+
+// A rede sobe numa função só, e a falha de qualquer peça vira registro e
+// estado em vez de derrubar o `setup` com um `panic` que ninguém vê.
+assert.match(lib, /fn start_network\(app: &tauri::AppHandle, awake: tunnel::Awake\) -> Result<Network, String>/);
+assert.match(lib, /MobileSite::resolve\(app\)\?/);
 assert.match(
   lib,
-  /Supervisor::for_app\(\s*app\.handle\(\),\s*&mobile_site,\s*bridge_session,\s*bridge_control,/,
+  /Supervisor::for_app\(app, &site, bridge_session, bridge_control, awake\)\?/,
 );
+assert.match(lib, /app\.manage\(network\.site\)/);
+assert.match(lib, /app\.manage\(network\.supervisor\)/);
+assert.match(lib, /diagnostics::note\(&format!\("\[rede\] indisponivel: \{reason\}"\)\)/);
+const setup = lib.slice(lib.indexOf('.setup(|app|'), lib.indexOf('.build(tauri::generate_context!())'));
+assert.doesNotMatch(setup, /map_err\(std::io::Error::other\)\?/, 'nenhuma peça da rede pode derrubar o setup');
 assert.match(read('tunnel/mod.rs'), /pub fn mobile_static_dir/);
 
 const prefs = read('prefs.rs').split('#[cfg(test)]')[0];

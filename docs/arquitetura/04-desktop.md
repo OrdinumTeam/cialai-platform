@@ -44,6 +44,10 @@ apps/desktop/
       workspace/procs/{mod,macos,linux,windows}.rs
       workspace/watch/{mod,kqueue,notify}.rs
       workspace/{files,git,journal,resume,ai,preview,office,browser,repos,dragout,mobile_files}.rs
+      workspace/agent_state.rs       leitores do turno do agente, reexportados pela Barra de IA
+      workspace/agent_profiles.rs    conta ativa de cada agente, sem tocar em credencial
+      workspace/dirs.rs              navegação de pastas do seletor, só nomes
+      workspace/docgraph.rs          varredura de Markdown do grafo, documento 16
       notch/{mod,commands,prefs,profiles,alerts}.rs, notch/usage/*, notch/sessions/*   Barra de IA, documento 15
       bridge/{mod,protocol,dispatch,events}.rs
   tools/                       wksnap, winid, winbounds, drive, movidos de $CONTROL/macos/tools
@@ -155,6 +159,7 @@ No macOS a tabela do documento 02 fica inalterada, porque ⌘ nunca chega ao she
 | Sessão seguinte e anterior | ⇧⌘] e ⇧⌘[ | Ctrl Shift ] e Ctrl Shift [ |
 | Mover card | ⌥↑ e ⌥↓ | Alt ↑ e Alt ↓ |
 | Dev Browser | ⇧⌘B | Ctrl Shift B |
+| Grafo da documentação | ⇧⌘D | Ctrl Shift D |
 | Colunas | ⇧⌘J e ⇧⌘E | Ctrl Shift J e Ctrl Shift E |
 | Paleta | ⌘K | Ctrl Shift K |
 | Excluir na árvore | ⌘⌫ | Delete e Ctrl Shift Backspace |
@@ -182,7 +187,7 @@ No macOS a tabela do documento 02 fica inalterada, porque ⌘ nunca chega ao she
 | `desktop/menu.js` | Só macOS; textos renomeados; submenu Stack removido; `Ctrl+Cmd+S` mantido |
 | `desktop/Toolbar.jsx` | Sem `StackStatus` e `RecordingIndicator` de `28-29`; `<kbd>⌘K</kbd>` em `42` por `label()`; `WindowControls` no Windows e botão de menu fora do macOS; botão Vincular celular com estado do túnel |
 | `desktop/Sidebar.jsx` | Seções Terminais, Dispositivos e Preferências; item Vincular celular fixo no rodapé com ponto de estado |
-| `desktop/Preferences.jsx` | Aparência mantida; Terminal com shell, argumentos, `LANG` e prefixo de PATH; Projetos com raízes e `chooseDirectory`; Dev Browser com caminho do Chromium; Rede com URL do Headscale, chave da API por keychain, usuário e nome do computador; Janela com fundo, só no Windows; sem Stack e Reuniões de `116-172` |
+| `desktop/Preferences.jsx` | Aparência mantida; Terminal com shell, argumentos, `LANG` e prefixo de PATH; Projetos com raízes e `chooseDirectory`; Dev Browser com caminho do Chromium; Rede com URL do Headscale, chave da API por keychain, usuário e nome do computador; Janela com fundo, só no Windows; sem Stack e Reuniões de `116-172`. Desde 18/09/2026 há também a seção Contas dos agentes, que renderiza `terminals/ui/AgentProfiles.jsx` |
 | `desktop/macos.css` | Vira `shell.css` mais `platform.css`; seletores `[data-platform="macos"]` que descrevem a casca viram `[data-shell="desktop"]`; regras só do macOS como o espaçador em `305`, o padding em `385-388` e `-webkit-font-smoothing` ficam sob `[data-platform="macos"]`; `platform.css` traz fontes e controles de janela por sistema; tokens `--mac-*` mantidos na primeira rodada, com renomeação para `--ui-*` como tarefa opcional final |
 | `views/registry.js` | Só `terminais`, mantendo `#view-terminais` e a derivação de ⌘1 |
 | `components/ContentArea.jsx` | Sem `useApp`; só `Suspense` e o componente |
@@ -190,6 +195,40 @@ No macOS a tabela do documento 02 fica inalterada, porque ⌘ nunca chega ao she
 | `frontend/scripts/check-terminal-drop-browser.js` | Expectativa em `70` continua posix; asserção nova com `shellFlavor` `powershell` |
 
 O estúdio só toca a casca por `shell-bridge.js`, `palette-registry.js` e `components/ui.jsx`, todos mantidos. `isTauri()` em `native.js:10-12`, `isPhone()` em `shell.js:6` por `data-form-factor="phone"` e `hasBridge()` continuam sendo os únicos interruptores.
+
+### Card de sessão
+
+Dois números aparecem no card com um agente reconhecido, e eles medem coisas diferentes.
+
+| Elemento | Origem | Significado |
+| --- | --- | --- |
+| Número ao lado do nome do agente, `terminais-card__plan` | Janela mais curta de `usage.windows`, publicada por `workspace/ai.rs` a partir do `rate_limits` do rollout do Codex ou do arquivo do hook do Claude Code | Quanto da janela de uso do plano daquela conta já foi gasto. É limite do plano, por conta, e não por conversa |
+| Tag Contexto, `terminais-card__chip` | `contextUsedPercent`, calculado por `scripts/claude-statusline.py` | Quanto da janela de contexto daquela conversa já foi usado. Só o Claude Code publica |
+
+O esforço de raciocínio continua publicado pelo hook e lido pelo Rust em `UsageSession.effort`, mas não é mostrado no card: o Codex nunca o publica, então a tag contradizia metade das sessões. `packages/ui/scripts/check-session-card.mjs` renderiza o card real com uma amostra que contém o esforço e reprova se algum rótulo dele voltar à interface.
+
+### Estados da sessão
+
+O computador é a fonte única do estado de atividade. `pty_metrics` leva `agentTurn`, lido dos arquivos do próprio agente, e `outputAgeMs`, medido no relógio do computador. A interface deriva rótulo, tom e animação de uma função pura só, `deriveActivity` em `packages/ui/src/terminals/activity-state.js`, e `describe`, `runningLabel` e o indicador de atividade passam por ela.
+
+| Situação | Código | Rótulo em pt-BR | Tom | Anima |
+| --- | --- | --- | --- | --- |
+| Agente com turno em andamento | `agent-busy` | Processando | busy | Sim |
+| Agente parou para perguntar | `agent-waiting` | Aguardando você | warn | Não |
+| Agente terminou o turno | `agent-done` | Resposta entregue | ok | Não |
+| Agente aberto sem turno | `agent-idle` | Pronto para instrução | ok | Não |
+| Processo sem sinal próprio, com saída recente ou CPU acima do piso | `active` | Em execução | busy | Sim |
+| Processo sem sinal próprio, quieto | `open` | Processo aberto | muted | Não |
+| Processo parado por sinal | `stopped` | Processo parado | warn | Não |
+| Shell no prompt | `idle` | Pronto para comando | ok | Não |
+
+O registro do Claude Code não tem estado de concluído: um `idle` cujo carimbo de estado é posterior ao início da sessão prova que houve pelo menos um turno e vira `agent-done`; sem esse carimbo é uma sessão recém aberta. O Codex nunca aparece como aguardando, porque não há evento que diga isso, e um turno abortado volta a `agent-idle`.
+
+Depois de reconectar, o vínculo do fluxo de saída continua sendo assunto de cada cliente, mas o estado é do computador. Uma sessão estacionada com PTY vivo segundo `pty_list` na conexão atual recebe métricas e mostra o estado certo sem ser reanexada e sem repetir o replay de 256 KiB. Na queda da ponte a evidência de atividade de cada sessão é invalidada, então nada anima até chegar amostra nova.
+
+### Colunas laterais
+
+`sessionsCollapsed` e `explorerCollapsed` ficam em `cialai_terminals_layout`, e `panels.js` recolhe sozinho abaixo de 720 px para as sessões e 980 px para os arquivos, sem tocar na preferência. Todo mostrar e esconder passa por `showPanel` em `Workbench.jsx`, que grava a preferência, vence o recolhimento automático e, na primeira vez de cada coluna, mostra o aviso de onde reabrir. Os caminhos de volta são três e coexistem: a faixa da lateral, os dois alternadores do cabeçalho da área de trabalho e os atalhos Mod Shift J e Mod Shift E.
 
 ## Onboarding
 
@@ -204,6 +243,8 @@ Fluxo de primeira abertura, dentro do webview, com o splash e a coreografia de j
 O assistente do Headscale: URL, chave da API, `control.configure` com diagnóstico de DNS, 443, certificado, versão e 3478; escolha do usuário existente ou criação; nome do computador; `node.up`; estado `running` com IP. Tudo por comandos `tunnel.*` do Rust ao sidecar.
 
 ## Preferências
+
+O bloco `agents.activeProfile` guarda a conta que os terminais novos vão usar, uma entrada por agente. Vazio significa não interferir, que é o comportamento de sempre. Ele só muda pelos comandos `agent_profile_*`, e `set_preferences` o preserva, como faz com o bloco da Barra de IA.
 
 ```json
 {

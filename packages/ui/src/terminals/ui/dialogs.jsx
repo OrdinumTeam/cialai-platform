@@ -7,7 +7,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
 import { getLocale, translate } from '../../shared/i18n.js';
 
-function Sheet({ open, title, children, actions, onClose }) {
+// Folha reaproveitada pelos diálogos do estúdio e pelo menu de ações do
+// celular: o mesmo MUI retematizado, com título, conteúdo e ações.
+export function Sheet({ open, title, children, actions, onClose }) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ fontWeight: 600 }}>{title}</DialogTitle>

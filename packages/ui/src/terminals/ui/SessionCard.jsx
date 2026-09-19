@@ -5,9 +5,9 @@
 // reais. O que nao foi observado nao aparece.
 //
 // Com um agente reconhecido e o hook de linha de estado instalado, o card
-// mostra tambem o modelo, o esforco de raciocinio, quanto da janela de
-// contexto ja foi usada, o custo estimado da sessao e o uso do plano. Sem o
-// hook, um botao instala a linha de estado nos perfis do Claude Code.
+// mostra tambem o modelo, quanto da janela de contexto ja foi usada, o custo
+// estimado da sessao e o uso do plano. Sem o hook, um botao instala a linha
+// de estado nos perfis do Claude Code.
 //
 // O card assina so a atividade da propria sessao: a saida dos outros
 // terminais e as metricas dos outros cards nao o redesenham. As barras de
@@ -16,34 +16,24 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { Bell, CheckCircle2, MoreHorizontal, Pin, Sparkles, XCircle } from 'lucide-react';
 import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, isWorking, runningLabel, sessionAccent, sessionUsage } from '../runtime.js';
+import { describe, runningLabel, sessionAccent, sessionUsage } from '../runtime.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
 import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
+import ActivityIndicator from './ActivityIndicator.jsx';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
-const EFFORT_LEVELS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+// Toque longo que abre o menu de acoes, sem disparar selecao nem rolagem.
+const LONG_PRESS_MS = 500;
+
 
 function AttentionIcon({ kind }) {
   if (kind === 'finished') return <CheckCircle2 size={12} strokeWidth={2} aria-hidden="true" />;
   if (kind === 'error') return <XCircle size={12} strokeWidth={2} aria-hidden="true" />;
   return <Bell size={12} strokeWidth={2} aria-hidden="true" />;
-}
-
-// Tres barras delicadas que respiram enquanto um processo roda; com o shell
-// em prompt viram um ponto parado. Sem movimento com preferencia reduzida.
-function Activity({ tone, active }) {
-  if (active) {
-    return (
-      <span className={`terminais-activity terminais-activity--${tone}`} aria-hidden="true">
-        <i /><i /><i />
-      </span>
-    );
-  }
-  return <span className={`dot terminais-card__dot terminais-card__dot--${tone}`} aria-hidden="true" />;
 }
 
 // Quanto do plano do agente ja foi gasto. A janela mais curta, a da sessao,
@@ -91,15 +81,14 @@ function missingTitle(activity) {
   return undefined;
 }
 
-function planTone(percent) {
+// Tom do numero de uso do plano: neutro ate 75 por cento, atencao ate 90 e
+// alarme acima disso. A tela de contas usa o mesmo.
+export function planTone(percent) {
   if (percent >= 90) return 'bad';
   if (percent >= 75) return 'warn';
   return 'ok';
 }
 
-function effortLabel(effort) {
-  return EFFORT_LEVELS.has(effort) ? translate(`terminal.session.effort.${effort}`) : effort;
-}
 
 // Botao que instala a linha de estado nos perfis do Claude Code, so no app
 // do computador: e onde os perfis moram e onde o comando existe.
@@ -143,6 +132,12 @@ function SessionCard({
   useRuntimeEvents(['activity', 'sessions'], session.id);
   const [draft, setDraft] = useState(session.name);
   const inputRef = useRef(null);
+  // Toque longo no card abre o mesmo menu do botao de tres pontos. O timer e
+  // cancelado por qualquer movimento ou pelo fim do toque, para nao roubar um
+  // toque simples nem a rolagem da lista.
+  const longPress = useRef(null);
+  const cancelLongPress = () => { if (longPress.current) { clearTimeout(longPress.current); longPress.current = null; } };
+  useEffect(() => cancelLongPress, []);
 
   useEffect(() => {
     if (!renaming) return undefined;
@@ -153,7 +148,6 @@ function SessionCard({
 
   const status = describe(session);
   const running = runningLabel(session);
-  const working = isWorking(session);
   const activity = session.activity;
   const cpu = activity?.available && activity.cpu != null ? fmtCpu(activity.cpu) : null;
   const memory = activity?.available && activity.memory != null ? fmtMemory(activity.memory) : null;
@@ -164,7 +158,6 @@ function SessionCard({
   const planWindow = usage ? usage.windows[0] : null;
   const detail = usage ? sessionUsage(activity) : null;
   const model = detail?.model || null;
-  const effort = detail?.effort ? effortLabel(detail.effort) : null;
   const context = detail?.contextUsedPercent != null ? fmtPlan(detail.contextUsedPercent) : null;
   const cost = detail?.costUsd != null ? fmtCost(detail.costUsd) : null;
   const missing = Boolean(activity?.agent && activity.profile && !usage);
@@ -200,6 +193,14 @@ function SessionCard({
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(session.id); }
       }}
       onContextMenu={touch ? undefined : (event) => { event.preventDefault(); onMenu(session, { x: event.clientX, y: event.clientY, align: 'left' }); }}
+      onPointerDown={touch && onMenu ? (event) => {
+        if (event.target.closest?.('.terminais-card__menu')) return;
+        cancelLongPress();
+        longPress.current = setTimeout(() => { longPress.current = null; onMenu(session, { touch: true }); }, LONG_PRESS_MS);
+      } : undefined}
+      onPointerMove={touch && onMenu ? cancelLongPress : undefined}
+      onPointerUp={touch && onMenu ? cancelLongPress : undefined}
+      onPointerCancel={touch && onMenu ? cancelLongPress : undefined}
       onMouseDown={touch || renaming || !onDragStart ? undefined : (event) => {
         if (event.target.closest?.('.terminais-card__menu, .terminais-card__rename, .terminais-card__install')) return;
         onDragStart(event, session);
@@ -207,7 +208,7 @@ function SessionCard({
       title={shortPath(session.cwd)}
     >
       <div className="terminais-card__row">
-        <Activity tone={status.tone} active={working || session.status === 'starting'} />
+        <ActivityIndicator tone={status.tone} animated={status.animated} />
         {renaming ? (
           <input
             ref={inputRef}
@@ -227,18 +228,19 @@ function SessionCard({
           <span className="terminais-card__name" onDoubleClick={touch ? undefined : (event) => { event.stopPropagation(); onRename(session); }}>{session.name}</span>
         )}
         {session.pinned ? <Pin size={11} strokeWidth={2} className="terminais-card__pin" role="img" aria-label={translate('terminal.session.pinned')} /> : null}
-        {!touch && <button
+        {onMenu ? <button
           type="button"
           className="terminais-card__menu"
           aria-label={translate('terminal.session.actionsFor', { name: session.name })}
           onClick={(event) => {
             event.stopPropagation();
+            if (touch) { onMenu(session, { touch: true }); return; }
             const rect = event.currentTarget.getBoundingClientRect();
             onMenu(session, { x: rect.right, y: rect.bottom + 4, align: 'right', flipOffset: rect.height + 8 });
           }}
         >
-          <MoreHorizontal size={14} strokeWidth={2} aria-hidden="true" />
-        </button>}
+          <MoreHorizontal size={touch ? 20 : 14} strokeWidth={2} aria-hidden="true" />
+        </button> : null}
       </div>
       {session.subtitle ? <div className="terminais-card__subtitle">{session.subtitle}</div> : null}
       {running ? (
@@ -254,10 +256,9 @@ function SessionCard({
           {elapsed && !running.background ? <span className="terminais-card__elapsed">{elapsed}</span> : null}
         </div>
       ) : null}
-      {running?.agent && (model || effort || context || cost || showProfile) ? (
+      {running?.agent && (model || context || cost || showProfile) ? (
         <div className="terminais-card__agent-row">
           {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
-          {effort ? <span className="terminais-card__chip" title={translate('terminal.session.effortTitle', { effort })}>{effort}</span> : null}
           {context ? <span className={`terminais-card__chip terminais-card__chip--${planTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
           {cost ? <span className="terminais-card__chip" title={translate('terminal.session.costTitle', { amount: cost })}>{translate('terminal.session.cost', { amount: cost })}</span> : null}
           {showProfile ? <span className="terminais-card__profile" title={translate(usage.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage.configDir) })}>{activity.profileName}</span> : null}

@@ -10,7 +10,7 @@ site do Cialai, nunca desenhados pela IA.
 As três telas nativas sem captura real, Parear, Computadores e Ajustes, vêm desenhadas
 pela IA em `ia/` e entram pela mesma cola, marcadas como provisórias na MATRIZ.
 
-Uso:  <venv>/bin/python docs/compose_device.py [chave ...]
+Uso:  <venv>/bin/python docs/compose_device.py [--idioma pt-BR|en] [chave ...]
 """
 import sys
 import pathlib
@@ -78,11 +78,65 @@ SLIDES = {
 }
 PHONE = "_work/phone-chroma.png"
 
+# Texto de cada slide em inglês. As telas em inglês vivem em `real-en/` e `ia-en/`,
+# traduzidas a partir das mesmas capturas pelo Nano Banana Pro, com layout, fonte e
+# cor preservados. A ficha en-US do Google Play usa este conjunto.
+EN = {
+    "slide-1-terminais": dict(
+        head=["All your terminals,", "on your phone."],
+        sub=["Every session from your computer,", "with state, agent and usage."],
+    ),
+    "slide-2-terminal": dict(
+        head=["Follow the agent", "and take over the terminal."],
+        sub=["Live history and the essential keys", "on the same screen."],
+    ),
+    "slide-3-parear": dict(
+        head=["Pair your phone", "with a QR code."],
+        sub=["A short lived code,", "no account and no server."],
+    ),
+    "slide-4-computadores": dict(
+        head=["Your computers,", "with the connection state."],
+        sub=["Direct when the network allows,", "through Tor as backup."],
+    ),
+    "slide-5-arquivos": dict(
+        head=["Browse the files", "of your project."],
+        sub=["Read only,", "in the folders you allowed on the computer."],
+    ),
+    "slide-6-agente": dict(
+        head=["See what the agent", "is doing."],
+        sub=["Model, effort, context and cost", "in every session."],
+    ),
+    "slide-7-ajustes": dict(
+        head=["Security", "on the device itself."],
+        sub=["Biometrics on every sensitive action,", "language and theme as you choose."],
+    ),
+    "slide-8-tema": dict(
+        head=["Light or dark,", "like the system."],
+        sub=["The same list,", "in the theme of your device."],
+    ),
+}
+
+IDIOMAS = ("pt-BR", "en")
+
+
+def variante(chave, idioma="pt-BR"):
+    """Config do slide no idioma pedido. Em inglês troca texto, tela e pasta de saída."""
+    cfg = dict(SLIDES[chave])
+    if idioma == "pt-BR":
+        return cfg
+    cfg["head"], cfg["sub"] = EN[chave]["head"], EN[chave]["sub"]
+    cfg["screen"] = cfg["screen"].replace("real/", "real-en/").replace("ia/", "ia-en/")
+    cfg["out"] = cfg["out"].replace("slides/", "slides-en/")
+    return cfg
+
+
 PROIBIDO = ["(", ")", " - ", "–", "—"]         # parênteses, hífen solto, meia-risca, travessão
-for _k, _cfg in SLIDES.items():
-    for _ln in _cfg["head"] + _cfg["sub"]:
-        for _p in PROIBIDO:
-            assert _p not in _ln, f"{_k}: texto visível com {_p!r}: {_ln!r}"
+for _k in SLIDES:
+    for _idioma in IDIOMAS:
+        _cfg = variante(_k, _idioma)
+        for _ln in _cfg["head"] + _cfg["sub"]:
+            for _p in PROIBIDO:
+                assert _p not in _ln, f"{_k} {_idioma}: texto visível com {_p!r}: {_ln!r}"
 
 
 GROW = 3        # folga em volta da tela, para alcançar a borda antisserrilhada do chroma
@@ -213,13 +267,20 @@ def compor(cfg, cw=CW, ch=CH, device_path=PHONE, phone_frac=None, bottom_frac=No
     return canvas
 
 
-def render(key):
-    cfg = SLIDES[key]
-    (BASE / "slides").mkdir(exist_ok=True)
+def render(key, idioma="pt-BR"):
+    cfg = variante(key, idioma)
+    (BASE / pathlib.Path(cfg["out"]).parent).mkdir(exist_ok=True)
     compor(cfg).save(BASE / cfg["out"], "PNG")
     print("SAVED", cfg["out"])
 
 
 if __name__ == "__main__":
-    for k in (sys.argv[1:] or list(SLIDES)):
-        render(k)
+    args = sys.argv[1:]
+    idioma = "pt-BR"
+    if "--idioma" in args:
+        i = args.index("--idioma")
+        idioma = args[i + 1]
+        del args[i:i + 2]
+    assert idioma in IDIOMAS, "idioma fora de %s" % (IDIOMAS,)
+    for k in (args or list(SLIDES)):
+        render(k, idioma)

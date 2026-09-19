@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { act, create } from 'react-test-renderer';
 import { AppState, Text } from 'react-native';
 
-import App, { HOME_PROXY_GRACE_MS, LAST_CONNECTION_FAILED_KEY, SHELL_RECONNECT_DEADLINE_MS } from './App';
+import App, { HOME_PROXY_GRACE_MS, SHELL_RECONNECT_DEADLINE_MS } from './App';
 import { setLocale } from './src/i18n';
 import { clearDiagnostics, recentDiagnostics } from './src/state/diagnostics';
 
@@ -117,11 +117,18 @@ const createNodeMock = element => {
   return node;
 };
 
-async function render() {
+// O app abre sempre no início. Quem precisa do terminal toca em Continuar,
+// que é o único caminho a partir do hub, e é o que a pessoa faz no aparelho.
+async function render({ home = false } = {}) {
   let tree;
   await act(async () => { tree = create(<App />, { createNodeMock }); });
   await flush();
+  if (!home) await continueToTerminal(tree);
   return tree;
+}
+
+async function continueToTerminal(tree) {
+  await press(tree, 'Continuar em Mac de Foco');
 }
 
 beforeEach(async () => {
@@ -231,7 +238,7 @@ test('a missing token asks to pair that desktop again', async () => {
 
 test('discarded Headscale profiles lead to pairing with a notice', async () => {
   mockStore.load.mockResolvedValue({ store: { version: 2, desktops: [], lastDesktopId: null }, legacyDiscarded: true });
-  const tree = await render();
+  const tree = await render({ home: true });
   expect(text(tree)).toMatch(/Esta versão do Cialai conecta de um jeito novo/);
   expect(mockTunnel.connect).not.toHaveBeenCalled();
   await act(async () => tree.unmount());
@@ -439,7 +446,7 @@ test('the biometric policy chosen in settings is remembered', async () => {
 
 test('opens on the home without a last computer and the terminal card leads to the list', async () => {
   mockStore.load.mockResolvedValue({ store: { ...stored, lastDesktopId: null }, legacyDiscarded: false });
-  const tree = await render();
+  const tree = await render({ home: true });
   expect(mockTunnel.connect).not.toHaveBeenCalled();
   expect(text(tree)).toMatch(/Início/);
   expect(text(tree)).toMatch(/Um vinculado/);
@@ -453,26 +460,32 @@ test('opens on the home without a last computer and the terminal card leads to t
   await act(async () => tree.unmount());
 });
 
-test('opens on the home when the last connection failed and continues from there', async () => {
-  mockSecure.set(LAST_CONNECTION_FAILED_KEY, 'true');
-  const tree = await render();
+// O app abre sempre no início, mesmo com o último computador respondendo:
+// nenhuma WebView é montada e nenhuma conexão é aberta antes do toque.
+test('opens on the home with a healthy last computer and continues from there', async () => {
+  const tree = await render({ home: true });
   expect(mockTunnel.connect).not.toHaveBeenCalled();
+  expect(webViewMounts).toHaveLength(0);
   expect(text(tree)).toMatch(/Continuar/);
   expect(text(tree)).toMatch(/Mac de Foco/);
-  expect(text(tree)).toMatch(/Não conectado/);
   await press(tree, 'Continuar em Mac de Foco');
   expect(mockTunnel.connect).toHaveBeenCalledTimes(1);
   expect(tree.root.findAll(node => node.props.source?.uri)[0].props.source.uri).toBe(proxyUrl);
-  // A conexão boa limpa a marca: a próxima abertura volta direto ao terminal.
-  expect(mockSecure.get(LAST_CONNECTION_FAILED_KEY)).toBe('false');
   await act(async () => tree.unmount());
 });
 
-test('a failed connection is remembered so the next launch starts on the home', async () => {
+// A marca que a abertura antiga usava é apagada uma vez, sem voltar.
+test('the mark used by the old launch rule is deleted once', async () => {
+  mockSecure.set('cialai.lastConnectionFailed', 'true');
+  const tree = await render({ home: true });
+  expect(mockSecure.has('cialai.lastConnectionFailed')).toBe(false);
+  await act(async () => tree.unmount());
+});
+
+test('a failed connection shows the offline screen with the home a tap away', async () => {
   mockTunnel.connect.mockRejectedValue(coded('no_path'));
   const tree = await render();
   expect(text(tree)).toMatch(/O computador está fora de alcance/);
-  expect(mockSecure.get(LAST_CONNECTION_FAILED_KEY)).toBe('true');
   // Da tela sem conexão o início fica a um toque e a escada para.
   await press(tree, 'Ir para o início');
   expect(text(tree)).toMatch(/Fora de alcance/);

@@ -16,6 +16,12 @@ const ACCESS = Object.freeze({
   pty_view_claim: 'terminal',
   pty_kill: 'action',
   pty_spawn: 'session',
+  pty_presentation: 'session',
+  list_dirs: 'session',
+  agent_profiles: 'read',
+  agent_profile_select: 'session',
+  agent_profile_create: 'session',
+  pty_launch_agent: 'terminal',
 });
 
 export const REMOTE_COMMANDS = Object.freeze(Object.keys(ACCESS));

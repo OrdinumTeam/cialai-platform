@@ -33,7 +33,9 @@ function fallback() {
     home: homes[os] || '',
     fileManager: managers[os] || translate('shared.fileManager.generic'),
     defaultShellFlavor: os === 'windows' ? 'powershell' : 'posix',
-    sep: os === 'windows' ? '\\' : '/',
+    // Caminho manipulado pela interface usa sempre barra normal, igual ao
+    // que o Rust anuncia. Para mostrar no estilo do sistema existe `displayPath`.
+    sep: '/',
   };
 }
 

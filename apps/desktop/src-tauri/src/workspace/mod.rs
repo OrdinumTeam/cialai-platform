@@ -44,8 +44,12 @@
 //!   de cada terminal em disco e a conversa do Claude Code ou do Codex em
 //!   uso, para reabrir depois que o app fecha ou cai.
 
+pub mod agent_profiles;
+pub mod agent_state;
 pub mod ai;
 pub mod browser;
+pub mod dirs;
+pub mod docgraph;
 pub mod dragout;
 pub mod files;
 pub mod git;

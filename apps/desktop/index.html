@@ -6,9 +6,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light dark" />
     <title>Cialai</title>
+    <!-- Estado inicial estático, antes de qualquer bundle. A janela do Windows
+         nasce sem moldura e transparente, então, sem isto, uma página que não
+         monta deixa um retângulo vazado, imóvel e sem botão de fechar. O fundo
+         opaco da marca e a região de arraste ficam visíveis enquanto `#root`
+         está vazio e somem sozinhos quando o React monta. -->
+    <style>
+      html, body { height: 100%; margin: 0; }
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #37112F;
+        color: #f4e9f1;
+        font: 500 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+        letter-spacing: .02em;
+      }
+      #root:not(:empty) ~ #boot { display: none; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot" data-tauri-drag-region="deep" aria-hidden="true">Cialai</div>
     <script type="module" src="./src/desktop.jsx"></script>
   </body>
 </html>

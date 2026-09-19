@@ -44,3 +44,84 @@ test('the workbench routes every show and hide through the panel state', () => {
     assert.match(source, new RegExp(`panelCollapsed\\(auto, '${panel}'`));
   }
 });
+
+/* ── faixa recolhida legivel, UI-01 ────────────────────────────────── */
+
+const read = (relative) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
+
+test('a faixa do painel recolhido diz o que esconde e leva de volta', () => {
+  const source = read('../src/terminals/ui/Workbench.jsx');
+  const css = read('../src/views/Terminais.css');
+
+  // A faixa inteira e o botao, com icone de 16 px no topo e resumo embaixo.
+  assert.match(source, /className="terminais-edge terminais-edge--left"/);
+  assert.match(source, /className="terminais-edge terminais-edge--right"/);
+  assert.doesNotMatch(source, /terminais-edge__btn/, 'a faixa inteira e clicavel, sem botao interno');
+  assert.match(source, /<PanelLeftOpen size=\{16\}/);
+  assert.match(source, /<PanelRightOpen size=\{16\}/);
+  assert.match(css, /\.terminais-edge\{[^}]*flex:0 0 28px/, 'largura minima de 28 px');
+  assert.doesNotMatch(css, /\.terminais-edge\{[^}]*transition:[^}]*width/, 'largura nao anima');
+
+  // Resumo: sessoes mostram total e selo de avisos; arquivos, alteracoes do Git.
+  const left = source.slice(source.indexOf('terminais-edge--left'), source.indexOf('terminais-edge--right'));
+  assert.match(left, /sessions\.length/);
+  assert.match(left, /attention \? <span className="terminais-edge__badge"/);
+  const right = source.slice(source.indexOf('terminais-edge--right'));
+  assert.match(right, /gitChanges/);
+  assert.match(source, /const gitChanges = selected\?\.explorer\?\.git\?\.changes\?\.length/);
+
+  // Dica com o atalho, `aria-expanded` e `aria-controls` apontando para o painel.
+  for (const block of [left, right]) {
+    assert.match(block, /aria-expanded=\{false\}/);
+    assert.match(block, /aria-controls="terminais-(sessions|explorer)"/);
+    assert.match(block, /title=\{translate\('terminal\.work\.show(Sessions|Files)Shortcut'/);
+  }
+  assert.match(read('../src/terminals/ui/SessionsPane.jsx'), /id="terminais-sessions"/);
+  assert.match(read('../src/terminals/ui/ExplorerPane.jsx'), /id="terminais-explorer"/);
+});
+
+test('os botoes de recolher usam 16 px e o par coerente de icones', () => {
+  assert.match(read('../src/terminals/ui/SessionsPane.jsx'), /<PanelLeftClose size=\{16\}/);
+  assert.match(read('../src/terminals/ui/ExplorerPane.jsx'), /<PanelRightClose size=\{16\}/);
+  const work = read('../src/terminals/ui/WorkArea.jsx');
+  assert.match(work, /PanelLeftOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelLeftClose size=\{16\}/);
+  assert.match(work, /PanelRightOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelRightClose size=\{16\}/);
+});
+
+test('o cabecalho da area de trabalho tem os dois alternadores, sempre visiveis', () => {
+  const work = read('../src/terminals/ui/WorkArea.jsx');
+  const header = work.slice(work.indexOf('<header className="terminais-work__head">'), work.indexOf('</header>'));
+  assert.match(header, /aria-pressed=\{!panels\.sessionsCollapsed\}/, 'sessoes a esquerda');
+  assert.ok(header.indexOf('panels.onToggleSessions') < header.indexOf('terminais-work__name'), 'o de sessoes vem antes do nome');
+  assert.match(work, /aria-pressed=\{!panels\.explorerCollapsed\}/, 'arquivos a direita');
+  assert.match(work, /aria-controls="terminais-sessions"/);
+  assert.match(work, /aria-controls="terminais-explorer"/);
+  // O alternador nasce com o estado do painel, nao com um estado proprio.
+  const bench = read('../src/terminals/ui/Workbench.jsx');
+  assert.match(bench, /onToggleSessions: \(\) => showPanel\('sessions', sessionsCollapsed/);
+  assert.match(bench, /onToggleExplorer: \(\) => showPanel\('explorer', explorerCollapsed\)/);
+});
+
+test('o primeiro recolhimento de cada coluna avisa onde reabrir, uma vez so', () => {
+  const bench = read('../src/terminals/ui/Workbench.jsx');
+  const show = bench.slice(bench.indexOf('const showPanel ='), bench.indexOf('const native ='));
+  assert.match(show, /const firstTime = !visible && !layout\[noticed\]/);
+  assert.match(show, /if \(firstTime\) \{/);
+  assert.match(show, /terminal\.work\.sessionsHidden/);
+  assert.match(show, /terminal\.work\.filesHidden/);
+  // A marca fica no mesmo registro do layout, entao o aviso nao volta.
+  const layout = read('../src/terminals/layout.js');
+  assert.match(layout, /noticedSessions: false/);
+  assert.match(layout, /noticedExplorer: false/);
+  assert.match(layout, /next\.noticedSessions = Boolean\(raw\.noticedSessions\)/);
+});
+
+test('no modo foco a faixa fica discreta, mas nunca some', () => {
+  const css = read('../src/views/Terminais.css');
+  const focus = css.slice(css.indexOf('.terminais-page.is-focus .terminais-edge{'));
+  assert.match(focus, /\.terminais-page\.is-focus \.terminais-edge\{background:transparent/);
+  assert.doesNotMatch(focus.slice(0, focus.indexOf('\n\n')), /display:none|opacity:0\}/);
+  // O resumo some, o alvo continua: a faixa e alcancavel por teclado.
+  assert.match(focus, /\.terminais-page\.is-focus \.terminais-edge__summary\{opacity:0/);
+  assert.match(focus, /:focus-visible \.terminais-edge__summary\{opacity:1\}/);
+});

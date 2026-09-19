@@ -9,11 +9,11 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowUp, Bell, ChevronLeft, ChevronRight, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, Pin, PinOff,
-  FilePlus2, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput,
+  ArrowDown, ArrowUp, Bell, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
+  FilePlus2, Network, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput, UserRound,
 } from 'lucide-react';
 import { useToast } from '../../components/ui.jsx';
-import { hasBridge } from '../../lib/native.js';
+import { hasBridge, invoke } from '../../lib/native.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { registerPaletteProvider } from '../../desktop/palette-registry.js';
 import { shell } from '../../desktop/shell-bridge.js';
@@ -25,6 +25,8 @@ import {
 } from '../runtime.js';
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
 import { copyPort, openBrowserTab, reconcileBrowsers, stopBrowser } from '../browser/runtime.js';
+import { docGraphTabId, openDocGraphTab } from '../docgraph/tab.js';
+import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
 import { INITIAL_PANELS, choosePanel, panelCollapsed, resizePanels } from '../panels.js';
 import { baseName, fs, isPreviewable, shortPath } from '../files.js';
@@ -37,9 +39,9 @@ import Menu from './Menu.jsx';
 import NewSessionPopover from './NewSessionPopover.jsx';
 import QuickOpen from './QuickOpen.jsx';
 import { CloseSessionDialog, ConflictDialog, DeleteDialog, NameDialog, UnsavedDialog } from './dialogs.jsx';
-import { isTerminalFocused, shortcutLabel } from '../../lib/keys.js';
+import { isShortcut, isTerminalFocused, shortcutLabel } from '../../lib/keys.js';
 import { isTerminalAppShortcut, terminalEditAction, workbenchShortcutAction } from '../shortcut-actions.js';
-import { translate, useI18n } from '../../shared/i18n.js';
+import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 function isDark() {
   return document.documentElement.getAttribute('data-theme') === 'dark';
@@ -76,10 +78,19 @@ export default function Workbench() {
   const sessionsCollapsed = panelCollapsed(auto, 'sessions', { preferred: layout.sessionsCollapsed, focus: layout.focus });
   const explorerCollapsed = panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
   // Mostrar ou esconder uma coluna grava a preferencia e, em janela estreita,
-  // vence o recolhimento automatico.
+  // vence o recolhimento automatico. Na primeira vez que cada coluna recolhe,
+  // um aviso diz onde reabri-la: `display: none` some com a lista inteira, e
+  // sem isso o caminho de volta fica invisivel.
   const showPanel = (panel, visible, patch = {}) => {
-    setLayout({ [`${panel}Collapsed`]: !visible, ...patch });
+    const noticed = panel === 'sessions' ? 'noticedSessions' : 'noticedExplorer';
+    const firstTime = !visible && !layout[noticed];
+    setLayout({ [`${panel}Collapsed`]: !visible, ...(firstTime ? { [noticed]: true } : {}), ...patch });
     setAuto((current) => choosePanel(current, panel, visible));
+    if (firstTime) {
+      notify(translate(panel === 'sessions' ? 'terminal.work.sessionsHidden' : 'terminal.work.filesHidden', {
+        shortcut: shortcutLabel(panel === 'sessions' ? 'Mod+Shift+J' : 'Mod+Shift+E'),
+      }), 'info');
+    }
   };
   const native = hasBridge() || isDemo();
 
@@ -144,11 +155,25 @@ export default function Workbench() {
   // Abas lembradas de uma sessao voltam quando ela e selecionada pela
   // primeira vez depois da abertura do app.
   useEffect(() => {
-    if (selected && selected.editor.restoreTabs?.length) restoreTabs(selected.id).catch(() => {});
+    const restoring = selected && selected.editor.restoreTabs?.length
+      ? restoreTabs(selected.id).catch(() => {})
+      : Promise.resolve();
     // A aba do browser volta parada, com a ultima URL, sem lancar o Chromium.
     if (selected && selected.browser?.restoreOpen) {
       selected.browser.restoreOpen = false;
       openBrowserTab(selected.id, { start: false });
+    }
+    // A aba do grafo volta depois das abas de arquivo, para nao virar a
+    // primeira da lista, e so fica ativa se era a ativa.
+    if (selected && selected.docgraph?.restoreOpen) {
+      selected.docgraph.restoreOpen = false;
+      const session = selected;
+      const graphWasActive = session.editor.activeId === docGraphTabId(session.id);
+      restoring.then(() => {
+        if (!getSession(session.id)) return;
+        const orphan = !session.editor.tabs.some((tab) => tab.id === session.editor.activeId);
+        openDocGraphTab(session.id, { activate: graphWasActive || orphan });
+      });
     }
   }, [selectedId]);
 
@@ -222,6 +247,30 @@ export default function Workbench() {
     setMenu({ anchor, items });
   }, []);
 
+  // Submenu com as contas do agente. Um terminal ja aberto nao muda de
+  // ambiente, entao trocar de conta nele e abrir o agente com as variaveis na
+  // propria linha, o que so vale com o shell no prompt.
+  const launchMenu = useCallback(async (session, anchor) => {
+    let profiles = [];
+    try {
+      profiles = await invoke('agent_profiles') || [];
+    } catch (error) {
+      notify(error.message, 'warning');
+      return;
+    }
+    if (!profiles.length) { notify(translate('terminal.profiles.none'), 'warning'); return; }
+    setMenu({
+      anchor,
+      items: profiles.map((profile) => ({
+        id: `launch:${profile.id}`,
+        label: translate('terminal.profiles.launchAs', { agent: translate(`terminal.profiles.agent.${profile.agent}`), profile: profile.label }),
+        icon: UserRound,
+        run: () => invoke('pty_launch_agent', { id: session.ptyId, agent: profile.agent, profile: profile.id })
+          .catch((error) => notify(error.message, 'warning')),
+      })),
+    });
+  }, [notify]);
+
   const sessionMenu = useCallback((session, anchor) => {
     const items = [
       { id: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput, run: () => setRenamingId(session.id) },
@@ -239,13 +288,21 @@ export default function Workbench() {
       { id: 'copy', label: translate('terminal.explorer.copyPath'), icon: Copy, run: async () => { const ok = await copyToClipboard(session.cwd); notify(translate(ok ? 'terminal.common.pathCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning'); } },
       { id: 'finder', label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
       { id: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
+      {
+        id: 'launch',
+        label: translate('terminal.profiles.launchHere'),
+        icon: UserRound,
+        disabled: session.status !== 'running' || Boolean(session.activity?.foreground),
+        hint: session.activity?.foreground ? translate('terminal.profiles.launchBusy') : undefined,
+        run: () => setTimeout(() => launchMenu(session, anchor), 0),
+      },
       { id: 'dir', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, run: () => changeDirectory(session.id).catch((error) => notify(error.message, 'warning')) },
       { separator: true },
       { id: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw, run: () => restart(session.id) },
       { id: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true, run: () => requestCloseSession(session) },
     ];
     setMenu({ anchor, items });
-  }, [notify, requestCloseSession, colorMenu]);
+  }, [notify, requestCloseSession, colorMenu, launchMenu]);
 
   const onSelect = useCallback((id) => {
     selectSession(id);
@@ -392,6 +449,27 @@ export default function Workbench() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [layout, selected, explorerCollapsed, sessionsCollapsed]);
 
+  // Mod Shift D abre o grafo da documentacao. Na fase de captura e parando a
+  // propagacao: o CodeMirror, sem atalho proprio para ela, cairia no `Mod-d`
+  // dele e selecionaria a proxima ocorrencia junto.
+  const openDocGraph = useCallback(() => {
+    const current = getState().selected;
+    if (!current) { notify(DOCGRAPH.needSession, 'info'); openPickerRef.current?.(); return; }
+    openDocGraphTab(current.id);
+  }, [notify]);
+  const openDocGraphRef = useRef(openDocGraph);
+  openDocGraphRef.current = openDocGraph;
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (!isShortcut(event, 'Mod+Shift+D')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openDocGraphRef.current();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, []);
+
   /* ── paleta de comandos ──────────────────────────────────────────── */
 
   useEffect(() => registerPaletteProvider(() => {
@@ -414,6 +492,7 @@ export default function Workbench() {
       items.push({ id: 'terminais:file', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.findProjectFile'), shortcut: shortcutLabel('Mod+P'), icon: FileSearch, run: () => { shell.navigate('terminais'); setTimeout(() => setQuickOpen(true), 60); } });
     }
     items.push({ id: 'terminais:explorer', kind: translate('terminal.palette.studio'), label: translate(explorerCollapsed ? 'terminal.palette.showExplorer' : 'terminal.palette.hideExplorer'), shortcut: shortcutLabel('Mod+Shift+E'), icon: Files, run: () => showPanel('explorer', explorerCollapsed) });
+    if (current) items.push({ id: 'terminais:docgraph', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.openDocGraph', { name: current.name }), shortcut: shortcutLabel('Mod+Shift+D'), icon: Network, run: () => { shell.navigate('terminais'); openDocGraphTab(current.id); } });
     items.push({ id: 'terminais:sessions', kind: translate('terminal.palette.studio'), label: translate(sessionsCollapsed ? 'terminal.palette.showSessions' : 'terminal.palette.hideSessions'), shortcut: shortcutLabel('Mod+Shift+J'), icon: PanelLeft, run: () => showPanel('sessions', sessionsCollapsed) });
     items.push({ id: 'terminais:focus', kind: translate('terminal.palette.studio'), label: translate(layout.focus ? 'terminal.work.exitFocus' : 'terminal.work.focusMode'), icon: Maximize2, run: toggleFocus });
     if (current) items.push({ id: 'terminais:restart', kind: translate('terminal.palette.studio'), label: translate('terminal.palette.restartNamed', { name: current.name }), icon: RotateCcw, run: () => restart(current.id) });
@@ -534,6 +613,8 @@ export default function Workbench() {
   if (layout.focus) classes.push('is-focus');
   const attention = sessionsNeedingAttention().length;
   const disconnected = sessions.filter((session) => session.status === 'disconnected').length;
+  // Resumo do que a coluna de arquivos esconde quando recolhida.
+  const gitChanges = selected?.explorer?.git?.changes?.length || 0;
 
   return (
     <div
@@ -563,9 +644,21 @@ export default function Workbench() {
           <Splitter orientation="vertical" label={translate('terminal.work.sessionsWidth')} onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
         </>
       ) : (
-        <div className="terminais-edge terminais-edge--left">
-          <button type="button" className="terminais-edge__btn" onClick={() => { showPanel('sessions', true, { focus: false }); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showSessions')} title={translate('terminal.work.showSessionsShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}><ChevronRight size={12} strokeWidth={2} /></button>
-        </div>
+        <button
+          type="button"
+          className="terminais-edge terminais-edge--left"
+          onClick={() => { showPanel('sessions', true, { focus: false }); if (layout.focus) toggleFocus(); }}
+          aria-label={translate('terminal.work.showSessions')}
+          aria-expanded={false}
+          aria-controls="terminais-sessions"
+          title={translate('terminal.work.showSessionsShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}
+        >
+          <PanelLeftOpen size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span className="terminais-edge__summary">
+            <span className="terminais-edge__count">{sessions.length.toLocaleString(getLocale())}</span>
+            {attention ? <span className="terminais-edge__badge">{attention.toLocaleString(getLocale())}</span> : null}
+          </span>
+        </button>
       )}
       {selected ? (
         <WorkArea
@@ -578,6 +671,12 @@ export default function Workbench() {
           onCloseSession={requestCloseSession}
           onChangeDir={(session) => changeDirectory(session.id).catch((error) => notify(error.message, 'warning'))}
           onToggleFocus={toggleFocus}
+          panels={{
+            sessionsCollapsed,
+            explorerCollapsed,
+            onToggleSessions: () => showPanel('sessions', sessionsCollapsed, { focus: false }),
+            onToggleExplorer: () => showPanel('explorer', explorerCollapsed),
+          }}
           findOpen={findOpen}
           onFindClose={() => { setFindOpen(false); focusSelected(); }}
           editorFocusKey={editorFocusKey}
@@ -592,6 +691,7 @@ export default function Workbench() {
             onOpenFile={openInEditor}
             onOpenDiff={openDiffFor}
             onNewSessionAt={newSessionAt}
+            onShowInGraph={(path) => openDocGraphTab(selected.id, { focusPath: path })}
             onInsertPath={insertPath}
             onDeleteRequest={setDeleteRequest}
             notify={notify}
@@ -600,9 +700,20 @@ export default function Workbench() {
           />
         </>
       ) : (
-        <div className="terminais-edge terminais-edge--right">
-          <button type="button" className="terminais-edge__btn" onClick={() => { showPanel('explorer', true); if (layout.focus) toggleFocus(); }} aria-label={translate('terminal.work.showFiles')} title={translate('terminal.work.showFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><ChevronLeft size={12} strokeWidth={2} /></button>
-        </div>
+        <button
+          type="button"
+          className="terminais-edge terminais-edge--right"
+          onClick={() => { showPanel('explorer', true); if (layout.focus) toggleFocus(); }}
+          aria-label={translate('terminal.work.showFiles')}
+          aria-expanded={false}
+          aria-controls="terminais-explorer"
+          title={translate('terminal.work.showFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}
+        >
+          <PanelRightOpen size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span className="terminais-edge__summary">
+            {gitChanges ? <span className="terminais-edge__count">{gitChanges.toLocaleString(getLocale())}</span> : null}
+          </span>
+        </button>
       )}
       {pickerNode}
       {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={translate('terminal.menu.sessionActions')} /> : null}

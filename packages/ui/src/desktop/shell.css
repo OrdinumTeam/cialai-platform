@@ -228,7 +228,12 @@
 
 /* ── base ───────────────────────────────────────────────────────── */
 
-:is([data-shell="desktop"],[data-platform="macos"]),:is([data-shell="desktop"],[data-platform="macos"]) body{background:transparent!important}
+/* Fundo opaco por padrão e transparente só no macOS, onde o vibrancy da janela
+   precisa aparecer atrás do conteúdo. A janela do Windows nasce com
+   `transparent: true` e, sem Mica, no Windows 10, uma página que ainda não
+   pintou deixava a janela vazada. */
+:is([data-shell="desktop"],[data-platform="macos"]),:is([data-shell="desktop"],[data-platform="macos"]) body{background:var(--mac-bg)}
+[data-platform="macos"],[data-platform="macos"] body{background:transparent!important}
 :is([data-shell="desktop"],[data-platform="macos"]) body{display:block;overflow:hidden;font-family:var(--mac-font);font-size:13px;line-height:1.45;letter-spacing:0;font-feature-settings:normal;color:var(--mac-label);transition:color var(--mac-normal) var(--mac-ease)}
 [data-platform="macos"] body{-webkit-font-smoothing:antialiased}
 :is([data-shell="desktop"],[data-platform="macos"]) #root{height:100%}

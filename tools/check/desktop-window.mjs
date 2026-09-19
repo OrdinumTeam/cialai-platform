@@ -41,7 +41,38 @@ for (const contract of [
   /fn is_wayland_session/,
   /fn mica_supported/,
   /MICA_MIN_BUILD: u32 = 22621/,
+  /fn rescue_plan\(interface_ready: bool, decorated: bool\)/,
+  /static INTERFACE_READY: AtomicBool/,
 ]) assert.match(windowMod, contract, `contrato ausente em window/mod.rs: ${contract}`);
+// A rede de segurança da abertura não pode depender de `is_visible`: toda
+// configuração de janela nasce com `visible: true`, então a guarda antiga
+// nunca agia e uma página que não montava deixava a janela presa no tamanho
+// de abertura, sem moldura, imóvel e sem botão de fechar no Windows.
+const rescue = windowMod.slice(windowMod.indexOf('pub fn decorate('), windowMod.indexOf('/// Troca o material de fundo'));
+assert.doesNotMatch(rescue, /is_visible/, 'a rede de segurança não pode se guiar pela visibilidade da janela');
+assert.match(rescue, /rescue_plan\(INTERFACE_READY\.load/, 'a rede de segurança decide por sinal positivo da interface');
+assert.match(rescue, /set_decorations\(true\)/, 'sem moldura própria, a do sistema é o último recurso');
+// Os dois comandos que só existem depois que o React montou marcam o sinal.
+const commands = read(`${tauri}/src/commands.rs`);
+for (const command of ['splash_ready', 'window_grow']) {
+  const body = commands.slice(commands.indexOf(`pub fn ${command}(`));
+  assert.match(body.slice(0, 220), /crate::window::mark_interface_ready\(\)/, `${command} precisa marcar o sinal da interface`);
+}
+
+// Estado inicial estático: enquanto `#root` está vazio a janela mostra um
+// fundo opaco da marca com região de arraste, escrito direto no HTML, antes de
+// qualquer bundle. Sem ele, um bundle que não carrega deixa a janela do
+// Windows vazada, imóvel e sem botão de fechar.
+const indexHtml = read('apps/desktop/index.html');
+assert.match(indexHtml, /<div id="boot"[^>]*data-tauri-drag-region/, 'o estado inicial precisa de região de arraste');
+assert.match(indexHtml, /#root:not\(:empty\) ~ #boot\s*\{\s*display:\s*none/, 'o estado inicial some sozinho quando o React monta');
+assert.match(indexHtml, /#boot\s*\{[^}]*background:\s*#[0-9A-Fa-f]{6}/, 'o estado inicial precisa de fundo opaco');
+assert.ok(indexHtml.indexOf('<div id="root">') < indexHtml.indexOf('<div id="boot"'), 'o irmão seguinte é o que o seletor ~ alcança');
+
+// A montagem do React não pode ficar presa numa promessa que nunca resolve.
+const desktopMain = read(`${ui}/desktop/main.jsx`);
+assert.match(desktopMain, /Promise\.race\(\[\s*initPlatform\(\)/, 'initPlatform disputa com um prazo');
+assert.doesNotMatch(desktopMain, /^await initPlatform\(\);$/m, 'um await sem prazo trava a interface');
 const windowsBackend = read(`${tauri}/src/window/windows.rs`);
 for (const contract of [/SetWindowPos/, /SWP_NOZORDER/, /SWP_NOACTIVATE/, /outer_position/, /outer_size/, /work_area/, /apply_mica/, /RtlGetVersion/]) {
   assert.match(windowsBackend, contract, `contrato ausente em window/windows.rs: ${contract}`);

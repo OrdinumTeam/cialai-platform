@@ -41,10 +41,12 @@ use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
 use super::EVENT_PTY_EXIT;
+use super::agent_profiles;
+use super::agent_state::{self, AgentTurn};
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, CommandLine, ProcSource, ProcState, SystemProcs};
 use super::pty::{self, CursorPosition, ShellFlavor};
-use super::resume;
+use super::resume::{self, AgentEvidence};
 
 const READ_BUFFER: usize = 16 * 1024;
 const COALESCE_WINDOW: Duration = Duration::from_millis(4);
@@ -134,14 +136,22 @@ pub struct TerminalView {
     pub revision: u64,
 }
 
+/// Nome, subtitulo, cor, fixacao e ordem de um card. O Rust e a fonte de
+/// verdade: computador e celular publicam e leem daqui, e `revision` resolve a
+/// disputa. Quem grava recebe a revisao nova; quem le adota a apresentacao
+/// quando a revisao recebida e maior que a conhecida.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 pub struct TerminalPresentation {
     pub name: String,
     pub subtitle: String,
     pub color: Option<String>,
     pub pinned: bool,
     pub order: u32,
+    /// Contador que so cresce, atribuido pelo Rust a cada gravacao. O cliente
+    /// nunca o escolhe: um campo ausente na entrada vira zero e e substituido.
+    #[serde(default)]
+    pub revision: u64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -204,6 +214,14 @@ pub struct SessionMetrics {
     pub agent_config_dir: Option<String>,
     pub agent_profile_name: Option<String>,
     pub shell_cwd: Option<String>,
+    /// Turno do agente desta sessao, lido dos arquivos que ele mesmo grava.
+    /// Quando existe, decide sozinho o estado do card.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_turn: Option<AgentTurn>,
+    /// Milissegundos desde a ultima saida do PTY, pelo relogio do computador.
+    /// `None` quando a sessao ainda nao produziu nada.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output_age_ms: Option<u64>,
 }
 
 enum Message {
@@ -228,6 +246,9 @@ struct OutputState {
     subscribers: HashMap<SubscriberKey, Subscriber>,
     history: VecDeque<u8>,
     sequence: u64,
+    /// Instante do ultimo lote de saida, medido no relogio do computador,
+    /// para todos os clientes concordarem sobre a idade dela.
+    last_output: Option<Instant>,
     /// Ate onde o historico ja foi limpo de consultas; o resto pode terminar
     /// num comeco de consulta cortado entre dois trechos.
     clean: usize,
@@ -300,6 +321,7 @@ impl OutputLink {
             let mut state = lock(&self.state);
             let bytes = if let InvokeResponseBody::Raw(data) = &body {
                 state.sequence += data.len() as u64;
+                state.last_output = Some(Instant::now());
                 state.history.extend(data);
                 let overflow = state.history.len().saturating_sub(SCROLLBACK_LIMIT);
                 state.history.drain(..overflow);
@@ -323,6 +345,11 @@ impl OutputLink {
                 self.detach(key);
             }
         }
+    }
+
+    /// Instante do ultimo lote de saida desta sessao.
+    fn last_output(&self) -> Option<Instant> {
+        lock(&self.state).last_output
     }
 
     /// Espera haver espaco para mais `bytes`. Devolve false se o canal foi
@@ -639,6 +666,14 @@ impl TerminalManager {
         )
     }
 
+    /// Troca a pasta pessoal do gerenciador, para um teste apontar para uma
+    /// arvore sintetica em vez do `HOME` de quem roda a suite.
+    #[cfg(test)]
+    fn with_home(mut self, home: PathBuf) -> Self {
+        self.home = home;
+        self
+    }
+
     #[cfg(test)]
     fn with_proc_source(notify_exit: ExitNotifier, procs: Arc<dyn ProcSource>) -> Self {
         Self::with_environment(
@@ -800,7 +835,9 @@ impl TerminalManager {
         ) else {
             return Err(tf("native.error.folderNotFoundPath", &[("path", &cwd)]));
         };
-        let cwd = dir.to_string_lossy().into_owned();
+        // A sessao publica a pasta na forma portatil, como o resto da
+        // interface espera; o proprio PTY continua abrindo em `dir`.
+        let cwd = platform::to_portable(&dir);
         let cols = cols.max(2);
         let rows = rows.max(1);
 
@@ -822,6 +859,30 @@ impl TerminalManager {
         {
             if is_inherited_agent_marker(&name) {
                 command.env_remove(&name);
+            }
+        }
+        // Conta escolhida na interface. Vem depois da limpeza de marcadores, e
+        // o cliente nunca manda variavel nem caminho: o servidor resolve a
+        // pasta a partir da propria preferencia e da pasta pessoal. Um perfil
+        // padrao ativo remove as variaveis; um nomeado as define. Se o arquivo
+        // de inicializacao do shell exportar a variavel, ele vence, e o card
+        // mostra a verdade lida do processo.
+        for (agent, id) in [
+            (
+                agent_profiles::Agent::Claude,
+                prefs.agents.active_profile.get("claude"),
+            ),
+            (
+                agent_profiles::Agent::Codex,
+                prefs.agents.active_profile.get("codex"),
+            ),
+        ] {
+            let Some(id) = id else { continue };
+            for (name, value) in agent_profiles::env_for(&self.home, agent, id) {
+                match value {
+                    Some(value) => command.env(name, value),
+                    None => command.env_remove(name),
+                }
             }
         }
         if needs_lang() {
@@ -972,6 +1033,63 @@ impl TerminalManager {
             })
     }
 
+    /// Abre um agente numa conta escolhida, no terminal que ja esta aberto.
+    ///
+    /// Um terminal vivo nao muda de ambiente, entao a troca acontece digitando
+    /// a linha com as variaveis na frente. So escreve com o shell no prompt e
+    /// sem processo em primeiro plano: no meio de um agente rodando, a linha
+    /// viraria texto na conversa dele.
+    pub fn launch_agent(&self, id: u32, agent: &str, profile_id: &str) -> Result<(), String> {
+        let kind =
+            agent_profiles::Agent::parse(agent).ok_or_else(|| t("native.error.agentUnknown"))?;
+        let slug = agent_profiles::slug_of(kind, profile_id)
+            .ok_or_else(|| t("native.error.profileUnknown"))?;
+        let dir = agent_profiles::dir_of(&self.home, kind, profile_id)
+            .filter(|dir| agent_profiles::is_profile_dir(dir, kind))
+            .ok_or_else(|| t("native.error.profileUnknown"))?;
+        let (flavor, busy) = {
+            let guard = self.lock();
+            let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
+            let foreground = pty::foreground_pid(
+                session.master.as_ref(),
+                session.info.pid,
+                self.procs.as_ref(),
+            );
+            let busy = foreground.is_some_and(|pgid| Some(pgid) != session.info.pid);
+            (session.info.shell_flavor, busy)
+        };
+        if busy {
+            return Err(t("native.error.shellBusy"));
+        }
+        // O perfil padrao abre o agente sem variavel nenhuma, para ele cair no
+        // proprio padrao; um nomeado leva caminho e nome, citados.
+        let portable = crate::platform::to_portable(&dir);
+        let line = match slug {
+            None => resume::launch_command(
+                if kind == agent_profiles::Agent::Claude {
+                    resume::CLAUDE
+                } else {
+                    resume::CODEX
+                },
+                None,
+                None,
+                flavor,
+            ),
+            Some(name) => resume::launch_command(
+                if kind == agent_profiles::Agent::Claude {
+                    resume::CLAUDE
+                } else {
+                    resume::CODEX
+                },
+                Some(&portable),
+                Some(name),
+                flavor,
+            ),
+        }
+        .ok_or_else(|| t("native.error.profileUnknown"))?;
+        self.write(id, format!("{line}\r").as_bytes())
+    }
+
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1052,7 +1170,8 @@ impl TerminalManager {
         Ok(view)
     }
 
-    pub fn presentation(&self, id: u32, presentation: TerminalPresentation) -> Result<(), String> {
+    /// Grava a apresentacao e devolve a revisao atribuida.
+    pub fn presentation(&self, id: u32, presentation: TerminalPresentation) -> Result<u64, String> {
         if presentation.name.chars().count() > 120
             || presentation.subtitle.chars().count() > 240
             || presentation
@@ -1073,13 +1192,20 @@ impl TerminalManager {
         {
             return Err(t("native.error.presentationInvalid"));
         }
-        self.lock()
-            .sessions
-            .get_mut(&id)
-            .ok_or_else(closed_error)?
+        let mut guard = self.lock();
+        let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
+        let revision = session
             .info
-            .presentation = Some(presentation);
-        Ok(())
+            .presentation
+            .as_ref()
+            .map(|current| current.revision)
+            .unwrap_or(0)
+            .saturating_add(1);
+        session.info.presentation = Some(TerminalPresentation {
+            revision,
+            ..presentation
+        });
+        Ok(revision)
     }
 
     pub fn subscribed_cwd(&self, id: u32, key: SubscriberKey) -> Result<String, String> {
@@ -1303,23 +1429,21 @@ impl TerminalManager {
     pub fn metrics(&self) -> Vec<SessionMetrics> {
         let source = self.procs.as_ref();
         source.refresh();
-        let targets: Vec<(u32, String, Option<u32>, Option<u32>)> = {
+        let targets: Vec<MetricsTarget> = {
             let guard = self.lock();
             guard
                 .sessions
                 .values()
-                .map(|session| {
-                    let foreground = pty::foreground_pid(
+                .map(|session| MetricsTarget {
+                    id: session.info.id,
+                    tag: session.info.tag.clone(),
+                    pid: session.info.pid,
+                    foreground_pgid: pty::foreground_pid(
                         session.master.as_ref(),
                         session.info.pid,
                         self.procs.as_ref(),
-                    );
-                    (
-                        session.info.id,
-                        session.info.tag.clone(),
-                        session.info.pid,
-                        foreground,
-                    )
+                    ),
+                    last_output: session.link.last_output(),
                 })
                 .collect()
         };
@@ -1330,7 +1454,19 @@ impl TerminalManager {
         let mut alive = Vec::new();
         let mut result = Vec::new();
         let mut codex_homes = Vec::new();
-        for (id, tag, pid, foreground_pgid) in targets {
+        for MetricsTarget {
+            id,
+            tag,
+            pid,
+            foreground_pgid,
+            last_output,
+        } in targets
+        {
+            let output_age_ms = last_output.map(|at| {
+                now.saturating_duration_since(at)
+                    .as_millis()
+                    .min(u128::from(u64::MAX)) as u64
+            });
             let Some(pid) = pid else {
                 result.push(SessionMetrics {
                     id,
@@ -1346,6 +1482,8 @@ impl TerminalManager {
                     agent_config_dir: None,
                     agent_profile_name: None,
                     shell_cwd: None,
+                    agent_turn: None,
+                    output_age_ms,
                 });
                 continue;
             };
@@ -1405,6 +1543,13 @@ impl TerminalManager {
             {
                 codex_homes.extend(found.config_dir.clone());
             }
+            // O estado do turno vem do arquivo do proprio agente, nunca de
+            // silencio ou de CPU. Sem agente na arvore, nao ha o que ler.
+            let agent_turn = agent
+                .is_some()
+                .then(|| resume::detect(pid, &tree, &mut commands, &home))
+                .flatten()
+                .and_then(|found| turn_of(&found.evidence));
 
             result.push(SessionMetrics {
                 id,
@@ -1424,6 +1569,8 @@ impl TerminalManager {
                     .as_ref()
                     .and_then(|profile| profile.name.clone()),
                 shell_cwd: source.cwd(pid),
+                agent_turn,
+                output_age_ms,
             });
         }
         samples.retain(|member, _| alive.contains(member));
@@ -1574,7 +1721,7 @@ fn snapshot(
         let agent = pid.and_then(|pid| {
             let mut tree = vec![pid];
             tree.extend(procs::descendants(pid));
-            resume::detect(pid, &tree, &mut lock(commands), home)
+            resume::detect(pid, &tree, &mut lock(commands), home).map(|found| found.session)
         });
         store.write_meta(&SavedMeta::sample(&tag, &cwd, cols, rows, agent), || {
             lock(inner)
@@ -1582,6 +1729,24 @@ fn snapshot(
                 .get(&id)
                 .is_some_and(|session| session.info.pid == pid)
         });
+    }
+}
+
+/// Alvo de uma amostra de metricas, colhido dentro do lock das sessoes para
+/// as chamadas ao kernel ficarem fora dele.
+struct MetricsTarget {
+    id: u32,
+    tag: String,
+    pid: Option<u32>,
+    foreground_pgid: Option<u32>,
+    last_output: Option<Instant>,
+}
+
+/// Turno do agente pelo arquivo que a deteccao apontou.
+fn turn_of(evidence: &AgentEvidence) -> Option<AgentTurn> {
+    match evidence {
+        AgentEvidence::ClaudeRecord(path) => agent_state::claude_turn(path),
+        AgentEvidence::CodexRollout(path) => agent_state::codex_turn(path),
     }
 }
 
@@ -2276,6 +2441,365 @@ mod tests {
             }
         }
         (output, None)
+    }
+
+    /// Pasta temporaria propria deste teste, sempre sintetica: nenhum
+    /// registro ou credencial real e lido aqui.
+    fn scratch(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "cialai-turno-{name}-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn claude_record_at(dir: &Path, pid: u32, body: serde_json::Value) -> PathBuf {
+        let sessions = dir.join("sessions");
+        std::fs::create_dir_all(&sessions).unwrap();
+        let path = sessions.join(format!("{pid}.json"));
+        std::fs::write(&path, body.to_string()).unwrap();
+        path
+    }
+
+    fn rollout_at(dir: &Path, name: &str, events: &[&str]) -> PathBuf {
+        let day = dir.join("sessions/2026/09/18");
+        std::fs::create_dir_all(&day).unwrap();
+        let path = day.join(name);
+        let body = events
+            .iter()
+            .map(|kind| format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"{kind}\"}}}}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, format!("{body}\n")).unwrap();
+        path
+    }
+
+    #[test]
+    fn the_claude_record_decides_the_turn_and_only_a_stamped_idle_counts_as_answered() {
+        let dir = scratch("claude");
+        let started = 1_789_000_000_000u64;
+
+        let busy = claude_record_at(
+            &dir,
+            11,
+            serde_json::json!({"pid":11,"cwd":"/p","status":"busy","startedAt":started,"statusUpdatedAt":started + 500}),
+        );
+        let turn = turn_of(&AgentEvidence::ClaudeRecord(busy)).expect("turno");
+        assert_eq!(turn.state, agent_state::TurnState::Busy);
+        assert_eq!(turn.since_ms, started + 500);
+
+        let waiting = claude_record_at(
+            &dir,
+            12,
+            serde_json::json!({"pid":12,"cwd":"/p","status":"waiting","waitingFor":"permission","startedAt":started,"statusUpdatedAt":started + 900}),
+        );
+        let turn = turn_of(&AgentEvidence::ClaudeRecord(waiting)).expect("turno");
+        assert_eq!(turn.state, agent_state::TurnState::Waiting);
+        assert_eq!(turn.waiting_for.as_deref(), Some("permission"));
+
+        // Sessao recem aberta: o carimbo de estado e o proprio inicio.
+        let fresh = claude_record_at(
+            &dir,
+            13,
+            serde_json::json!({"pid":13,"cwd":"/p","status":"idle","startedAt":started}),
+        );
+        assert_eq!(
+            turn_of(&AgentEvidence::ClaudeRecord(fresh)).map(|turn| turn.state),
+            Some(agent_state::TurnState::Idle)
+        );
+
+        // Mesmo `idle`, mas depois de um turno: o carimbo andou.
+        let answered = claude_record_at(
+            &dir,
+            14,
+            serde_json::json!({"pid":14,"cwd":"/p","status":"idle","startedAt":started,"statusUpdatedAt":started + 60_000}),
+        );
+        assert_eq!(
+            turn_of(&AgentEvidence::ClaudeRecord(answered)).map(|turn| turn.state),
+            Some(agent_state::TurnState::Done)
+        );
+
+        // Registro que nao diz nada que se entenda nao vira turno nenhum.
+        let mute = claude_record_at(
+            &dir,
+            15,
+            serde_json::json!({"pid":15,"cwd":"/p","entrypoint":"claude-desktop","startedAt":started}),
+        );
+        assert!(turn_of(&AgentEvidence::ClaudeRecord(mute)).is_none());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn two_codex_rollouts_in_one_profile_get_independent_turns() {
+        let dir = scratch("codex");
+        let working = rollout_at(
+            &dir,
+            "rollout-2026-09-18T10-00-00-aaaa.jsonl",
+            &["task_started"],
+        );
+        let answered = rollout_at(
+            &dir,
+            "rollout-2026-09-18T10-05-00-bbbb.jsonl",
+            &["task_started", "item_completed", "task_complete"],
+        );
+        let aborted = rollout_at(
+            &dir,
+            "rollout-2026-09-18T10-06-00-cccc.jsonl",
+            &["task_started", "turn_aborted"],
+        );
+
+        assert_eq!(
+            turn_of(&AgentEvidence::CodexRollout(working)).map(|turn| turn.state),
+            Some(agent_state::TurnState::Busy)
+        );
+        // A segunda conversa do mesmo perfil nao herda o estado da primeira.
+        assert_eq!(
+            turn_of(&AgentEvidence::CodexRollout(answered)).map(|turn| turn.state),
+            Some(agent_state::TurnState::Done)
+        );
+        // Turno abortado nao e conclusao: a conversa volta a aberta e parada.
+        assert_eq!(
+            turn_of(&AgentEvidence::CodexRollout(aborted)).map(|turn| turn.state),
+            Some(agent_state::TurnState::Idle)
+        );
+        assert!(turn_of(&AgentEvidence::CodexRollout(dir.join("nao-existe.jsonl"))).is_none());
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn metrics_carry_the_age_of_the_last_output_and_serialize_the_new_fields() {
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                CursorPosition::default(),
+                "t_age",
+                SubscriberKey::Webview,
+                sink,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+        let mut queries = LaterCursorQueries::new("age", &manager, info.id);
+        let mut output = Vec::new();
+        manager.write(info.id, b"echo idade-da-saida\n").unwrap();
+        assert!(collect_until_printed(
+            &rx,
+            &mut queries,
+            &mut output,
+            "idade-da-saida"
+        ));
+
+        let sample = manager
+            .metrics()
+            .into_iter()
+            .find(|metrics| metrics.tag == "t_age")
+            .expect("metrica da sessao");
+        let age = sample.output_age_ms.expect("idade da ultima saida");
+        assert!(age < 20_000, "a saida acabou de chegar, veio {age} ms");
+        // Um shell parado no prompt nao tem agente e, portanto, nao tem turno.
+        assert!(sample.agent_turn.is_none());
+
+        let json = serde_json::to_value(&sample).unwrap();
+        assert!(json.get("outputAgeMs").is_some(), "camelCase no protocolo");
+        assert!(
+            json.get("agentTurn").is_none(),
+            "campo ausente nao vai no fio"
+        );
+
+        manager.kill(info.id).ok();
+        let _ = rx;
+    }
+
+    /// Contrato de barra normal na fronteira do PTY. No Windows a pasta
+    /// resolvida vem com barra invertida e, publicada crua, nunca casava com o
+    /// que o explorador e os recentes guardavam.
+    /// Conta escolhida na interface chega ao shell novo como variavel de
+    /// ambiente. O cliente nunca manda caminho: a pasta sai da preferencia e
+    /// da pasta pessoal, e uma pasta sem marcador nao muda nada.
+    #[test]
+    fn the_active_profile_reaches_the_new_shell_as_environment() {
+        let home = scratch("perfil-ativo");
+        std::fs::create_dir_all(home.join(".codex-work")).unwrap();
+        std::fs::write(home.join(".codex-work/auth.json"), "{}").unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        std::fs::write(home.join(".codex/config.toml"), "").unwrap();
+
+        let echo = |prefs: &Preferences, tag: &'static str| -> String {
+            let manager = TerminalManager::with_notifier(Arc::new(|_| {})).with_home(home.clone());
+            let shell = pty::TestShell::isolated();
+            let (tx, rx) = channel::<InvokeResponseBody>();
+            let sink = Channel::new(move |body| {
+                let _ = tx.send(body);
+                Ok(())
+            });
+            let info = manager
+                .spawn_for_with_spec(
+                    shell.cwd(),
+                    80,
+                    24,
+                    CursorPosition::default(),
+                    tag,
+                    SubscriberKey::Webview,
+                    sink,
+                    shell.spec(),
+                    prefs,
+                )
+                .expect("spawn");
+            let mut queries = LaterCursorQueries::new(tag, &manager, info.id);
+            let mut output = Vec::new();
+            manager
+                .write(info.id, b"echo \"casa=[$CODEX_HOME]\"\n")
+                .unwrap();
+            assert!(
+                collect_until_printed(&rx, &mut queries, &mut output, "casa=["),
+                "{tag}: o shell nao respondeu dentro do prazo"
+            );
+            manager.kill(info.id).ok();
+            String::from_utf8_lossy(&output).to_string()
+        };
+
+        let mut named = Preferences::default();
+        named.agents.active_profile.set("codex", "codex-work");
+        let seen = echo(&named, "t_perfil_nomeado");
+        assert!(
+            seen.contains(&format!(
+                "casa=[{}]",
+                crate::platform::to_portable(home.join(".codex-work"))
+            )),
+            "o perfil nomeado define CODEX_HOME: {seen}"
+        );
+
+        // Perfil padrao ativo remove a variavel, para o agente cair no proprio
+        // padrao dele.
+        let mut default = Preferences::default();
+        default.agents.active_profile.set("codex", "codex");
+        assert!(echo(&default, "t_perfil_padrao").contains("casa=[]"));
+
+        // Sem escolha, e com pasta que nao existe, nada e tocado.
+        assert!(echo(&Preferences::default(), "t_sem_perfil").contains("casa=[]"));
+        let mut missing = Preferences::default();
+        missing.agents.active_profile.set("codex", "codex-sumiu");
+        assert!(echo(&missing, "t_perfil_sumido").contains("casa=[]"));
+
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    /// A apresentacao e do card, e o Rust e a fonte de verdade dela. Cada
+    /// gravacao recebe uma revisao maior, e e por ela que computador e celular
+    /// decidem quem venceu sem um apagar o nome do outro.
+    #[test]
+    fn every_presentation_write_gets_a_higher_revision() {
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                CursorPosition::default(),
+                "t_presentation",
+                SubscriberKey::Webview,
+                sink,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+
+        let card = |name: &str| TerminalPresentation {
+            name: name.to_string(),
+            subtitle: String::new(),
+            color: None,
+            pinned: false,
+            order: 0,
+            // O cliente nunca escolhe a revisao; o valor enviado e ignorado.
+            revision: 999,
+        };
+        assert_eq!(manager.presentation(info.id, card("primeiro")), Ok(1));
+        assert_eq!(manager.presentation(info.id, card("segundo")), Ok(2));
+        assert_eq!(manager.presentation(info.id, card("terceiro")), Ok(3));
+
+        let listed = manager
+            .list()
+            .into_iter()
+            .find(|item| item.tag == "t_presentation")
+            .expect("sessao na lista");
+        let presentation = listed.presentation.expect("apresentacao publicada");
+        assert_eq!(presentation.name, "terceiro");
+        assert_eq!(presentation.revision, 3);
+        assert_eq!(
+            serde_json::to_value(&presentation).unwrap()["revision"],
+            serde_json::json!(3)
+        );
+
+        // Nome invalido nao grava e nao consome revisao.
+        let invalid = TerminalPresentation {
+            name: "com\u{0007}sino".to_string(),
+            ..card("x")
+        };
+        assert!(manager.presentation(info.id, invalid).is_err());
+        assert_eq!(manager.presentation(info.id, card("quarto")), Ok(4));
+
+        manager.kill(info.id).ok();
+        let _ = rx;
+    }
+
+    #[test]
+    fn the_session_publishes_its_folder_in_the_portable_form() {
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        let shell = pty::TestShell::isolated();
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                80,
+                24,
+                CursorPosition::default(),
+                "t_portable",
+                SubscriberKey::Webview,
+                sink,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+        assert!(
+            !info.cwd.contains('\\'),
+            "a pasta da sessao nao pode sair com barra invertida: {}",
+            info.cwd
+        );
+        #[cfg(windows)]
+        assert!(
+            info.cwd.as_bytes().get(1) == Some(&b':') && info.cwd.contains('/'),
+            "no Windows a pasta sai como C:/..., e nao como C:\\...: {}",
+            info.cwd
+        );
+        manager.kill(info.id).ok();
+        let _ = rx;
     }
 
     #[test]

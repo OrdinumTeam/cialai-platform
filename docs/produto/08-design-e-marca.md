@@ -115,6 +115,29 @@ Dezoito tons de `lib/organization-colors.js`, cada um com versão clara e escura
 
 Card com cor: gradiente a 135 graus de 10 para 4 por cento do acento no claro e 15 para 6 no escuro, com hover em 14 para 7 e 20 para 10. Filete lateral de 3 px marca a seleção. Barras de atividade de 2 px com gradiente de 55 por cento de branco até o acento, animação `terminaisBars` de 1,1 s escalonada em 0,18 e 0,36 s, desligada com menos movimento.
 
+### Quando o indicador de atividade anima
+
+As três barras significam processamento acontecendo agora. Fora disso o indicador é um ponto parado. A decisão é de `packages/ui/src/terminals/activity-state.js`, função `deriveActivity`, e vale igual no card da lista, no cabeçalho do computador e no cabeçalho do celular, que usam o mesmo componente `ActivityIndicator`.
+
+| Situação | Código | Indicador |
+| --- | --- | --- |
+| Agente com turno em andamento | `agent-busy` | Barras animadas |
+| Agente parou para perguntar | `agent-waiting` | Ponto, tom de atenção |
+| Agente terminou o turno | `agent-done` | Ponto |
+| Agente aberto sem turno | `agent-idle` | Ponto |
+| Processo sem sinal próprio, com saída recente ou CPU acima do piso | `active` | Barras animadas |
+| Processo sem sinal próprio, quieto | `open` | Ponto apagado |
+| Processo parado por sinal | `stopped` | Ponto, tom de atenção |
+| Shell no prompt | `idle` | Ponto |
+
+Três regras fecham o comportamento. Um agente reconhecido decide sozinho, e nem saída nem CPU o contradizem. Silêncio nunca vira concluído: um `sleep 300` aparece como processo aberto, não como terminado. E sem amostra nova de `pty_metrics` desde a conexão atual nada anima, o que impede uma sessão de continuar respirando depois que a ponte cai.
+
+### Painel recolhido
+
+Uma coluna recolhida sai da tela por `display: none`, então o único vestígio dela é a faixa da lateral. A faixa tem 28 px de largura mínima, é inteira clicável e leva o ícone do par correspondente com 16 px no topo, `PanelLeftOpen` à esquerda e `PanelRightOpen` à direita, mais um resumo do que está escondido: nas sessões o total e o selo de avisos pendentes, nos arquivos o total de alterações do Git. A dica traz o nome do painel e o atalho, e o alvo declara `aria-expanded` e `aria-controls`.
+
+A largura não anima, pela regra de movimento acima: recolher e reabrir é troca de layout, não transição. Além da faixa, o cabeçalho da área de trabalho tem dois alternadores sempre visíveis, sessões à esquerda e arquivos à direita, com `aria-pressed`, para o caminho de volta estar sempre no mesmo lugar. Na primeira vez que cada coluna é recolhida, um aviso diz onde reabri la; a marca fica no mesmo registro de layout e o aviso não volta. No modo foco a faixa fica discreta e o resumo some, mas o alvo continua alcançável por teclado.
+
 ## Tipografia por sistema
 
 | Sistema | Interface | Mono |

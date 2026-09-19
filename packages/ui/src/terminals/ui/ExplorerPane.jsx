@@ -15,7 +15,7 @@ import {
   FolderOpen, FolderPlus, Locate, PanelRightClose, RefreshCw, Search, X,
 } from 'lucide-react';
 import Menu, { anchorFromEvent } from './Menu.jsx';
-import { baseName, compactPath, dirName, extensionOf, fileKind, freeName, fs, git, isInside, joinPath, relativePath, shortPath } from '../files.js';
+import { baseName, compactPath, dirName, extensionOf, fileKind, freeName, fs, git, isAbsolutePath, isInside, joinPath, relativePath, shortPath } from '../files.js';
 import { beginDrag, inside, nativeDragOutPath, onDrag, wasDragged } from '../drag.js';
 import { markExplorerChanged, setExplorerRoot, setFollowCwd, subscribeChanges, unwatchPath, watchPath } from '../runtime.js';
 import { retargetTabs } from '../editor.js';
@@ -63,7 +63,7 @@ function isDirEntry(entry) {
   return entry.kind === 'dir' || entry.targetKind === 'dir';
 }
 
-export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, notify, revealRequest, onCollapse }) {
+export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, onShowInGraph, notify, revealRequest, onCollapse }) {
   useI18n();
   const explorer = session.explorer;
   const root = explorer.root;
@@ -394,10 +394,12 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     }
   }, [root, explorer, sessionId, loadDir, scheduleGit, notify]);
 
-  // Itens vindos do Finder ou de outro app entram sempre como copia.
+  // Itens vindos do gerenciador de arquivos do sistema entram sempre como
+  // copia. No Windows o caminho chega como `C:\\Users\\...`, entao a guarda
+  // aceita letra de unidade e compartilhamento de rede, nao so a barra inicial.
   const importPaths = useCallback(async (paths, dir) => {
     for (const source of paths) {
-      if (typeof source !== 'string' || !source.startsWith('/')) continue;
+      if (typeof source !== 'string' || !isAbsolutePath(source)) continue;
       // eslint-disable-next-line no-await-in-loop
       await dropInto(source, dir, { copy: true });
     }
@@ -469,6 +471,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       change && !dir ? { id: 'diff', label: translate('terminal.explorer.compareChanges'), run: () => onOpenDiff(gitIndex.status.root, entry.path) } : null,
       { separator: true },
       dir ? { id: 'session', label: translate('terminal.explorer.newSessionHere'), run: () => onNewSessionAt(entry.path) } : null,
+      onShowInGraph && (dir || /\.md$/i.test(entry.name)) ? { id: 'docgraph', label: translate('terminal.docgraph.showInGraph'), run: () => onShowInGraph(entry.path) } : null,
       { id: 'insert', label: translate('terminal.explorer.insertPath'), run: () => onInsertPath(entry.path) },
       { id: 'copy', label: translate('terminal.explorer.copyPath'), run: () => copyPath(entry.path, false) },
       { id: 'copy-rel', label: translate('terminal.explorer.copyRelativePath'), run: () => copyPath(entry.path, true) },
@@ -565,7 +568,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const gitStatus = gitIndex.status;
 
   return (
-    <aside className="terminais-explorer" aria-label={translate('terminal.explorer.projectFiles')}>
+    <aside className="terminais-explorer" id="terminais-explorer" aria-label={translate('terminal.explorer.projectFiles')}>
       <div className="terminais-pane__head">
         <span className="terminais-pane__title">{translate('terminal.explorer.files')}</span>
         <span className="terminais-pane__count" title={shortPath(root)}>{baseName(root)}</span>
@@ -575,7 +578,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label={translate('terminal.explorer.refresh')} title={translate('terminal.explorer.refreshTitle')}><RefreshCw size={13} strokeWidth={1.75} /></button>
         <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label={translate('terminal.explorer.collapseAll')} title={translate('terminal.explorer.collapseAll')}><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
         <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label={translate('terminal.explorer.searchByName')} aria-pressed={searching} title={translate('terminal.explorer.searchName')}><Search size={13} strokeWidth={2} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.explorer.collapseFiles')} title={translate('terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><PanelRightClose size={14} strokeWidth={1.75} /></button>
+        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.explorer.collapseFiles')} title={translate('terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><PanelRightClose size={16} strokeWidth={1.75} /></button>
       </div>
       {gitStatus?.isRepo ? (
         <div className="terminais-explorer__git" title={gitStatus.upstream ? translate('terminal.explorer.tracks', { upstream: gitStatus.upstream }) : translate('terminal.explorer.noRemote')}>
