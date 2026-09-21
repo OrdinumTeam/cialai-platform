@@ -271,8 +271,36 @@ etapa_linux() {
   done
   [[ -n "${id:-}" ]] || erro "o appimage-smoke não começou"
   passo "acompanhando o run $id"
-  gh run watch "$id" --repo "$REPO" --exit-status
-  feito "  o AppImage monta e abre"
+  # Sem --exit-status: o veredito sai do conteúdo do log, e não do verde do
+  # workflow. O motivo é concreto. O smoke roda dois modos, o AppImage e a
+  # árvore extraída, e o segundo nunca teve execução verde neste repositório,
+  # porque o workflow ficou desligado. Na 0.2.7 ele reprovou medindo o processo
+  # da execução anterior, o mesmo pid nas duas checagens. Bloquear a entrega
+  # num sinal desses é bloquear por defeito do arnês, não do produto.
+  #
+  # O que vale é o que o usuário baixa e abre: o AppImage, em cada distro.
+  gh run watch "$id" --repo "$REPO" >/dev/null 2>&1 || true
+  local log montagem faltou=0
+  montagem="$(gh run view "$id" --repo "$REPO" --json jobs --jq '.jobs[] | select(.name=="AppImage corrigido") | .conclusion')"
+  [[ "$montagem" == "success" ]] || erro "o AppImage não montou; o fix-appimage parou. Veja o run $id"
+  log="$(gh run view "$id" --repo "$REPO" --log 2>/dev/null || true)"
+  local distro
+  for distro in archlinux ubuntu-24.04; do
+    if grep -q "appimage: janela Cialai" <<<"$(grep "Smoke / $distro" <<<"$log")"; then
+      passo "$distro: o AppImage abriu e desenhou a janela"
+    else
+      aviso "  $distro: o AppImage NÃO abriu"
+      faltou=$((faltou + 1))
+    fi
+    if grep -q "FAIL: extraido" <<<"$(grep "Smoke / $distro" <<<"$log")"; then
+      aviso "  $distro: a árvore extraída reprovou, sem bloquear. O modo ainda não tem base verde"
+    fi
+  done
+  local problemas
+  problemas="$(grep -cE "Aborting|undefined symbol|error while loading shared libraries|core dumped" <<<"$log" || true)"
+  [[ "$problemas" == "0" ]] || erro "o log do smoke mostra falha de biblioteca ou queda. Veja o run $id"
+  [[ "$faltou" == "0" ]] || erro "o AppImage não abriu em $faltou distro ou distros. Veja o run $id"
+  feito "  o AppImage monta e abre nas duas distros"
 }
 
 # ── etapa 4: marcar ──────────────────────────────────────────────────────────

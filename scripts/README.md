@@ -17,7 +17,7 @@ impedimentos. Nada sai para fora nesse modo.
 | --- | --- | --- |
 | 1 `preparar` | Grava a versão nos nove arquivos que a carregam, refaz os lockfiles, exige a página da release e roda `npm test`, os checks de navegador, o orçamento de desempenho e os portões de release | Local, reversível |
 | 2 `enviar` | Commita e envia a main | **Público**, mas ainda não dispara release |
-| 3 `linux` | Constrói e abre o AppImage pelo `appimage-smoke`, antes da tag | Portão |
+| 3 `linux` | Constrói e abre o AppImage pelo `appimage-smoke`, antes da tag. Exige o AppImage abrindo em cada distro, que é o que o usuário baixa; relata a árvore extraída sem bloquear enquanto ela não tiver base verde | Portão |
 | 4 `marcar` | Cria e envia a tag `vX.Y.Z` | A tag dispara o `release.yml` |
 | 5 `desktop` | Acompanha o `release.yml` até a release sair do rascunho | macOS arm64 e Intel, Linux, Windows |
 | 6 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |

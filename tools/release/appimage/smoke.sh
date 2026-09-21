@@ -87,11 +87,35 @@ bundle_process() {
   return 1
 }
 
+# Encerra app e sidecar pelo nome, e espera sumirem.
+#
+# Encerrar por grupo de processo nao alcanca nenhum dos dois: o comando roda
+# sob `setsid`, que abre um grupo novo, e o app cria o sidecar com
+# `process_group(0)`, que abre outro. Sem isto a execucao seguinte encontrava o
+# processo da anterior e o relatorio culpava o produto por um defeito daqui.
+encerrar_sobras() {
+  local sinal tentativa
+  for sinal in TERM KILL; do
+    pkill -"$sinal" -x cialai-desktop 2>/dev/null || true
+    pkill -"$sinal" -x cialai-tunnel 2>/dev/null || true
+    for tentativa in 1 2 3 4 5; do
+      if ! pgrep -x cialai-desktop >/dev/null 2>&1 && ! pgrep -x cialai-tunnel >/dev/null 2>&1; then
+        return 0
+      fi
+      sleep 1
+    done
+  done
+  return 0
+}
+
 launch() {
   local name="$1" dir="$2"
   shift 2
   local log="$logs/$name.log" home="$work/home-$name"
   mkdir -p "$home"
+  # Nada da execucao anterior pode estar vivo, senao o pgrep abaixo encontra o
+  # veterano e a verificacao mede a execucao errada.
+  encerrar_sobras
   echo "== $name: $* a partir de $dir"
   (
     cd "$dir"
@@ -173,13 +197,7 @@ launch() {
     wait "$group" 2>/dev/null || true
   fi
 
-  # O app cria o sidecar com process_group(0), então o cialai-tunnel fica num
-  # grupo próprio e o kill acima não o alcança. Sobrevivendo, ele continua com
-  # a UDP 4740 e as portas do Tor, e a execução seguinte não sobe. Encerrar
-  # aqui é o que torna as duas execuções independentes de verdade.
-  pkill -x cialai-tunnel 2>/dev/null || true
-  sleep 1
-  pkill -KILL -x cialai-tunnel 2>/dev/null || true
+  encerrar_sobras
 
   local problems
   problems="$(grep -En 'Aborting|undefined symbol|symbol lookup error|error while loading shared libraries|Failed to load module: |Unable to spawn a new child process|core dumped|EGL_BAD_' "$log" || true)"
