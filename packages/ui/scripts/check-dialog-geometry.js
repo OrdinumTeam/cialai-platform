@@ -114,7 +114,29 @@ async function main() {
     assert(grade.split(' ').length === 2, `folha de ${Math.round(folhaPar.getBoundingClientRect().width)}px e o pareamento caiu para uma coluna, veio ${grade}`);
   }
 
-  document.title = `PASS: Cialai dialog geometry at ${window.innerWidth}x${window.innerHeight}, ${contas} accounts in a ${LARGURA.md}px sheet, body scrolls inside, sections measure the sheet`;
+  // Por último, o caso que quebrou a 0.2.7 na máquina de verdade: o estilo que
+  // o MUI injeta em tempo de execução não aplicou, e o diálogo caiu no fluxo do
+  // documento, no canto de baixo, sem véu. Derrubar as folhas do emotion aqui
+  // reproduz isso sem depender de a falha acontecer sozinha. Vem por último
+  // porque destrói o resto da página.
+  const folhas = [...document.querySelectorAll('style[data-emotion]')];
+  assert(folhas.length > 0, 'nenhuma folha do emotion na página; a simulação não valeria');
+  for (const folha of folhas) folha.remove();
+  await pause(300);
+  const orfa = document.querySelector('.MuiDialog-paper');
+  assert(orfa, 'sem emotion: a folha sumiu');
+  const raiz = document.querySelector('.MuiDialog-root');
+  assert(getComputedStyle(raiz).position === 'fixed', 'sem emotion: o diálogo saiu da camada fixa e caiu no fluxo do documento');
+  const caixa = getComputedStyle(document.querySelector('.MuiDialog-container'));
+  assert(caixa.alignItems === 'center' && caixa.justifyContent === 'center', 'sem emotion: a folha deixou de ser centralizada');
+  const veuOrfao = getComputedStyle(document.querySelector('.MuiBackdrop-root'));
+  assert(veuOrfao.position === 'fixed', 'sem emotion: o véu saiu da camada fixa');
+  assert(!/rgba\(0, 0, 0, 0\)|transparent/.test(veuOrfao.backgroundColor), `sem emotion: o véu ficou sem cor, ${veuOrfao.backgroundColor}`);
+  const sem = orfa.getBoundingClientRect();
+  assert(Math.abs(sem.width - LARGURA.md) <= 1, `sem emotion: papel com ${Math.round(sem.width)}px de largura`);
+  assert(sem.top >= -1 && sem.bottom <= window.innerHeight + 1 && sem.left >= -1, `sem emotion: folha fora da janela, topo ${Math.round(sem.top)} esquerda ${Math.round(sem.left)}`);
+
+  document.title = `PASS: Cialai dialog geometry at ${window.innerWidth}x${window.innerHeight}, ${contas} accounts in a ${LARGURA.md}px sheet, body scrolls inside, sections measure the sheet, and it survives losing the runtime styles`;
 }
 
 main().catch((error) => {

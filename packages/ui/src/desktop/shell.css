@@ -944,7 +944,7 @@
    sobrevive a essa falha. Os numeros vivem em components/modal-geometry.js e
    tools/check/dialog-geometry.mjs impede que os dois lados divirjam.
    A pagina do celular sobrepoe tudo isto com !important, em mobile/mobile.css. */
-:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal]{width:var(--mac-modal-w,520px);max-width:calc(100vw - 48px);max-height:min(660px,calc(100dvh - 96px))}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal]{position:relative;display:flex;flex-direction:column;margin:32px;overflow-y:auto;background:var(--mac-surface);color:var(--mac-label);width:var(--mac-modal-w,520px);max-width:calc(100vw - 48px);max-height:min(660px,calc(100dvh - 96px))}
 :is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="xs"]{--mac-modal-w:400px}
 :is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="sm"]{--mac-modal-w:520px}
 :is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="md"]{--mac-modal-w:700px}
@@ -953,6 +953,19 @@
 /* O corpo da folha e o contêiner que as secoes medem. Sem isto elas mediriam
    a janela, que nao tem relacao com a largura do papel. */
 :is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal] .MuiDialogContent-root{container-type:inline-size;container-name:sheet}
+
+/* A folha também não pode depender do emotion para SE POSICIONAR.
+   O tamanho já saiu daqui; faltava a posição, e sem ela o diálogo cai no fluxo
+   do documento e aparece no canto de baixo, sem véu, atrás de tudo. Foi assim
+   que a folha de pareamento apareceu na 0.2.7 instalada.
+   Os valores são os mesmos que o MUI usa, então quando o emotion está presente
+   nada muda; quando falta, o diálogo continua sendo um diálogo. */
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-root{position:fixed;inset:0;z-index:1300}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-container{display:flex;align-items:center;justify-content:center;height:100%;outline:0}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiBackdrop-root{position:fixed;inset:0;-webkit-tap-highlight-color:transparent}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal] .MuiDialogTitle-root{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 10px;font-size:15px;font-weight:600}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal] .MuiDialogContent-root{flex:1 1 auto;padding:12px 20px 16px;overflow-y:auto}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal] .MuiDialogActions-root{flex:0 0 auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 20px 16px}
 :is([data-shell="desktop"],[data-platform="macos"]) [class*="-kicker"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-label"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-lbl"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-hdr"]{text-transform:none;letter-spacing:0}
 
 /* ── utilidades ─────────────────────────────────────────────────── */
