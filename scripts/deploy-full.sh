@@ -254,6 +254,13 @@ etapa_linux() {
     passo "faria: disparar o appimage-smoke na main e esperar"
     return 0
   fi
+  # O portão só serve se o workflow estiver ligado. Ele já esteve desligado, e
+  # foi por isso que a mudança de layout do AppDir chegou até a tag.
+  local estado
+  estado="$(gh workflow list --repo "$REPO" --all --json name,state --jq '.[] | select(.name=="AppImage smoke") | .state')"
+  if [[ "$estado" != "active" ]]; then
+    erro "o workflow AppImage smoke está $estado. Ligue com: gh workflow enable appimage-smoke.yml --repo $REPO"
+  fi
   local antes depois id
   antes="$(gh run list --repo "$REPO" --workflow appimage-smoke.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
   gh workflow run appimage-smoke.yml --repo "$REPO" --ref main
