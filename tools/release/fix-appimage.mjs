@@ -72,16 +72,26 @@ export function bundleRunpath(path) {
   return up ? `$ORIGIN/${up}` : '$ORIGIN';
 }
 
-// Caminhos que o AppRun próprio usa; se o layout do linuxdeploy mudar, a correção para aqui.
+// Caminhos que o AppRun próprio usa. Cada item é uma lista de alternativas,
+// porque o linuxdeploy ora grava os módulos do GTK, do gdk-pixbuf e do GIO em
+// `usr/lib/x86_64-linux-gnu`, ora direto em `usr/lib`, sem o diretório da
+// arquitetura. O WebKit, até aqui, ficou sempre no primeiro. Exigir um layout
+// só derrubava a release quando o bundler mudava de ideia, que foi o que
+// aconteceu entre a 0.2.6 e a 0.2.7. Se nenhuma alternativa existir, a
+// correção para: aí o layout mudou de verdade.
+const ARCH_LIB = 'usr/lib/x86_64-linux-gnu';
+const PLAIN_LIB = 'usr/lib';
+const nosDoisLugares = (resto) => [`${ARCH_LIB}/${resto}`, `${PLAIN_LIB}/${resto}`];
+
 export const APPRUN_PATHS = Object.freeze([
-  'usr/bin/cialai-desktop',
-  'usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess',
-  'usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess',
-  'usr/lib/x86_64-linux-gnu/gtk-3.0/3.0.0/immodules.cache',
-  'usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache',
-  'usr/lib/x86_64-linux-gnu/gio/modules/libgiognutls.so',
-  'usr/share/glib-2.0/schemas',
-]);
+  ['usr/bin/cialai-desktop'],
+  nosDoisLugares('webkit2gtk-4.1/WebKitWebProcess'),
+  nosDoisLugares('webkit2gtk-4.1/WebKitNetworkProcess'),
+  nosDoisLugares('gtk-3.0/3.0.0/immodules.cache'),
+  nosDoisLugares('gdk-pixbuf-2.0/2.10.0/loaders.cache'),
+  nosDoisLugares('gio/modules/libgiognutls.so'),
+  ['usr/share/glib-2.0/schemas'],
+].map(Object.freeze));
 
 export const APPRUN_TEMPLATE = fileURLToPath(new URL('./appimage/AppRun', import.meta.url));
 
@@ -179,8 +189,9 @@ function fixRunpaths(appDir) {
 }
 
 function replaceAppRun(appDir) {
-  for (const path of APPRUN_PATHS) {
-    if (!existsSync(join(appDir, path))) throw new Error(`The AppImage layout changed: ${path} is missing`);
+  for (const alternativas of APPRUN_PATHS) {
+    if (alternativas.some((path) => existsSync(join(appDir, path)))) continue;
+    throw new Error(`The AppImage layout changed: none of ${alternativas.join(' or ')} is present`);
   }
   rmSync(join(appDir, 'AppRun.wrapped'), { force: true });
   rmSync(join(appDir, 'apprun-hooks'), { recursive: true, force: true });

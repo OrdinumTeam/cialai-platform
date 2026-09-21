@@ -149,15 +149,33 @@ assert.match(appRun, /^#!\/bin\/sh\n/);
 for (const leaked of ['PATH', 'LD_LIBRARY_PATH', 'PYTHONHOME', 'PYTHONPATH', 'PYTHONDONTWRITEBYTECODE', 'PERLLIB', 'QT_PLUGIN_PATH']) {
   assert.doesNotMatch(appRun, new RegExp(`^\\s*(export\\s+)?${leaked}=`, 'm'), `the AppRun must not set ${leaked}`);
 }
-assert.match(appRun, /^export GIO_MODULE_DIR="\$lib\/gio\/modules"$/m, 'the bundled GLib must not load the system GIO modules');
+assert.match(appRun, /^export GIO_MODULE_DIR="\$gio_dir"$/m, 'the bundled GLib must not load the system GIO modules');
 assert.match(appRun, /^unset GIO_EXTRA_MODULES$/m);
-assert.match(appRun, /^export GTK_PATH="\$lib\/gtk-3\.0"$/m, 'GTK modules come from the bundle only');
+assert.match(appRun, /^export GTK_PATH="\$gtk_dir"$/m, 'GTK modules come from the bundle only');
 assert.match(appRun, /^export GDK_BACKEND="\$\{CIALAI_GDK_BACKEND:-x11\}"$/m);
 assert.ok(appRun.indexOf('cd "$APPDIR/usr"') < appRun.indexOf('exec "$APPDIR/usr/bin/cialai-desktop" "$@"'), 'WebKit finds its helpers relative to $APPDIR/usr');
-for (const [, path] of appRun.matchAll(/"\$(?:lib|APPDIR)(\/[^"$]+)"/g)) {
-  const relative = path.startsWith('/usr/') ? path.slice(1) : `usr/lib/x86_64-linux-gnu${path}`;
+
+// O bundler ora grava os módulos sob o diretório da arquitetura, ora direto em
+// usr/lib. O AppRun procura nos dois, e cada diretório que ele resolve precisa
+// olhar os mesmos dois lugares que o fix-appimage exige.
+for (const [, nome, arch, plain] of appRun.matchAll(/^(\w+)_dir="\$\(primeiro_que_existe "\$lib(\/[^"]+)" "\$plain(\/[^"]+)"\)"$/gm)) {
+  assert.equal(arch, plain, `${nome}_dir precisa procurar o mesmo caminho nos dois layouts`);
+  const alternativas = [`usr/lib/x86_64-linux-gnu${arch}`, `usr/lib${plain}`];
+  assert.ok(
+    APPRUN_PATHS.some((required) => alternativas.every((item, index) => required[index] === item || String(required[index] || '').startsWith(`${item}/`))),
+    `fix-appimage.mjs precisa exigir ${alternativas.join(' ou ')}`,
+  );
+}
+assert.equal([...appRun.matchAll(/primeiro_que_existe "/g)].length, 3, 'GTK, gdk-pixbuf e GIO são os três diretórios que mudam de lugar');
+
+// Caminhos escritos direto, sem alternativa, continuam cobertos um a um.
+for (const [, path] of appRun.matchAll(/"\$APPDIR(\/[^"$]+)"/g)) {
+  const relative = path.slice(1);
   if (relative === 'usr' || relative.endsWith('/usr')) continue;
-  assert.ok(APPRUN_PATHS.some((required) => required === relative || required.startsWith(`${relative}/`)), `fix-appimage.mjs must require ${relative}`);
+  assert.ok(
+    APPRUN_PATHS.some((required) => required.some((item) => item === relative || item.startsWith(`${relative}/`))),
+    `fix-appimage.mjs must require ${relative}`,
+  );
 }
 
 // Assinatura minisign do atualizador conferida sobre o arquivo final, com um par descartável.

@@ -23,7 +23,7 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SITE="${CIALAI_SITE_REPO:-$(cd "$RAIZ/../cialai-website" 2>/dev/null && pwd || true)}"
 REPO="${CIALAI_REPO:-OrdinumTeam/cialai-platform}"
-ETAPAS=(preparar marcar desktop android ios site anuncio conferir)
+ETAPAS=(preparar enviar linux marcar desktop android ios site anuncio conferir)
 
 VERSAO=""
 APLICAR=0
@@ -50,6 +50,7 @@ exigir() {
   return 1
 }
 passo() { printf '  %s\n' "$*"; }
+titulo() { local nome="$1"; shift; azul "$(( $(indice_de "$nome") + 1 ))/${#ETAPAS[@]} $*"; }
 
 # Executa de verdade só com --aplicar; caso contrário imprime o que faria.
 faz() {
@@ -162,7 +163,7 @@ PY
 }
 
 etapa_preparar() {
-  azul "1/8 preparar, local e reversível"
+  titulo preparar "preparar, local e reversível"
   local atual
   atual="$(node -p "require('./package.json').version")"
   passo "versão atual $atual, alvo $VERSAO"
@@ -208,14 +209,10 @@ etapa_preparar() {
   feito "  preparar concluído"
 }
 
-# ── etapa 2: marcar ──────────────────────────────────────────────────────────
-# Primeiro passo público: a tag dispara o release.yml.
-etapa_marcar() {
-  azul "2/8 marcar, a partir daqui é público"
-  if git rev-parse "$TAG" >/dev/null 2>&1 || gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-    passo "tag $TAG já existe, nada a marcar"
-    return 0
-  fi
+# ── etapa 2: enviar ──────────────────────────────────────────────────────────
+# Primeiro passo público. A tag fica para depois do portão do Linux.
+etapa_enviar() {
+  titulo enviar "enviar o trabalho, a partir daqui é público"
   if [[ -n "$(git status --porcelain)" ]]; then
     # A mensagem segue o padrão do repositório: a primeira frase do Resumo da
     # página da release, em vez de um `release: x.y.z` seco.
@@ -237,17 +234,56 @@ PYMSG
     else
       faz git commit -m "$assunto"
     fi
+  else
+    passo "nada novo para commitar"
   fi
   faz git push origin main
+  feito "  trabalho na main"
+}
+
+# ── etapa 3: linux ───────────────────────────────────────────────────────────
+# O empacotamento do Linux é o que mais quebra, e quebra por coisa de fora: o
+# linuxdeploy muda o layout do AppDir e o `fix-appimage.mjs` para. Isso não
+# aparece em `npm test`, porque nada ali monta um AppImage. Então o AppImage é
+# construído e aberto ANTES da tag, pelo workflow de smoke. Sem este portão a
+# falha só apareceria com a tag criada e a release pela metade, que foi o que
+# aconteceu na 0.2.7.
+etapa_linux() {
+  titulo linux "linux, provar o AppImage antes da tag"
+  if [[ "$APLICAR" != 1 ]]; then
+    passo "faria: disparar o appimage-smoke na main e esperar"
+    return 0
+  fi
+  local antes depois id
+  antes="$(gh run list --repo "$REPO" --workflow appimage-smoke.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+  gh workflow run appimage-smoke.yml --repo "$REPO" --ref main
+  for _ in $(seq 1 30); do
+    depois="$(gh run list --repo "$REPO" --workflow appimage-smoke.yml --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+    [[ "$depois" != "$antes" ]] && { id="$depois"; break; }
+    sleep 10
+  done
+  [[ -n "${id:-}" ]] || erro "o appimage-smoke não começou"
+  passo "acompanhando o run $id"
+  gh run watch "$id" --repo "$REPO" --exit-status
+  feito "  o AppImage monta e abre"
+}
+
+# ── etapa 4: marcar ──────────────────────────────────────────────────────────
+etapa_marcar() {
+  titulo marcar "marcar, a tag dispara os instaladores"
+  if git rev-parse "$TAG" >/dev/null 2>&1 || gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+    passo "tag $TAG já existe, nada a marcar"
+    return 0
+  fi
   faz git tag -a "$TAG" -m "Cialai $VERSAO"
   faz git push origin "$TAG"
   feito "  tag $TAG enviada, o release.yml começou"
 }
 
-# ── etapa 3: desktop ─────────────────────────────────────────────────────────
+# ── etapa 5: desktop ─────────────────────────────────────────────────────────
 # macOS arm64 e Intel, Linux e Windows saem do release.yml.
 etapa_desktop() {
-  azul "3/8 desktop, macOS, Linux e Windows pelo release.yml"
+  titulo desktop "desktop, macOS, Linux e Windows pelo release.yml"
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: acompanhar o release.yml da tag $TAG até a release sair do rascunho"
     return 0
@@ -273,7 +309,7 @@ etapa_desktop() {
 # O APK não faz parte da release do desktop: sai do Codemagic e é anexado com
 # nome estável, para /releases/latest/download continuar valendo.
 etapa_android() {
-  azul "4/8 android, APK pelo Codemagic e anexado à release"
+  titulo android "android, APK pelo Codemagic e anexado à release"
   local nome="Cialai_android_universal.apk"
   if [[ "$APLICAR" == 1 ]] && gh release view "$TAG" --repo "$REPO" --json assets \
       --jq ".assets[].name" 2>/dev/null | grep -qx "$nome"; then
@@ -300,7 +336,7 @@ etapa_android() {
 # ── etapa 5: ios ─────────────────────────────────────────────────────────────
 # Vai ao TestFlight; não existe arquivo para baixar nem para espelhar.
 etapa_ios() {
-  azul "5/8 ios, TestFlight pelo Codemagic"
+  titulo ios "ios, TestFlight pelo Codemagic"
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: disparar o ios-testflight no Codemagic e acompanhar"
     passo "lembrete: liberar o build para testadores e enviar à revisão fica no App Store Connect"
@@ -345,7 +381,7 @@ PY
 }
 
 etapa_site() {
-  azul "6/8 site, espelho dos downloads e páginas"
+  titulo site "site, espelho dos downloads e páginas"
   exigir '[[ -n "$SITE" && -d "$SITE" ]]' "não achei o repositório do site. Aponte CIALAI_SITE_REPO" || return 0
   passo "site em $SITE"
   if [[ "$APLICAR" == 1 && -n "$(git -C "$SITE" status --porcelain)" ]]; then
@@ -367,7 +403,7 @@ etapa_site() {
 # O release.yml já anuncia no Discord depois de publicar. Aqui a gente confere
 # e só reenvia quando faltou, para não duplicar mensagem no canal.
 etapa_anuncio() {
-  azul "7/8 anúncio no Discord"
+  titulo anuncio "anúncio no Discord"
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: conferir se o release.yml anunciou e reenviar só se faltou"
     return 0
@@ -388,7 +424,7 @@ etapa_anuncio() {
 # ── etapa 8: conferir ────────────────────────────────────────────────────────
 # A pergunta que importa no fim: quem roda o curl agora recebe a versão nova?
 etapa_conferir() {
-  azul "8/8 conferir o que o público recebe"
+  titulo conferir "conferir o que o público recebe"
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: ler https://cialai.com.br/downloads/latest.json e conferir a versão"
     return 0

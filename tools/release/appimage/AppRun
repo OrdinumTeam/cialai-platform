@@ -10,6 +10,24 @@ set -eu
 APPDIR="$(dirname "$(readlink -f "$0")")"
 export APPDIR
 lib="$APPDIR/usr/lib/x86_64-linux-gnu"
+plain="$APPDIR/usr/lib"
+
+# O linuxdeploy ora grava os modulos do GTK, do gdk-pixbuf e do GIO sob o
+# diretorio da arquitetura, ora direto em usr/lib. Fixar um layout quebrou a
+# release quando o bundler mudou de ideia, entao cada diretorio e procurado nos
+# dois lugares e o primeiro que existir vale.
+primeiro_que_existe() {
+  for candidato in "$@"; do
+    if [ -e "$candidato" ]; then
+      printf '%s\n' "$candidato"
+      return 0
+    fi
+  done
+  printf '%s\n' "$1"
+}
+gtk_dir="$(primeiro_que_existe "$lib/gtk-3.0" "$plain/gtk-3.0")"
+pixbuf_dir="$(primeiro_que_existe "$lib/gdk-pixbuf-2.0" "$plain/gdk-pixbuf-2.0")"
+gio_dir="$(primeiro_que_existe "$lib/gio/modules" "$plain/gio/modules")"
 
 # Temas GTK do sistema podem pedir um GTK mais novo que o do bundle; vale o Adwaita claro ou escuro.
 if [ -z "${APPIMAGE_GTK_THEME:-}" ]; then
@@ -27,15 +45,15 @@ export GTK_THEME="$APPIMAGE_GTK_THEME"
 export GTK_DATA_PREFIX="$APPDIR"
 export GTK_EXE_PREFIX="$APPDIR/usr"
 # Só os módulos do bundle: os do sistema são compilados para um GTK e uma GLib mais novos.
-export GTK_PATH="$lib/gtk-3.0"
-export GTK_IM_MODULE_FILE="$lib/gtk-3.0/3.0.0/immodules.cache"
-export GDK_PIXBUF_MODULE_FILE="$lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+export GTK_PATH="$gtk_dir"
+export GTK_IM_MODULE_FILE="$gtk_dir/3.0.0/immodules.cache"
+export GDK_PIXBUF_MODULE_FILE="$pixbuf_dir/2.10.0/loaders.cache"
 export GSETTINGS_SCHEMA_DIR="$APPDIR/usr/share/glib-2.0/schemas"
 export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 
 # Sem isso a GLib do bundle carrega os módulos GIO do sistema, como o libgvfsdbus.so, e falha com
 # undefined symbol: g_task_set_static_name. O TLS do WebKit vem do libgiognutls.so do bundle.
-export GIO_MODULE_DIR="$lib/gio/modules"
+export GIO_MODULE_DIR="$gio_dir"
 unset GIO_EXTRA_MODULES
 
 # O WebKitGTK do bundle, do Ubuntu 22.04, cai no backend Wayland do GTK: tauri-apps/tauri#8541. Pelo X11,

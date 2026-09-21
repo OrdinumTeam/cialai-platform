@@ -16,13 +16,21 @@ impedimentos. Nada sai para fora nesse modo.
 | Etapa | O que faz | Onde |
 | --- | --- | --- |
 | 1 `preparar` | Grava a versão nos nove arquivos que a carregam, refaz os lockfiles, exige a página da release e roda `npm test`, os checks de navegador, o orçamento de desempenho e os portões de release | Local, reversível |
-| 2 `marcar` | Commita, envia a main e cria a tag `vX.Y.Z` | **Público.** A tag dispara o `release.yml` |
-| 3 `desktop` | Acompanha o `release.yml` até a release sair do rascunho | macOS arm64 e Intel, Linux, Windows |
-| 4 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |
-| 5 `ios` | Dispara o `ios-testflight` no Codemagic | TestFlight |
-| 6 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site | Repositório do site |
-| 7 `anuncio` | Confere se o `release.yml` já anunciou no Discord e só reenvia quando faltou | Discord |
-| 8 `conferir` | Lê o `latest.json` do espelho e confirma que o público recebe a versão nova | Verificação |
+| 2 `enviar` | Commita e envia a main | **Público**, mas ainda não dispara release |
+| 3 `linux` | Constrói e abre o AppImage pelo `appimage-smoke`, antes da tag | Portão |
+| 4 `marcar` | Cria e envia a tag `vX.Y.Z` | A tag dispara o `release.yml` |
+| 5 `desktop` | Acompanha o `release.yml` até a release sair do rascunho | macOS arm64 e Intel, Linux, Windows |
+| 6 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |
+| 7 `ios` | Dispara o `ios-testflight` no Codemagic | TestFlight |
+| 8 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site | Repositório do site |
+| 9 `anuncio` | Confere se o `release.yml` já anunciou no Discord e só reenvia quando faltou | Discord |
+| 10 `conferir` | Lê o `latest.json` do espelho e confirma que o público recebe a versão nova | Verificação |
+
+**Por que o Linux tem portão próprio.** O empacotamento do Linux é o que mais
+quebra, e quebra por coisa de fora: o `linuxdeploy` muda o layout do AppDir e o
+`fix-appimage.mjs` para. Isso não aparece no `npm test`, porque nada ali monta
+um AppImage. Na 0.2.7 a falha só apareceu com a tag já criada e a release pela
+metade. Agora o AppImage é construído e aberto antes da tag.
 
 **O comando `curl` não tem etapa própria de propósito.** O `install.sh` do site
 lê o `latest.json` de `/downloads/`, então a etapa `site` já atualiza o
