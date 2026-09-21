@@ -51,6 +51,17 @@ function useEscapeGuard() {
   }, []);
 }
 
+// Consulta da URL que abre um dialogo ja montado, pelo mesmo mecanismo do
+// `?boot=splash`. A medicao de geometria precisa de um jeito estavel de abrir
+// a folha sem clicar num rotulo traduzido.
+function queryFlag(name) {
+  try {
+    return new URLSearchParams(window.location.search).get(name);
+  } catch (_error) {
+    return null;
+  }
+}
+
 function useBoot() {
   const [boot, setBoot] = useState('splash');
   const [runtimeStatus, setRuntimeStatus] = useState('loading');
@@ -99,9 +110,12 @@ function DesktopShell() {
   viewRef.current = view;
   const [sidebarHidden, setSidebarHidden] = useState(() => readStored(SIDEBAR_KEY) === 'true');
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [prefsOpen, setPrefsOpen] = useState(false);
-  const [prefsSection, setPrefsSection] = useState(null);
-  const [pairOpen, setPairOpen] = useState(false);
+  const [prefsOpen, setPrefsOpen] = useState(() => Boolean(queryFlag('prefs')));
+  const [prefsSection, setPrefsSection] = useState(() => {
+    const section = queryFlag('prefs');
+    return section && section !== '1' ? section : null;
+  });
+  const [pairOpen, setPairOpen] = useState(() => queryFlag('pair') === '1');
   const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();

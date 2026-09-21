@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material';
-import { modalPaperSx } from '../../components/ui.jsx';
+import { modalPaperProps } from '../../components/ui.jsx';
 import { getLocale, translate } from '../../shared/i18n.js';
 
 // Folha reaproveitada pelos diálogos do estúdio e pelo menu de ações do
@@ -14,7 +14,7 @@ import { getLocale, translate } from '../../shared/i18n.js';
 // dentro quando o conteúdo passa do teto de altura.
 export function Sheet({ open, title, children, actions, onClose, size = 'xs' }) {
   return (
-    <Dialog open={open} onClose={onClose} maxWidth={false} disableScrollLock PaperProps={{ sx: modalPaperSx({ maxWidth: size }) }}>
+    <Dialog open={open} onClose={onClose} maxWidth={false} disableScrollLock PaperProps={modalPaperProps({ maxWidth: size })}>
       <DialogTitle sx={{ fontWeight: 600 }}>{title}</DialogTitle>
       <DialogContent>{typeof children === 'string' ? <Typography variant="body2">{children}</Typography> : children}</DialogContent>
       <DialogActions>{actions}</DialogActions>

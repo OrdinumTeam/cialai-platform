@@ -17,6 +17,7 @@ import {
 } from './preferences-model.js';
 import AccessPanel from './AccessPanel.jsx';
 import NotchPreferences from './NotchPreferences.jsx';
+import { demoScenario, demoState } from '../notch/fixtures.js';
 import AgentProfiles from '../terminals/ui/AgentProfiles.jsx';
 import { notchActions } from './notch-runtime.js';
 import { useTunnel } from './TunnelContext.jsx';
@@ -41,6 +42,27 @@ function Segmented({ value, options, onChange, ariaLabel }) {
   </div>;
 }
 
+const commandInstalled = (command) => command?.state === 'installed' || command?.state === 'unchanged';
+
+// O caminho e a linha de PATH viajam como dado vindo do Rust, nunca como
+// chave de dicionario: assim o texto do check de separadores nao precisa
+// conhecer caminho de arquivo nenhum.
+function commandDescription(command) {
+  const parts = [translate('desktop.preferences.terminalCommandDescription')];
+  if (commandInstalled(command)) {
+    parts.push(`${translate('desktop.preferences.terminalCommandAt')} ${command.path}`);
+    if (command.needsNewTerminal) parts.push(translate('desktop.preferences.terminalCommandNewTerminal'));
+    if (command.onPath === false && command.pathHint) parts.push(`${translate('desktop.preferences.terminalCommandOffPath')} ${command.pathHint}`);
+  } else if (command?.state === 'kept') {
+    parts.push(translate('desktop.preferences.terminalCommandKept'));
+  } else if (command?.state === 'disabled') {
+    parts.push(translate('desktop.preferences.terminalCommandDisabled'));
+  } else {
+    parts.push(translate('desktop.preferences.terminalCommandMissing'));
+  }
+  return parts.join(' ');
+}
+
 function Row({ title, description, wide = false, children }) {
   return <div className={`mac-prefs__row${wide ? ' mac-prefs__row--wide' : ''}`}>
     <div className="mac-prefs__row-text"><div className="mac-prefs__row-title">{title}</div>{description ? <div className="mac-prefs__row-desc">{description}</div> : null}</div>
@@ -63,6 +85,8 @@ export default function Preferences({ open, onClose, appearance, section = null 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [installingHook, setInstallingHook] = useState(false);
+  const [command, setCommand] = useState(null);
+  const [workingCommand, setWorkingCommand] = useState(false);
   const [error, setError] = useState('');
 
   // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
@@ -94,6 +118,40 @@ export default function Preferences({ open, onClose, appearance, section = null 
     } finally { setInstallingHook(false); }
   };
 
+  // Comando `cialai` no terminal. O app ja instala sozinho na primeira
+  // abertura; estes botoes existem para quem removeu, para quem tinha um
+  // arquivo com esse nome, e para ver onde o comando ficou.
+  const installCommand = async () => {
+    setWorkingCommand(true);
+    try {
+      const result = await invoke('cli_install');
+      setCommand(result);
+      if (result?.state === 'installed') notify(translate('desktop.preferences.terminalCommandAt') + ' ' + result.path, 'success');
+    } catch (commandError) {
+      notify(translate('desktop.preferences.terminalCommandFailed', { error: commandError?.message || commandError }), 'warning');
+    } finally { setWorkingCommand(false); }
+  };
+
+  const removeCommand = async () => {
+    setWorkingCommand(true);
+    try {
+      setCommand(await invoke('cli_uninstall'));
+      notify(translate('desktop.preferences.terminalCommandRemoved'), 'success');
+    } catch (commandError) {
+      notify(commandError?.message || String(commandError), 'warning');
+    } finally { setWorkingCommand(false); }
+  };
+
+  const copyCommandHint = async () => {
+    if (!command?.pathHint) return;
+    try {
+      await navigator.clipboard.writeText(command.pathHint);
+      notify(translate('desktop.preferences.terminalCommandCopied'), 'success');
+    } catch (copyError) {
+      notify(copyError?.message || String(copyError), 'warning');
+    }
+  };
+
   useEffect(() => {
     if (!open) return undefined;
     let cancelled = false;
@@ -102,9 +160,12 @@ export default function Preferences({ open, onClose, appearance, section = null 
     // A barra de IA responde por `notch_state`: as preferências dela vencem o
     // bloco `notch` do arquivo, e a lista de perfis da máquina vem junto.
     const load = native
-      ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null), notchActions.state().catch(() => null)])
-      : Promise.resolve([{ ...DEFAULT_PREFERENCES, network: tunnel.preferences }, null, null, null]);
-    load.then(([value, shell, paths, notch]) => {
+      ? Promise.all([invoke('get_preferences'), invoke('app_shell'), invoke('app_paths').catch(() => null), notchActions.state().catch(() => null), invoke('cli_status').catch(() => null)])
+      // Fora do app nao ha o que ler, entao a lista de perfis so aparece pelo
+      // cenario de demonstracao. Sem ele a secao nascia vazia, e foi por isso
+      // que a tela cheia de contas nunca foi medida.
+      : Promise.resolve([{ ...DEFAULT_PREFERENCES, network: tunnel.preferences }, null, null, demoScenario() ? demoState(translate, demoScenario()) : null, null]);
+    load.then(([value, shell, paths, notch, cli]) => {
       if (cancelled) return;
       const next = normalizePreferenceDraft({ ...(value || {}), appearance: appearance.mode, notch: notch?.prefs || value?.notch });
       setDraft(next);
@@ -112,6 +173,7 @@ export default function Preferences({ open, onClose, appearance, section = null 
       setEffectiveShell(shell?.path ? shell : null);
       setAppPaths(paths);
       setNotchProfiles(Array.isArray(notch?.allProfiles) ? notch.allProfiles : []);
+      setCommand(cli);
     }).catch((loadError) => {
       if (!cancelled) setError(translate('desktop.preferences.loadError', { error: loadError?.message || loadError }));
     }).finally(() => { if (!cancelled) setLoading(false); });
@@ -223,6 +285,14 @@ export default function Preferences({ open, onClose, appearance, section = null 
         {hints.showLang ? <Row title={translate('language.label')} description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label={translate('desktop.preferences.terminalLanguage')} /></Row> : null}
         <Row title={translate('desktop.preferences.pathPrefixes')} description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.pathPrefixes')} /></Row>
         {native ? <Row title={translate('desktop.preferences.claudeHook')} description={translate('desktop.preferences.claudeHookDescription')}><button type="button" className="btn btn-secondary btn-sm" disabled={installingHook} onClick={installClaudeHook}>{translate(installingHook ? 'desktop.preferences.claudeHookInstalling' : 'desktop.preferences.claudeHookInstall')}</button></Row> : null}
+        {native && command ? <Row title={translate('desktop.preferences.terminalCommand')} description={commandDescription(command)} wide>
+          <div className="mac-prefs__actions">
+            {command.pathHint ? <button type="button" className="btn btn-quiet btn-sm" onClick={copyCommandHint}>{translate('desktop.preferences.terminalCommandCopy')}</button> : null}
+            {commandInstalled(command)
+              ? <button type="button" className="btn btn-quiet btn-sm" disabled={workingCommand} onClick={removeCommand}>{translate('desktop.preferences.terminalCommandRemove')}</button>
+              : <button type="button" className="btn btn-secondary btn-sm" disabled={workingCommand} onClick={installCommand}>{translate(workingCommand ? 'desktop.preferences.terminalCommandInstalling' : 'desktop.preferences.terminalCommandInstall')}</button>}
+          </div>
+        </Row> : null}
       </section>
 
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.projects')}</h3>

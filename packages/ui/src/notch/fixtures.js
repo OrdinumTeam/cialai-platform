@@ -104,7 +104,37 @@ function single() {
   return { profiles: [profile('codex-amorim', 'codex', 'amorim', 0.28)], sessions: {} };
 }
 
-const SCENARIOS = { basic, states, single, collapsed: basic };
+/// Doze contas, com os extremos que a lista de Preferencias precisa aguentar:
+/// conta longa, pasta longa, uma pasta que repete a conta de um perfil com
+/// nome, uma sem login e um apelido no limite de 24 caracteres. E o cenario
+/// que reproduz a tela cheia sem depender de contas reais na maquina.
+function many() {
+  const long = 'a.amorim.ordinum.plataforma@exemplo.com.br';
+  return {
+    profiles: [
+      profile('claude-ti', 'claude', 'ti', 0.18, { duplicate: true, configDir: `${HOME}/.claude`, account: long }),
+      profile('claude-ordinum', 'claude', 'ordinum', 0.26, { account: long }),
+      profile('claude-webrota', 'claude', 'webrota', 0.81),
+      profile('claude-webrotaa', 'claude', 'webrotaa', 0.75),
+      profile('claude-webrotaaa', 'claude', 'webrotaaa', 0.9),
+      profile('claude-plataforma', 'claude', 'plataforma', 0.47, { configDir: `${HOME}/.claude-plataforma-de-engenharia-ordinum` }),
+      profile('codex-amorimcompanybr', 'codex', 'amorimcompanybr', 0.12, { duplicate: true, configDir: `${HOME}/.codex` }),
+      profile('codex-aamorim', 'codex', 'aamorim', 0.62),
+      profile('codex-amorim', 'codex', 'amorim', 0.57, { account: long }),
+      profile('codex-ordinum', 'codex', 'ordinum', 0, { windows: [], status: statusOf('needsAuth'), fetchedAtMs: 0, account: null, source: null }),
+      profile('codex-webrota', 'codex', 'webrota', 0.99),
+      profile('codex-infraestrutura', 'codex', 'infraestrutura', 0.34, { configDir: `${HOME}/.codex-infraestrutura-e-plataforma` }),
+    ],
+    sessions: {
+      'claude-ordinum': [claudeSession('claude-ordinum.1', 'claude-ordinum', 'cialai-platform', 'busy', 95_000)],
+      'codex-webrota': [codexSession('codex-webrota.1', 'codex-webrota', 'webrota', 'busy', 20_000)],
+    },
+    // Apelido no limite do campo, para a linha esticar o maximo que consegue.
+    prefs: { profiles: { 'claude-webrotaaa': { enabled: true, alias: 'plataforma de engenharia', muted: true } } },
+  };
+}
+
+const SCENARIOS = { basic, states, single, many, collapsed: basic };
 
 /// Cenario pedido na URL, ou `null` fora do modo de demonstracao.
 export function demoScenario(search = typeof window !== 'undefined' ? window.location.search : '') {
@@ -122,7 +152,7 @@ export function demoScenario(search = typeof window !== 'undefined' ? window.loc
 /// Estado completo de um cenario, no formato de `notch_state`.
 export function demoState(t = translate, name = 'basic') {
   const build = SCENARIOS[name] || basic;
-  const { profiles, sessions } = build(t);
+  const { profiles, sessions, prefs: extra } = build(t);
   const activity = {};
   Object.entries(sessions).forEach(([id, list]) => { activity[id] = activitySummary(list); });
   return {
@@ -136,10 +166,11 @@ export function demoState(t = translate, name = 'basic') {
       criticalLimit: 0.7,
       alerts: { threshold: false, limitReached: false, reset: false },
       resetTimeFormat: 'automatic',
+      ...(extra || {}),
     },
     profiles,
     sessions,
     activity,
-    allProfiles: [],
+    allProfiles: profiles,
   };
 }

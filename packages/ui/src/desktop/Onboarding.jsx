@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronLeft, FolderOpen, FolderPlus, Globe, ShieldCheck, Smartphone, Terminal, Wifi } from 'lucide-react';
 import { chooseDirectory, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
-import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
+import logo from '../assets/cialai-mark-256.png';
 import { useTunnel } from './TunnelContext.jsx';
 import { translate } from './i18n.js';
 

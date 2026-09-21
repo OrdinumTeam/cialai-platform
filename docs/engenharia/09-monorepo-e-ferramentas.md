@@ -104,9 +104,11 @@ O pacote `packages/ui` é um workspace exportado como fonte, resolvido pelo Vite
 | `npm run check:living-docs` | Confere estado datado nos documentos 01 a 12 e cobertura das tarefas e decisões |
 | `npm run check:release-workflow` | Confere canal de prévia, assinatura opcional, nomes estáveis, `latest.json`, `SHA256SUMS` e publicação do `release.yml` |
 | `npm run check:text` | Recusa parênteses e hífen, meia-risca ou travessão como separador no texto visível dos três idiomas, das lojas, das políticas e das notas de release |
-| `npm run test:browser` | Sobe o Vite do desktop e roda por Playwright os roteiros do estúdio, da rede e do celular; exige `npm ci --prefix tools/browser` e o Chromium do Playwright |
+| `npm run test:browser` | Sobe o Vite do desktop e roda por Playwright os roteiros do estúdio, da rede e do celular; exige `npm ci --prefix tools/browser` e o Chromium do Playwright. Dois cenários rodam sobre o build de produção, servido por `preview`, porque a ordem dos pedaços do Vite e o modo de inserção do emotion só existem lá |
+| `npm run check:dialog-geometry` | Cruza os números de `components/modal-geometry.js` com a folha de produção e confere que nada vence a caixa do papel; roda depois do build |
+| `npm run check:performance` | Orçamento de desempenho num computador simulado quatro vezes mais lento, sobre o build de produção. Mede o tempo até o estúdio ficar utilizável, o payload da primeira pintura, as tarefas longas e a taxa de quadros da folha animada, compara com `tools/check/performance-baseline.json` e imprime a variação. Regravar a base é `node tools/check/performance.mjs --registrar` |
 
-O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`, sem atalho na raiz. Desenvolvimento Expo e prebuild são executados no workspace `@cialai/mobile`. `test:browser` e `check:text` existem desde 14/09/2026; o atalho `icons` do planejamento original continua como `npm run icon --workspace @cialai/desktop`.
+O build móvel continua disponível pelo arquivo `tools/build-tunnel-mobile.sh`, sem atalho na raiz. Desenvolvimento Expo e prebuild são executados no workspace `@cialai/mobile`. `test:browser` e `check:text` existem desde 14/09/2026; `check:dialog-geometry` e `check:performance` desde 21/09/2026; o atalho `icons` do planejamento original continua como `npm run icon --workspace @cialai/desktop`.
 
 ## Como rodar
 

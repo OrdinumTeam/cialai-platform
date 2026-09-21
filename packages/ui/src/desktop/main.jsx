@@ -29,6 +29,12 @@ if (new URLSearchParams(window.location.search).get('docpreview') === '1') {
 if (new URLSearchParams(window.location.search).get('cialai_selftest')) {
   import('../../../../tools/selftest/selftest-app.js').catch((error) => console.error('[autoteste]', error));
 }
+// A geometria dos dialogos e medida sobre o build de producao, onde o emotion
+// injeta por CSSOM e o Vite reordena os pedacos. O `preview` nao serve `/@fs`,
+// entao o roteiro entra por importacao da propria pagina, como o da rede.
+if (new URLSearchParams(window.location.search).get('dialog-check') === '1') {
+  import('../../scripts/check-dialog-geometry.js').catch((error) => { document.title = `FAIL: ${error.message}`; console.error('[dialog-check]', error); });
+}
 if (new URLSearchParams(window.location.search).get('network-check') === '1') {
   import('../../scripts/check-network-browser.js').catch((error) => { document.title = `FAIL: ${error.message}`; console.error('[network-check]', error); });
 }

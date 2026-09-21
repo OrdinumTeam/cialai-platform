@@ -6,6 +6,7 @@
 //! reunioes, Node e Python pertenciam ao Control e nao fazem parte deste app.
 
 pub mod bridge;
+pub mod cli;
 mod commands;
 mod diagnostics;
 mod i18n;
@@ -164,6 +165,9 @@ pub fn run() {
             commands::fs_drag_out,
             commands::ai_usage,
             commands::ai_install_claude_hook,
+            commands::cli_status,
+            commands::cli_install,
+            commands::cli_uninstall,
             commands::fs_read_bytes,
             commands::office_convert,
             commands::browser_start,
@@ -220,6 +224,31 @@ pub fn run() {
                 .path()
                 .home_dir()
                 .unwrap_or_else(|_| std::env::temp_dir());
+            // Comando `cialai` no terminal, instalado na primeira abertura e
+            // conferido em toda abertura, para se consertar sozinho quando o
+            // app muda de lugar. Nada aqui pode derrubar o app: o motivo vira
+            // registro, como a rede logo abaixo. Fora da thread principal
+            // porque toca disco e, no Windows, o ambiente do usuario.
+            let cli_home = home.clone();
+            let cli_config = app
+                .path()
+                .app_config_dir()
+                .unwrap_or_else(|_| support.clone());
+            std::thread::spawn(move || {
+                let target = cli::Target::current();
+                let launcher = cli::launcher_from(
+                    std::env::var_os("APPIMAGE").as_deref(),
+                    &std::env::current_exe().unwrap_or_default(),
+                    target,
+                );
+                match cli::install(&cli_home, &cli_config, launcher.as_deref(), target, false) {
+                    Ok(report) => {
+                        diagnostics::note(&format!("[cli] {} em {}", report.state, report.path))
+                    }
+                    Err(reason) => diagnostics::note(&format!("[cli] indisponivel: {reason}")),
+                }
+            });
+
             app.manage(workspace::browser::BrowserManager::new(
                 app.handle().clone(),
                 support.join("dev-browser"),

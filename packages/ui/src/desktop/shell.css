@@ -105,6 +105,9 @@
   --mac-shadow-popover:0 10px 30px rgba(0,0,0,.12),0 0 0 .5px rgba(0,0,0,.08);
   --mac-shadow-sheet:0 18px 48px rgba(0,0,0,.20),0 0 0 .5px rgba(0,0,0,.10);
 
+  /* veu atras de uma folha; a folha e grande, entao 18% sumia */
+  --mac-scrim:rgba(0,0,0,.34);
+
   /* raios */
   --mac-radius-control:7px;
   --mac-radius-field:8px;
@@ -221,6 +224,7 @@
   --mac-shadow-primary:0 1px 2px rgba(0,0,0,.3),inset 0 1px 0 rgba(255,255,255,.12);
   --mac-shadow-popover:0 10px 30px rgba(0,0,0,.5),0 0 0 .5px rgba(255,255,255,.08);
   --mac-shadow-sheet:0 18px 50px rgba(0,0,0,.6),0 0 0 .5px rgba(255,255,255,.1);
+  --mac-scrim:rgba(0,0,0,.5);
 
   --brand-accent:#6ea3f0;
   --navy-light:#2a4f8a;
@@ -555,12 +559,12 @@
 .mac-prefs__row-text{min-width:0}
 .mac-prefs__row-title{font-size:13px;color:var(--mac-label)}
 .mac-prefs__row-desc{font-size:11px;color:var(--mac-label-2);margin-top:2px}
-.mac-prefs__row-control{flex:0 0 auto;display:flex;align-items:center}
+.mac-prefs__row-control{flex:0 1 auto;min-width:0;display:flex;align-items:center}
 .mac-prefs__row--wide{align-items:flex-start}
 .mac-prefs__row--wide .mac-prefs__row-text{padding-top:6px}
-.mac-prefs__input{width:280px}
-.mac-prefs__textarea{width:360px;resize:vertical;font-family:var(--mac-font-mono)}
-.mac-prefs__browser-path{width:360px;font-family:var(--mac-font-mono);font-size:11px}
+.mac-prefs__input{width:100%;max-width:280px;min-width:0}
+.mac-prefs__textarea{width:100%;max-width:360px;min-width:0;resize:vertical;font-family:var(--mac-font-mono)}
+.mac-prefs__browser-path{width:100%;max-width:360px;min-width:0;font-family:var(--mac-font-mono);font-size:11px}
 .mac-prefs__path{display:block;margin:4px 0 10px;padding:6px 8px;border-radius:7px;background:var(--mac-surface-2);font:11px/1.5 var(--mac-font-mono);color:var(--mac-label-2);word-break:break-all}
 .mac-prefs__actions{display:flex;gap:6px;flex-wrap:wrap}
 .mac-prefs__note{margin:4px 0 0;font-size:12px;line-height:1.5;color:var(--mac-label-2)}
@@ -605,7 +609,7 @@
 .mac-onboarding__final-actions{display:flex;align-items:center;gap:8px}
 
 /* pareamento */
-.mac-pair{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:22px;align-items:start;padding:2px 0 6px}
+.mac-pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,292px);gap:22px;align-items:start;padding:2px 0 6px}
 .mac-pair__copy{align-self:start;min-width:0;padding:2px 0 0}
 .mac-pair__device{display:grid;place-items:center;width:40px;height:40px;margin-bottom:16px;border-radius:12px;background:var(--mac-accent-soft);color:var(--mac-accent)}
 .mac-pair__device svg{width:20px;height:20px}
@@ -739,24 +743,38 @@
 .mac-advanced__legacy>div{min-width:0;flex:1 1 260px}
 
 
-@media (max-width:720px){
+/* Preferencias e pareamento vivem dentro do papel do dialogo, que tem largura
+   propria. Medir a janela colapsava a grade do QR numa janela de 880 mesmo com
+   os 700 px do papel inteiros, e a folha pulava de 463 para 660 de altura. A
+   consulta de contêiner mede a folha, que e o que realmente limita. */
+@container sheet (max-width:620px){
   .mac-prefs__row{align-items:flex-start;flex-direction:column;gap:7px}
-  .mac-prefs__row-control,.mac-prefs__input,.mac-prefs__textarea,.mac-prefs__browser-path{width:100%}
+  .mac-prefs__row-control,.mac-prefs__input,.mac-prefs__textarea,.mac-prefs__browser-path{max-width:none}
   .mac-prefs__row--wide .mac-prefs__row-text{padding-top:0}
-}
 
-@media (max-width:900px){
-  .mac-tunnel-status>span:last-child{display:none}
-  .mac-tool--label span{display:none}
   .mac-pair{grid-template-columns:1fr;gap:14px}
   .mac-pair__device,.mac-pair__copy h3{display:none!important}
   .mac-pair__visual{order:-1}
   .mac-pair__copy{padding:0;text-align:center}
   .mac-pair__device{margin-left:auto;margin-right:auto}
   .mac-pair__reserve,.mac-pair__notice{width:min(100%,420px);margin-left:auto!important;margin-right:auto!important;text-align:left}
+}
+
+@media (max-width:900px){
+  .mac-tunnel-status>span:last-child{display:none}
+  .mac-tool--label span{display:none}
   .mac-device-row{grid-template-columns:34px minmax(140px,1fr) minmax(100px,.6fr) 64px}
   .mac-device-row__platform{display:none}
   .mac-advanced__grid{grid-template-columns:1fr}
+}
+
+@container sheet (max-width:560px){
+  .mac-access__head{flex-wrap:wrap}
+  .mac-access__head .mac-network-badge{order:3;margin-left:45px}
+  .mac-access__rows{grid-template-columns:1fr}
+  .mac-access__rows>div{flex-direction:row;align-items:flex-start;justify-content:space-between;gap:12px}
+  .mac-access__rows .mac-access__value{align-items:flex-end}
+  .mac-access__link{margin-left:0}
 }
 
 @media (max-width:720px){
@@ -915,9 +933,26 @@
 
 /* ── dialogos e gaveta ──────────────────────────────────────────── */
 
-:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper{border-radius:var(--mac-radius-panel);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-sheet);animation:macSheet 220ms var(--mac-ease)}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper{border-radius:var(--mac-radius-panel);border:1px solid var(--mac-separator-strong);box-shadow:var(--mac-shadow-sheet);animation:macSheet 220ms var(--mac-ease)}
 :is([data-shell="desktop"],[data-platform="macos"]) .MuiDrawer-paper{box-shadow:var(--mac-shadow-sheet)}
-:is([data-shell="desktop"],[data-platform="macos"]) .MuiBackdrop-root{background:rgba(0,0,0,.18)}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiBackdrop-root{background:var(--mac-scrim)}
+
+/* Geometria da folha em CSS estatico, e nao so no `sx` do MUI.
+   O `sx` vira classe do emotion, injetada em tempo de execucao; se essa
+   injecao falhar, o papel fica sem largura e sem teto de altura e a folha se
+   espalha pela janela, com o conteudo cortado em cima e embaixo. Aqui ela
+   sobrevive a essa falha. Os numeros vivem em components/modal-geometry.js e
+   tools/check/dialog-geometry.mjs impede que os dois lados divirjam.
+   A pagina do celular sobrepoe tudo isto com !important, em mobile/mobile.css. */
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal]{width:var(--mac-modal-w,520px);max-width:calc(100vw - 48px);max-height:min(660px,calc(100dvh - 96px))}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="xs"]{--mac-modal-w:400px}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="sm"]{--mac-modal-w:520px}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="md"]{--mac-modal-w:700px}
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal="lg"]{--mac-modal-w:880px}
+
+/* O corpo da folha e o contêiner que as secoes medem. Sem isto elas mediriam
+   a janela, que nao tem relacao com a largura do papel. */
+:is([data-shell="desktop"],[data-platform="macos"]) .MuiDialog-paper[data-modal] .MuiDialogContent-root{container-type:inline-size;container-name:sheet}
 :is([data-shell="desktop"],[data-platform="macos"]) [class*="-kicker"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-label"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-lbl"],:is([data-shell="desktop"],[data-platform="macos"]) [class*="-hdr"]{text-transform:none;letter-spacing:0}
 
 /* ── utilidades ─────────────────────────────────────────────────── */

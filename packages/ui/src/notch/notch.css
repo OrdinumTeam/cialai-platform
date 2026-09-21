@@ -271,7 +271,7 @@
 .notch-prefs__profile-meta { display: flex; gap: 10px; margin-top: 2px; font-size: 11px; color: var(--mac-label-3); overflow: hidden; }
 .notch-prefs__profile-meta > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .notch-prefs__profile-note { margin-top: 4px; font-size: 11px; color: var(--mac-label-3); }
-.notch-prefs__profile-actions { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.notch-prefs__profile-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
 .notch-prefs__alias { flex: 1 1 auto; min-width: 0; height: 24px; padding: 0 8px; border: 1px solid var(--mac-separator); border-radius: var(--mac-radius-control); background: var(--mac-field); color: var(--mac-label); font-size: 12px; font-family: inherit; }
 .notch-prefs__threshold { min-width: 88px; }
 

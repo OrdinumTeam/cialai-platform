@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import { X, Inbox, AlertCircle } from 'lucide-react';
 import { translate } from '../shared/i18n.js';
+import { modalPaperProps } from './modal-geometry.js';
 
 const isMacPlatform = () => typeof document !== 'undefined' && document.documentElement.dataset.platform === 'macos';
 
@@ -133,26 +134,9 @@ export function useToast() {
 
 /* ── modal e drawer ───────────────────────────────────────────────── */
 
-// Largura de cada tamanho de modal, em pixels. `fullWidth` do MUI esticava o
-// papel ate o ponto de quebra inteiro, entao o diálogo de vincular celular
-// nascia com 900 px e afastava o texto do QR, e Preferências chegava a ocupar
-// quase toda a janela. Aqui cada tamanho tem a largura que o conteúdo pede, e
-// o papel encolhe sozinho em janela estreita.
-export const MODAL_WIDTH = Object.freeze({ xs: 400, sm: 520, md: 700, lg: 880 });
-// Teto de altura do papel. Abaixo disto o corpo rola por dentro, e a folha
-// nunca cobre a janela de ponta a ponta.
-export const MODAL_MAX_HEIGHT = 'min(660px, calc(100% - 96px))';
-
-// Estilo do papel de um diálogo do estúdio. A folha do celular, em
-// mobile.css, sobrepoe largura e margem com `!important`, entao a mesma
-// função serve as duas plataformas.
-export function modalPaperSx({ maxWidth = 'sm', width, maxHeight } = {}) {
-  return {
-    width: width ?? MODAL_WIDTH[maxWidth] ?? MODAL_WIDTH.sm,
-    maxWidth: 'calc(100vw - 48px)',
-    maxHeight: maxHeight ?? MODAL_MAX_HEIGHT,
-  };
-}
+// A geometria dos dialogos mora em `modal-geometry.js` e em `desktop/shell.css`.
+// Aqui ficam so os reexports, para as views nao precisarem saber de onde vem.
+export { MODAL_WIDTH, MODAL_MAX_HEIGHT, MODAL_SIZES, modalPaperProps, modalPaperSx } from './modal-geometry.js';
 
 export function AppModal({ open, title, onClose, children, footer, maxWidth = 'sm', width, maxHeight }) {
   return (
@@ -164,7 +148,7 @@ export function AppModal({ open, title, onClose, children, footer, maxWidth = 's
       // efeito mexer no `padding` do `body` e mudar a largura do conteúdo
       // atrás do modal.
       disableScrollLock
-      PaperProps={{ sx: modalPaperSx({ maxWidth, width, maxHeight }) }}
+      PaperProps={modalPaperProps({ maxWidth, width, maxHeight })}
     >
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, fontWeight: 600 }}>
         {title}
@@ -288,7 +272,7 @@ export function TextField({
 
 export function ConfirmDialog({ open, title = translate('shared.action.confirm'), message, onCancel, onConfirm, confirmLabel = translate('shared.action.confirm'), danger = false }) {
   return (
-    <Dialog open={open} onClose={onCancel} maxWidth={false} disableScrollLock PaperProps={{ sx: modalPaperSx({ maxWidth: 'xs' }) }}>
+    <Dialog open={open} onClose={onCancel} maxWidth={false} disableScrollLock PaperProps={modalPaperProps({ maxWidth: 'xs' })}>
       <DialogTitle sx={{ fontWeight: 600 }}>{title}</DialogTitle>
       <DialogContent><Typography variant="body2">{message}</Typography></DialogContent>
       <DialogActions>

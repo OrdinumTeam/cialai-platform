@@ -148,6 +148,7 @@ export default Object.freeze({
   'native.notch.windowSession': 'da sessão atual',
   'native.notch.windowWeekly': 'semanal',
   'native.notch.windowWeeklyAll': 'de todos os modelos',
+  'native.command.missing': 'Cialai não encontrado. Abra o app uma vez para consertar o comando.',
   'native.quit.cancel': 'Cancelar',
   'native.quit.confirm': 'Sair',
   'native.quit.detail': 'Sair encerra os shells e os agentes que rodam neles. O histórico e as conversas de Claude Code e Codex ficam salvos e voltam quando você reabrir as sessões.',

@@ -80,9 +80,17 @@ test('a faixa do painel recolhido diz o que esconde e leva de volta', () => {
   assert.match(read('../src/terminals/ui/ExplorerPane.jsx'), /id="terminais-explorer"/);
 });
 
-test('os botoes de recolher usam 16 px e o par coerente de icones', () => {
-  assert.match(read('../src/terminals/ui/SessionsPane.jsx'), /<PanelLeftClose size=\{16\}/);
-  assert.match(read('../src/terminals/ui/ExplorerPane.jsx'), /<PanelRightClose size=\{16\}/);
+test('recolher uma coluna e um botao so, no cabecalho da area de trabalho', () => {
+  // Os cabecalhos das colunas tinham um botao de recolher com o mesmo icone, o
+  // mesmo rotulo e o mesmo atalho do alternador da area de trabalho, e os dois
+  // ficavam colados, um de cada lado da divisa. Ficou o da area de trabalho,
+  // que tambem traz a coluna de volta e mostra o estado por aria-pressed.
+  const sessions = read('../src/terminals/ui/SessionsPane.jsx');
+  const explorer = read('../src/terminals/ui/ExplorerPane.jsx');
+  assert.doesNotMatch(sessions, /PanelLeftClose/, 'a coluna de sessoes nao pode repetir o alternador');
+  assert.doesNotMatch(explorer, /PanelRightClose/, 'a coluna de arquivos nao pode repetir o alternador');
+  assert.doesNotMatch(sessions, /onCollapse/, 'prop de recolher sem uso na coluna de sessoes');
+  assert.doesNotMatch(explorer, /onCollapse/, 'prop de recolher sem uso na coluna de arquivos');
   const work = read('../src/terminals/ui/WorkArea.jsx');
   assert.match(work, /PanelLeftOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelLeftClose size=\{16\}/);
   assert.match(work, /PanelRightOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelRightClose size=\{16\}/);

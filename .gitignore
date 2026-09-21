@@ -68,3 +68,6 @@ __pycache__/
 .mypy_cache/
 tools/browser/test-results/
 playwright-report/
+
+# Artefatos baixados pelo scripts/deploy-full.sh, como o APK do Codemagic.
+.deploy-full/

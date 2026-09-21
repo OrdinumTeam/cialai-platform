@@ -701,7 +701,6 @@ export default function Workbench() {
             disconnectedCount={disconnected}
             onReopenAll={reopenAll}
             onAccounts={native ? () => setAccountsOpen(true) : null}
-            onCollapse={() => showPanel('sessions', false)}
           />
           <Splitter orientation="vertical" label={translate('terminal.work.sessionsWidth')} onDrag={dragSessions} onReset={() => setLayout({ sessionsWidth: LAYOUT_LIMITS.sessions.default })} onStep={(step) => setLayout({ sessionsWidth: layout.sessionsWidth + step })} />
         </>
@@ -758,7 +757,6 @@ export default function Workbench() {
             onDeleteRequest={setDeleteRequest}
             notify={notify}
             revealRequest={revealRequest}
-            onCollapse={() => showPanel('explorer', false)}
           />
         </>
       ) : (

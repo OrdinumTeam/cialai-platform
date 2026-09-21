@@ -148,6 +148,7 @@ export default Object.freeze({
   'native.notch.windowSession': 'current session',
   'native.notch.windowWeekly': 'weekly',
   'native.notch.windowWeeklyAll': 'all models',
+  'native.command.missing': 'Cialai not found. Open the app once to fix the command.',
   'native.quit.cancel': 'Cancel',
   'native.quit.confirm': 'Quit',
   'native.quit.detail': 'Quitting ends the shells and the agents running in them. Claude Code and Codex history and conversations are saved and come back when you reopen the sessions.',

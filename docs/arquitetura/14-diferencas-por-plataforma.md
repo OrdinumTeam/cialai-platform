@@ -121,6 +121,30 @@ seta nos demais sistemas.
 | Gerenciador de arquivos | Finder | Gerenciador padrão | Explorer |
 | Observação de arquivos | kqueue | notify | notify |
 | Lixeira | API do sistema | API do sistema | API do sistema |
+| Comando `cialai` | `~/.local/bin/cialai` | `~/.local/bin/cialai` | `%LOCALAPPDATA%\Programs\Cialai\bin\cialai.cmd` |
+
+### Comando cialai no terminal
+
+O app grava o comando na primeira abertura e confere o conteúdo a cada abertura,
+então ele se conserta sozinho quando o aplicativo muda de lugar. O corpo muda por
+sistema:
+
+| Sistema | Corpo | Por quê |
+| --- | --- | --- |
+| macOS | `open -b br.com.ordinum.cialai` | Resolve pelo identificador do pacote, sobrevive a renomear e a mover, e entrega ao launchd, então fechar o terminal não derruba o app |
+| Linux | guarda com `pgrep` e depois `setsid` no executável | Não existe equivalente ao `open`. Sem instância única, a guarda evita um segundo processo disputando preferências, jornal, porta do túnel e perfil do Dev Browser |
+| Windows | `start ""` num `.cmd` gravado em CRLF | Devolve o console na hora. Chamar o executável direto prenderia o terminal até o app sair |
+
+No POSIX o app **não edita arquivo de shell**. Quando `~/.local/bin` está fora do
+PATH, as Preferências mostram a linha exata para o usuário colar. A sondagem lê o
+PATH de um shell de login, e não o do processo, porque um app aberto pelo Dock no
+macOS herda o PATH do launchd.
+
+No Windows a decisão se inverte: o PATH do usuário é o valor `Path` em
+`HKCU\Environment`, mecanismo por usuário e sem administrador, então o app
+acrescenta a pasta sozinho. O valor é lido sem expandir, para não destruir
+entradas como `%USERPROFILE%`, e `setx.exe` nunca é usado porque trunca em 1024
+caracteres.
 
 Caminhos enviados à interface usam barras normais em todos os sistemas. Entradas
 Windows aceitam barras normais e invertidas. Links são recriados somente no

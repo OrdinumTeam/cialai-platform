@@ -1,5 +1,7 @@
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import { COMMUNITIES, isCommunityUrl } from '../config/community';
 
 import { findDesktop, type DesktopEntry, type DesktopStore } from '../desktops/store';
 import { useI18n } from '../i18n';
@@ -22,6 +24,18 @@ type Props = {
 };
 
 type Glyph = 'desktops' | 'pair' | 'terminal' | 'settings';
+
+// Marcas de terceiro, geradas por `tools/brand/build-community-glyphs.mjs` a
+// partir do traçado oficial, o mesmo que o site usa. São pretas sobre
+// transparente e a cor vem de `tintColor`, então servem aos dois temas.
+const COMMUNITY_GLYPHS = {
+  discord: require('../assets/discord.png'),
+  whatsapp: require('../assets/whatsapp.png'),
+};
+const COMMUNITY_LABELS = {
+  discord: 'mobile.home.discord',
+  whatsapp: 'mobile.home.whatsapp',
+} as const;
 
 // Glifos desenhados só com View, no acento, para o início ter ícones sem
 // dependência nova: monitor, código QR, janela de terminal e controles.
@@ -92,6 +106,17 @@ export function Home({ store, describe, keptDesktopId, onContinue, onDisconnect,
   ];
   const surface = { backgroundColor: palette.surface, borderColor: palette.separator };
 
+  // Abre no navegador do sistema. O endereço é conferido antes: um valor
+  // inesperado aqui viraria abertura de app de terceiro.
+  const openCommunity = async (url: string) => {
+    if (!isCommunityUrl(url)) return;
+    try {
+      await Linking.openURL(url);
+    } catch {
+      Alert.alert(t('mobile.home.community'), t('mobile.home.communityFailed'));
+    }
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -133,6 +158,24 @@ export function Home({ store, describe, keptDesktopId, onContinue, onDisconnect,
             </Pressable>
           ))}
         </View>
+
+        <View style={styles.community}>
+          <Text accessibilityRole="header" style={[styles.communityTitle, { color: palette.label }]}>{t('mobile.home.community')}</Text>
+          <Text style={[styles.communityHint, { color: palette.secondaryLabel }]}>{t('mobile.home.communityHint')}</Text>
+          <View style={styles.communityRow}>
+            {COMMUNITIES.map(space => {
+              const label = t(COMMUNITY_LABELS[space.id]);
+              return (
+                <Pressable accessibilityLabel={label} accessibilityRole="link" key={space.id} onPress={() => openCommunity(space.url)}
+                  style={({ pressed }) => [styles.communityButton, surface, pressed && styles.pressed]}>
+                  <Image accessibilityIgnoresInvertColors resizeMode="contain" source={COMMUNITY_GLYPHS[space.id]}
+                    style={[styles.communityGlyph, { tintColor: palette.label }]} />
+                  <Text numberOfLines={1} style={[styles.communityLabel, { color: palette.label }]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -159,6 +202,13 @@ const styles = StyleSheet.create({
   cardTitle: { marginTop: 12, fontSize: 17, lineHeight: 22, fontWeight: '600' },
   cardHint: { marginTop: 2, fontSize: 13, lineHeight: 18 },
   pressed: { opacity: 0.7 },
+  community: { marginTop: 8, paddingHorizontal: 4, gap: 2 },
+  communityTitle: { fontSize: 17, lineHeight: 22, fontWeight: '600' },
+  communityHint: { fontSize: 13, lineHeight: 18 },
+  communityRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  communityButton: { flexGrow: 1, flexBasis: '46%', minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 999 },
+  communityGlyph: { width: 18, height: 18 },
+  communityLabel: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
   tile: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   glyph: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
   monitorScreen: { width: 22, height: 15, borderWidth: 2, borderRadius: 4 },

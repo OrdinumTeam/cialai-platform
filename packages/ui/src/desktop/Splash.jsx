@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React from 'react';
-import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
+import logo from '../assets/cialai-mark-256.png';
 import { translate } from './i18n.js';
 
 export default function Splash({ status, leaving }) {

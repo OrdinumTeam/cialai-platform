@@ -43,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'Cialai',
     slug: 'cialai',
-    version: '0.2.6',
+    version: '0.2.7',
     userInterfaceStyle: 'automatic',
     platforms: ['ios', 'android'],
     scheme: 'cialai',

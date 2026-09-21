@@ -12,7 +12,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChevronRight, ChevronsDownUp, Crosshair, File, FileCode2, FileImage, FileJson2, FileText, FilePlus2, Folder,
-  FolderOpen, FolderPlus, Locate, PanelRightClose, RefreshCw, Search, X,
+  FolderOpen, FolderPlus, Locate, RefreshCw, Search, X,
 } from 'lucide-react';
 import Menu, { anchorFromEvent } from './Menu.jsx';
 import { baseName, compactPath, dirName, extensionOf, fileKind, freeName, fs, git, isAbsolutePath, isInside, joinPath, relativePath, shortPath } from '../files.js';
@@ -63,7 +63,7 @@ function isDirEntry(entry) {
   return entry.kind === 'dir' || entry.targetKind === 'dir';
 }
 
-export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, onShowInGraph, notify, revealRequest, onCollapse }) {
+export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSessionAt, onInsertPath, onDeleteRequest, onShowInGraph, notify, revealRequest }) {
   useI18n();
   const explorer = session.explorer;
   const root = explorer.root;
@@ -578,7 +578,6 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         <button type="button" className="terminais-pane__tool" onClick={refreshAll} aria-label={translate('terminal.explorer.refresh')} title={translate('terminal.explorer.refreshTitle')}><RefreshCw size={13} strokeWidth={1.75} /></button>
         <button type="button" className="terminais-pane__tool" onClick={collapseAll} disabled={explorer.expanded.size <= 1} aria-label={translate('terminal.explorer.collapseAll')} title={translate('terminal.explorer.collapseAll')}><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
         <button type="button" className={`terminais-pane__tool${searching ? ' is-on' : ''}`} onClick={() => { setSearching((value) => !value); setQuery(''); }} aria-label={translate('terminal.explorer.searchByName')} aria-pressed={searching} title={translate('terminal.explorer.searchName')}><Search size={13} strokeWidth={2} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.explorer.collapseFiles')} title={translate('terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}><PanelRightClose size={16} strokeWidth={1.75} /></button>
       </div>
       {gitStatus?.isRepo ? (
         <div className="terminais-explorer__git" title={gitStatus.upstream ? translate('terminal.explorer.tracks', { upstream: gitStatus.upstream }) : translate('terminal.explorer.noRemote')}>

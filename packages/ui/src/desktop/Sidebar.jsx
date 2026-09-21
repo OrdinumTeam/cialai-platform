@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Link2, Settings } from 'lucide-react';
 import { groupViews } from '../views/registry.js';
-import logo from '../../../../brand/logo/cialai-mantis-v4-1-head-4k.png';
+import logo from '../assets/cialai-mark-256.png';
 import { translate } from './i18n.js';
 
 const GROUPS_KEY = 'cialai_groups_closed';

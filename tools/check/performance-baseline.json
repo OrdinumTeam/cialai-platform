@@ -1,0 +1,19 @@
+{
+  "sobre": "Medido por tools/check/performance.mjs com a CPU 4 vezes mais lenta, mediana de 3 aberturas do estudio, sobre o build de producao. O teto tem folga para a variacao de maquina e de CI; a queda de 4601 para 615 KB veio de parar de carregar o master da marca de 4096 px na primeira pintura.",
+  "orcamento": {
+    "interactiveMs": 1400,
+    "payloadKb": 760,
+    "requests": 24,
+    "longTaskMs": 900
+  },
+  "piso": {
+    "fps": 45
+  },
+  "medido": {
+    "interactiveMs": 862,
+    "payloadKb": 615,
+    "requests": 18,
+    "longTaskMs": 506,
+    "fps": 62
+  }
+}

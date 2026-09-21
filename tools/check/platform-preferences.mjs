@@ -82,6 +82,11 @@ for (const contract of [
   /invoke\('app_paths'\)/,
   /\{translate\('desktop\.preferences\.appFiles'\)\}<\/h3>/,
   /invoke\('fs_reveal', \{ path \}\)/,
+  // Comando `cialai` no terminal: a linha mostra onde ficou, oferece copiar a
+  // linha de PATH e remover. O caminho vem como dado do Rust.
+  /invoke\('cli_status'\)/,
+  /invoke\('cli_install'\)/,
+  /invoke\('cli_uninstall'\)/,
 ]) assert.match(preferences, contract, `contrato ausente em Preferences.jsx: ${contract}`);
 
 // Rede: sem servidor; nome do computador, aprovação por código e vigília.
@@ -106,6 +111,22 @@ const commands = read('apps/desktop/src-tauri/src/commands.rs');
 assert.match(commands, /crate::window::apply_backdrop\(&window, next\.window\.backdrop\(\)\)/);
 assert.match(commands, /pub fn app_paths\(app: AppHandle\) -> Result<AppPaths, String>/);
 assert.match(read('apps/desktop/src-tauri/src/lib.rs'), /commands::app_paths,/);
+// Comando de terminal: os tres comandos registrados e o gancho de primeira
+// abertura, que nunca pode derrubar o `setup`.
+for (const contract of [/pub fn cli_status\(/, /pub fn cli_install\(/, /pub fn cli_uninstall\(/]) {
+  assert.match(commands, contract, `comando do terminal ausente em commands.rs: ${contract}`);
+}
+for (const contract of [/commands::cli_status,/, /commands::cli_install,/, /commands::cli_uninstall,/, /cli::install\(&cli_home, &cli_config/]) {
+  assert.match(read('apps/desktop/src-tauri/src/lib.rs'), contract, `contrato do comando ausente em lib.rs: ${contract}`);
+}
+const cli = read('apps/desktop/src-tauri/src/cli.rs');
+// A promessa que sustenta a decisao de nao editar arquivo de shell. Os
+// comentarios saem antes, porque eles citam esses arquivos justamente para
+// explicar por que o app nao encosta neles.
+const cliCode = cli.replace(/^\s*\/\/.*$/gm, '');
+assert.doesNotMatch(cliCode, /zshrc|bashrc|bash_profile|config\.fish|profile\.ps1/, 'o app nao pode editar arquivo de shell do usuario');
+assert.match(cli, /pub fn launcher_from\(/);
+assert.match(cli, /pub const CLI_MARKER/);
 assert.match(read('apps/desktop/src-tauri/src/lib.rs'), /window::decorate\(&main_window, &backdrop\)/);
 const windowMod = read('apps/desktop/src-tauri/src/window/mod.rs');
 assert.match(windowMod, /pub fn apply_backdrop\(window: &WebviewWindow, backdrop: &str\)/);

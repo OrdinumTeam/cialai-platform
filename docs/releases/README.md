@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.2.7](0.2.7.md) | 21/09/2026 | `v0.2.7` | `OrdinumTeam/cialai-platform` |
 | [0.2.6](0.2.6.md) | 19/09/2026 | `v0.2.6` | `OrdinumTeam/cialai-platform` |
 | [0.2.5](0.2.5.md) | 19/09/2026 | `v0.2.5` | `OrdinumTeam/cialai-platform` |
 | [0.2.4](0.2.4.md) | 18/09/2026 | Sem tag | Somente celular, pelo Codemagic |
@@ -21,6 +22,10 @@ data e onde cada arquivo está.
 | [0.1.0](0.1.0.md) | 14/09/2026 | `v0.1.0` | `Cialai/cialai`, repositório anterior |
 
 ## Onde cada arquivo mora
+
+**Entrega inteira num comando.** Desde a 0.2.7, a sequência completa é o
+`scripts/deploy-full.sh`, documentado em `scripts/README.md`. Ele orquestra o
+que está descrito abaixo e não substitui nenhuma dessas peças.
 
 **Release no GitHub.** O workflow `release.yml` monta os instaladores e publica
 a release quando uma tag `v*` chega ao repositório. Os nomes são estáveis e não

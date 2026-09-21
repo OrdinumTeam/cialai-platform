@@ -90,6 +90,13 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:browser
 
+      # Orçamento de desempenho num computador simulado mais simples. Roda
+      # depois dos checks de navegador, que já instalaram o Chromium e já
+      # construíram apps/desktop/dist.
+      - name: Orçamento de desempenho
+        if: runner.os == 'Linux'
+        run: npm run check:performance
+
       # A CI não recebe a chave do atualizador; o bundle sai sem os arquivos assinados do updater.
       # No Linux o linuxdeploy do AppImage confere as dependências de todo ELF do bundle e não segue o $ORIGIN do tor
       # empacotado; a pasta dele entra no LD_LIBRARY_PATH só neste passo, para achar libevent, libssl e libcrypto.

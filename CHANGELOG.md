@@ -14,6 +14,9 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * Signed update support prepared for desktop releases
 * Automated checks for the desktop, shared interface, tunnel protocol, mobile shell and release documentation
 * An AppImage smoke test that opens the Linux app under Xvfb on Ubuntu 24.04 and Arch Linux with the system Mesa, WebKitGTK and GVfs
+* The phone Home ends with the community rooms. Two buttons, Discord and WhatsApp, open the same invitations the website publishes, in the system browser. The addresses live in `apps/mobile/src/config/community.ts` as data, never as dictionary text, and only a public https invitation is accepted. The brand marks are generated from the official path by `tools/brand/build-community-glyphs.mjs` and tinted by the palette, so one file serves both themes
+* A performance budget, `npm run check:performance`, measured on a computer simulated four times slower and over the production build. It records how long the studio takes to become usable, the payload of the first paint, the long tasks and the frame rate of the animated sheet, compares them with a versioned baseline and prints the change. Passing it by turning animation off is impossible: the animation scenario runs with motion on and the check asserts the sheet still animates
+* A `cialai` command in the terminal. The app writes it on first launch and checks it on every launch, so it repairs itself when the application moves. It only opens Cialai, with no arguments and no subcommands. On macOS and Linux it lands in `~/.local/bin` and the app never edits a shell file: when the folder is outside the PATH, Preferences shows the exact line to paste. On Windows it lands in `%LOCALAPPDATA%` and the folder is added to the user `Path` in the registry, read without expanding so `%USERPROFILE%` entries survive. A file with that name that is not ours is never overwritten or deleted, and removing the command from Preferences keeps it removed
 
 ### Fixed
 
@@ -34,6 +37,9 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * The phone terminal gained a floating composer. A bubble over the terminal opens a native text box where a long instruction can be written, corrected and reviewed with the device keyboard, selection, clipboard, autocorrect and dictation. Enter inside the box always breaks a line, and the text only reaches the terminal through Insert, which writes it and stops there, or Send, which writes it and only then sends Enter as a separate write. A multi-line text going to a program without bracketed paste asks for a second confirmation, and the draft survives closing the box
 * Windows paths now follow one contract on both sides. The Rust side sends every path with forward slashes, including the process working directory and the session folder, and announces the same separator; the interface normalizes the only other door, the system dialog, at the boundary. Going up from `C:/Users` reaches the drive root instead of an invalid `C:`, folders compare without case on a file system that ignores it, dropping a file from Explorer works, and the explorer no longer keeps switching roots
 * A desktop window that fails to paint is no longer a dead rectangle. The startup safety net now acts on a positive signal from the interface instead of on window visibility, which never triggered because every window is created visible; after the deadline the window grows, becomes resizable again and, with no frame of its own, gets the system one so it can be moved and closed. The page also ships a static first paint with the brand background and a drag region, platform detection races a deadline instead of blocking the mount, and a failure to start the phone page, the bridge or the tunnel supervisor is recorded and degraded instead of killing the app
+* Opening the studio no longer downloads four megabytes of brand artwork. The sidebar, the splash and the first run imported the 4096 px master to draw the mark at 20, 52 and 64 px, which was 87% of everything fetched before the first paint. They now use a 256 px derivative generated from the same master, with the same framing, so nothing changes on screen: the first paint went from 4601 KB to 615 KB
+* Collapsing a side column is one button again. The headers of the sessions and the files columns each carried a collapse button with the same icon, the same label and the same shortcut as the toggle in the work area header, and the two sat side by side across the divider. The one in the work area header stayed, because it also brings the column back and reports its state
+* Desktop dialogs no longer depend on styles injected at runtime to have a size. The width and the height ceiling of the sheet now live in the application stylesheet, so a failure to inject the emotion styles no longer leaves the sheet spread across the window with its content cut off at the top and the bottom. The sections inside a dialog also stopped measuring the window: on a 880 px window the pairing sheet used to collapse the QR code into a single column with the full 700 px of the sheet available, and grew from 463 to 660 px tall. Two new gates cover this, one over the production stylesheet and one in the browser over the production build, with twelve accounts on screen
 * The Linux AppImage no longer aborts on current distributions such as Arch Linux with Mesa 26 and recent Ubuntu. The system Mesa stack and its base libraries now come from the host, the WebKit helpers find the bundled libraries on their own, the bundled GLib ignores the host GIO modules and the launcher no longer exports `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` or `QT_PLUGIN_PATH`. The updater signature is made over the final AppImage
 
 ### Security
@@ -45,6 +51,24 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 ### Release status
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.2.7 preview
+
+Preview dated 2026-09-21. Opening the studio got seven times lighter, the `cialai` command now exists in the terminal, dialogs carry their own size, collapsing a side column is one button again, the icon got room to breathe and the phone Home invites you to the community.
+
+### Added
+
+* A `cialai` command in the terminal, written on first launch and checked on every launch
+* The community rooms at the end of the phone Home, Discord and WhatsApp
+* A performance budget, `npm run check:performance`, measured on a computer simulated four times slower
+* A dialog geometry gate over the production stylesheet, and two browser scenarios that measure the sheet with twelve accounts on screen
+
+### Fixed
+
+* Opening the studio no longer downloads four megabytes of brand artwork: the first paint went from 4601 KB to 615 KB
+* Dialogs no longer depend on styles injected at runtime to have a size, and their sections measure the sheet instead of the window
+* Collapsing a side column is one button again
+* The application icon is framed by the solid mass of the head instead of the box its thin tips stretch
 
 ## 0.2.6 preview
 

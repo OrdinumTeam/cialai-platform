@@ -1,6 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { act, create } from 'react-test-renderer';
-import { Text } from 'react-native';
+import { Linking, Text } from 'react-native';
 
 import { Desktops } from './Desktops';
 import { Home } from './Home';
@@ -227,6 +227,28 @@ test('Home shows the last computer, the four cards and the count, without addres
   await act(async () => { pressable(tree, 'Desconectar').props.onPress(); });
   expect(handlers.onDisconnect).toHaveBeenCalledTimes(1);
   await act(async () => tree.unmount());
+});
+
+test('Home offers the community rooms and opens the published address', async () => {
+  const open = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+  const handlers = homeHandlers();
+  let tree;
+  await act(async () => {
+    tree = create(<Home store={store} describe={() => ({ state: 'idle', transport: null })} keptDesktopId={null} {...handlers} />);
+  });
+  const rendered = text(tree);
+  for (const expected of ['Comunidade', 'Converse com quem usa e desenvolve o Cialai', 'Entrar no Discord', 'Entrar no WhatsApp']) {
+    expect(rendered).toContain(expected);
+  }
+  expect(rendered).not.toMatch(forbiddenPunctuation);
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Entrar no Discord')[0].props.onPress(); });
+  expect(open).toHaveBeenCalledWith('https://discord.gg/Kd4yjB24wP');
+  await act(async () => { tree.root.findAll(node => node.props.accessibilityLabel === 'Entrar no WhatsApp')[0].props.onPress(); });
+  expect(open).toHaveBeenCalledWith('https://chat.whatsapp.com/JktntW0R31gKdvCBnLj9cQ');
+  // Papel de link, e nao de botao: leva para fora do app.
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Entrar no Discord')[0].props.accessibilityRole).toBe('link');
+  await act(async () => tree.unmount());
+  open.mockRestore();
 });
 
 test('Home without a last computer hides Continue and offers to choose one', async () => {

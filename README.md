@@ -35,6 +35,8 @@ Downloads live on [cialai.com.br](https://cialai.com.br/#baixar). On macOS and L
 curl -fsSL https://cialai.com.br/install.sh | bash
 ```
 
+After the first launch, `cialai` in any terminal opens the application. On macOS and Linux the command lives in `~/.local/bin`; Preferences shows where it landed and how to remove it.
+
 Windows installers and the Android APK are on the same page. The desktop app checks the same mirror for signed updates. Each preview is described in the [changelog](./CHANGELOG.md).
 
 ## Project status

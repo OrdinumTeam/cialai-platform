@@ -13,6 +13,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+use crate::cli;
 use crate::i18n::{t, tf};
 use crate::platform::{self, PlatformInfo, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
@@ -1212,4 +1213,117 @@ mod agent_profile_tests {
             );
         }
     }
+}
+
+/// Estado do comando `cialai` no terminal, com a sondagem do PATH de login.
+///
+/// A sondagem abre um shell de login de proposito: um app aberto pelo Dock no
+/// macOS herda o PATH do launchd, que nao tem nada do usuario, e ler
+/// `std::env::var("PATH")` daria um falso negativo quase sempre. Falha ou
+/// demora devolve `None`, nunca uma afirmacao errada.
+#[tauri::command(async)]
+pub fn cli_status(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<cli::CliReport, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let target = cli::Target::current();
+    let directory = cli::command_dir(&home, target);
+    let path = cli::command_path(&home, target);
+    let mut report = if path.exists() {
+        cli::CliReport {
+            state: "unchanged",
+            path: platform::to_portable(&path),
+            directory: platform::to_portable(&directory),
+            on_path: None,
+            path_hint: None,
+            needs_new_terminal: false,
+        }
+    } else {
+        let config = app
+            .path()
+            .app_config_dir()
+            .map_err(|error| error.to_string())?;
+        cli::CliReport {
+            state: if config.join("cli-disabled").exists() {
+                "disabled"
+            } else {
+                "missing"
+            },
+            path: platform::to_portable(&path),
+            directory: platform::to_portable(&directory),
+            on_path: None,
+            path_hint: None,
+            needs_new_terminal: false,
+        }
+    };
+    if target != cli::Target::Windows {
+        let shell = platform::default_shell(&prefs.get());
+        report.on_path = login_path(&shell).map(|value| cli::on_path(&value, &directory, &home));
+        if report.on_path == Some(false) {
+            report.path_hint = Some(cli::path_hint(&shell.path, &directory));
+        }
+    }
+    Ok(report)
+}
+
+/// PATH visto por um shell de login, ou `None` quando ele nao responde a tempo.
+fn login_path(shell: &platform::ShellSpec) -> Option<String> {
+    use std::process::{Command, Stdio};
+    let mut command = Command::new(&shell.path);
+    command
+        .args(&shell.args)
+        .arg("-c")
+        .arg("printf '%s\\n' \"$PATH\"")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    platform::configure_background_command(&mut command);
+    let mut child = command.spawn().ok()?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < deadline => {
+                std::thread::sleep(std::time::Duration::from_millis(40));
+            }
+            _ => {
+                let _ = child.kill();
+                return None;
+            }
+        }
+    }
+    let output = child.wait_with_output().ok()?;
+    Some(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// Instala o comando `cialai`, pelo botao das Preferencias. Forca a escrita,
+/// entao apaga a lapide e sobrescreve arquivo alheio com copia de seguranca.
+#[tauri::command(async)]
+pub fn cli_install(app: AppHandle) -> Result<cli::CliReport, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let config = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    let launcher = cli::launcher_from(
+        std::env::var_os("APPIMAGE").as_deref(),
+        &std::env::current_exe().map_err(|error| error.to_string())?,
+        cli::Target::current(),
+    );
+    cli::install(
+        &home,
+        &config,
+        launcher.as_deref(),
+        cli::Target::current(),
+        true,
+    )
+}
+
+/// Remove o comando e grava a lapide, para a proxima abertura nao reinstalar.
+#[tauri::command(async)]
+pub fn cli_uninstall(app: AppHandle) -> Result<cli::CliReport, String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    let config = app
+        .path()
+        .app_config_dir()
+        .map_err(|error| error.to_string())?;
+    cli::uninstall(&home, &config, cli::Target::current())
 }

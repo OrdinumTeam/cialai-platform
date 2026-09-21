@@ -39,6 +39,7 @@ for (const required of [
   'npm ci --prefix tools/browser',
   'playwright/cli.js install --with-deps chromium',
   'npm run test:browser',
+  'npm run check:performance',
   'npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json',
   'node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage',
   'actions/upload-artifact@v4',
@@ -53,6 +54,12 @@ for (const required of [
   assert.ok(workflow.includes(required), `passo da matriz ausente: ${required}`);
 }
 
+// O orçamento de desempenho mede o build de produção e precisa do Chromium,
+// então vem depois dos checks de navegador, que preparam os dois.
+assert.ok(
+  workflow.indexOf('npm run test:browser') < workflow.indexOf('npm run check:performance'),
+  'o orçamento de desempenho precisa rodar depois dos checks de navegador',
+);
 assert.ok(
   workflow.indexOf('path: packages/tunnel-core/build/tor/downloads') < workflow.indexOf('npm run sidecar --workspace @cialai/desktop'),
   'o cache do Tor precisa vir antes do sidecar local, que prepara resources/tor',
@@ -85,7 +92,10 @@ assert.ok(
 const browserPackage = JSON.parse(readFileSync(`${root}/tools/browser/package.json`, 'utf8'));
 assert.match(browserPackage.dependencies.playwright, /^\d+\.\d+\.\d+$/, 'o Playwright precisa de versão exata');
 const { SCENARIOS, verdict, viteFsPath } = await import(new URL('../browser/run-browser-checks.mjs', import.meta.url));
-assert.deepEqual(SCENARIOS.map(({ name }) => name), ['desktop studio', 'desktop network', 'phone terminal']);
+assert.deepEqual(SCENARIOS.map(({ name }) => name), ['desktop studio', 'desktop network', 'phone terminal', 'desktop dialog geometry', 'desktop dialog geometry on a narrow window']);
+// A geometria dos diálogos precisa ser medida no build de produção: é lá que o
+// emotion injeta por CSSOM e que o Vite decide a ordem dos pedaços.
+assert.ok(SCENARIOS.some(({ origin }) => origin === 'build'), 'nenhum cenário roda contra o build de produção');
 assert.equal(verdict('PASS: ok'), 'pass');
 assert.equal(verdict('FAIL: erro'), 'fail');
 assert.equal(verdict('CHECK: Cialai'), 'pending');

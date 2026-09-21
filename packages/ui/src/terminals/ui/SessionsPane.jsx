@@ -11,7 +11,7 @@
 // metade da altura, e abaixo do ultimo card e o fim do grupo.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, PanelLeftClose, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
+import { Bell, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
 import SessionCard from './SessionCard.jsx';
 import { deliverPaths, moveSession, moveSessionBy } from '../runtime.js';
 import { beginDrag, inside, onDrag } from '../drag.js';
@@ -32,7 +32,7 @@ function sameTarget(a, b) {
 
 export default function SessionsPane({
   sessions, selectedId, onSelect, onNew, onMenu, renamingId, onRename, onRenameDone, attentionCount,
-  onJumpAttention, disconnectedCount, onReopenAll, onAccounts, onCollapse,
+  onJumpAttention, disconnectedCount, onReopenAll, onAccounts,
 }) {
   useI18n();
   const [query, setQuery] = useState('');
@@ -177,9 +177,6 @@ export default function SessionsPane({
         ) : null}
         <button type="button" className="terminais-pane__tool" onClick={onNew} aria-label={translate('terminal.session.new')} title={translate('terminal.session.newShortcut', { shortcut: shortcutLabel('Mod+T') })}>
           <Plus size={15} strokeWidth={2} aria-hidden="true" />
-        </button>
-        <button type="button" className="terminais-pane__tool" onClick={onCollapse} aria-label={translate('terminal.session.collapse')} title={translate('terminal.session.collapseShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}>
-          <PanelLeftClose size={16} strokeWidth={1.75} aria-hidden="true" />
         </button>
       </div>
       <div className="terminais-search">
