@@ -43,7 +43,7 @@ export default ({ config }: ConfigContext): ExpoConfig => {
     ...config,
     name: 'Cialai',
     slug: 'cialai',
-    version: '0.2.7',
+    version: '0.2.8',
     userInterfaceStyle: 'automatic',
     platforms: ['ios', 'android'],
     scheme: 'cialai',
@@ -72,7 +72,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       versionCode: resolveAndroidVersionCode(),
       adaptiveIcon: {
         foregroundImage: '../desktop/design/android-foreground-1024.png',
-        backgroundColor: '#FFFFFF'
+        // Magenta orquídea da marca. O primeiro plano é o símbolo em branco,
+        // então um fundo branco aqui faria o ícone sumir.
+        backgroundColor: '#E23B84'
       },
       allowBackup: false,
       softwareKeyboardLayoutMode: 'resize',

@@ -449,8 +449,16 @@ etapa_site() {
   titulo site "site, espelho dos downloads e páginas"
   exigir '[[ -n "$SITE" && -d "$SITE" ]]' "não achei o repositório do site. Aponte CIALAI_SITE_REPO" || return 0
   passo "site em $SITE"
-  if [[ "$APLICAR" == 1 && -n "$(git -C "$SITE" status --porcelain)" ]]; then
-    erro "a árvore do site precisa estar limpa"
+  # Árvore suja não impede, pelo mesmo motivo da etapa preparar: o site publica
+  # a árvore de trabalho, então o que está aqui já costuma estar no ar sem
+  # commit. Matar a entrega neste ponto deixaria a release publicada e o site
+  # parado na versão anterior. O que importa é mostrar o que vai junto.
+  local pendentes_site
+  pendentes_site="$(git -C "$SITE" status --porcelain | wc -l | tr -d ' ')"
+  if [[ "$pendentes_site" != "0" ]]; then
+    passo "$pendentes_site arquivos do site entram no commit"
+    git -C "$SITE" status --short | head -8 | sed 's/^/    /'
+    [[ "$pendentes_site" -gt 8 ]] && passo "    e mais $((pendentes_site - 8))"
   fi
   faz definir_versao_site "$VERSAO"
   # O espelho baixa os assets da release e reescreve o latest.json para o site.

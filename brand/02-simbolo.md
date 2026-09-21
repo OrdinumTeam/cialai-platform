@@ -16,8 +16,8 @@ escolha decorativa, é a cor real do animal.
 | Peça | Arquivo | Quando usar |
 |------|---------|-------------|
 | Símbolo em cores | `logo/cialai-mantis-v4-1-head-4k.png` | Favicon, avatar, ícone de app, menu recolhido, carimbo em canto de peça, qualquer aplicação abaixo de 48 px de altura |
-| Símbolo branco | `logo/cialai-mantis-v4-1-head-4k-white.png` | Fundos escuros, fundos rosa quente ou magenta, modo escuro da interface |
-| Símbolo preto | `logo/cialai-mantis-v4-1-head-4k-black.png` | Impressão de uma cor, carimbo, gravação, documentos em preto e branco |
+| Símbolo branco | `logo/cialai-mantis-v4-1-head-4k-white.png` | Fundos escuros, fundos rosa quente ou magenta, modo escuro da interface, ícone do aplicativo sobre o gradiente da marca |
+| Símbolo preto | `logo/cialai-mantis-v4-1-head-4k-black.png` | Impressão de uma cor, carimbo, gravação, documentos em preto e branco, marca da interface e do site sobre fundo claro |
 | Assinatura horizontal | `logo/cialai-lockup-1-4k.png` | Header, login, rodapé, assinatura de e-mail, capa de documento, impressão, qualquer aplicação acima de 48 px de altura |
 
 ### Símbolo
@@ -25,13 +25,15 @@ escolha decorativa, é a cor real do animal.
 Só a cabeça do louva-a-deus, ampliada, com a pétala de topo atrás como única
 referência à flor. Sem braços, sem peito, sem outras pétalas.
 
-Existe em três versões, todas com fundo transparente e a mesma geometria:
+Existe em três versões, todas com fundo transparente. A versão em cores traz a
+cabeça inteira. As monocromáticas são uma redução dela, feita para funcionar
+sobre fundo cheio e em tamanho pequeno:
 
 | Versão | Construção |
 |--------|------------|
 | Cores | Paleta completa, ver tabela de componentes abaixo |
-| Branca | Todas as formas em branco `#FFFFFF`, separadas por linhas finas transparentes. Feita à mão em vetor a partir da versão em cores |
-| Preta | Todas as formas em preto `#000000`, separadas por linhas finas brancas, brilho dos olhos em branco. Feita à mão em vetor a partir da versão em cores |
+| Branca | Só antenas, olhos e boca, em branco `#FFFFFF`. Pétala e face ficam vazadas, e o fundo aparece por elas. Feita à mão em vetor a partir da versão em cores |
+| Preta | Só antenas, olhos e boca, em preto `#000000`, com o brilho dos olhos vazado. Pétala e face ficam vazadas. Feita à mão em vetor a partir da versão em cores |
 
 As versões monocromáticas não são geradas por IA. Qualquer ajuste nelas é
 feito no vetor de origem, nunca regerando.

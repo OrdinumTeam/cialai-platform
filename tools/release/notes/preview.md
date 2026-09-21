@@ -6,12 +6,11 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **Opening the studio is seven times lighter.** The sidebar, the splash and the first run imported the 4096 px brand master to draw the mark at 20, 52 and 64 px, which was 87% of everything fetched before the first paint. The first paint went from 4601 KB to 615 KB, and nothing changed on screen.
-* **A `cialai` command in the terminal.** It is written on first launch and checked on every launch, so it repairs itself when the application moves. On macOS and Linux it lives in `~/.local/bin` and the app never edits a shell file.
-* **Dialogs carry their own size.** The width and the height ceiling moved out of styles injected at runtime, and the sections inside a dialog now measure the sheet instead of the window.
-* **Collapsing a side column is one button again,** the one in the work area header, which also brings the column back.
-* **The application icon has room to breathe,** framed by the solid mass of the head instead of the box its thin tips stretch.
-* **The phone Home invites you to the community,** with the Discord and WhatsApp rooms the website publishes.
+* **A new application icon,** in the same drawing as the sibling Ordinum applications: the brand gradient filling the whole frame, from magenta orchid at the top to hot pink at the bottom, with the symbol in white on it. The file is a full square with no rounded corners drawn in it, because current macOS applies the system mask itself.
+* **The same icon on iPhone and on Android.** On Android the adaptive foreground is the white symbol over the brand magenta, instead of the white background that made it disappear.
+* **The brand mark was redrawn,** and it reaches every place that showed the previous one: the sidebar, the splash and the first run of the studio, the website favicons, the iPhone shortcut and the marks on the pages.
+* **Dialogs position themselves.** In the installed 0.2.7 the pairing sheet could appear at the bottom corner of the window with no scrim and no centring. The fixed layer, the centring and the scrim now come from the application stylesheet, not from styles injected at runtime.
+* **Release announcements are one block per highlight,** instead of a wall of text.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

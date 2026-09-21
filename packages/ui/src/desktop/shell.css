@@ -318,8 +318,12 @@
 .mac-sidebar.is-hidden{margin-left:-232px;visibility:hidden}
 [data-platform="macos"] .mac-sidebar__drag{flex:0 0 52px;height:52px}
 .mac-sidebar__brand{display:flex;align-items:center;gap:9px;padding:0 18px 14px}
+/* A marca da interface e a versao preta do simbolo, entao ela ja le sobre
+   fundo claro. O branco entra so onde o fundo e escuro: a casca padrao tem a
+   barra lateral em azul profundo, e o tema escuro escurece tudo. A marca
+   Cialai clareia a barra lateral, e la o preto e que vale. */
 .mac-sidebar__logo{width:20px;height:20px;object-fit:contain;flex:0 0 auto;filter:brightness(0) invert(1)}
-.mac-sidebar__logo{filter:brightness(0) invert(1)}
+[data-theme="dark"] .mac-sidebar__logo{filter:brightness(0) invert(1)}
 .mac-sidebar__brand-name{font-size:13px;font-weight:600;color:var(--mac-sidebar-text);white-space:nowrap;letter-spacing:-.01em}
 .mac-sidebar__nav{position:relative;flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 10px 16px;display:flex;flex-direction:column;gap:1px}
 

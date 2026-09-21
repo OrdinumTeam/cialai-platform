@@ -24,8 +24,12 @@ for y in stride(from: 0, to: 1024, by: 4) {
         if red < 110 && green < 65 && blue < 100 && red > green { plum += 1 }
     }
 }
-guard !bitmap.hasAlpha, transparent == 0, light > 18000, pink > 6000, plum > 300 else {
-    fputs("App icon must be opaque and contain the visible Cialai pink and plum mark.\n", stderr)
+// O icone passou a seguir o desenho dos apps irmaos da Ordinum: gradiente da
+// cor da marca ocupando o quadro e o simbolo em branco por cima. Agora o rosa
+// e o fundo, e o branco e o simbolo, entao os limites mudaram de lado. Nao ha
+// mais ameixa no arquivo.
+guard !bitmap.hasAlpha, transparent == 0, light > 2000, pink > 40000 else {
+    fputs("App icon must be opaque, with the Cialai gradient background and the white symbol.\n", stderr)
     exit(1)
 }
-print("App icon validated: 1024 by 1024, opaque, with Cialai pink and plum artwork.")
+print("App icon validated: 1024 by 1024, opaque, Cialai gradient with the white symbol.")

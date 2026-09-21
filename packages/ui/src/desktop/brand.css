@@ -98,3 +98,7 @@
   filter:brightness(1.03);
   box-shadow:var(--mac-shadow-primary);
 }
+
+/* A barra lateral da marca Cialai e clara, ao contrario da casca padrao, que
+   e azul profunda. Ali o simbolo preto le, e o branco sumiria. */
+:is([data-shell="desktop"],[data-platform="macos"]):not([data-theme="dark"]) .mac-sidebar__logo{filter:none}

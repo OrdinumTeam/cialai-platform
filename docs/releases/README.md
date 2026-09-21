@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.2.8](0.2.8.md) | 21/09/2026 | `v0.2.8` | `OrdinumTeam/cialai-platform` |
 | [0.2.7](0.2.7.md) | 21/09/2026 | `v0.2.7` | `OrdinumTeam/cialai-platform` |
 | [0.2.6](0.2.6.md) | 19/09/2026 | `v0.2.6` | `OrdinumTeam/cialai-platform` |
 | [0.2.5](0.2.5.md) | 19/09/2026 | `v0.2.5` | `OrdinumTeam/cialai-platform` |

@@ -22,7 +22,7 @@ impedimentos. Nada sai para fora nesse modo.
 | 5 `desktop` | Acompanha o `release.yml` até a release sair do rascunho | macOS arm64 e Intel, Linux, Windows |
 | 6 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |
 | 7 `ios` | Dispara o `ios-testflight` no Codemagic | TestFlight |
-| 8 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site | Repositório do site |
+| 8 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site. Árvore suja do site também não bloqueia, e o plano lista o que vai junto | Repositório do site |
 | 9 `anuncio` | Confere se o `release.yml` já anunciou no Discord e só reenvia quando faltou | Discord |
 | 10 `conferir` | Lê o `latest.json` do espelho e confirma que o público recebe a versão nova | Verificação |
 
@@ -58,7 +58,7 @@ scripts/deploy-full.sh 0.2.7 --aplicar --pular ios    # sem a etapa do iOS
 | Codemagic e lojas | O script carrega sozinho **os dois** arquivos de `ordinum-control/secrets`: `ordinum/ordinum.env`, com o token do Codemagic, a chave da App Store Connect e a conta do Google Play, e `cialai/cialai.env`, com o que é deste app. Carregar só o segundo deixa o Codemagic sem token, e foi o que travou Android e iOS na primeira tentativa da 0.2.7. Para outra pasta, aponte `CIALAI_SECRETS_DIR`. O plano diz qual pasta achou, nunca o conteúdo |
 | Caminhos de chave | Os `*_PATH` dos arquivos são relativos e resolvem contra a raiz de um repositório, onde as chaves não estão. O script os converte para absolutos dentro da pasta de segredos |
 | AWS para o site | Perfil `aws-ordinum` |
-| Repositório do site ao lado deste, ou `CIALAI_SITE_REPO` | O plano avisa |
+| Repositório do site ao lado deste, ou `CIALAI_SITE_REPO` | O plano avisa. O `deploy.sh` de lá publica a árvore de trabalho, então o que está sem commit já costuma estar no ar; parar a entrega por isso deixaria a release publicada e o site na versão anterior |
 
 ## O que continua manual
 

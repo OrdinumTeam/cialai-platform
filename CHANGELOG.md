@@ -16,6 +16,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * An AppImage smoke test that opens the Linux app under Xvfb on Ubuntu 24.04 and Arch Linux with the system Mesa, WebKitGTK and GVfs
 * The phone Home ends with the community rooms. Two buttons, Discord and WhatsApp, open the same invitations the website publishes, in the system browser. The addresses live in `apps/mobile/src/config/community.ts` as data, never as dictionary text, and only a public https invitation is accepted. The brand marks are generated from the official path by `tools/brand/build-community-glyphs.mjs` and tinted by the palette, so one file serves both themes
 * A performance budget, `npm run check:performance`, measured on a computer simulated four times slower and over the production build. It records how long the studio takes to become usable, the payload of the first paint, the long tasks and the frame rate of the animated sheet, compares them with a versioned baseline and prints the change. Passing it by turning animation off is impossible: the animation scenario runs with motion on and the check asserts the sheet still animates
+* The application icon and every brand mark are generated, not drawn by hand. `tools/brand/build-app-icons.mjs` writes the three icon sources and the interface mark from the white and the black master, and `tools/brand/build-site-brand.mjs` writes the brand files of the website, each one at the exact size of the file it replaces so no page markup has to change. The gate cross reads the gradient ends and the symbol height from the generator, so the files and the code cannot drift apart
 * A `cialai` command in the terminal. The app writes it on first launch and checks it on every launch, so it repairs itself when the application moves. It only opens Cialai, with no arguments and no subcommands. On macOS and Linux it lands in `~/.local/bin` and the app never edits a shell file: when the folder is outside the PATH, Preferences shows the exact line to paste. On Windows it lands in `%LOCALAPPDATA%` and the folder is added to the user `Path` in the registry, read without expanding so `%USERPROFILE%` entries survive. A file with that name that is not ours is never overwritten or deleted, and removing the command from Preferences keeps it removed
 
 ### Fixed
@@ -40,6 +41,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * Opening the studio no longer downloads four megabytes of brand artwork. The sidebar, the splash and the first run imported the 4096 px master to draw the mark at 20, 52 and 64 px, which was 87% of everything fetched before the first paint. They now use a 256 px derivative generated from the same master, with the same framing, so nothing changes on screen: the first paint went from 4601 KB to 615 KB
 * Collapsing a side column is one button again. The headers of the sessions and the files columns each carried a collapse button with the same icon, the same label and the same shortcut as the toggle in the work area header, and the two sat side by side across the divider. The one in the work area header stayed, because it also brings the column back and reports its state
 * Desktop dialogs no longer depend on styles injected at runtime to have a size. The width and the height ceiling of the sheet now live in the application stylesheet, so a failure to inject the emotion styles no longer leaves the sheet spread across the window with its content cut off at the top and the bottom. The sections inside a dialog also stopped measuring the window: on a 880 px window the pairing sheet used to collapse the QR code into a single column with the full 700 px of the sheet available, and grew from 463 to 660 px tall. Two new gates cover this, one over the production stylesheet and one in the browser over the production build, with twelve accounts on screen
+* Desktop dialogs no longer depend on styles injected at runtime to be positioned either. In the installed 0.2.7 the pairing sheet appeared at the bottom corner of the window, in the document flow, with no scrim and no centring. The fixed layer, the centring, the scrim and the padding of the title, the body and the actions now come from the application stylesheet with the values MUI uses, so nothing changes while the injected styles are there. The browser gate drops the emotion sheets and measures again, in both engines
 * The Linux AppImage no longer aborts on current distributions such as Arch Linux with Mesa 26 and recent Ubuntu. The system Mesa stack and its base libraries now come from the host, the WebKit helpers find the bundled libraries on their own, the bundled GLib ignores the host GIO modules and the launcher no longer exports `LD_LIBRARY_PATH`, `PYTHONHOME`, `PYTHONPATH`, `PERLLIB` or `QT_PLUGIN_PATH`. The updater signature is made over the final AppImage
 
 ### Security
@@ -51,6 +53,23 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 ### Release status
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.2.8 preview
+
+Preview dated 2026-09-21. The brand mark was redrawn, the icon became the brand gradient filling the whole frame with the white symbol on it, the same drawing reaches the computer, the iPhone and Android, and dialogs no longer depend on styles injected at runtime to be positioned.
+
+### Added
+
+* An icon that follows the sibling Ordinum applications: the brand gradient edge to edge, from magenta orchid at the top to hot pink at the bottom, with the white symbol on it. The file is a full square with no rounded corners drawn in it, because current macOS applies the system mask itself
+* The same icon on iPhone and on Android, where the adaptive foreground is the white symbol over the brand magenta instead of the white background that made it disappear
+* Two generators for the brand files, one for the application icons and the interface mark, one for the website, both reading the same pair of masters
+
+### Fixed
+
+* The redrawn symbol reaches every place that showed the previous one: the sidebar, the splash and the first run of the studio, the website favicons, the iPhone shortcut and the light and dark marks of the pages
+* Dialogs no longer depend on styles injected at runtime to be positioned, only to be decorated
+* The release announcement is one block per highlight instead of a wall of text, and resending an old announcement uses today's format rather than the one that existed on the day of the tag
+* The delivery script loads both secret files, so the Codemagic token is found and the Android and iOS steps no longer stall
 
 ## 0.2.7 preview
 

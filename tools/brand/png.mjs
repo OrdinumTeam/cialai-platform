@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Leitura e escrita de PNG sem dependencia externa, no mesmo espirito de
 // `tools/check/desktop-icon.mjs`, que ja decodifica na mao. Cobre o que os
-// assets da marca usam: profundidade 8, sem entrelacamento, RGB ou RGBA.
+// assets da marca usam: profundidade 8, sem entrelacamento, RGB, RGBA e
+// paleta, que e o formato da marca branca.
 import { deflateSync, inflateSync } from 'node:zlib';
 
 const CRC = (() => {
@@ -28,6 +29,8 @@ export function decode(png) {
   let height = 0;
   let depth = 0;
   let color = 0;
+  let palette = null;
+  let transparency = null;
   const parts = [];
   while (offset < png.length) {
     const size = png.readUInt32BE(offset);
@@ -40,11 +43,13 @@ export function decode(png) {
       color = data[9];
       if (data[12] !== 0) throw new Error('PNG entrelacado nao e suportado');
     }
+    if (type === 'PLTE') palette = Buffer.from(data);
+    if (type === 'tRNS') transparency = Buffer.from(data);
     if (type === 'IDAT') parts.push(data);
     offset += size + 12;
   }
-  if (depth !== 8 || (color !== 2 && color !== 6)) throw new Error(`PNG fora do suporte: profundidade ${depth}, cor ${color}`);
-  const channels = color === 6 ? 4 : 3;
+  if (depth !== 8 || (color !== 2 && color !== 6 && color !== 3)) throw new Error(`PNG fora do suporte: profundidade ${depth}, cor ${color}`);
+  const channels = color === 6 ? 4 : color === 3 ? 1 : 3;
   const stride = width * channels;
   const raw = inflateSync(Buffer.concat(parts));
   const flat = Buffer.alloc(stride * height);
@@ -74,6 +79,17 @@ export function decode(png) {
     input += stride;
   }
   const pixels = Buffer.alloc(width * height * 4);
+  if (color === 3) {
+    if (!palette) throw new Error('PNG de paleta sem PLTE');
+    for (let i = 0; i < width * height; i += 1) {
+      const indice = flat[i];
+      pixels[i * 4] = palette[indice * 3];
+      pixels[i * 4 + 1] = palette[indice * 3 + 1];
+      pixels[i * 4 + 2] = palette[indice * 3 + 2];
+      pixels[i * 4 + 3] = transparency && indice < transparency.length ? transparency[indice] : 255;
+    }
+    return { width, height, pixels };
+  }
   for (let i = 0, j = 0; i < width * height; i += 1, j += channels) {
     pixels[i * 4] = flat[j];
     pixels[i * 4 + 1] = flat[j + 1];

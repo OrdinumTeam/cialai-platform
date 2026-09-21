@@ -536,7 +536,7 @@ dependencies = [
 
 [[package]]
 name = "cialai-desktop"
-version = "0.2.7"
+version = "0.2.8"
 dependencies = [
  "base64 0.21.7",
  "chrono",
