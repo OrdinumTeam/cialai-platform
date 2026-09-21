@@ -11,6 +11,13 @@ on:
         description: Release tag to announce, for example v0.2.5
         required: true
         type: string
+      # O formato do anúncio e o texto da página evoluem depois da tag. Sem esta
+      # entrada, reenviar um anúncio traria de volta o formato que existia no dia
+      # da tag, que é justamente o que se quer trocar.
+      ref:
+        description: Branch or commit whose tooling and release page to use, defaults to the tag
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -27,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ inputs.ref || inputs.tag }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
