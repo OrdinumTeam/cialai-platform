@@ -102,20 +102,46 @@ roda_etapa() {
 exige() { command -v "$1" >/dev/null 2>&1 || erro "$1 não encontrado no PATH"; }
 exige git; exige gh; exige node; exige python3
 
-# Segredos do Codemagic e das lojas. Eles moram fora deste repositório, no
-# ordinum-control, e as ferramentas de tools/release leem o caminho por
-# CIALAI_RELEASE_ENV_FILE. Achar sozinho é o ponto do deploy-full: não ter que
-# lembrar disso a cada entrega. Nada do conteúdo é impresso.
-if [[ -z "${CIALAI_RELEASE_ENV_FILE:-}" ]]; then
-  for candidato in \
-    "$RAIZ/../ordinum-control/secrets/cialai/cialai.env" \
-    "$HOME/Ordinum/Repos/OrdinumTeam/ordinum-control/secrets/cialai/cialai.env"; do
-    if [[ -f "$candidato" ]]; then
-      export CIALAI_RELEASE_ENV_FILE="$(cd "$(dirname "$candidato")" && pwd)/$(basename "$candidato")"
-      break
+# Segredos de release. Eles moram fora deste repositório, no ordinum-control, e
+# em DOIS arquivos: `ordinum/ordinum.env` traz o que é da conta Ordinum, como o
+# token do Codemagic e a chave da App Store Connect, e `cialai/cialai.env` traz
+# o que é deste app. Carregar só o segundo deixa o Codemagic sem token, e foi
+# isso que travou Android e iOS na 0.2.7. Nada do conteúdo é impresso.
+carregar_segredos() {
+  local base="${CIALAI_SECRETS_DIR:-}" candidato
+  if [[ -z "$base" ]]; then
+    for candidato in \
+      "$RAIZ/../ordinum-control/secrets" \
+      "$HOME/Ordinum/Repos/OrdinumTeam/ordinum-control/secrets"; do
+      if [[ -d "$candidato" ]]; then base="$(cd "$candidato" && pwd)"; break; fi
+    done
+  fi
+  [[ -n "$base" && -d "$base" ]] || return 0
+  SEGREDOS="$base"
+  set -a
+  # shellcheck source=/dev/null
+  [[ -f "$base/ordinum/ordinum.env" ]] && . "$base/ordinum/ordinum.env"
+  # shellcheck source=/dev/null
+  [[ -f "$base/cialai/cialai.env" ]] && . "$base/cialai/cialai.env"
+  set +a
+  # Os caminhos de chave nesses arquivos são relativos e resolvem contra a raiz
+  # de um repositório, onde as chaves não estão. Aqui viram absolutos.
+  local variavel valor
+  for variavel in APP_STORE_CONNECT_PRIVATE_KEY_PATH APP_STORE_CONNECT_NOTARY_PRIVATE_KEY_PATH \
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_PATH IOS_DISTRIBUTION_CERT_KEY_PATH APNS_AUTH_KEY_PATH \
+    DEVELOPER_ID_APPLICATION_PASSWORD_PATH; do
+    valor="${!variavel:-}"
+    [[ -n "$valor" && ! -f "$valor" ]] || continue
+    if [[ -f "$base/ordinum/$(basename "$valor")" ]]; then
+      export "$variavel=$base/ordinum/$(basename "$valor")"
+    elif [[ -f "$base/cialai/$(basename "$valor")" ]]; then
+      export "$variavel=$base/cialai/$(basename "$valor")"
     fi
   done
-fi
+  export CIALAI_RELEASE_ENV_FILE="${CIALAI_RELEASE_ENV_FILE:-$base/cialai/cialai.env}"
+}
+SEGREDOS=""
+carregar_segredos
 
 # O repositório exige Node 22; o `node` do PATH pode ser outro.
 NODE22="/opt/homebrew/opt/node@22/bin"
@@ -193,10 +219,11 @@ etapa_preparar() {
     passo "página da release presente"
   fi
 
-  if [[ -n "${CIALAI_RELEASE_ENV_FILE:-}" ]]; then
-    passo "segredos de release em ${CIALAI_RELEASE_ENV_FILE/#$HOME/~}"
+  if [[ -n "$SEGREDOS" ]]; then
+    passo "segredos de release em ${SEGREDOS/#$HOME/~}"
+    [[ -n "${CODEMAGIC_API_TOKEN:-}" ]] || aviso "  sem CODEMAGIC_API_TOKEN: as etapas android e ios vão parar"
   else
-    aviso "  sem arquivo de segredos: as etapas android e ios vão falhar. Aponte CIALAI_RELEASE_ENV_FILE"
+    aviso "  pasta de segredos não encontrada: as etapas android e ios vão parar. Aponte CIALAI_SECRETS_DIR"
   fi
 
   azul "  testes e portões"
@@ -323,11 +350,14 @@ etapa_desktop() {
     passo "faria: acompanhar o release.yml da tag $TAG até a release sair do rascunho"
     return 0
   fi
+  # O mais recente, nunca o primeiro que casar. Uma tentativa anterior da mesma
+  # tag deixa um run velho na lista, e `first` pegava justamente ele: o
+  # acompanhamento reportava a falha antiga como se fosse a de agora.
   local id=""
   for _ in $(seq 1 30); do
     id="$(gh run list --repo "$REPO" --workflow release.yml --limit 20 \
       --json databaseId,headBranch,status \
-      --jq "[.[] | select(.headBranch==\"$TAG\")] | first | .databaseId" 2>/dev/null || true)"
+      --jq "[.[] | select(.headBranch==\"$TAG\")] | max_by(.databaseId) | .databaseId" 2>/dev/null || true)"
     [[ -n "$id" && "$id" != "null" ]] && break
     sleep 10
   done

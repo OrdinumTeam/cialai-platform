@@ -55,7 +55,8 @@ scripts/deploy-full.sh 0.2.7 --aplicar --pular ios    # sem a etapa do iOS
 | Na `main` e igual ao `origin/main` | O plano avisa. Árvore suja é normal: o commit de release carrega o trabalho da entrega, e o plano lista o que vai junto |
 | `docs/releases/<versao>.md` com `Resumo` e `Destaques` | O plano avisa. É de onde sai o anúncio do Discord |
 | `gh` autenticado | `gh auth status` |
-| Codemagic e lojas | O script procura sozinho `ordinum-control/secrets/cialai/cialai.env` ao lado deste repositório e na home. Para outro caminho, aponte `CIALAI_RELEASE_ENV_FILE`. Os nomes das variáveis estão em `tools/release/.env.example`. O plano diz qual arquivo achou, nunca o conteúdo |
+| Codemagic e lojas | O script carrega sozinho **os dois** arquivos de `ordinum-control/secrets`: `ordinum/ordinum.env`, com o token do Codemagic, a chave da App Store Connect e a conta do Google Play, e `cialai/cialai.env`, com o que é deste app. Carregar só o segundo deixa o Codemagic sem token, e foi o que travou Android e iOS na primeira tentativa da 0.2.7. Para outra pasta, aponte `CIALAI_SECRETS_DIR`. O plano diz qual pasta achou, nunca o conteúdo |
+| Caminhos de chave | Os `*_PATH` dos arquivos são relativos e resolvem contra a raiz de um repositório, onde as chaves não estão. O script os converte para absolutos dentro da pasta de segredos |
 | AWS para o site | Perfil `aws-ordinum` |
 | Repositório do site ao lado deste, ou `CIALAI_SITE_REPO` | O plano avisa |
 

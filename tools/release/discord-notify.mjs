@@ -44,22 +44,40 @@ function condense(text) {
   return text.replace(/\s*\n\s*/g, ' ').trim();
 }
 
+/**
+ * Separa o rótulo em negrito do corpo do destaque.
+ *
+ * A página escreve `**🖥️ Diálogos do computador.** texto`, então o emoji e o
+ * título curto vêm de lá, junto com o texto. Assim o anúncio continua tendo
+ * uma fonte só, e quem escreve a página decide como o canal vai ler.
+ */
+export function splitHighlight(item) {
+  const match = /^\*\*\s*(.+?)\s*\.?\*\*\s*([\s\S]*)$/.exec(item);
+  if (!match) return { label: '', body: condense(item) };
+  return { label: condense(match[1]), body: condense(match[2]) };
+}
+
 export function buildPayload(version, page, { downloads = DOWNLOADS, release } = {}) {
   const summary = condense(section(page, 'Resumo'));
-  const highlights = bullets(section(page, 'Destaques')).map(condense);
+  const highlights = bullets(section(page, 'Destaques'));
   if (!summary) throw new Error(`docs/releases/${version}.md não tem seção Resumo`);
   if (!highlights.length) throw new Error(`docs/releases/${version}.md não tem seção Destaques`);
-  const lines = highlights.map((item) => `• ${item}`).join('\n');
+  // Um bloco por destaque: rótulo em negrito e o texto citado abaixo. A citação
+  // separa os assuntos sem transformar o anúncio numa parede de texto.
+  const blocks = highlights.map((item) => {
+    const { label, body } = splitHighlight(item);
+    return label ? `**${label}:**\n> ${body}` : `> ${body}`;
+  });
+  const description = [summary, ...blocks, `**📥 Baixar:**\n> ${downloads}`].join('\n\n');
   return {
     username: 'Cialai',
     avatar_url: AVATAR,
     embeds: [
       {
-        title: `Cialai ${version}`,
+        title: `Cialai ${version} 🚀`,
         url: release,
         color: COLOR,
-        description: `${summary}\n\n${lines}`,
-        fields: [{ name: 'Baixar', value: downloads }],
+        description,
         footer: { text: 'Prévia pública' },
         timestamp: new Date().toISOString(),
       },
