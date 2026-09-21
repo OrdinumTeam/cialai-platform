@@ -113,9 +113,15 @@ launch() {
   else
     local main appdir display xauthority
     main="$(pgrep -x cialai-desktop | head -n 1 || true)"
-    appdir="$(environ_of "$main" | sed -n 's/^APPDIR=//p')"
-    if [ -z "$main" ] || [ -z "$appdir" ]; then
-      fail "$name: processo cialai-desktop não encontrado"
+    appdir=""
+    [ -n "$main" ] && appdir="$(environ_of "$main" | sed -n 's/^APPDIR=//p')"
+    if [ -z "$main" ]; then
+      fail "$name: nenhum processo cialai-desktop vivo depois de $seconds s"
+    elif [ -z "$appdir" ]; then
+      # O pgrep achou e a leitura de /proc não: o app saiu entre uma coisa e
+      # outra. Dizer "não encontrado" aqui manda a investigação para o lado
+      # errado, que foi o que aconteceu na 0.2.7.
+      fail "$name: cialai-desktop $main saiu durante a verificação; últimas linhas do log:"$'\n'"$(tail -n 5 "$log")"
     else
       appdir="$(readlink -f "$appdir")"
       echo "$name: cialai-desktop $main com APPDIR=$appdir"
@@ -166,6 +172,14 @@ launch() {
     kill -KILL -- "-$group" 2>/dev/null || true
     wait "$group" 2>/dev/null || true
   fi
+
+  # O app cria o sidecar com process_group(0), então o cialai-tunnel fica num
+  # grupo próprio e o kill acima não o alcança. Sobrevivendo, ele continua com
+  # a UDP 4740 e as portas do Tor, e a execução seguinte não sobe. Encerrar
+  # aqui é o que torna as duas execuções independentes de verdade.
+  pkill -x cialai-tunnel 2>/dev/null || true
+  sleep 1
+  pkill -KILL -x cialai-tunnel 2>/dev/null || true
 
   local problems
   problems="$(grep -En 'Aborting|undefined symbol|symbol lookup error|error while loading shared libraries|Failed to load module: |Unable to spawn a new child process|core dumped|EGL_BAD_' "$log" || true)"
