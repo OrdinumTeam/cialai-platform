@@ -547,6 +547,18 @@ etapa_site() {
 # e só reenvia quando faltou, para não duplicar mensagem no canal.
 etapa_anuncio() {
   titulo anuncio "anúncio no Discord"
+  # A ficha da página manda. Uma entrega pode sair sem mensagem no canal, e
+  # quem diz isso é a própria página, porque o envio automático vem da tag e
+  # não tem como receber argumento.
+  if ! node -e "
+    import('./tools/release/discord-notify.mjs').then(async (m) => {
+      const { readFileSync } = await import('node:fs');
+      process.exit(m.announces(readFileSync('docs/releases/$VERSAO.md', 'utf8')) ? 0 : 1);
+    });
+  " 2>/dev/null; then
+    passo "a página da $VERSAO pede para não anunciar, então o canal fica quieto"
+    return 0
+  fi
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: conferir se o release.yml anunciou e reenviar só se faltou"
     return 0

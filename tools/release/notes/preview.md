@@ -6,11 +6,9 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **A new application icon,** the mantis head in colour on a white rounded plate. On the phone the plate fills the frame, because the system is what rounds it; on the desktop it steps back to the macOS grid so the icon does not touch its neighbours in the Dock.
-* **The same icon on iPhone, on Android and in the browser tab.** On Android the adaptive foreground is the colour artwork over the white that plays the part of the plate, and it fits the 66 dp safe zone.
-* **The `cialai` command is found on Linux.** Typing it gave command not found, because `~/.local/bin` only reaches PATH through a login file that runs before Cialai creates the folder. The application now writes a marked, guarded block into the file your terminal actually reads, with a backup first and an exact removal from Preferences.
-* **Dialogs position themselves.** In the installed 0.2.7 the pairing sheet could appear at the bottom corner of the window with no scrim and no centring. The fixed layer, the centring and the scrim now come from the application stylesheet, not from styles injected at runtime.
-* **Release announcements are one block per highlight,** instead of a wall of text.
+* **The application icon is the colour artwork on a white rounded plate again,** on the desktop, on both stores and in the browser tab. The plate fills the frame on the phone, because the system is what rounds it, and steps back to the macOS grid on the desktop so the icon does not touch its neighbours in the Dock.
+* **The `cialai` command is found on Linux.** Typing it gave command not found: `~/.local/bin` only reaches PATH through a login file that runs before Cialai creates the folder, and opening a new terminal did not help either, because a terminal reads `~/.bashrc`. The application now writes a marked, guarded block into the file your terminal actually reads, with a backup first and an exact removal from Preferences. On fish a file of its own lands in `conf.d` and nothing else is touched.
+* **The PATH probe stopped lying.** It measured a freshly opened login shell, where the folder already exists, so it reported everything was fine while your terminal found nothing.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

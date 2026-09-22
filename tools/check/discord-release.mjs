@@ -11,7 +11,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { buildPayload, section, versionOf } from '../release/discord-notify.mjs';
+import { announces, buildPayload, section, versionOf } from '../release/discord-notify.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path) => readFileSync(`${root}${path}`, 'utf8');
@@ -39,6 +39,17 @@ for (const name of pages) {
   assert.ok(embed.description.length <= 4096, `${name} passa do limite de descrição do Discord`);
   assert.ok(embed.title.startsWith('Cialai '), 'o título nomeia o produto e a versão');
 }
+
+// Uma entrega pode sair sem anúncio, e a ficha da página é onde isso se diz.
+// O portão guarda o mecanismo, porque quem decide é a página e não o comando:
+// o envio automático vem da tag, sem ninguém para passar argumento.
+const semAnuncio = pages.filter((name) => !announces(read(`docs/releases/${name}`)));
+console.log(semAnuncio.length
+  ? `  ${semAnuncio.length} página ou páginas pedem para não anunciar: ${semAnuncio.join(', ')}`
+  : '  todas as páginas anunciam');
+assert.ok(announces('| Canal | Prévia |'), 'uma ficha comum precisa anunciar');
+assert.ok(!announces('| Anúncio | Não |'), 'a ficha precisa conseguir recusar o anúncio');
+assert.match(read('tools/release/discord-notify.mjs'), /if \(!announces\(page\)\)/, 'o envio precisa honrar a recusa');
 
 // O índice lista cada página, para ninguém publicar uma que não se acha.
 const index = read('docs/releases/README.md');

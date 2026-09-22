@@ -23,7 +23,7 @@ impedimentos. Nada sai para fora nesse modo.
 | 6 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |
 | 7 `ios` | Dispara o `ios-testflight` no Codemagic | TestFlight |
 | 8 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site. Árvore suja do site também não bloqueia, e o plano lista o que vai junto | Repositório do site |
-| 9 `anuncio` | Confere se o `release.yml` já anunciou no Discord e só reenvia quando faltou | Discord |
+| 9 `anuncio` | Confere se o `release.yml` já anunciou no Discord e só reenvia quando faltou. Uma linha `| Anúncio | Não |` na ficha da página deixa a entrega sair calada, nos dois caminhos | Discord |
 | 10 `conferir` | Lê o `latest.json` do espelho e confirma que o público recebe a versão nova | Verificação |
 
 **Por que o Linux tem portão próprio.** O empacotamento do Linux é o que mais

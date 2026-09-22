@@ -24,6 +24,20 @@ export function versionOf(tag) {
   return match[1];
 }
 
+/**
+ * A página pede anúncio?
+ *
+ * A ficha da página aceita uma linha `| Anúncio | Não |`, e ela é a única
+ * forma de uma entrega sair sem mensagem no canal. Fica na página, e não num
+ * argumento do comando, porque o envio automático é o último passo do
+ * `release.yml`, disparado pela tag, sem ninguém para passar argumento. Assim a
+ * decisão viaja junto com a versão e vale nos dois caminhos, o automático e o
+ * reenvio à mão.
+ */
+export function announces(markdown) {
+  return !/^\|\s*An[úu]ncio\s*\|\s*N[ãa]o\s*\|\s*$/im.test(markdown);
+}
+
 /** Corpo de uma seção `## Título`, até a próxima seção do mesmo nível. */
 export function section(markdown, title) {
   const pattern = new RegExp(`^## ${title}\\s*$([\\s\\S]*?)(?=^## |\\s*$(?![\\s\\S]))`, 'm');
@@ -101,6 +115,10 @@ async function main() {
   const [tag, ...flags] = process.argv.slice(2);
   const version = versionOf(tag);
   const page = readFileSync(new URL(`docs/releases/${version}.md`, ROOT), 'utf8');
+  if (!announces(page)) {
+    console.log(`A página da ${version} pede para não anunciar, então nada foi enviado ao Discord`);
+    return;
+  }
   const repo = process.env.GH_REPO || 'OrdinumTeam/cialai-platform';
   const payload = buildPayload(version, page, {
     release: `https://github.com/${repo}/releases/tag/${tag}`,
