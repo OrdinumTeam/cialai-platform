@@ -97,6 +97,46 @@ Esta é a primeira versão do Cialai para celular:
 O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser configurado.
 ```
 
+## Novidades da prévia na App Store
+
+O que a App Store mostra em Novidades desta versão. A loja tem uma fonte só, e
+é esta: `tools/release/asc_submit.py` lê este bloco e grava o texto na versão
+antes de enviar à revisão. A última versão publicada na loja é a 0.2.2, então o
+texto cobre tudo que chegou ao iPhone desde ela, e não só o da entrega do dia.
+
+<!-- ASC_WHATS_NEW_START -->
+```text
+Esta atualização traz ao iPhone tudo que chegou desde a primeira versão.
+
+• Tela inicial como ponto de partida, com cartões de computador, parear, terminal e ajustes. O cartão continuar chega ao terminal num toque.
+• Caixa de texto flutuante no terminal. Escreva a instrução longa com o teclado do aparelho, com seleção, área de transferência, correção automática e ditado. Inserir escreve o texto e para. Enviar escreve e só então manda a linha.
+• Menu de sessão com renomear, subtítulo, cor, fixar, mover, nova sessão na pasta, trocar de pasta, copiar caminho, reiniciar e fechar, por toque longo ou pelos três pontos.
+• Seletor de pastas que alcança a raiz de cada projeto e o resto do disco, dentro dos limites que o computador define.
+• Contas dos agentes em cartões, com nome, plano e uso, e a troca de conta pela própria interface.
+• Terminal sem piscar, com a fileira de teclas inteira visível e rolagem só enquanto o teclado está aberto.
+• Teclado acompanhando a área visível o tempo todo, ao concluir, ao voltar do segundo plano e ao girar o aparelho.
+• Acentos e ç saindo uma vez só.
+• Conexão mais firme em rede móvel lenta, sem derrubar uma sessão que estava funcionando ao voltar do segundo plano.
+• Pareamento que mostra o tempo decorrido, explica a espera da reserva e pode ser cancelado.
+• Botões da comunidade no fim da tela inicial, para o Discord e o WhatsApp.
+• Ícone novo, no desenho da marca.
+```
+<!-- ASC_WHATS_NEW_END -->
+
+## Texto promocional da App Store
+
+Aparece acima da descrição na ficha. A Apple deixa trocar este campo sem nova
+revisão, e ele NÃO é copiado quando uma versão nova é criada: a 0.2.8 nasceu com
+ele vazio até ser regravado daqui. Por isso mora no repositório.
+
+<!-- ASC_PROMO_START -->
+```text
+Acompanhe seus terminais, arquivos e sessões de código pelo celular com uma conexão cifrada que se configura sozinha.
+```
+<!-- ASC_PROMO_END -->
+
+São 117 dos 170 caracteres.
+
 ## Palavras chave da App Store
 
 <!-- ASC_KEYWORDS_START -->

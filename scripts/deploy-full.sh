@@ -449,7 +449,8 @@ etapa_ios() {
   titulo ios "ios, TestFlight pelo Codemagic"
   if [[ "$APLICAR" != 1 ]]; then
     passo "faria: disparar o ios-testflight no Codemagic e acompanhar"
-    passo "lembrete: liberar o build para testadores e enviar à revisão fica no App Store Connect"
+    passo "o build fica no TestFlight. Para mandar esta versão à loja:"
+    passo "  python3 tools/release/asc_submit.py $VERSAO --aplicar"
     return 0
   fi
   local build

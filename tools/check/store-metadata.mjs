@@ -24,6 +24,18 @@ for (const path of ['docs/stores/listing-pt-BR.md', 'docs/stores/listing-en.md']
   assert.doesNotMatch(source, /\bVPN\b/i, `${path} must use product language`);
 }
 
+// A App Store mostra este texto em Novidades desta versão, e o
+// `tools/release/asc_submit.py` o grava na versão antes de enviar à revisão.
+// Sem o portão, um bloco fora do formato só apareceria na hora do envio.
+const whatsNew = markedBlock(read('docs/stores/listing-pt-BR.md'), 'ASC_WHATS_NEW');
+assert.ok(whatsNew.length <= 4000, `App Store what is new has ${whatsNew.length} characters`);
+assert.ok(whatsNew.length >= 40, 'App Store what is new is too short to describe a release');
+
+// O texto promocional não é copiado para uma versão nova, então ele mora aqui
+// e é regravado a cada envio. A Apple corta em 170 caracteres.
+const promo = markedBlock(read('docs/stores/listing-pt-BR.md'), 'ASC_PROMO');
+assert.ok(promo.length <= 170, `App Store promotional text has ${promo.length} characters`);
+
 const apple = read('docs/stores/app-store-privacy.md');
 assert.match(apple, /No, we do not collect data from this app/);
 assert.match(apple, /against the archived binary/i);

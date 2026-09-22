@@ -81,10 +81,46 @@ Nunca versione tokens, chaves da App Store, chaves de assinatura ou credenciais 
 | `cm-watch.sh BUILD_ID` | Acompanha o build a cada 15 segundos |
 | `cm-log.sh BUILD_ID --download` | Mostra o resumo e baixa logs sem expor URLs assinadas |
 | `cm-publish.sh ios-testflight main` | Dispara, acompanha e resume |
-| `asc_api.py builds` | Consulta a App Store Connect |
+| `asc_api.py builds` | Consulta a App Store Connect, só leitura |
+| `asc_submit.py 0.2.8` | Mostra o plano do envio de uma versão à revisão da Apple |
+| `asc_submit.py 0.2.8 --aplicar` | Cria a versão, grava os textos, anexa o build e envia à revisão |
 | `play_api.py status` | Consulta as faixas no Google Play |
 | `play_api.py upload APP.aab internal` | Valida um AAB e descarta o ensaio sem publicar |
 | `ios-gen-signing-key.sh` | Gera localmente a chave RSA em `secrets` |
 | `verify-android-signature.sh` | Confere que APK e AAB saíram assinados pela chave de upload |
+
+## Enviar uma versão à App Store
+
+O `deploy-full` leva o build ao TestFlight e para aí, de propósito: nem toda
+prévia vai à loja. Mandar uma versão à revisão é um comando à parte.
+
+```sh
+python3 tools/release/asc_submit.py 0.2.8             # plano, nada sai daqui
+python3 tools/release/asc_submit.py 0.2.8 --aplicar    # cria, grava, anexa e envia
+python3 tools/release/asc_submit.py 0.2.8 --aplicar --ate anexar
+```
+
+Cada passo relê o estado antes de agir, então repetir o comando depois de uma
+falha continua de onde parou. Com `--ate anexar` a versão fica montada e
+revisável no App Store Connect sem ir para a Apple.
+
+O que a ferramenta faz e o que ela não faz:
+
+| Vem de onde | O quê |
+| --- | --- |
+| Codemagic | O build, que precisa estar em `VALID`. Build em processamento para o envio |
+| Versão anterior | Descrição, palavras chave, capturas, endereços e a ficha de revisão, copiados pela própria Apple |
+| `docs/stores/listing-pt-BR.md` | Novidades desta versão e texto promocional, pelos blocos `ASC_WHATS_NEW` e `ASC_PROMO` |
+
+**O texto promocional precisa estar no repositório.** Ele é o único campo que a
+Apple não copia para a versão nova: a 0.2.8 nasceu com ele vazio e só voltou
+porque está versionado. O `check:store-metadata` confere os dois limites, 4000
+e 170 caracteres.
+
+A ficha publicada tem uma localização só, `pt-BR`. Acrescentar idioma pede
+descrição, palavras chave e capturas próprias daquele idioma, que é outra
+entrega, não um campo a mais aqui.
+
+A liberação é `AFTER_APPROVAL`, como na 0.2.2: aprovou, vai ao ar sozinho.
 
 Criar o app nas lojas e configurar integrações continuam sendo ações manuais do usuário.
