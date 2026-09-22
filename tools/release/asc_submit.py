@@ -151,9 +151,34 @@ def achar_ou_criar_versao(versao: str) -> dict | None:
                  "Para corrigir, crie a versão seguinte" % (versao, estado))
         return existente
 
-    anterior = peticao("GET", "/v1/apps/%s/appStoreVersions?limit=1" % APP).get("data") or []
-    direitos = (anterior[0]["attributes"].get("copyright") if anterior else None)
     passo("versão %s não existe ainda" % versao)
+
+    # A Apple aceita UMA versão aberta por vez. Com outra em aberto, criar
+    # devolve 409 e o motivo não é óbvio: "You cannot create a new version of
+    # the App in the current state". Foi o que aconteceu com a 0.2.8, que ficou
+    # em DEVELOPER_REJECTED e nunca chegou ao público.
+    #
+    # Renomear a vaga é o caminho certo, e não apagar: a versão aberta carrega
+    # a ficha inteira já copiada da anterior, descrição, palavras chave,
+    # capturas e detalhes de revisão. Só entra aqui versão que ainda não saiu,
+    # pelo mesmo conjunto de estados que autoriza edição.
+    todas = peticao("GET", "/v1/apps/%s/appStoreVersions?limit=10" % APP).get("data") or []
+    aberta = next((v for v in todas if v["attributes"].get("appStoreState") in EDITAVEL), None)
+    if aberta:
+        antiga = aberta["attributes"].get("versionString")
+        passo("a %s está aberta em %s e ocupa a única vaga de versão editável"
+              % (antiga, aberta["attributes"].get("appStoreState")))
+        if not faria("renomear a versão aberta de %s para %s" % (antiga, versao)):
+            return None
+        renomeada = peticao("PATCH", "/v1/appStoreVersions/%s" % aberta["id"], {
+            "data": {"type": "appStoreVersions", "id": aberta["id"],
+                     "attributes": {"versionString": versao, "releaseType": "AFTER_APPROVAL"}},
+        })["data"]
+        verde("  a vaga da %s virou a %s, com a ficha que já estava lá" % (antiga, versao))
+        return renomeada
+
+    anterior = (todas or [None])[0]
+    direitos = (anterior["attributes"].get("copyright") if anterior else None)
     if not faria("criar a versão %s, liberação depois da aprovação" % versao):
         return None
     criada = peticao("POST", "/v1/appStoreVersions", {

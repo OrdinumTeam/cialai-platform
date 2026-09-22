@@ -104,6 +104,11 @@ O que a App Store mostra em Novidades desta versão. A loja tem uma fonte só, e
 antes de enviar à revisão. A última versão publicada na loja é a 0.2.2, então o
 texto cobre tudo que chegou ao iPhone desde ela, e não só o da entrega do dia.
 
+O ícone não entra na lista. Ele foi reenquadrado mais de uma vez entre a 0.2.2 e a
+0.2.9, mas voltou ao mesmo lugar: a arte mede 597 por 898 nos dois arquivos, e a
+diferença visível entre eles é zero pixel. Para quem atualiza do iPhone, o ícone
+não mudou, e anunciar que mudou seria mentira na ficha da loja.
+
 <!-- ASC_WHATS_NEW_START -->
 ```text
 Esta atualização traz ao iPhone tudo que chegou desde a primeira versão.
@@ -119,7 +124,6 @@ Esta atualização traz ao iPhone tudo que chegou desde a primeira versão.
 • Conexão mais firme em rede móvel lenta, sem derrubar uma sessão que estava funcionando ao voltar do segundo plano.
 • Pareamento que mostra o tempo decorrido, explica a espera da reserva e pode ser cancelado.
 • Botões da comunidade no fim da tela inicial, para o Discord e o WhatsApp.
-• Ícone novo, no desenho da marca.
 ```
 <!-- ASC_WHATS_NEW_END -->
 
