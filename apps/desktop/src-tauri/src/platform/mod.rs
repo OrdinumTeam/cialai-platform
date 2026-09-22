@@ -243,7 +243,7 @@ pub fn default_shell(preferences: &Preferences) -> ShellSpec {
 }
 
 #[cfg(unix)]
-fn system_shell() -> String {
+pub fn system_shell() -> String {
     if let Some(shell) = std::env::var_os("SHELL").and_then(|value| value.into_string().ok()) {
         if !shell.trim().is_empty() {
             return shell;
@@ -280,7 +280,7 @@ fn login_shell_from_passwd() -> Option<String> {
 }
 
 #[cfg(target_os = "windows")]
-fn system_shell() -> String {
+pub fn system_shell() -> String {
     if let Ok(path) = which::which("pwsh.exe") {
         return path.to_string_lossy().into_owned();
     }

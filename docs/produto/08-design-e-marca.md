@@ -21,7 +21,7 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | --- | --- |
 | Pasta | `$MARCA/brand/logo` |
 | Marca em iteração | `cialai-mantis-v4-1.png` é a versão mais recente em 12/09/2026, busto da louva-a-deus sobre uma orquídea de cinco pétalas; os prompts `prompt-v2a*.txt`, `prompt-v3-*.txt` e `prompt-v4-*.txt` registram a evolução. A execução usa o arquivo mais novo aprovado na pasta e não fixa este nome |
-| Linguagem | Vetor plano, só preenchimentos sólidos, sem sombra, textura ou contorno, formas separadas por vãos, simetria bilateral, legível a 32 px. O símbolo em si não tem gradiente; o gradiente existe só como fundo do ícone do aplicativo |
+| Linguagem | Vetor plano, só preenchimentos sólidos, sem gradiente, sombra, textura ou contorno, formas separadas por vãos brancos, simetria bilateral, legível a 32 px |
 | Paleta, contrato fixo em todas as iterações | Magenta profundo `#E23B84`; rosa quente `#FF7AB2`; rosa pálido `#FFD6E6`; ameixa `#3A1B33` só para antenas e boca; branco puro para vãos e fundo |
 | Sem texto | A marca não tem letras; o nome aparece só em tipografia do sistema ao lado |
 
@@ -32,7 +32,7 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | Acento | `--mac-accent #1a4fa0` claro e `#4a8ae6` escuro | `--mac-accent #E23B84` claro e `#FF7AB2` escuro; `--mac-accent-hover #c9317a` claro e `#ff8fc0` escuro; `--mac-accent-soft-hover rgba(226,59,132,.14)` claro e `rgba(255,122,178,.24)` escuro |
 | Sidebar | Gradiente da marca Ordinum em azuis | Claro: gradiente de `#FFD6E6` para `#ffffff`; escuro: de `#3A1B33` para `#1c1c1e`; item ativo em pílula magenta |
 | Bloco de destaque, número principal | Azul Ordinum | Magenta |
-| Ícone do app | Marca Ordinum em fundo navy | Gradiente da marca ocupando o quadro inteiro, do magenta `#E23B84` no topo ao rosa `#FF7AB2` embaixo, com o símbolo em branco por cima a 70 por cento da altura. Quadrado cheio, sem cantos arredondados desenhados, porque o sistema aplica a própria máscara; no iOS o arquivo é opaco, sem alfa; no Android o primeiro plano é só o símbolo na zona segura, sobre fundo `#E23B84` |
+| Ícone do app | Marca Ordinum em fundo navy | Cabeça do louva-a-deus em cores sobre placa branca arredondada, com a arte a 87,6 por cento da altura da placa. No iPhone e no Android a placa ocupa o quadro inteiro, porque quem recorta é o sistema, e no iOS o arquivo é opaco, sem alfa. No macOS, Windows e Linux a placa recua para a grade do sistema, 824 de 1024 px, com margem transparente. No Android o primeiro plano é só a arte, na zona segura, sobre fundo `#FFFFFF` |
 | Splash | Marca Ordinum | Marca Cialai centralizada, mesmo tempo e mesma coreografia de janela |
 | Diálogo Vincular celular | Não existe | QR em preto sobre branco, sem tingir, com a marca pequena acima e o nome do computador; nunca colorir o QR |
 | Ponto de estado do túnel | Não existe | Verde conectado, âmbar reconectando, cinza sem rede, vermelho falha, com os tokens `--mac-ok`, `--mac-warn` e `--mac-bad` |
@@ -156,9 +156,9 @@ Tudo que aparece surge em 140 a 240 ms, só com opacidade e deslocamento, no `--
 
 | Plataforma | Geração | Verificação |
 | --- | --- | --- |
-| Desktop | `tauri icon apps/desktop/design/desktop-icon-1024.png`, quadrado cheio de 1024 px com alfa totalmente opaco | `tools/check/desktop-icon.mjs`, que exige cantos opacos e lê o gradiente e a altura do símbolo do próprio gerador, mais conferência visual em claro e escuro no Dock, na barra de tarefas e no lançador |
-| iOS | PNG opaco de 1024 px em `apps/desktop/design/app-icon-1024.png`, usado como `icon` do Expo | `tools/release/check-app-icon.swift` no Codemagic: 1024 por 1024, sem alfa, sem pixel transparente, com o rosa da marca no fundo e o símbolo em branco |
-| Android | Ícone adaptativo com `foregroundImage` em `apps/desktop/design/android-foreground-1024.png` e `backgroundColor #E23B84` no `app.config.ts`. O primeiro plano é o símbolo em branco, então um fundo branco o faria sumir | Arte dentro do raio seguro de 33 dp; pré-visualização nas máscaras circular, arredondada e quadrada |
+| Desktop | `tauri icon apps/desktop/design/desktop-icon-1024.png`, placa de 824 px em tela transparente de 1024 px | `tools/check/desktop-icon.mjs`, que lê a grade do próprio gerador e exige a placa centrada no tamanho exato, mais conferência visual em claro e escuro no Dock, na barra de tarefas e no lançador |
+| iOS | PNG opaco de 1024 px em `apps/desktop/design/app-icon-1024.png`, usado como `icon` do Expo | `tools/release/check-app-icon.swift` no Codemagic: 1024 por 1024, sem alfa, sem pixel transparente, com a placa branca, o rosa e a ameixa da arte |
+| Android | Ícone adaptativo com `foregroundImage` em `apps/desktop/design/android-foreground-1024.png` e `backgroundColor #FFFFFF` no `app.config.ts`, que faz o papel da placa que o iPhone já traz desenhada | Arte dentro da zona segura de 66 dp, conferida pelo portão; pré-visualização nas máscaras circular, arredondada e quadrada |
 | Favicon e site | `tools/brand/build-site-brand.mjs`, que grava cada arquivo do site no tamanho exato do que ele substitui | Legibilidade a 32 px |
 
 ## Regras de texto na interface

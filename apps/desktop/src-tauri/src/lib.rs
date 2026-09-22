@@ -241,7 +241,17 @@ pub fn run() {
                     &std::env::current_exe().unwrap_or_default(),
                     target,
                 );
-                match cli::install(&cli_home, &cli_config, launcher.as_deref(), target, false) {
+                // O shell de login do usuario, nao o que as Preferencias usam
+                // dentro do Cialai: quem digita `cialai` esta no terminal dele.
+                let shell = platform::system_shell();
+                match cli::install(
+                    &cli_home,
+                    &cli_config,
+                    launcher.as_deref(),
+                    target,
+                    false,
+                    Some(shell.as_str()),
+                ) {
                     Ok(report) => {
                         diagnostics::note(&format!("[cli] {} em {}", report.state, report.path))
                     }

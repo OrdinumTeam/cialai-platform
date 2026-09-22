@@ -19,6 +19,8 @@ escolha decorativa, é a cor real do animal.
 | Símbolo branco | `logo/cialai-mantis-v4-1-head-4k-white.png` | Fundos escuros, fundos rosa quente ou magenta, modo escuro da interface, ícone do aplicativo sobre o gradiente da marca |
 | Símbolo preto | `logo/cialai-mantis-v4-1-head-4k-black.png` | Impressão de uma cor, carimbo, gravação, documentos em preto e branco, marca da interface e do site sobre fundo claro |
 | Assinatura horizontal | `logo/cialai-lockup-1-4k.png` | Header, login, rodapé, assinatura de e-mail, capa de documento, impressão, qualquer aplicação acima de 48 px de altura |
+| Ícone do aplicativo | `logo/cialai-icon.png` | Ícone do app e favicon. Símbolo em cores sobre placa branca arredondada, com a arte a 87,6% da altura |
+| Ícone sem placa | `logo/cialai-icon-v2.png` | A mesma arte do anterior, sem o fundo, para montar a placa em outro tamanho |
 
 ### Símbolo
 
@@ -46,6 +48,18 @@ feito no vetor de origem, nunca regerando.
 | Coroa | Rosa claro | Protuberância pequena e pontuda entre os olhos |
 | Antenas | Ameixa | Duas linhas finas e retas saindo de entre os olhos |
 | Boca | Ameixa | Ponto pequeno na ponta inferior da face |
+
+### Ícone do aplicativo
+
+As duas peças de ícone trazem a arte no mesmo lugar e no mesmo tamanho, então a
+segunda é a primeira sem o fundo. O `tools/brand/build-app-icons.mjs` monta os
+três arquivos de `apps/desktop/design/` a partir delas e nunca redesenha forma:
+a curva da placa é a do designer.
+
+O enquadramento muda por alvo, e cada um tem um motivo. No iPhone e no Android
+a placa ocupa o quadro inteiro, porque quem recorta é o sistema. No macOS ela
+recua para a grade do sistema, 824 de 1024 px, senão o ícone encosta nos
+vizinhos do Dock.
 
 ### Assinatura horizontal
 

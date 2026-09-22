@@ -6,9 +6,9 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **A new application icon,** in the same drawing as the sibling Ordinum applications: the brand gradient filling the whole frame, from magenta orchid at the top to hot pink at the bottom, with the symbol in white on it. The file is a full square with no rounded corners drawn in it, because current macOS applies the system mask itself.
-* **The same icon on iPhone and on Android.** On Android the adaptive foreground is the white symbol over the brand magenta, instead of the white background that made it disappear.
-* **The brand mark was redrawn,** and it reaches every place that showed the previous one: the sidebar, the splash and the first run of the studio, the website favicons, the iPhone shortcut and the marks on the pages.
+* **A new application icon,** the mantis head in colour on a white rounded plate. On the phone the plate fills the frame, because the system is what rounds it; on the desktop it steps back to the macOS grid so the icon does not touch its neighbours in the Dock.
+* **The same icon on iPhone, on Android and in the browser tab.** On Android the adaptive foreground is the colour artwork over the white that plays the part of the plate, and it fits the 66 dp safe zone.
+* **The `cialai` command is found on Linux.** Typing it gave command not found, because `~/.local/bin` only reaches PATH through a login file that runs before Cialai creates the folder. The application now writes a marked, guarded block into the file your terminal actually reads, with a backup first and an exact removal from Preferences.
 * **Dialogs position themselves.** In the installed 0.2.7 the pairing sheet could appear at the bottom corner of the window with no scrim and no centring. The fixed layer, the centring and the scrim now come from the application stylesheet, not from styles injected at runtime.
 * **Release announcements are one block per highlight,** instead of a wall of text.
 

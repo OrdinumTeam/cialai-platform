@@ -1256,9 +1256,34 @@ pub fn cli_status(app: AppHandle, prefs: State<'_, PrefsState>) -> Result<cli::C
     };
     if target != cli::Target::Windows {
         let shell = platform::default_shell(&prefs.get());
-        report.on_path = login_path(&shell).map(|value| cli::on_path(&value, &directory, &home));
+        // Duas perguntas diferentes, e antes da 0.2.8 so a primeira era feita.
+        //
+        // O shell de login enxerga a pasta? Isso responde pelo proximo login.
+        // Nao responde pelo terminal de agora, e foi essa confusao que fez o
+        // app dizer que estava tudo certo enquanto o usuario de Linux levava
+        // command not found: o `~/.profile` do Debian so acrescenta a pasta se
+        // ela ja existir, e a sessao corrente comecou antes de ela existir.
+        //
+        // O bloco esta no arquivo do shell interativo? Isso responde pela
+        // janela de terminal que a pessoa abrir daqui a pouco, que e o que ela
+        // vai fazer em seguida.
+        let login = login_path(&shell).map(|value| cli::on_path(&value, &directory, &home));
+        let com_bloco = std::fs::read_to_string(cli::rc_file(&home, &platform::system_shell()))
+            .map(|texto| texto.contains(cli::BLOCO_INICIO))
+            .unwrap_or(false);
+        report.on_path = match login {
+            Some(true) => Some(true),
+            _ if com_bloco => Some(true),
+            outro => outro,
+        };
         if report.on_path == Some(false) {
             report.path_hint = Some(cli::path_hint(&shell.path, &directory));
+        }
+        // Terminal ja aberto herdou o PATH de antes. Nesse caso o comando so
+        // aparece numa janela nova, e a interface precisa dizer isso.
+        if report.on_path == Some(true) {
+            let agora = std::env::var("PATH").unwrap_or_default();
+            report.needs_new_terminal = !cli::on_path(&agora, &directory, &home);
         }
     }
     Ok(report)
@@ -1308,12 +1333,14 @@ pub fn cli_install(app: AppHandle) -> Result<cli::CliReport, String> {
         &std::env::current_exe().map_err(|error| error.to_string())?,
         cli::Target::current(),
     );
+    let shell = platform::system_shell();
     cli::install(
         &home,
         &config,
         launcher.as_deref(),
         cli::Target::current(),
         true,
+        Some(shell.as_str()),
     )
 }
 
@@ -1325,5 +1352,6 @@ pub fn cli_uninstall(app: AppHandle) -> Result<cli::CliReport, String> {
         .path()
         .app_config_dir()
         .map_err(|error| error.to_string())?;
-    cli::uninstall(&home, &config, cli::Target::current())
+    let shell = platform::system_shell();
+    cli::uninstall(&home, &config, cli::Target::current(), Some(shell.as_str()))
 }

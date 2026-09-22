@@ -24,12 +24,17 @@ for y in stride(from: 0, to: 1024, by: 4) {
         if red < 110 && green < 65 && blue < 100 && red > green { plum += 1 }
     }
 }
-// O icone passou a seguir o desenho dos apps irmaos da Ordinum: gradiente da
-// cor da marca ocupando o quadro e o simbolo em branco por cima. Agora o rosa
-// e o fundo, e o branco e o simbolo, entao os limites mudaram de lado. Nao ha
-// mais ameixa no arquivo.
-guard !bitmap.hasAlpha, transparent == 0, light > 2000, pink > 40000 else {
-    fputs("App icon must be opaque, with the Cialai gradient background and the white symbol.\n", stderr)
+// O icone e a arte colorida sobre placa branca, e a placa ocupa o quadro
+// inteiro porque quem arredonda e o iOS. Por isso o branco domina, e o rosa e
+// a ameixa aparecem na medida da arte. A origem nao pode ter canal alfa: o
+// iOS recusa, e um pixel transparente aqui vira preto na tela inicial.
+//
+// A amostra pega um pixel a cada quatro nos dois eixos, 65536 ao todo. Medido
+// na 0.2.8: 50328 claros, 11653 rosa e 683 ameixa. A ameixa e so o par de
+// antenas, entao o piso dela e baixo por natureza, nao por descuido. Os tres
+// ficam com folga para reenquadrar sem quebrar o portao.
+guard !bitmap.hasAlpha, transparent == 0, light > 30000, pink > 5000, plum > 300 else {
+    fputs("App icon must be opaque, with the Cialai artwork on the white plate.\n", stderr)
     exit(1)
 }
-print("App icon validated: 1024 by 1024, opaque, Cialai gradient with the white symbol.")
+print("App icon validated: 1024 by 1024, opaque, Cialai artwork on the white plate.")

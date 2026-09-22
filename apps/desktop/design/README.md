@@ -10,30 +10,43 @@ node tools/brand/build-site-brand.mjs         # writes the brand assets of the w
 
 | File | Use | Shape |
 | --- | --- | --- |
-| `app-icon-1024.png` | iOS and Expo source | Square, opaque RGB, gradient with the white symbol |
-| `desktop-icon-1024.png` | macOS, Windows and Linux | Square, edge to edge, with an alpha channel that is fully opaque |
-| `android-foreground-1024.png` | Android adaptive icon foreground | The white symbol alone, inside the 66 dp safe zone, over `#E23B84` |
+| `app-icon-1024.png` | iPhone, Android and the website favicon | Plate edge to edge, opaque RGB with no alpha channel |
+| `desktop-icon-1024.png` | macOS, Windows and Linux | Plate of 824 px centred in 1024, with a transparent margin |
+| `android-foreground-1024.png` | Android adaptive icon foreground | The artwork alone, inside the 66 dp safe zone, over `#FFFFFF` |
 
 ## The design
 
-The icon follows the sibling Ordinum applications: the brand gradient filling
-the whole frame, from magenta orchid at the top to hot pink at the bottom, with
-the symbol in white on it. The white brand mark carries only the antennae, the
-eyes and the mouth; the petal and the face are cut out, and the gradient shows
-through them.
+The icon is the mantis head in colour on a white rounded plate. Nothing here
+draws a shape: both pieces come finished from the brand folder.
 
-**The file is a full square, with no rounded corners drawn in it.** This is the
-part that matters. Current macOS applies the system mask itself. The previous
-icon shipped a squircle already drawn inside a transparent frame, so the system
-masked something that was already smaller: it was born smaller than its
-neighbours in the Dock, with the edge of its own plate visible inside the frame.
-`tools/check/desktop-icon.mjs` asserts the corners are opaque so that cannot
-come back.
+| Piece | What it carries |
+| --- | --- |
+| `brand/logo/cialai-icon.png` | The white rounded plate with the artwork inside |
+| `brand/logo/cialai-icon-v2.png` | The same artwork, with no plate |
 
-Two constants in `tools/brand/build-app-icons.mjs` govern the rest: `TOPO` and
-`BASE`, the ends of the gradient, and `ALTURA_MARCA`, how much of the frame the
-symbol takes. The check cross reads them, so the files and the code cannot drift
-apart.
+The two place the artwork at the same size, 87.6% of the frame height, so the
+second is the first without its background. That is why the desktop plate is
+the approved piece reduced, and not a rounded rectangle rasterized here: the
+curve is the designer's.
+
+## Why each target is framed differently
+
+**On the phone the plate fills the frame,** because the system is what rounds
+it. On iOS the file must also be opaque, with no alpha channel, so the corners
+the plate leaves out are painted white; the iOS mask eats them. On Android the
+adaptive background is `#FFFFFF`, which plays the part of the plate the iPhone
+already carries drawn.
+
+**On the desktop the plate steps back to the system grid,** 824 px of 1024,
+with the transparent margin the Dock expects. It is the same grid the
+applications that ship with the system use, and without it the icon touches its
+neighbours.
+
+`tools/check/desktop-icon.mjs` reads `PLACA_MACOS` from the generator and
+asserts the plate measures exactly that and stays centred, so the files and the
+code cannot drift apart. It also asserts the artwork takes the same fraction of
+both plates, which is what keeps the phone and the computer looking like the
+same application.
 
 Run `npm run icon --workspace @cialai/desktop` afterwards to regenerate every
 desktop size under `src-tauri/icons`. iOS and Android come from `expo prebuild`,

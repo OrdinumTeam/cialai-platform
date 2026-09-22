@@ -116,15 +116,33 @@ assert.match(read('apps/desktop/src-tauri/src/lib.rs'), /commands::app_paths,/);
 for (const contract of [/pub fn cli_status\(/, /pub fn cli_install\(/, /pub fn cli_uninstall\(/]) {
   assert.match(commands, contract, `comando do terminal ausente em commands.rs: ${contract}`);
 }
-for (const contract of [/commands::cli_status,/, /commands::cli_install,/, /commands::cli_uninstall,/, /cli::install\(&cli_home, &cli_config/]) {
+// O `cli::install` do gancho recebe a pasta pessoal e a de configuracao do
+// app. A busca ignora espaco e quebra de linha porque quem decide o formato da
+// chamada e o rustfmt, e um portao nao deve quebrar por reformatacao.
+for (const contract of [/commands::cli_status,/, /commands::cli_install,/, /commands::cli_uninstall,/, /cli::install\(\s*&cli_home,\s*&cli_config/]) {
   assert.match(read('apps/desktop/src-tauri/src/lib.rs'), contract, `contrato do comando ausente em lib.rs: ${contract}`);
 }
 const cli = read('apps/desktop/src-tauri/src/cli.rs');
-// A promessa que sustenta a decisao de nao editar arquivo de shell. Os
-// comentarios saem antes, porque eles citam esses arquivos justamente para
-// explicar por que o app nao encosta neles.
-const cliCode = cli.replace(/^\s*\/\/.*$/gm, '');
-assert.doesNotMatch(cliCode, /zshrc|bashrc|bash_profile|config\.fish|profile\.ps1/, 'o app nao pode editar arquivo de shell do usuario');
+// Ate a 0.2.8 este portao exigia que o app NAO tocasse em arquivo de shell. A
+// promessa nao se sustentou no Linux: `~/.local/bin` so entra no PATH pelo
+// `~/.profile` do Debian se a pasta ja existir no login, e o Cialai cria a
+// pasta depois, entao o usuario digitava `cialai` e levava command not found.
+//
+// O app passou a escrever no arquivo que o shell INTERATIVO le, que e quem
+// decide se uma janela nova acha o comando. O que este portao guarda agora e o
+// modo de escrever, que e o que torna a escrita segura.
+assert.match(cli, /pub fn rc_file\(/, 'falta escolher o arquivo do shell interativo');
+assert.match(cli, /pub fn path_block\(/);
+assert.match(cli, /pub const BLOCO_INICIO/, 'o bloco precisa de marcador de abertura para a remocao ser exata');
+assert.match(cli, /pub const BLOCO_FIM/, 'o bloco precisa de marcador de fechamento');
+// Guardado, senao cada terminal novo empilha a pasta no PATH.
+assert.match(cli, /case \\":\$PATH:\\" in/, 'o bloco do POSIX precisa da guarda que evita repetir a pasta no PATH');
+// Copia de seguranca antes da primeira escrita num arquivo que ja existia.
+assert.match(cli, /if rc\.exists\(\) && !atual\.contains\(BLOCO_INICIO\) \{\s*backup\(rc\)/, 'a primeira escrita no arquivo do shell precisa de copia de seguranca');
+// Remover pelas Preferencias tem que desfazer a escrita.
+assert.match(cli, /remove_path_block\(&rc_file\(home, shell\)\)/, 'a remocao precisa tirar o bloco do arquivo do shell');
+// No fish nada e editado: o Cialai escreve um arquivo so dele em conf.d.
+assert.match(cli, /conf\.d/, 'no fish o Cialai escreve arquivo proprio, nao edita configuracao alheia');
 assert.match(cli, /pub fn launcher_from\(/);
 assert.match(cli, /pub const CLI_MARKER/);
 assert.match(read('apps/desktop/src-tauri/src/lib.rs'), /window::decorate\(&main_window, &backdrop\)/);

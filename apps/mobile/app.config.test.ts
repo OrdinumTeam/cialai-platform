@@ -63,9 +63,9 @@ describe('Expo app config', () => {
     expect(config.icon).toBe('../desktop/design/app-icon-1024.png');
     expect(config.android?.adaptiveIcon).toEqual({
       foregroundImage: '../desktop/design/android-foreground-1024.png',
-      // Magenta orquídea: o primeiro plano é o símbolo em branco, e num fundo
-      // branco ele sumiria.
-      backgroundColor: '#E23B84'
+      // A placa branca do ícone: o primeiro plano é a arte colorida, e o fundo
+      // faz o papel da placa que o iPhone já traz desenhada.
+      backgroundColor: '#FFFFFF'
     });
   });
 

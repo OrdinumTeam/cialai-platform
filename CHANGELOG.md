@@ -60,13 +60,14 @@ Preview dated 2026-09-21. The brand mark was redrawn, the icon became the brand 
 
 ### Added
 
-* An icon that follows the sibling Ordinum applications: the brand gradient edge to edge, from magenta orchid at the top to hot pink at the bottom, with the white symbol on it. The file is a full square with no rounded corners drawn in it, because current macOS applies the system mask itself
-* The same icon on iPhone and on Android, where the adaptive foreground is the white symbol over the brand magenta instead of the white background that made it disappear
-* Two generators for the brand files, one for the application icons and the interface mark, one for the website, both reading the same pair of masters
+* An icon built from two finished brand pieces, the mantis head in colour on a white rounded plate. The framing differs per system and each difference has a reason: on the phone the plate fills the frame because the system is what rounds it, and on the desktop it steps back to the 824 of 1024 system grid so the icon does not touch its neighbours in the Dock. No shape is rasterized by the generator
+* The same icon on iPhone, on Android and in the browser tab, where the adaptive foreground is the colour artwork over the white that plays the part of the plate, sized against the mask and asserted to fit the 66 dp safe zone
+* Two generators for the brand files, one for the application icons and the interface mark, one for the website, both reading finished brand pieces rather than drawing anything
 
 ### Fixed
 
-* The redrawn symbol reaches every place that showed the previous one: the sidebar, the splash and the first run of the studio, the website favicons, the iPhone shortcut and the light and dark marks of the pages
+* The redrawn monochrome symbol reaches every place that showed the previous one: the sidebar, the splash and the first run of the studio, the iPhone shortcut and the light and dark marks of the pages
+* The `cialai` command is found on Linux. Typing it gave command not found, and the application still reported everything was fine. The cause is an ordering trap: the Debian and Ubuntu `~/.profile` only adds `~/.local/bin` to PATH when the folder already exists, and it runs at login, before Cialai creates the folder; opening a new terminal did not help either, because a terminal opens an interactive shell, which reads `~/.bashrc`. The application now writes a marked block into that file, guarded so it cannot stack the folder on PATH, with a backup before the first write and an exact removal from Preferences. On fish nothing is edited: a file of its own lands in `conf.d`. The probe stopped lying too, because it measured a freshly opened login shell, where the folder already exists
 * Dialogs no longer depend on styles injected at runtime to be positioned, only to be decorated
 * The release announcement is one block per highlight instead of a wall of text, and resending an old announcement uses today's format rather than the one that existed on the day of the tag
 * The delivery script loads both secret files, so the Codemagic token is found and the Android and iOS steps no longer stall

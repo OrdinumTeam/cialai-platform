@@ -48,7 +48,12 @@ function main() {
   if (!existsSync(destino)) throw new Error(`nao achei os assets do site em ${destino}`);
   const preta = decode(readFileSync(`${root}brand/logo/cialai-mantis-v4-1-head-4k-black.png`));
   const branca = decode(readFileSync(`${root}brand/logo/cialai-mantis-v4-1-head-4k-white.png`));
-  const icone = decode(readFileSync(`${root}apps/desktop/design/app-icon-1024.png`));
+  // Duas formas da mesma peca. O favicon fica com a placa recortada, para a
+  // aba do navegador mostrar o canto arredondado e nao um quadrado branco. O
+  // atalho do iPhone fica com a versao opaca, porque o iOS compoe o que for
+  // transparente sobre preto.
+  const placa = decode(readFileSync(`${root}brand/logo/cialai-icon.png`));
+  const opaco = decode(readFileSync(`${root}apps/desktop/design/app-icon-1024.png`));
   const caixaPreta = medir(preta);
   const caixaBranca = medir(branca);
   const temporario = tmpdir();
@@ -79,10 +84,14 @@ function main() {
   }
 
   // Favicon e atalho do iPhone: o mesmo icone do aplicativo.
-  const quadrados = [['favicon-32.png', 32], ['favicon-64.png', 64], ['favicon-192.png', 192], ['favicon-512.png', 512], ['apple-touch-icon.png', 180]];
-  const inteiro = { x: 0, y: 0, width: icone.width, height: icone.height };
-  for (const [nome, lado] of quadrados) {
-    writeFileSync(join(destino, nome), encode(resample(icone, inteiro, lado, lado), { alpha: true }));
+  const quadrados = [
+    ['favicon-32.png', 32, placa], ['favicon-64.png', 64, placa],
+    ['favicon-192.png', 192, placa], ['favicon-512.png', 512, placa],
+    ['apple-touch-icon.png', 180, opaco],
+  ];
+  for (const [nome, lado, fonte] of quadrados) {
+    const inteiro = { x: 0, y: 0, width: fonte.width, height: fonte.height };
+    writeFileSync(join(destino, nome), encode(resample(fonte, inteiro, lado, lado), { alpha: true }));
     escritos.push(`${nome} ${lado}x${lado}`);
   }
 

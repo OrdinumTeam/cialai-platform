@@ -9,14 +9,29 @@
 //!
 //! Duas decisoes merecem registro.
 //!
-//! No POSIX o app **nao edita arquivo de shell**. O destino e `~/.local/bin`,
-//! que nao exige privilegio e ja entra no PATH sozinho em boa parte das
-//! distribuicoes. Quando nao entra, a interface mostra a linha exata para o
-//! usuario colar. O raio de dano nao justifica o contrario: um `.zshrc`
-//! corrompido quebra todo shell novo da maquina, enquanto a falha evitada e
-//! apenas o comando nao ser encontrado. Ainda por cima o arquivo certo nao e
-//! obvio entre `.zshrc`, `.zprofile`, `.bashrc`, `.bash_profile` e o do fish,
-//! e dotfiles de quem programa costumam ser symlink de um repositorio.
+//! No POSIX o destino e `~/.local/bin`, que nao exige privilegio. Ate a 0.2.8
+//! o app parava por ai e **nao editava arquivo de shell**, confiando em que a
+//! pasta ja entra sozinha no PATH em boa parte das distribuicoes.
+//!
+//! **Isso nao funcionou, e o relato veio de usuario de Linux: instalou,
+//! digitou `cialai`, deu command not found.** O motivo e uma armadilha de
+//! ordem. O `~/.profile` do Debian e do Ubuntu so acrescenta `~/.local/bin` se
+//! a pasta JA EXISTIR, e ele roda no login. O Cialai cria a pasta depois do
+//! login, entao a sessao corrente nunca a recebe. Pior: `~/.profile` e de
+//! shell de login, e a janela de terminal abre shell interativo, que le
+//! `~/.bashrc`. Ou seja, nem abrir um terminal novo resolvia; so sair e entrar
+//! de novo na sessao.
+//!
+//! A sondagem ainda por cima mentia. Ela mede o PATH de um shell de login
+//! recem aberto, e nesse ponto a pasta ja existe, entao ela respondia que
+//! estava tudo certo enquanto o terminal do usuario nao achava nada.
+//!
+//! Agora o app escreve um bloco marcado no arquivo que o shell INTERATIVO le,
+//! `~/.bashrc`, `~/.zshrc` ou um arquivo proprio em `conf.d` no fish. O bloco
+//! e guardado, entao nao duplica a pasta no PATH, vem com marcadores nos dois
+//! lados para a remocao ser exata, e o arquivo ganha copia de seguranca antes
+//! da primeira escrita. E o que rustup, nvm e pyenv fazem, pelo mesmo motivo.
+//! Com ele, um terminal novo acha o comando na hora, sem sair da sessao.
 //!
 //! No Windows a conclusao se inverte, e a assimetria e proposital: la o PATH
 //! do usuario nao e arquivo pessoal, e o valor `Path` em `HKCU\Environment`,
@@ -215,6 +230,7 @@ pub fn install(
     launcher: Option<&Path>,
     target: Target,
     forced: bool,
+    shell: Option<&str>,
 ) -> Result<CliReport, String> {
     let directory = command_dir(home, target);
     let path = command_path(home, target);
@@ -251,13 +267,25 @@ pub fn install(
     let mut report = CliReport::new("installed", &path, &directory);
     if target == Target::Windows {
         report.needs_new_terminal = windows_path_add(&directory)?;
+    } else if let Some(shell) = shell {
+        // Falha aqui nao derruba a instalacao: o comando ja esta gravado, e o
+        // que se perde e so o atalho de achar sem configurar o PATH. A
+        // interface continua mostrando a linha para colar.
+        let rc = rc_file(home, shell);
+        report.needs_new_terminal =
+            ensure_path_block(&rc, &path_block(shell, &directory, home)).unwrap_or(false);
     }
     Ok(report)
 }
 
 /// Remove o comando e deixa a lapide, para a proxima abertura nao reinstalar.
 /// Arquivo que nao carrega o marcador nunca e apagado.
-pub fn uninstall(home: &Path, config: &Path, target: Target) -> Result<CliReport, String> {
+pub fn uninstall(
+    home: &Path,
+    config: &Path,
+    target: Target,
+    shell: Option<&str>,
+) -> Result<CliReport, String> {
     let directory = command_dir(home, target);
     let path = command_path(home, target);
     match fs::read_to_string(&path) {
@@ -269,10 +297,156 @@ pub fn uninstall(home: &Path, config: &Path, target: Target) -> Result<CliReport
     }
     if target == Target::Windows {
         windows_path_remove(&directory)?;
+    } else if let Some(shell) = shell {
+        let _ = remove_path_block(&rc_file(home, shell));
     }
     fs::create_dir_all(config).map_err(|error| error.to_string())?;
     fs::write(config.join(TOMBSTONE), CLI_MARKER).map_err(|error| error.to_string())?;
     Ok(CliReport::new("disabled", &path, &directory))
+}
+
+/// Marcadores do bloco no arquivo do shell. Ficam nos dois lados para a
+/// remocao recortar exatamente o que foi escrito, e nada alem.
+pub const BLOCO_INICIO: &str = "# >>> cialai >>>";
+pub const BLOCO_FIM: &str = "# <<< cialai <<<";
+
+/// Arquivo que o shell INTERATIVO le, que e quem decide se uma janela de
+/// terminal nova acha o comando. Nao e o arquivo de login: `~/.profile` so
+/// vale para shell de login, e abrir um terminal nao abre um.
+///
+/// No fish nao ha arquivo a editar. Ele le tudo que estiver em `conf.d`, entao
+/// o Cialai escreve um arquivo so dele e nao encosta em configuracao alheia.
+pub fn rc_file(home: &Path, shell: &str) -> PathBuf {
+    let nome = shell
+        .replace('\\', "/")
+        .rsplit('/')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    if nome.contains("fish") {
+        return home
+            .join(".config")
+            .join("fish")
+            .join("conf.d")
+            .join("cialai.fish");
+    }
+    if nome.contains("zsh") {
+        return home.join(".zshrc");
+    }
+    home.join(".bashrc")
+}
+
+/// Bloco que entra no arquivo do shell.
+///
+/// A pasta entra como `$HOME/...` e nao como caminho literal, porque dotfile
+/// de quem programa costuma ser o mesmo em mais de uma maquina. E a linha e
+/// guardada: sem a guarda, cada terminal novo empilharia a pasta no PATH.
+pub fn path_block(shell: &str, directory: &Path, home: &Path) -> String {
+    let portable = crate::platform::to_portable(directory);
+    let curto = portable.replacen(&crate::platform::to_portable(home), "$HOME", 1);
+    if shell.to_ascii_lowercase().contains("fish") {
+        return format!(
+            "{BLOCO_INICIO}\n# Escrito pelo Cialai. Para tirar, use o botao das Preferencias.\nfish_add_path -g {curto}\n{BLOCO_FIM}\n"
+        );
+    }
+    format!(
+        "{BLOCO_INICIO}\n# Escrito pelo Cialai. Para tirar, use o botao das Preferencias.\ncase \":$PATH:\" in\n  *\":{curto}:\"*) ;;\n  *) PATH=\"{curto}:$PATH\" ;;\nesac\n{BLOCO_FIM}\n"
+    )
+}
+
+/// Conteudo com o bloco em dia, ou `None` quando ja esta como deveria.
+///
+/// Troca no lugar quando os marcadores ja existem, para uma atualizacao nao
+/// deixar dois blocos, e acrescenta no fim quando nao existem.
+pub fn with_block(contents: &str, block: &str) -> Option<String> {
+    if let Some(inicio) = contents.find(BLOCO_INICIO) {
+        let fim = contents[inicio..]
+            .find(BLOCO_FIM)
+            .map(|offset| inicio + offset + BLOCO_FIM.len());
+        let Some(fim) = fim else {
+            // Marcador de abertura sem o de fechamento: arquivo mexido a mao.
+            // Nao da para recortar com seguranca, entao nada e tocado.
+            return None;
+        };
+        let fim = if contents[fim..].starts_with('\n') {
+            fim + 1
+        } else {
+            fim
+        };
+        if &contents[inicio..fim] == block {
+            return None;
+        }
+        return Some(format!(
+            "{}{}{}",
+            &contents[..inicio],
+            block,
+            &contents[fim..]
+        ));
+    }
+    if contents.is_empty() {
+        return Some(block.to_string());
+    }
+    let separador = if contents.ends_with("\n\n") {
+        ""
+    } else if contents.ends_with('\n') {
+        "\n"
+    } else {
+        "\n\n"
+    };
+    Some(format!("{contents}{separador}{block}"))
+}
+
+/// Conteudo sem o bloco, ou `None` quando ele nao esta la.
+pub fn without_block(contents: &str) -> Option<String> {
+    let inicio = contents.find(BLOCO_INICIO)?;
+    let fim = contents[inicio..]
+        .find(BLOCO_FIM)
+        .map(|offset| inicio + offset + BLOCO_FIM.len())?;
+    let fim = if contents[fim..].starts_with('\n') {
+        fim + 1
+    } else {
+        fim
+    };
+    let antes = contents[..inicio].trim_end_matches('\n');
+    let depois = &contents[fim..];
+    if antes.is_empty() {
+        return Some(depois.trim_start_matches('\n').to_string());
+    }
+    if depois.trim().is_empty() {
+        return Some(format!("{antes}\n"));
+    }
+    Some(format!("{antes}\n\n{depois}"))
+}
+
+/// Grava o bloco no arquivo do shell. Devolve `true` quando o arquivo mudou,
+/// que e o sinal de que um terminal novo passa a achar o comando.
+pub fn ensure_path_block(rc: &Path, block: &str) -> Result<bool, String> {
+    let atual = fs::read_to_string(rc).unwrap_or_default();
+    let Some(proximo) = with_block(&atual, block) else {
+        return Ok(false);
+    };
+    if let Some(pai) = rc.parent() {
+        fs::create_dir_all(pai).map_err(|error| error.to_string())?;
+    }
+    // Copia de seguranca so na primeira vez que o Cialai toca no arquivo. Uma
+    // atualizacao do proprio bloco nao precisa encher a pasta de copias.
+    if rc.exists() && !atual.contains(BLOCO_INICIO) {
+        backup(rc)?;
+    }
+    write_atomic(rc, &proximo)?;
+    Ok(true)
+}
+
+/// Tira o bloco do arquivo do shell. Devolve `true` quando havia o que tirar.
+pub fn remove_path_block(rc: &Path) -> Result<bool, String> {
+    let Ok(atual) = fs::read_to_string(rc) else {
+        return Ok(false);
+    };
+    let Some(proximo) = without_block(&atual) else {
+        return Ok(false);
+    };
+    write_atomic(rc, &proximo)?;
+    Ok(true)
 }
 
 /// A pasta aparece no PATH lido de um shell de login? Aceita a forma literal
@@ -531,10 +705,147 @@ mod tests {
     }
 
     #[test]
+    fn rc_file_escolhe_o_arquivo_do_shell_interativo() {
+        let home = Path::new("/home/ana");
+        // Nao e `~/.profile`: abrir um terminal nao abre shell de login.
+        assert_eq!(rc_file(home, "/bin/bash"), home.join(".bashrc"));
+        assert_eq!(rc_file(home, "/bin/zsh"), home.join(".zshrc"));
+        assert_eq!(rc_file(home, "/usr/local/bin/zsh"), home.join(".zshrc"));
+        assert_eq!(
+            rc_file(home, "/usr/bin/fish"),
+            home.join(".config/fish/conf.d/cialai.fish")
+        );
+        // Shell desconhecido cai no bashrc, que e o caso mais comum.
+        assert_eq!(rc_file(home, "/bin/dash"), home.join(".bashrc"));
+    }
+
+    #[test]
+    fn path_block_usa_home_e_nao_repete_a_pasta() {
+        let home = Path::new("/home/ana");
+        let dir = home.join(".local/bin");
+        let posix = path_block("/bin/bash", &dir, home);
+        assert!(posix.starts_with(BLOCO_INICIO));
+        assert!(posix.trim_end().ends_with(BLOCO_FIM));
+        // Caminho relativo ao HOME: dotfile viaja entre maquinas.
+        assert!(posix.contains("$HOME/.local/bin"));
+        assert!(!posix.contains("/home/ana"));
+        // Guardado: sem isso cada terminal novo empilharia a pasta no PATH.
+        assert!(posix.contains("case \":$PATH:\" in"));
+        let fish = path_block("/usr/bin/fish", &dir, home);
+        assert!(fish.contains("fish_add_path -g $HOME/.local/bin"));
+    }
+
+    #[test]
+    fn with_block_acrescenta_troca_e_reconhece_o_que_ja_esta_certo() {
+        let bloco = format!("{BLOCO_INICIO}\nPATH=novo\n{BLOCO_FIM}\n");
+        // Arquivo vazio recebe so o bloco.
+        assert_eq!(with_block("", &bloco).unwrap(), bloco);
+        // Arquivo com conteudo ganha uma linha em branco antes.
+        let com = with_block("alias l=ls\n", &bloco).unwrap();
+        assert_eq!(com, format!("alias l=ls\n\n{bloco}"));
+        // Ja esta como deveria: nada a fazer, e o arquivo nao e reescrito.
+        assert!(with_block(&com, &bloco).is_none());
+        // Bloco antigo e trocado no lugar, sem deixar dois.
+        let antigo = format!("alias l=ls\n\n{BLOCO_INICIO}\nPATH=velho\n{BLOCO_FIM}\nexport X=1\n");
+        let trocado = with_block(&antigo, &bloco).unwrap();
+        assert_eq!(trocado.matches(BLOCO_INICIO).count(), 1);
+        assert!(trocado.contains("PATH=novo"));
+        assert!(trocado.contains("export X=1"));
+        // Marcador de abertura sem o de fechamento: arquivo mexido a mao, e
+        // recortar as cegas destruiria configuracao alheia.
+        assert!(with_block(&format!("{BLOCO_INICIO}\nsem fim\n"), &bloco).is_none());
+    }
+
+    #[test]
+    fn without_block_recorta_so_o_que_o_cialai_escreveu() {
+        let bloco = format!("{BLOCO_INICIO}\nPATH=novo\n{BLOCO_FIM}\n");
+        assert!(without_block("alias l=ls\n").is_none());
+        let meio = format!("alias l=ls\n\n{bloco}export X=1\n");
+        assert_eq!(without_block(&meio).unwrap(), "alias l=ls\n\nexport X=1\n");
+        let fim = format!("alias l=ls\n\n{bloco}");
+        assert_eq!(without_block(&fim).unwrap(), "alias l=ls\n");
+        assert_eq!(without_block(&bloco).unwrap(), "");
+    }
+
+    #[test]
+    fn a_instalacao_no_posix_deixa_o_terminal_novo_achando_o_comando() {
+        let (home, config) = sandbox("bloco");
+        let launcher = app(&home, "Cialai");
+        let rc = home.join(".bashrc");
+        fs::write(&rc, "alias l=ls\n").unwrap();
+
+        let report = install(
+            &home,
+            &config,
+            Some(&launcher),
+            Target::Linux,
+            false,
+            Some("/bin/bash"),
+        )
+        .unwrap();
+        assert_eq!(report.state, "installed");
+        // O arquivo mudou, entao uma janela nova acha o comando na hora.
+        assert!(report.needs_new_terminal);
+        let corpo = fs::read_to_string(&rc).unwrap();
+        assert!(corpo.starts_with("alias l=ls"));
+        assert!(corpo.contains("$HOME/.local/bin"));
+        // Copia de seguranca antes da primeira escrita.
+        assert!(
+            fs::read_dir(&home)
+                .unwrap()
+                .filter_map(Result::ok)
+                .any(|entrada| entrada.file_name().to_string_lossy().contains(".bak-"))
+        );
+
+        // Segunda abertura nao mexe no arquivo nem manda abrir terminal.
+        let de_novo = install(
+            &home,
+            &config,
+            Some(&launcher),
+            Target::Linux,
+            false,
+            Some("/bin/bash"),
+        )
+        .unwrap();
+        assert!(!de_novo.needs_new_terminal);
+        assert_eq!(fs::read_to_string(&rc).unwrap(), corpo);
+
+        // Remover pelas Preferencias tira o bloco e deixa o resto.
+        uninstall(&home, &config, Target::Linux, Some("/bin/bash")).unwrap();
+        let depois = fs::read_to_string(&rc).unwrap();
+        assert!(!depois.contains(BLOCO_INICIO));
+        assert!(depois.contains("alias l=ls"));
+    }
+
+    #[test]
+    fn no_fish_o_cialai_escreve_arquivo_proprio_em_conf_d() {
+        let (home, config) = sandbox("fish");
+        let launcher = app(&home, "Cialai");
+        install(
+            &home,
+            &config,
+            Some(&launcher),
+            Target::Linux,
+            false,
+            Some("/usr/bin/fish"),
+        )
+        .unwrap();
+        let arquivo = home.join(".config/fish/conf.d/cialai.fish");
+        assert!(arquivo.exists());
+        assert!(
+            fs::read_to_string(&arquivo)
+                .unwrap()
+                .contains("fish_add_path")
+        );
+        // Nenhum arquivo de configuracao alheio foi tocado.
+        assert!(!home.join(".bashrc").exists());
+    }
+
+    #[test]
     fn installs_the_command_and_writes_only_when_it_changes() {
         let (home, config) = sandbox("install");
         let launcher = app(&home, "Cialai");
-        let first = install(&home, &config, Some(&launcher), Target::Linux, false).unwrap();
+        let first = install(&home, &config, Some(&launcher), Target::Linux, false, None).unwrap();
         assert_eq!(first.state, "installed");
         let path = command_path(&home, Target::Linux);
         assert!(path.exists());
@@ -546,7 +857,7 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             assert_ne!(fs::metadata(&path).unwrap().permissions().mode() & 0o111, 0);
         }
-        let again = install(&home, &config, Some(&launcher), Target::Linux, false).unwrap();
+        let again = install(&home, &config, Some(&launcher), Target::Linux, false, None).unwrap();
         assert_eq!(again.state, "unchanged");
     }
 
@@ -554,9 +865,9 @@ mod tests {
     fn rewrites_the_command_when_the_app_moved() {
         let (home, config) = sandbox("moved");
         let first = app(&home, "um");
-        install(&home, &config, Some(&first), Target::Linux, false).unwrap();
+        install(&home, &config, Some(&first), Target::Linux, false, None).unwrap();
         let second = app(&home, "dois");
-        let report = install(&home, &config, Some(&second), Target::Linux, false).unwrap();
+        let report = install(&home, &config, Some(&second), Target::Linux, false, None).unwrap();
         assert_eq!(report.state, "installed");
         let body = fs::read_to_string(command_path(&home, Target::Linux)).unwrap();
         assert!(body.contains(&second.to_string_lossy().to_string()));
@@ -570,14 +881,14 @@ mod tests {
         let path = command_path(&home, Target::Linux);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "#!/bin/sh\necho outro\n").unwrap();
-        let kept = install(&home, &config, Some(&launcher), Target::Linux, false).unwrap();
+        let kept = install(&home, &config, Some(&launcher), Target::Linux, false, None).unwrap();
         assert_eq!(kept.state, "kept");
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             "#!/bin/sh\necho outro\n"
         );
 
-        let forced = install(&home, &config, Some(&launcher), Target::Linux, true).unwrap();
+        let forced = install(&home, &config, Some(&launcher), Target::Linux, true, None).unwrap();
         assert_eq!(forced.state, "installed");
         assert!(fs::read_to_string(&path).unwrap().contains(CLI_MARKER));
         let backups = fs::read_dir(path.parent().unwrap())
@@ -595,16 +906,16 @@ mod tests {
     fn uninstall_removes_only_our_script_and_leaves_a_tombstone() {
         let (home, config) = sandbox("remover");
         let launcher = app(&home, "Cialai");
-        install(&home, &config, Some(&launcher), Target::Linux, false).unwrap();
-        let gone = uninstall(&home, &config, Target::Linux).unwrap();
+        install(&home, &config, Some(&launcher), Target::Linux, false, None).unwrap();
+        let gone = uninstall(&home, &config, Target::Linux, None).unwrap();
         assert_eq!(gone.state, "disabled");
         assert!(!command_path(&home, Target::Linux).exists());
-        let blocked = install(&home, &config, Some(&launcher), Target::Linux, false).unwrap();
+        let blocked = install(&home, &config, Some(&launcher), Target::Linux, false, None).unwrap();
         assert_eq!(
             blocked.state, "disabled",
             "a lapide impede a reinstalacao automatica"
         );
-        let back = install(&home, &config, Some(&launcher), Target::Linux, true).unwrap();
+        let back = install(&home, &config, Some(&launcher), Target::Linux, true, None).unwrap();
         assert_eq!(back.state, "installed", "o botao apaga a lapide");
     }
 
@@ -614,7 +925,7 @@ mod tests {
         let path = command_path(&home, Target::Linux);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(&path, "#!/bin/sh\necho outro\n").unwrap();
-        let report = uninstall(&home, &config, Target::Linux).unwrap();
+        let report = uninstall(&home, &config, Target::Linux, None).unwrap();
         assert_eq!(report.state, "kept");
         assert!(path.exists());
     }

@@ -72,9 +72,9 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       versionCode: resolveAndroidVersionCode(),
       adaptiveIcon: {
         foregroundImage: '../desktop/design/android-foreground-1024.png',
-        // Magenta orquídea da marca. O primeiro plano é o símbolo em branco,
-        // então um fundo branco aqui faria o ícone sumir.
-        backgroundColor: '#E23B84'
+        // A placa branca do ícone. O primeiro plano é a arte colorida, a mesma
+        // que o iPhone mostra sobre branco, então o fundo aqui é a placa.
+        backgroundColor: '#FFFFFF'
       },
       allowBackup: false,
       softwareKeyboardLayoutMode: 'resize',
