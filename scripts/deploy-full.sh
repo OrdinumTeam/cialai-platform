@@ -61,6 +61,51 @@ faz() {
   fi
 }
 
+# Espera um run do GitHub terminar, relatando cada job que fecha.
+#
+# Não usa `gh run watch`. Ele redesenha a tela a cada três segundos, o que
+# enche o log de repetição, e sai com erro quando a API falha UMA leitura. Com
+# `set -e` isso derruba a entrega inteira com a release ainda compilando, que
+# foi exatamente o que aconteceu na 0.2.8: os dois builds de macOS já tinham
+# passado e o script morreu num `read: connection reset`. Aqui uma leitura que
+# falha só custa a próxima tentativa, e quem decide é a conclusão do run.
+#
+# Com o segundo argumento em 1, uma conclusão diferente de `success` para a
+# entrega. Sem ele a função só espera, para quem tira o veredito do log.
+esperar_run() {
+  local id="$1" exigente="${2:-0}" limite="${3:-180}"
+  local linhas linha estado conclusao falhas=0 vistos=""
+  for _ in $(seq 1 "$limite"); do
+    if ! linhas="$(gh run view "$id" --repo "$REPO" --json status,conclusion,jobs \
+        --jq '"run \(.status) \(.conclusion // "")", (.jobs[] | select(.status=="completed") | "job \(.conclusion) \(.name)")' 2>/dev/null)"; then
+      falhas=$((falhas + 1))
+      [[ "$falhas" -ge 15 ]] && erro "a API do GitHub não respondeu em 15 leituras seguidas do run $id"
+      sleep 20
+      continue
+    fi
+    falhas=0
+    estado=""; conclusao=""
+    while IFS= read -r linha; do
+      case "$linha" in
+        "run "*) estado="$(cut -d' ' -f2 <<<"$linha")"; conclusao="$(cut -d' ' -f3- <<<"$linha")" ;;
+        "job "*)
+          case "$vistos" in *"|$linha|"*) continue ;; esac
+          vistos="$vistos|$linha|"
+          passo "${linha#job }"
+          ;;
+      esac
+    done <<<"$linhas"
+    if [[ "$estado" == "completed" ]]; then
+      if [[ "$exigente" == 1 && "$conclusao" != "success" ]]; then
+        erro "o run $id terminou em ${conclusao:-sem conclusão}. Veja: gh run view $id --repo $REPO --log-failed"
+      fi
+      return 0
+    fi
+    sleep 20
+  done
+  erro "o run $id passou de uma hora sem terminar"
+}
+
 # ── argumentos ───────────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -306,7 +351,7 @@ etapa_linux() {
   # num sinal desses é bloquear por defeito do arnês, não do produto.
   #
   # O que vale é o que o usuário baixa e abre: o AppImage, em cada distro.
-  gh run watch "$id" --repo "$REPO" >/dev/null 2>&1 || true
+  esperar_run "$id"
   local log montagem faltou=0
   montagem="$(gh run view "$id" --repo "$REPO" --json jobs --jq '.jobs[] | select(.name=="AppImage corrigido") | .conclusion')"
   [[ "$montagem" == "success" ]] || erro "o AppImage não montou; o fix-appimage parou. Veja o run $id"
@@ -363,7 +408,7 @@ etapa_desktop() {
   done
   [[ -n "$id" && "$id" != "null" ]] || erro "não achei o run do release.yml para $TAG"
   passo "acompanhando o run $id"
-  gh run watch "$id" --repo "$REPO" --exit-status
+  esperar_run "$id" 1
   local rascunho
   rascunho="$(gh release view "$TAG" --repo "$REPO" --json isDraft --jq .isDraft)"
   [[ "$rascunho" == "false" ]] || erro "a release $TAG continua em rascunho"
@@ -423,25 +468,49 @@ definir_versao_site() {
   python3 - "$nova" "$SITE" <<'PY'
 import io, re, sys
 nova, raiz = sys.argv[1], sys.argv[2]
+VERSAO = r'(?<![\d.])\d+\.\d+\.\d+(?![\d.])'
+
+# Cada alvo diz onde trocar. `linhas` limita a troca às linhas que contêm uma
+# daquelas marcas, porque numa página inteira um número solto de versão pode
+# ser qualquer coisa. `padrao` troca o número dentro de um contexto exato.
 alvos = [
-    (f'{raiz}/assets/js/i18n/home.js', r'(?<![\d.])\d+\.\d+\.\d+(?![\d.])'),
-    (f'{raiz}/index.html', r'("softwareVersion": ")[^"]+(")'),
-    (f'{raiz}/downloads/index.html', r'(<span data-release-version>)[^<]+(</span>)'),
+    # O dicionário do site e o texto de reserva das mesmas duas frases no HTML.
+    # A reserva é o que aparece antes do i18n rodar, e é o que um rastreador lê:
+    # sem ela aqui a página anunciava a versão anterior mesmo depois da entrega.
+    (f'{raiz}/assets/js/i18n/home.js', dict(linhas=('download.desktopText', 'download.phoneText'))),
+    (f'{raiz}/index.html', dict(linhas=('data-i18n="download.desktopText"', 'data-i18n="download.phoneText"'))),
+    (f'{raiz}/index.html', dict(padrao=r'("softwareVersion": ")[^"]+(")')),
+    (f'{raiz}/downloads/index.html', dict(padrao=r'(<span data-release-version>)[^<]+(</span>)')),
 ]
-for caminho, padrao in alvos:
+for caminho, regra in alvos:
     with io.open(caminho, encoding='utf-8') as f: texto = f.read()
-    if padrao.startswith('('):
-        novo = re.sub(padrao, rf'\g<1>{nova}\g<2>', texto)
+    if 'padrao' in regra:
+        novo = re.sub(regra['padrao'], rf'\g<1>{nova}\g<2>', texto)
     else:
-        # home.js: só as duas linhas de download carregam número de versão.
         linhas = texto.split('\n')
         for i, linha in enumerate(linhas):
-            if 'download.desktopText' in linha or 'download.phoneText' in linha:
-                linhas[i] = re.sub(padrao, nova, linha)
+            if any(marca in linha for marca in regra['linhas']):
+                linhas[i] = re.sub(VERSAO, nova, linha)
         novo = '\n'.join(linhas)
     if novo != texto:
         with io.open(caminho, 'w', encoding='utf-8') as f: f.write(novo)
-        print(f'  versão atualizada em {caminho.split("/")[-1]}')
+        # Caminho relativo à raiz do site, nunca só o nome: a página inicial e a
+        # de downloads se chamam index.html, e duas linhas iguais no log não
+        # dizem qual das duas mudou.
+        print(f'  versão atualizada em {caminho[len(raiz) + 1:]}')
+
+# O llms.txt não entra na troca automática. Ele descreve a entrega em prosa, em
+# três idiomas, com data e lista de novidades, e ainda cita de propósito a
+# versão que a Apple aprovou, que é outra. Trocar número por número deixaria o
+# texto anunciando a versão nova com as novidades da antiga. O que dá para
+# conferir sozinho é se ele chegou a falar da versão de agora.
+caminho = f'{raiz}/llms.txt'
+try:
+    texto = io.open(caminho, encoding='utf-8').read()
+except OSError:
+    texto = ''
+if texto and nova not in re.findall(VERSAO, texto):
+    print(f'  ATENCAO: llms.txt nao menciona a {nova}. Ele e prosa em tres idiomas, reescreva a mao')
 PY
 }
 

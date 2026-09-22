@@ -19,7 +19,7 @@ impedimentos. Nada sai para fora nesse modo.
 | 2 `enviar` | Commita e envia a main | **Público**, mas ainda não dispara release |
 | 3 `linux` | Constrói e abre o AppImage pelo `appimage-smoke`, antes da tag. Exige o AppImage abrindo em cada distro, que é o que o usuário baixa; relata a árvore extraída sem bloquear enquanto ela não tiver base verde | Portão |
 | 4 `marcar` | Cria e envia a tag `vX.Y.Z` | A tag dispara o `release.yml` |
-| 5 `desktop` | Acompanha o `release.yml` até a release sair do rascunho | macOS arm64 e Intel, Linux, Windows |
+| 5 `desktop` | Acompanha o `release.yml` até a release sair do rascunho, relatando um job por linha. Leitura de API que falha só custa a próxima tentativa | macOS arm64 e Intel, Linux, Windows |
 | 6 `android` | Dispara o `android-play` no Codemagic, anexa o APK à release com nome estável e refaz o `SHA256SUMS` | Codemagic e GitHub |
 | 7 `ios` | Dispara o `ios-testflight` no Codemagic | TestFlight |
 | 8 `site` | Atualiza o número da versão nas páginas, espelha os instaladores em `/downloads/` e publica o site. Árvore suja do site também não bloqueia, e o plano lista o que vai junto | Repositório do site |
@@ -47,6 +47,14 @@ scripts/deploy-full.sh 0.2.7 --aplicar --de site      # retoma da etapa 6
 scripts/deploy-full.sh 0.2.7 --aplicar --ate marcar   # para depois da tag
 scripts/deploy-full.sh 0.2.7 --aplicar --pular ios    # sem a etapa do iOS
 ```
+
+**Falha de rede não é falha de entrega.** O acompanhamento de um run do GitHub
+não usa o `gh run watch`, que sai com erro quando a API falha uma única leitura.
+Na 0.2.8 isso derrubou a entrega no passo 5 com os dois builds de macOS já
+verdes. O `esperar_run` consulta o estado a cada 20 segundos, tolera até quinze
+leituras seguidas falhando e decide pela conclusão do run. Se ainda assim a
+entrega parar, o run continua sozinho no GitHub: espere ele terminar e retome
+com `--de desktop`.
 
 ## Antes de rodar
 
