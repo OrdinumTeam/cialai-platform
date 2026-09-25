@@ -285,9 +285,16 @@ pub fn run() {
 
             if let Some(main_window) = app.get_webview_window("main") {
                 window::decorate(&main_window, &backdrop);
+                #[cfg(not(target_os = "windows"))]
                 let keyboard_owner = main_window.clone();
                 let exit_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
+                    // No Windows o Tauri sintetiza `Focused(true)` a partir do
+                    // GotFocus do proprio WebView2, e pedir foco de novo em
+                    // resposta a ele faz o foco oscilar entre o HWND hospedeiro
+                    // e a janela do navegador sem parar: teclado e roda do mouse
+                    // ficam sem dono. La o WebView2 ja cuida do foco sozinho.
+                    #[cfg(not(target_os = "windows"))]
                     if matches!(
                         event,
                         tauri::WindowEvent::Focused(true) | tauri::WindowEvent::Resized(_)

@@ -37,6 +37,14 @@ export function terminalEditAction(event, os = currentOs()) {
   return null;
 }
 
+// Relato de foco do xterm, `ESC[I` ao ganhar e `ESC[O` ao perder. O ConPTY liga
+// o modo 1004 em todo shell novo, mas o conhost do Windows 11 24H2 não consome
+// a resposta e o PSReadLine a ecoa como texto: quem clica fora e volta fica
+// com `[I` na linha de comando. Nos outros sistemas o shell trata sozinho.
+export function isTerminalFocusReport(data, os = currentOs()) {
+  return os === 'windows' && (data === '\x1b[I' || data === '\x1b[O');
+}
+
 export function isExplorerDeleteShortcut(event, os = currentOs()) {
   if (os === 'macos') return isShortcut(event, 'Mod+Backspace', os);
   return isShortcut(event, 'Delete', os)

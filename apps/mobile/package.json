@@ -1,6 +1,6 @@
 {
   "name": "@cialai/mobile",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "private": true,
   "main": "index.ts",
   "license": "Apache-2.0",
@@ -48,6 +48,8 @@
   },
   "jest": {
     "preset": "jest-expo",
-    "testPathIgnorePatterns": ["/node_modules/"]
+    "testPathIgnorePatterns": [
+      "/node_modules/"
+    ]
   }
 }

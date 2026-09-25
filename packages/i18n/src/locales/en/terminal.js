@@ -175,7 +175,7 @@ export default Object.freeze({
   'terminal.explorer.filesOf': 'Files in {name}',
   'terminal.explorer.nothingFound': 'Nothing found',
   'terminal.explorer.typeToSearch': 'Type to search',
-  'terminal.explorer.dragTitle': '{path}\nDrag to move. Hold Option to copy. Drop in the terminal to insert the path, in the editor to open it, on a card to send it to the session, or outside the app to copy it.',
+  'terminal.explorer.dragTitle': '{path}\nDrag to move. Hold {modifier} to copy. Drop in the terminal to insert the path, in the editor to open it, on a card to send it to the session, or outside the app to copy it.',
   'terminal.explorer.largeProject': 'Large project. The search stopped at 60 thousand entries.',
   'terminal.explorer.loading': 'Loading…',
   'terminal.explorer.emptyFolder': 'Empty folder',

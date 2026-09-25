@@ -23,7 +23,7 @@ import { swapIn } from '../motion.js';
 import { useRuntimeEvents, useRuntimeValue } from '../hooks.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { onNativeDragDrop } from '../../lib/native.js';
-import { shortcutLabel } from '../../lib/keys.js';
+import { altKeyLabel, shortcutLabel } from '../../lib/keys.js';
 import { isExplorerDeleteShortcut } from '../shortcut-actions.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
@@ -640,7 +640,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
                   else onOpenFile(item.path);
                 }}
                 onContextMenu={(event) => { event.preventDefault(); menuFor({ name: baseName(item.path), path: item.path, kind: item.kind }, anchorFromEvent(event)); }}
-                title={translate('terminal.explorer.dragTitle', { path: item.path })}
+                title={translate('terminal.explorer.dragTitle', { path: item.path, modifier: altKeyLabel() })}
               >
                 <IconFor entry={{ name: baseName(item.path), kind: item.kind }} />
                 <span className="terminais-result__name">{baseName(item.path)}</span>
@@ -682,7 +682,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
               onMouseDown={(event) => { if (!renaming) startDrag(event, entry.path, row.dir); }}
               onClick={() => { if (wasDragged()) return; setFocused(entry.path); openEntry(entry); }}
               onContextMenu={(event) => { event.preventDefault(); setFocused(entry.path); menuFor(entry, anchorFromEvent(event)); }}
-              title={translate('terminal.explorer.dragTitle', { path: change ? `${entry.name}: ${statusLabel(change.status)}` : entry.name })}
+              title={translate('terminal.explorer.dragTitle', { path: change ? `${entry.name}: ${statusLabel(change.status)}` : entry.name, modifier: altKeyLabel() })}
             >
               <span className={`terminais-row__chevron${row.dir ? '' : ' is-blank'}${row.expanded ? ' is-open' : ''}`} aria-hidden="true">
                 {row.dir ? <ChevronRight size={12} strokeWidth={2} /> : null}

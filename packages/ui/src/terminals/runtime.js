@@ -49,6 +49,7 @@ import { baseName, fs, isInside, shellQuote } from './files.js';
 import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
 import { platform } from '../lib/platform.js';
+import { isTerminalFocusReport } from './shortcut-actions.js';
 import { windowLabel } from '../notch/copy.js';
 import { demoProfiles } from './agent-profiles-demo.js';
 import { translate } from '../shared/i18n.js';
@@ -590,6 +591,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     // Replay nunca gera entrada: as respostas do xterm às consultas gravadas
     // no histórico não podem sair como se fossem digitação.
     if (session.replaying) return;
+    if (isTerminalFocusReport(data)) return;
     if (session.attention) clearAttention(session);
     writeTerminal(session, data);
   }));

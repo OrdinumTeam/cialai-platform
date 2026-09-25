@@ -175,7 +175,7 @@ export default Object.freeze({
   'terminal.explorer.filesOf': 'Arquivos de {name}',
   'terminal.explorer.nothingFound': 'Nada encontrado',
   'terminal.explorer.typeToSearch': 'Digite para buscar',
-  'terminal.explorer.dragTitle': '{path}\nArraste para mover. Use Option para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão ou fora do app para copiar.',
+  'terminal.explorer.dragTitle': '{path}\nArraste para mover. Use {modifier} para copiar. Solte no terminal para inserir o caminho, no editor para abrir, num card para mandar à sessão ou fora do app para copiar.',
   'terminal.explorer.largeProject': 'Projeto grande. A busca parou em 60 mil entradas.',
   'terminal.explorer.loading': 'Carregando…',
   'terminal.explorer.emptyFolder': 'Pasta vazia',

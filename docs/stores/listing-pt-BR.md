@@ -70,15 +70,16 @@ Consulte a política de privacidade e a documentação do projeto para saber qua
 
 ### Texto curto para Google Play
 
+Aplicado na produção do Google Play com a 0.2.9, versionCode 26, em 23/09/2026. Cobre o que chegou ao celular desde a 0.2.4, a versão anterior da loja.
+
 <!-- PLAY_RELEASE_START -->
 ```text
-Primeira versão do Cialai:
-• Pareamento com o computador por código QR de curta duração.
-• Lista de computadores com estado de conexão.
-• Terminal com histórico e teclas essenciais no celular.
-• Navegação pelos arquivos liberados no desktop.
-• Reconexão após troca de rede e retorno ao aplicativo.
-• Perfis e tokens protegidos no armazenamento seguro do aparelho.
+Novidades desta versão:
+• Caixa de texto para escrever a instrução longa com o teclado do aparelho, com correção automática e ditado.
+• Menu de sessão por toque longo, com renomear, cor, fixar, mover, trocar de pasta, reiniciar e fechar.
+• Seletor de pastas que alcança a raiz de cada projeto e o resto do disco.
+• Contas dos agentes com plano e uso, e troca de conta pela própria interface.
+• Botões da comunidade no Discord e no WhatsApp na tela inicial.
 ```
 <!-- PLAY_RELEASE_END -->
 

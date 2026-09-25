@@ -88,6 +88,17 @@ test('edição do terminal preserva o Mac e adiciona as variantes dos outros sis
   assert.equal(terminalEditAction(press('c', 'KeyC', { metaKey: true }), 'macos'), null);
 });
 
+test('relatos de foco do xterm só são descartados no Windows', async () => {
+  // Na VM Windows 11 24H2 de 25/09/2026 o conhost não consumia `ESC[I` e o
+  // PSReadLine ecoava `[I` na linha de comando a cada clique de volta ao terminal.
+  const { isTerminalFocusReport } = await import('../../src/terminals/shortcut-actions.js');
+  assert.equal(isTerminalFocusReport('\x1b[I', 'windows'), true);
+  assert.equal(isTerminalFocusReport('\x1b[O', 'windows'), true);
+  assert.equal(isTerminalFocusReport('\x1b[Ia', 'windows'), false, 'so o relato inteiro, nunca digitacao que o contenha');
+  assert.equal(isTerminalFocusReport('a', 'windows'), false);
+  for (const os of ['macos', 'linux']) assert.equal(isTerminalFocusReport('\x1b[I', os), false, os);
+});
+
 test('exclusão no explorador mantém o Mac e aceita as duas variantes fora dele', async () => {
   const { isExplorerDeleteShortcut } = await import('../../src/terminals/shortcut-actions.js');
   assert.equal(isExplorerDeleteShortcut(press('Backspace', 'Backspace', { metaKey: true }), 'macos'), true);

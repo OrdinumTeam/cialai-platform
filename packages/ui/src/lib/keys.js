@@ -95,6 +95,11 @@ export function shortcutLabel(combo, os) {
   return label(terminalSafe(combo, os), os);
 }
 
+// Nome da tecla que o evento reporta como altKey: Option no Mac, Alt no resto.
+export function altKeyLabel(os) {
+  return isMac(os) ? 'Option' : 'Alt';
+}
+
 export function isTerminalFocused(root = typeof document !== 'undefined' ? document : null) {
   const active = root?.activeElement;
   return Boolean(active && typeof active.closest === 'function' && active.closest('.xterm'));
