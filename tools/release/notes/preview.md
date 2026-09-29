@@ -6,9 +6,11 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **The application icon is the colour artwork on a white rounded plate again,** on the desktop, on both stores and in the browser tab. The plate fills the frame on the phone, because the system is what rounds it, and steps back to the macOS grid on the desktop so the icon does not touch its neighbours in the Dock.
-* **The `cialai` command is found on Linux.** Typing it gave command not found: `~/.local/bin` only reaches PATH through a login file that runs before Cialai creates the folder, and opening a new terminal did not help either, because a terminal reads `~/.bashrc`. The application now writes a marked, guarded block into the file your terminal actually reads, with a backup first and an exact removal from Preferences. On fish a file of its own lands in `conf.d` and nothing else is touched.
-* **The PATH probe stopped lying.** It measured a freshly opened login shell, where the folder already exists, so it reported everything was fine while your terminal found nothing.
+* **Windows works from the keyboard again.** In 0.2.9 nothing typed reached the application on Windows 11 while clicks still worked: the window asked the WebView2 to take focus on every focus event, Windows raises that event from the WebView2 itself, and the two handed the focus back and forth forever. The call now runs only on macOS and Linux.
+* **The Windows terminal has its colours and its font.** The content security policy blocked the style sheet xterm injects at runtime, because a hash had been added to `style-src` and a hash makes the browser ignore `'unsafe-inline'`.
+* **`claude` and `codex` are found right after installing on Windows.** The default PATH folders were empty and the PATH was copied once at launch. The usual installer folders are now on the list and the PATH is read from the registry for every new shell, so nothing has to be configured.
+* **No more `[I` when clicking back into the terminal on Windows.** The focus reports the terminal emits are discarded before they reach Windows PowerShell, whose PSReadLine echoed them as text.
+* **The drag hint names Alt outside macOS.**
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

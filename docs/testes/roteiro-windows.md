@@ -1,6 +1,8 @@
 # Roteiro de Windows Real
 
-Estado: roteiro preparado, execução em Windows real pendente
+Estado: executado no Windows 11 em 24 e 25/09/2026, numa máquina virtual e num notebook real; Windows 10 e máquina x64 física com medições pendentes
+
+Atualização de 25/09/2026: a primeira execução aconteceu numa máquina virtual Windows 11 Pro 24H2, com o registro preenchido em `docs/evidence/plano-2026-09-18/windows/README.md`. O relato que abriu esta frente era um laço de foco entre as duas janelas do WebView2, que matava o teclado e a roda do mouse; ele e mais quatro defeitos foram corrigidos na `main` e provados com builds instalados na mesma máquina, e o notebook real do relato confirmou o teclado com o instalador 0.2.10. Esta folha continua em branco como modelo para a próxima rodada.
 
 Nenhuma execução do Cialai em Windows real foi registrada até 18/09/2026. O relato que abriu esta frente diz que, depois de instalar, a janela abre, o conteúdo não carrega, nada responde, a janela não se move, as pastas se comportam errado e o terminal fica inutilizável. Este roteiro existe para transformar esse relato em fatos por hipótese, antes de qualquer correção depender de adivinhação.
 

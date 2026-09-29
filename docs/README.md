@@ -4,6 +4,8 @@ Estado em 13/09/2026: documentos 01 a 12 revistos como documentação viva. Em 1
 
 Cialai é o estúdio de terminais do Ordinum Control transformado em produto open source: desktop para macOS, Linux e Windows, apps para iOS e Android que acompanham e controlam os terminais do computador, pareamento por QR code e conexão automática entre os aparelhos, direta sempre que a rede permite e pelo Tor embutido como ponto de encontro e reserva, sem servidor da pessoa, da Ordinum ou do projeto.
 
+Em 24 e 25/09/2026 o desktop rodou pela primeira vez no Windows 11, numa máquina virtual e num notebook real; cinco defeitos foram corrigidos e a evidência está em `docs/evidence/plano-2026-09-18/windows/`.
+
 ## Estrutura
 
 Os números dos documentos são identificadores estáveis, como os das tarefas: continuam os mesmos quando um documento muda de pasta. A ordem de leitura segue os números.

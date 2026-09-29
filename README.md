@@ -46,7 +46,7 @@ Windows installers and the Android APK are on the same page. The desktop app che
 | Desktop studio | Implemented and verified locally on macOS |
 | Automatic connectivity | Implemented with automated suites and in process tests against the real Tor network; the physical checklist on real devices is pending |
 | iOS and Android | Android preview APK published; iOS builds run through TestFlight; store review and real device checks pending |
-| Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; physical Windows machines and code signing pending |
+| Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; Windows 11 exercised in a virtual machine and on one real notebook on 2026-09-25; a physical x64 machine with measurements, Windows 10 and code signing pending |
 | Signed releases and stores | macOS previews signed with Developer ID and notarized; Windows signing, store review and version 1.0.0 pending |
 
 Prepared code is not the same as verified distribution. See the [roadmap](./docs/produto/11-roadmap-de-execucao.md) for the state of each task and the remaining external work.
@@ -109,7 +109,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A physical Windows machine, WebView2 with a GPU, installing the packages and code signing have not been exercised. Behavior differences between systems are documented in [docs/arquitetura/14-diferencas-por-plataforma.md](./docs/arquitetura/14-diferencas-por-plataforma.md).
+Windows runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on GitHub Actions. A Windows 11 virtual machine and one real notebook installed the NSIS package and exercised the studio on 2026-09-24 and 25, which found and fixed the focus loop that killed the keyboard in 0.2.9. A physical x64 machine with measurements, WebView2 with a GPU, the MSI and code signing have not been exercised. Behavior differences between systems are documented in [docs/arquitetura/14-diferencas-por-plataforma.md](./docs/arquitetura/14-diferencas-por-plataforma.md).
 
 ## Connect your phone
 

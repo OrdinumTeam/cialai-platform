@@ -26,7 +26,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 016 | Implementado | Em 14/09/2026 o GitHub Actions publicou a prévia `v0.1.0` e o Codemagic enviou o build 1 ao TestFlight interno e o AAB à faixa interna do Play |
 | 017 | Implementado | Entrada pública em inglês e interface em três idiomas estão integradas |
 | 018 | Implementado | Tokens `--mac-*` foram mantidos |
-| 019 | Pendente | Atalhos Linux e Windows dependem da integração da Fase 5 |
+| 019 | Implementado | Esquema Ctrl Shift exercitado no Windows 11 em 25/09/2026; `Ctrl Shift 0` fica reservado pelo sistema |
 | 020 | Implementado | Arraste para fora segue só no macOS; desde 14/09/2026 a leitura de arquivos pelo celular também vale no Windows pela tarefa 6.4 |
 | 021 | Implementado | Extração usou o working tree inventariado; commit no Control segue como dependência do usuário |
 | 022 | Implementado | Go 1.26.5 está fixado no módulo e nos workflows |
@@ -49,6 +49,8 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 041 | Implementado | O app móvel abre sempre no início, substituindo o trecho Abertura do app da decisão 037 |
 | 042 | Implementado | Troca de conta dos agentes por escolha de pasta, sem tocar em credencial, valendo para sessões novas |
 | 043 | Implementado | Grafo da documentação numa aba do estúdio, só com Markdown e as pastas que levam até eles |
+| 044 | Implementado | Comando `cialai` instalado pelo app; desde a 0.2.9 o Linux recebe um bloco guardado no arquivo do shell |
+| 045 | Implementado | No Windows o app não pede foco ao webview em evento de foco e o `style-src` fica sem hash |
 
 ## 001 Nome Cialai
 
@@ -313,3 +315,13 @@ Alternativa rejeitada: chamar o executável direto no macOS. Sem `tauri-plugin-s
 Consequência: entra o módulo `apps/desktop/src-tauri/src/cli.rs` com os três comandos `cli_status`, `cli_install` e `cli_uninstall`, mais o gancho no `setup`, numa thread separada, que nunca derruba o app e registra o motivo por `diagnostics::note`. O caminho do app é gravado na instalação no Linux e no Windows, respeitando `$APPIMAGE` como o sidecar do túnel já faz, e o gancho não instala quando o app roda de um volume montado, que é o caso de abrir direto do dmg. Remover pela linha das Preferências apaga o script e deixa a lápide `cli-disabled` em `app_config_dir`, para a abertura seguinte não reinstalar. São doze testes no módulo, incluindo a sintaxe dos scripts POSIX conferida pelo próprio `sh`, e contratos novos em `tools/check/platform-preferences.mjs`.
 
 A instância única no Linux fica resolvida por uma guarda com `pgrep`, que cobre o caso comum e não a corrida. A solução de raiz é `tauri-plugin-single-instance` e ficou como trabalho seguinte.
+
+## 045 Foco do webview e CSP no Windows
+
+Data: 25/09/2026. Contexto: o primeiro relato de Windows 11 dizia que o app abria e não aceitava nenhuma tecla, com os cliques funcionando. A máquina virtual reproduziu: `lib.rs` pedia foco ao webview em resposta ao próprio `Focused(true)`, que no Windows o Tauri sintetiza a partir do `GotFocus` do WebView2, e as duas janelas do WebView2 trocaram o foco 69 vezes em 45 s. No mesmo ambiente o terminal saía sem cores e com fonte proporcional, porque o Tauri acrescenta ao `style-src` o hash do `<style>` do `index.html` e, com um hash presente, o navegador ignora `'unsafe-inline'` e bloqueia a folha que o xterm injeta.
+
+Decisão: no Windows o app nunca pede foco ao webview em resposta a evento de foco ou de redimensionamento; a chamada continua no macOS e no Linux, onde ela resolve o foco inicial. E o `style-src` da CSP fica como escrito, sem hash, nos três sistemas, por `dangerousDisableAssetCspModification: ["style-src"]`; `script-src` continua recebendo o hash.
+
+Alternativa rejeitada: pedir o foco com um atraso ou só quando o webview não o tem. O `GotFocus` chega depois do pedido e reabre o laço; e não existe leitura confiável de quem tem o foco entre as duas janelas do WebView2. Para a CSP, mover a folha do xterm para um arquivo estático não resolve, porque o xterm gera a folha em tempo de execução a partir do tema.
+
+Consequência: a regra de foco vale para qualquer código novo de janela no Windows, e o terminal passa a depender de `'unsafe-inline'` em `style-src`, o que já era a política declarada. Com isso entraram também os candidatos padrão de PATH do Windows, o PATH lido do registro a cada shell e o descarte de `ESC[I` e `ESC[O`, todos provados na mesma máquina virtual. Evidência em `docs/evidence/plano-2026-09-18/windows/README.md`.

@@ -90,21 +90,21 @@ Estados refletem apenas o conteúdo integrado nesta linha. `Implementado` exige 
 | --- | --- | --- |
 | 5.1 | Implementado | Contrato e backends verificados no macOS, no Linux e na suíte Rust nativa do Windows na CI em 14/09/2026 |
 | 5.2 | Implementado | Backend Linux verificado no Ubuntu 22.04 arm64 em contêiner |
-| 5.3 | Implementado | Backend Windows testado na suíte Rust nativa do `windows-2022` em 14/09/2026, com memória por working set antes do Windows 11; máquina Windows física pendente |
-| 5.4 | Implementado | PTY verificado no macOS, no Linux e no ConPTY do `windows-2022`; desde 14/09/2026 o Rust responde a pergunta de cursor com que o ConPTY nasce |
+| 5.3 | Implementado | Backend Windows testado na suíte Rust nativa do `windows-2022` em 14/09/2026, com memória por working set antes do Windows 11; em 24 e 25/09/2026 executado numa máquina virtual Windows 11 24H2 e num notebook real; medições numa máquina x64 física pendentes |
+| 5.4 | Implementado | PTY verificado no macOS, no Linux e no ConPTY do `windows-2022`; desde 14/09/2026 o Rust responde a pergunta de cursor com que o ConPTY nasce; em 25/09/2026 o ConPTY com PowerShell rodou na máquina virtual Windows 11 com comandos, cores, `Ctrl+C`, histórico, Tab e 20000 linhas, e os relatos de foco `ESC[I` passaram a ser descartados |
 | 5.5 | Preparado | Retomada verificada no macOS e Linux; sintaxe PowerShell e cmd testada no Windows da CI, sem retomada real de agente |
 | 5.6 | Implementado | Observador verificado no macOS, no Linux e na suíte nativa do Windows na CI em 14/09/2026 |
 | 5.7 | Implementado | Arquivos verificados no macOS, no Linux e na suíte nativa do Windows na CI em 14/09/2026; lixeira real do Windows sem teste manual |
 | 5.8 | Preparado | Prévia testada no macOS e Linux; WebView2 não exercitado |
 | 5.9 | Preparado | Descoberta testada no macOS e Linux; Chromium, WebView2 e LibreOffice reais pendentes fora do macOS |
 | 5.10 | Preparado | Diagnóstico e hook testados no macOS e Linux; instalador PowerShell sem execução nativa |
-| 5.11 | Preparado | Na main desde `d2678e7`: backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; animação X11 medida sob Xvfb, Wayland e Windows nativo não exercitados |
-| 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; sem execução nativa Linux ou Windows |
-| 5.13 | Implementado | Na main desde `d64207d` e `bfccb08`: casca, fontes, `.mac-switch` e JetBrains Mono conferidos em Chromium nos três sistemas, com a cascata de produção protegida; WebKitGTK e WebView2 reais não exercitados |
+| 5.11 | Preparado | Na main desde `d2678e7`: backends de janela, menu da toolbar e controles do Windows testados no macOS, no Linux em contêiner e por Clippy cruzado do Windows; animação X11 medida sob Xvfb; Windows nativo exercitado na máquina virtual em 25/09/2026, com mover, redimensionar pela moldura invisível, maximizar e restaurar, e o Mica sem avaliação por falta de GPU; Wayland não exercitado |
+| 5.12 | Implementado | Contrato único de atalhos testado e conferido no Dev Browser; exercitado no Windows 11 em 25/09/2026, onde `Ctrl Shift 0` fica reservado pelo sistema; sem execução nativa Linux |
+| 5.13 | Implementado | Na main desde `d64207d` e `bfccb08`: casca, fontes, `.mac-switch` e JetBrains Mono conferidos em Chromium nos três sistemas, com a cascata de produção protegida; WebView2 137 real exercitado em 25/09/2026, com a JetBrains Mono no terminal só depois de tirar o hash do `style-src`; WebKitGTK real não exercitado |
 | 5.14 | Implementado | Na main desde `b1a4efe`: Terminal, Dev Browser, Janela e caminhos por sistema em testes Rust nos três alvos e conferidos em Chromium nos três idiomas; troca do Mica ao salvar sem execução Windows |
 | 5.15 | Implementado | Suíte Rust nativa verde no macOS, no Ubuntu e no `windows-2022` da CI em 14/09/2026; checks de navegador por Playwright no Ubuntu |
 | 5.16 | Implementado | `ci.yml` verde nos três sistemas no run `34813846975` de 14/09/2026, com `check:text` e Playwright no Ubuntu; `release.yml` publicou as prévias `v0.1.0` e `v0.1.1` |
-| 5.17 | Pendente | Assinaturas e instaladores não foram executados |
+| 5.17 | Preparado | Instalador NSIS executado numa máquina virtual Windows 11 em 24 e 25/09/2026, com o 0.2.9 publicado e o 0.2.10 gerado no Mac; MSI e assinaturas não foram executados |
 | 5.18 | Preparado | `nightly-e2e.yml` rodou no público em 14/09/2026, passou 8 de 8 no Ubuntu e foi desligado às 04:40 para conter minutos; no Windows a janela cresce, o explorador abre e o PowerShell responde, mas a página do WebView2 sem GPU fica lenta e deixa de responder ao WebDriver antes do fim do roteiro |
 | 5.19 | Implementado | README e guia 14 registram preparo e evidência por plataforma |
 

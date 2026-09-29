@@ -1,6 +1,6 @@
 # WIN-01: desktop no Windows
 
-Estado: primeira execução em Windows real registrada em 24 e 25/09/2026, numa máquina virtual. Cinco defeitos encontrados e corrigidos no working tree, cada um provado com um build cruzado instalado na mesma máquina. Windows 10 e máquina x64 física seguem pendentes.
+Estado: primeira execução em Windows registrada em 24 e 25/09/2026, numa máquina virtual, e confirmada num notebook real em 25/09/2026. Cinco defeitos encontrados e corrigidos na `main` desde `0279a94`, cada um provado com um build cruzado instalado na mesma máquina. O instalador 0.2.10 gerado no Mac foi instalado nas duas máquinas e está no site desde 25/09/2026. Windows 10 e máquina x64 física com medições seguem pendentes.
 
 A rodada completa, com diário, capturas e os scripts que dirigem a máquina, fica fora do Git em `/Volumes/ORDINUM-SSD/Emulators/Desktop/Windows11/tools/campanha-2026-09-24/`. O relatório é o `relatorio.md` dessa pasta.
 
@@ -9,19 +9,25 @@ A rodada completa, com diário, capturas e os scripts que dirigem a máquina, fi
 | Código | Origem | Edição e build do Windows | GPU | WebView2 | Data |
 | --- | --- | --- | --- | --- | --- |
 | A1 | VM UTM em Mac M4, Windows ARM64 com o Cialai x64 sob emulação | Windows 11 Pro 24H2, build 26100.4349, pt-BR | Por software, sem driver de vídeo dedicado; o WebGL do xterm não carrega | 137.0.3296.68 | 24 e 25/09/2026 |
-| A2 |  |  |  |  |  |
+| A2 | Notebook Windows 11 x64 de quem abriu o relato, fora da equipe | Windows 11, build não coletado | Não coletada | Não coletada | 25/09/2026 |
 
 Os tempos medidos em A1 valem só como comparação entre cenários na mesma máquina. Numa máquina x64 o app e o WebView2 rodam nativos.
 
 ## O que o 0.2.9 publicado fazia em A1
 
-| Sintoma | Causa | Correção no working tree |
+| Sintoma | Causa | Correção na `main` |
 | --- | --- | --- |
 | Teclado e roda do mouse mortos em todo o app, cliques funcionando | `lib.rs` pedia foco ao webview em resposta ao próprio `Focused(true)`, que no Windows o Tauri sintetiza a partir do `GotFocus` do WebView2; o foco oscilava 69 vezes em 45 s entre as duas janelas do WebView2 | chamada limitada aos outros sistemas |
 | Terminal sem cores e com fonte proporcional | o Tauri acrescenta ao `style-src` o hash do `<style>` do `index.html`; com hash presente o navegador ignora `'unsafe-inline'` e bloqueia a folha que o xterm injeta | `dangerousDisableAssetCspModification: ["style-src"]` |
 | `claude` instalado e não encontrado até reiniciar ou configurar Prefixos do PATH | lista de pastas padrão vazia no Windows e PATH copiado na abertura do app | `~/.local/bin`, `%APPDATA%/npm`, winget, cargo e scoop entram sozinhos e o PATH do registro é lido a cada shell |
 | `[I` na linha de comando ao clicar fora e voltar | o ConPTY liga o modo 1004, o xterm relata foco com `ESC[I` e o PSReadLine 2.0 do Windows ecoa como texto | relatos de foco descartados no Windows antes do `pty_write` |
 | Dica de arrasto falando em tecla Option | texto fixo do Mac | tecla por parâmetro: Option no Mac, Alt no resto |
+
+## Máquina real e instalador 0.2.10
+
+Em 25/09/2026 o `Cialai_0.2.10_x64-setup.exe`, gerado no Mac por build cruzado com `cargo-xwin` e NSIS, foi instalado em A2 e a pessoa escreveu no terminal pela primeira vez. O mesmo instalador entrou em A1 como usuário comum: o binário reporta `ProductVersion 0.2.10`, o atalho aparece na área de trabalho, o app abre com a sessão anterior restaurada, um shell novo aceita o que é digitado e as cores do prompt aparecem. Esse arquivo está por trás de `https://cialai.com.br/downloads/Cialai_x64-setup.exe` desde 25/09/2026, sem release no GitHub e sem mudar o `latest.json`, que segue em 0.2.9 para os três sistemas; por isso o atualizador embutido ainda não o enxerga e o `Cialai_x64.msi` do site continua 0.2.9 até a release completa.
+
+Em A2 veio um pedido novo: os projetos moram no Ubuntu do WSL, em `\\wsl.localhost\Ubuntu\home\...`, e o campo Caminho do shell apontado para um binário Linux falha com `os error 193`, que não é um aplicativo Win32 válido. O contorno é `C:\Windows\System32\wsl.exe` com os argumentos `-d` e `Ubuntu`; a tarefa de produto está na lista abaixo.
 
 ## Hipóteses de janela
 
@@ -61,9 +67,13 @@ Os tempos medidos em A1 valem só como comparação entre cenários na mesma má
 | Navegar e selecionar pastas | ☐ | ☑ | seletor de nova sessão, diálogo nativo, explorador com busca, nova pasta e menu de contexto, t2 e t14 |
 | Abrir e usar um terminal | ☐ | ☑ | com o build corrigido: comandos, cores, `Ctrl+C`, histórico, Tab, 20000 linhas com digitação concorrente, Claude Code e Codex até a tela de login, t1, t17 e t11. Com o 0.2.9 publicado o teclado não chega ao terminal |
 | Cinco minutos sem janela de console | ☐ | ☑ | quatro horas de uso sem nenhuma janela de console nas capturas |
+| Instalar o 0.2.10 gerado no Mac | ☐ | ☑ | instalado em A1 como usuário comum e em A2; binário em 0.2.10, teclado e cores conferidos em 25/09/2026 |
 
-## Ainda em aberto em A1
+## Ainda em aberto
 
 - Colar com `Ctrl+Shift+V` abre o prompt de permissão do WebView2 para a área de transferência.
 - `Ctrl+Shift+0`, o reset de fonte no terminal, é reservado pelo Windows para troca de layout.
 - O filtro do seletor de nova sessão casa o caminho inteiro, então "Docu" traz todas as pastas do Documents.
+- Integração com o WSL, pedida em A2: listar as distros com `wsl.exe -l -q`, oferecer cada uma como shell ao lado do PowerShell, traduzir caminhos entre `/home/...` e `\\wsl.localhost\...` para explorador, git e agentes, e tratar raízes em `\\wsl.localhost` como projetos Linux. A VM não tem WSL, então o contorno por `wsl.exe` ainda não foi provado.
+- Login do Claude Code e do Codex para uma sessão completa dos dois dentro do Cialai; os dois abrem até a tela de login.
+- Windows 10 e uma máquina x64 física para medir latência e CPU sem emulação.

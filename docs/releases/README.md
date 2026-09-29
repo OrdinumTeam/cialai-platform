@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.2.10](0.2.10.md) | A publicar | `v0.2.10` | Página pronta, tag ainda não criada; o `.exe` do Windows já está no site desde 25/09/2026 |
 | [0.2.9](0.2.9.md) | 22/09/2026 | `v0.2.9` | `OrdinumTeam/cialai-platform` |
 | [0.2.8](0.2.8.md) | 21/09/2026 | `v0.2.8` | `OrdinumTeam/cialai-platform` |
 | [0.2.7](0.2.7.md) | 21/09/2026 | `v0.2.7` | `OrdinumTeam/cialai-platform` |

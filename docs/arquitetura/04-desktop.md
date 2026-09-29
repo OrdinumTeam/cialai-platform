@@ -13,7 +13,7 @@ Versões conferidas no `Cargo.lock` do Control: tauri 2.11.5, wry 0.55.1, tao 0.
 | Terminal, arquivos, Git, prévias e Dev Browser | Implementado | Suíte Rust elegível e self test local aprovados no macOS |
 | Ponte, supervisor e telas de rede | Implementado | Contratos e simulações locais aprovados; pareamento com celular físico segue pendente |
 | Backend Linux | Pendente | Matriz e riscos estão especificados, sem integração nesta linha |
-| Backend Windows | Pendente | ConPTY, Job Objects, janela, atalhos e arquivos permanecem especificados, sem integração nesta linha |
+| Backend Windows | Implementado | ConPTY, Job Objects, janela, atalhos e arquivos integrados na Fase 5; executado no Windows 11 numa máquina virtual e num notebook real em 24 e 25/09/2026, com cinco defeitos corrigidos, entre eles o laço de foco que matava o teclado |
 | Empacotamento desktop | Preparado | Sidecars e configuração Tauri existem; instaladores assinados e instalação limpa não foram produzidos |
 | Tor embutido | Preparado | Tor Expert Bundle 15.0.22 fixado por hash, preparado em `$RESOURCE/tor`, passado ao sidecar em `--tor-bin` e aberto pelo `doctor` no macOS arm64 local; instaladores dos três sistemas, assinatura Developer ID dos binários aninhados e instalação limpa seguem pendentes; Linux arm64 aguarda decisão de produto |
 | Encerramento em cascata | Preparado | Supervisor com espera do início em andamento e Job Object no Windows, testes com sidecar falso e `tor` real medido no macOS arm64; o roteiro manual com o app nos três sistemas segue pendente |

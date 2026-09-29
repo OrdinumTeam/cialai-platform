@@ -18,4 +18,4 @@ Regras para quem preencher, iguais para todas as pastas:
 | `inicio-do-app` | MOB-04 | Abertura no início com o computador ligado |
 | `paineis-recolhidos` | UI-01 | Conferência visual nos dois temas e em três larguras |
 | `contas-dos-agentes` | CTA-01 | Troca de conta com contas reais, no computador e no aparelho |
-| `windows` | WIN-01 | Roteiro de `docs/testes/roteiro-windows.md` e a tabela de hipóteses |
+| `windows` | WIN-01 | Executado no Windows 11 numa máquina virtual e num notebook real em 24 e 25/09/2026; faltam Windows 10 e uma máquina x64 física com medições |

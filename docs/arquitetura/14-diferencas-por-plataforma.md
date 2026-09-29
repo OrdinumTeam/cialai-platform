@@ -11,13 +11,22 @@ especificação detalhada continua em [04-desktop.md](./04-desktop.md); este tex
 | macOS arm64 | Suíte Rust nativa com 151 casos aprovados e dois ensaios externos ignorados. O caso do instalador do Chromium passou novamente depois do ajuste portável do fixture | Bundle assinado, notarização e instalação limpa |
 | Ubuntu 22.04 arm64 | Suíte Rust em contêiner com 145 casos aprovados e dois ensaios externos ignorados | WebKitGTK visível, instaladores e IME real |
 | AppImage x86_64 | Em 15/09/2026, no run `34948496705` do público, `smoke.sh` abriu a prévia 0.2.0 corrigida por `fix-appimage.mjs` sob Xvfb no Ubuntu 24.04 e num contêiner Arch com Mesa, WebKitGTK e GVfs do sistema, com a interface renderizada e os processos do WebKit vivos. Sem a correção, a mesma prévia abortou no Arch com `EGL_BAD_PARAMETER` e mostrou `undefined symbol` no GVfs do Ubuntu 24.04 | Sessão Wayland real, GPU física, driver NVIDIA e atualização automática de um AppImage instalado |
-| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando | Máquina física, WebView2 com GPU, self test completo, IME, instalação dos instaladores e Authenticode. Processos filhos sem janela de console no binário de release: o check estático e o self test de release do nightly cobrem a regra, mas nenhuma execução em Windows real foi registrada |
+| Windows x86_64 | `cargo-xwin check --all-targets` aprovou código e testes para MSVC. Em 14/09/2026 a CI no `windows-2022` rodou a suíte Rust nativa com 159 casos, o núcleo Go, o Jest e o bundle sem assinatura, e o self test mostrou janela, explorador e ConPTY com PowerShell funcionando. Em 24 e 25/09/2026 uma máquina virtual Windows 11 Pro 24H2 com WebView2 137 instalou o NSIS do 0.2.9 e os builds cruzados corrigidos: janela, explorador, ConPTY com PowerShell, Claude Code e Codex até o login e quatro horas sem janela de console; cinco defeitos corrigidos, registrados em `docs/evidence/plano-2026-09-18/windows/README.md`. Em 25/09/2026 um notebook real confirmou o teclado com o instalador 0.2.10 | Máquina física x64 com medições, Windows 10, WebView2 com GPU, IME, MSI e Authenticode |
 
 O contêiner Linux teve limite de 6 GiB e dois CPUs e foi removido ao final. O
 cross check Windows usou `CIALAI_SKIP_WINDOWS_RESOURCES=1` porque o host não
 tinha `llvm-rc`; portanto ele não valida o arquivo de recursos. A CI remota
 executou os três sistemas em 14/09/2026; assinaturas de plataforma continuam
 como trabalho preparado, não como evidência de execução.
+
+Desde 25/09/2026 o instalador NSIS também sai de um Mac, sem runner Windows:
+`npx tauri build --runner cargo-xwin --target x86_64-pc-windows-msvc --bundles
+nsis --config src-tauri/tauri.ci.conf.json` em `apps/desktop`, com `llvm`,
+`lld` e `nsis` do Homebrew, o Tor de Windows encenado por `fetch-tor.mjs
+--stage` e o sidecar recompilado por `build-tunnel.mjs` para o alvo. Esse
+pacote não tem MSI, não tem Authenticode e não entra no `latest.json`: serve
+para teste manual e para uma correção de uma plataforma só por trás do link
+estável do site.
 
 ## Janela, menu e aparência
 
@@ -81,12 +90,43 @@ de produção sem essa chamada na mesma função. O sidecar Go ainda sai como
 subsistema GUI por `-H=windowsgui`, e os inícios dele ficam limitados a dez por
 janela de dez minutos, para um crash loop não multiplicar processos. O nightly
 roda o self test também sobre o binário de release, contando janelas de console
-novas; o resultado numa máquina Windows real ainda não foi registrado.
+novas; em 24 e 25/09/2026 quatro horas de uso numa máquina virtual Windows 11
+não mostraram nenhuma janela de console.
 
-O terminal exibido usa WebGL. Num runner do Windows sem GPU o WebView2 desenha
-esse WebGL por SwiftShader e a página ficou lenta a ponto de não responder ao
-WebDriver; o app registra a GPU do contexto do xterm para diagnóstico, e a
-troca para o renderizador DOM nesses casos aguarda teste num WebView2 real.
+O terminal exibido usa WebGL quando o addon carrega. Num runner do Windows sem
+GPU o WebView2 desenha esse WebGL por SwiftShader e a página ficou lenta a
+ponto de não responder ao WebDriver. Na máquina virtual Windows 11 sem driver
+de vídeo dedicado, com WebView2 137, o addon nem chega a carregar e o xterm
+roda no renderizador DOM sem travar; o app registra a GPU do contexto do xterm
+para diagnóstico. A medição com uma GPU real continua pendente.
+
+### Foco, CSP e PATH no Windows
+
+No Windows o app nunca pede foco ao webview em resposta a `Focused(true)` ou
+`Resized`. O Tauri sintetiza `Focused` a partir do `GotFocus` do próprio
+WebView2, então a chamada devolvia o foco a quem acabou de entregá-lo e as
+duas janelas do WebView2 trocavam o foco sem parar, 69 vezes em 45 s na
+medição de 25/09/2026: teclado e roda do mouse mortos, cliques vivos. A
+chamada de `window::focus_webview` nesses eventos fica sob
+`cfg(not(target_os = "windows"))` em `lib.rs`.
+
+O `style-src` da CSP não recebe hash. O Tauri acrescentaria o hash do `<style>`
+do `index.html`, e com um hash presente o navegador ignora `'unsafe-inline'`
+e bloqueia a folha que o xterm injeta em tempo de execução: terminal sem
+cores e sem a JetBrains Mono. `dangerousDisableAssetCspModification:
+["style-src"]` em `tauri.conf.json` mantém a política como escrita, nos três
+sistemas.
+
+O PATH dos shells no Windows tem candidatos padrão, a pasta `bin` local do
+usuário, a pasta do npm em `%APPDATA%`, os links do winget, `~/.cargo/bin` e
+`~/scoop/shims`, e o `Path` de máquina e de usuário é lido do registro a cada
+shell novo. Um `claude` ou `codex` recém instalado é achado sem reiniciar o
+app e sem prefixo manual, que era o que o 0.2.9 exigia.
+
+O ConPTY liga o relato de foco, modo 1004, em todo shell novo; o xterm responde
+`ESC[I` e `ESC[O`, e o PSReadLine do Windows PowerShell os ecoa como `[I`. A
+interface descarta esses dois relatos no Windows antes do `pty_write`, por
+`isTerminalFocusReport`.
 
 ## Atalhos
 
@@ -109,7 +149,14 @@ do shell.
 | Excluir na árvore | ⌘⌫ | Delete ou Ctrl Shift Backspace |
 
 Salvar no editor usa Mod S. Mover cards usa Option com seta no macOS e Alt com
-seta nos demais sistemas.
+seta nos demais sistemas, e a dica de arrasto do explorador nomeia a tecla do
+sistema em uso.
+
+Dois limites conhecidos no Windows desde 25/09/2026: `Ctrl Shift 0` é reservado
+pelo sistema para a troca de layout de teclado e não chega ao app, então o
+reset de fonte do terminal fica sem atalho lá; e `Ctrl Shift V` no terminal
+abre, na primeira vez, o pedido de permissão do WebView2 para a área de
+transferência.
 
 ## Caminhos e integrações
 

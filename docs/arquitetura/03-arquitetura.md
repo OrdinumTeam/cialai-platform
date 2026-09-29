@@ -10,7 +10,7 @@
 | `packages/tunnel-core` | Implementado | Em 15/09/2026: identidade, transportes direto e Tor, rendezvous, DNS-SD, borda, proxy, pareamento v2 e sidecar v2 passam em Go, com testes em processo contra a rede Tor real; o modo Headscale segue no repositório, inerte, até CON-070 |
 | `apps/mobile` | Preparado | Casca Expo e wrappers Swift e Kotlin existem; nenhum aparelho ou archive assinado foi executado |
 | `infra/headscale` | Implementado | Receita e política das prévias 0.1.x, exercitadas localmente; desde 15/09/2026 ficam só como histórico, fora do caminho do produto |
-| Linux e Windows desktop | Pendente | O desenho está especificado, mas a implementação da frente paralela não está integrada nesta linha |
+| Linux e Windows desktop | Implementado | Fase 5 integrada; Linux verificado em contêiner e no AppImage sob Xvfb, Windows 11 executado numa máquina virtual e num notebook real em 24 e 25/09/2026 |
 | Distribuição | Preparado | Workflows e updater existem; assinatura, artefatos publicados, instalações e lojas continuam pendentes |
 
 O desenho abaixo é normativo. Onde ele descreve plataformas ou serviços ainda não executados, o estado válido é o da tabela acima e do documento 13.
