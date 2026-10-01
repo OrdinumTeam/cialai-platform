@@ -35,6 +35,8 @@ env:
 jobs:
   bindings:
     name: Tunnelcore XCFramework and AAR
+    # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
+    if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     runs-on: macos-14
     timeout-minutes: 60
     permissions:

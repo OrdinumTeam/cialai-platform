@@ -5,6 +5,8 @@
 # v1.0.0 are previews and skip the version 1 gates; stable tags must pass check-release.mjs --release.
 name: Release
 
+# A tag v* continua disparando, mas o guard só roda para o dono do projeto e os
+# outros jobs dependem dele.
 on:
   push:
     tags: ["v*"]
@@ -28,6 +30,8 @@ env:
 jobs:
   guard:
     name: Release guard
+    # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
+    if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     runs-on: ubuntu-22.04
     timeout-minutes: 5
     outputs:

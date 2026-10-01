@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 name: CI
 
+# Só disparo manual desde 30/09/2026: push, PR e agenda não rodam mais sozinhos,
+# e o job confere quem disparou.
 on:
-  push:
-    # Tags de release já passaram pela CI no commit da main e rodam o release.yml.
-    branches: ["**"]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -18,6 +16,8 @@ concurrency:
 jobs:
   desktop:
     name: Desktop / ${{ matrix.os }}
+    # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
+    if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     strategy:
       fail-fast: false
       matrix:

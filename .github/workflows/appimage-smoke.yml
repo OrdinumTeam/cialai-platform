@@ -1,21 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 name: AppImage smoke
 
+# Só disparo manual desde 30/09/2026: push, PR e agenda não rodam mais sozinhos,
+# e o job confere quem disparou.
 on:
-  pull_request:
-    paths:
-      - .github/workflows/appimage-smoke.yml
-      - .github/workflows/release.yml
-      - tools/release/fix-appimage.mjs
-      - tools/release/appimage/**
-      - tools/release/verify-updater-signature.mjs
-      - tools/fetch-tor.mjs
-      - apps/desktop/package.json
-      - apps/desktop/src-tauri/Cargo.lock
-      - apps/desktop/src-tauri/tauri.conf.json
-      - apps/desktop/src-tauri/tauri.linux.conf.json
-      # O smoke confere que o sidecar nasce de dentro da imagem; quem o localiza é o supervisor.
-      - apps/desktop/src-tauri/src/tunnel/**
   workflow_dispatch:
 
 permissions:
@@ -28,8 +16,8 @@ concurrency:
 jobs:
   bundle:
     name: AppImage corrigido
-    # PR roda só no repositório público; o disparo manual vale nos dois.
-    if: github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'
+    # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
+    if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     runs-on: ubuntu-22.04
     timeout-minutes: 60
     env:

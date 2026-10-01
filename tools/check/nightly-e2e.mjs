@@ -8,11 +8,10 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const read = (path) => readFileSync(`${root}${path}`, 'utf8');
 const workflow = read('.github/workflows/nightly-e2e.yml');
 
-// Gatilho diário e manual, sem push, PR ou segredos.
-assert.match(workflow, /^on:\n {2}schedule:\n {4}- cron: '\d{1,2} \d{1,2} \* \* \*'\n {2}workflow_dispatch:\n/m, 'nightly precisa de cron diário e disparo manual');
-assert.doesNotMatch(workflow, /^\s+(push|pull_request|pull_request_target):/m, 'nightly não roda em push ou PR');
+// Só disparo manual, sem agenda, push, PR ou segredos; quem disparou é conferido no ci-matrix.
+assert.match(workflow, /^on:\n {2}workflow_dispatch:\n/m, 'nightly roda só por disparo manual');
+assert.doesNotMatch(workflow, /^\s+(schedule|push|pull_request|pull_request_target):/m, 'nightly não roda em agenda, push ou PR');
 assert.match(workflow, /^permissions:\n {2}contents: read$/m);
-assert.match(workflow, /if: github\.event_name != 'schedule' \|\| github\.repository == 'Cialai\/cialai'/, 'a agenda do nightly roda só no repositório público');
 assert.ok(!workflow.includes('secrets.'), 'o nightly não pode consumir segredos');
 
 // Linux e Windows; o macOS roda o self test por tauri dev.
@@ -157,4 +156,4 @@ assert.ok(app.includes("drag(source, target, '.is-dropping')"), 'arraste para o 
 assert.ok(app.includes("session.term.element?.closest('.terminais-terminal')"), 'o alvo é o terminal da sessão do teste');
 assert.doesNotMatch(app, /\.terminais-terminal\.is-drop'/);
 
-console.log('PASS nightly e2e: daily Linux and Windows self test by tauri-driver, pinned drivers, evidence upload and portable in-app script');
+console.log('PASS nightly e2e: manual Linux and Windows self test by tauri-driver, pinned drivers, evidence upload and portable in-app script');

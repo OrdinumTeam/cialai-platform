@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Nightly E2E
 
+# Só disparo manual desde 30/09/2026: push, PR e agenda não rodam mais sozinhos,
+# e o job confere quem disparou.
 on:
-  schedule:
-    - cron: '17 5 * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,8 +16,8 @@ concurrency:
 jobs:
   selftest:
     name: Self test / ${{ matrix.os }}
-    # A agenda diária roda só no repositório público; no privado o nightly fica manual.
-    if: github.event_name != 'schedule' || github.repository == 'Cialai/cialai'
+    # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
+    if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     strategy:
       fail-fast: false
       matrix:

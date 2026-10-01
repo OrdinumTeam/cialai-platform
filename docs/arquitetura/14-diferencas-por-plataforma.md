@@ -311,8 +311,8 @@ do Windows aguarda uma máquina real.
 | Linux | `deb`, `rpm` e `AppImage` | Build de referência em Ubuntu 22.04, AppImage pós-processado por `fix-appimage.mjs`, sem assinatura de código |
 | Windows | `nsis` e `msi` | Authenticode nas releases e pacote sem assinatura em nightly |
 
-O sidecar precisa ser compilado para o triplo de destino antes do Tauri. A CI de
-push e pull request prepara bundles sem credenciais; publicar, assinar e criar
+O sidecar precisa ser compilado para o triplo de destino antes do Tauri. A CI, que só
+roda quando o dono do projeto dispara, prepara bundles sem credenciais; publicar, assinar e criar
 release pertencem a fluxos separados.
 
 ### AppImage em distribuições novas

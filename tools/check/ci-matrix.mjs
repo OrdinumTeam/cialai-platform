@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -80,7 +80,6 @@ assert.ok(
   'o AppImage anexado ao run é o corrigido',
 );
 assert.ok(!workflow.includes('secrets.'), 'a CI de push e PR não pode consumir segredos');
-assert.match(workflow, /^on:\n {2}push:\n(?: {4}#.*\n)? {4}branches: \["\*\*"\]\n/m, 'tags de release não disparam a CI de novo');
 const integration = readFileSync(`${root}/.github/workflows/headscale-integration.yml`, 'utf8');
 // O modo Headscale saiu do RPC do sidecar v2: a integração antiga fica só manual até CON-070.
 assert.match(integration, /^on:\n {2}workflow_dispatch:\n/m, 'a integração do Headscale só roda por disparo manual');
@@ -136,16 +135,13 @@ const binder = readFileSync(`${root}/tools/build-tunnel-mobile.sh`, 'utf8');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 Tunnelcore\.xcframework\.zip > Tunnelcore\.xcframework\.zip\.sha256/, 'o hash publicado não leva caminho do runner');
 assert.match(binder, /cd "\$output_dir" && shasum -a 256 tunnelcore\.aar > tunnelcore\.aar\.sha256/);
 
-// Laboratório de NAT e reserva: PR que toque o núcleo ou o laboratório e disparo manual; agenda só em CON-072.
+// Laboratório de NAT e reserva: só disparo manual; a agenda fica para CON-072.
 const netLabSource = readFileSync(`${root}/.github/workflows/net-lab.yml`, 'utf8');
 const netLab = yaml.load(netLabSource);
-assert.deepEqual(Object.keys(netLab.on).sort(), ['pull_request', 'workflow_dispatch'], 'o laboratório roda só em PR e por disparo manual');
-assert.deepEqual(netLab.on.pull_request.paths, ['packages/tunnel-core/**', 'tools/net-lab/**', '.github/workflows/net-lab.yml']);
 assert.equal(netLab.permissions.contents, 'read');
 assert.ok(!netLabSource.includes('secrets.'), 'o laboratório não pode consumir segredos');
 const labJob = netLab.jobs['nat-and-fallback'];
 assert.equal(labJob['runs-on'], 'ubuntu-latest');
-assert.equal(labJob.if, "github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'", 'o PR do laboratório roda só no repositório público');
 assert.ok(labJob.steps.some((step) => step.uses === 'actions/setup-go@v5' && step.with?.['go-version-file'] === 'packages/tunnel-core/go.mod'));
 const labRun = labJob.steps.find((step) => step.run === 'npm run test:netlab');
 assert.ok(labRun, 'o workflow roda npm run test:netlab');
@@ -168,22 +164,13 @@ assert.match(labRouter, /--random-fully/, 'o NAT simétrico sorteia a porta púb
 assert.match(labRouter, /-j DNAT --to-destination "\$LAN_HOST"/, 'o NAT cone encaminha o UDP de entrada ao host interno');
 assert.match(readFileSync(`${root}/packages/tunnel-core/integration/netlab_test.go`, 'utf8'), /^\/\/go:build netlab$/m, 'o laboratório fica fora do go test comum');
 
-// Smoke do AppImage corrigido em Linux real: PR que toque o empacotamento e disparo manual, só no público em PR.
+// Smoke do AppImage corrigido em Linux real: só disparo manual, e o deploy-full o dispara antes da tag.
 const smokeSource = readFileSync(`${root}/.github/workflows/appimage-smoke.yml`, 'utf8');
 const smoke = yaml.load(smokeSource);
-assert.deepEqual(Object.keys(smoke.on).sort(), ['pull_request', 'workflow_dispatch'], 'o smoke do AppImage roda em PR e por disparo manual');
-for (const path of [
-  '.github/workflows/appimage-smoke.yml', '.github/workflows/release.yml', 'tools/release/fix-appimage.mjs', 'tools/release/appimage/**',
-  'tools/release/verify-updater-signature.mjs', 'tools/fetch-tor.mjs', 'apps/desktop/package.json', 'apps/desktop/src-tauri/Cargo.lock',
-  'apps/desktop/src-tauri/tauri.conf.json', 'apps/desktop/src-tauri/tauri.linux.conf.json',
-]) {
-  assert.ok(smoke.on.pull_request.paths.includes(path), `PR que toca ${path} precisa rodar o smoke do AppImage`);
-}
 assert.equal(smoke.permissions.contents, 'read');
 assert.ok(!smokeSource.includes('secrets.'), 'o smoke do AppImage não pode consumir segredos');
 const bundleJob = smoke.jobs.bundle;
 assert.equal(bundleJob['runs-on'], 'ubuntu-22.04', 'o AppImage sai do mesmo Ubuntu da release');
-assert.equal(bundleJob.if, "github.event_name == 'workflow_dispatch' || github.repository == 'Cialai/cialai'");
 const bundleRuns = bundleJob.steps.map((step) => step.run || '').join('\n');
 const bundleOrder = [
   ['npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json --bundles appimage', 'o smoke cria o AppImage sem a chave do updater'],
@@ -211,4 +198,23 @@ for (const guard of ['Aborting', 'undefined symbol', 'Failed to load module: ', 
   assert.ok(smokeScript.includes(guard), `o smoke do AppImage perdeu a guarda: ${guard}`);
 }
 
-console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, fixed AppImage, AppImage smoke, artifacts, mobile bindings and net lab');
+// Só o dono do projeto dispara os workflows, decidido em 30/09/2026: push, PR e
+// agenda não rodam sozinhos, e a tag v* segue disparando a release. Os jobs sem
+// `needs` conferem quem disparou; os demais pulam junto com eles.
+const OWNER_GUARD = `contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)`;
+const workflowsDir = `${root}/.github/workflows`;
+for (const file of readdirSync(workflowsDir).filter((name) => /\.ya?ml$/.test(name))) {
+  const flow = yaml.load(readFileSync(`${workflowsDir}/${file}`, 'utf8'));
+  const release = file === 'release.yml';
+  assert.deepEqual(Object.keys(flow.on).sort(), release ? ['push', 'workflow_dispatch'] : ['workflow_dispatch'], `${file} só roda por disparo manual`);
+  if (release) assert.deepEqual(flow.on.push, { tags: ['v*'] }, 'a release só dispara sozinha pela tag');
+  for (const [name, job] of Object.entries(flow.jobs)) {
+    if (job.needs) {
+      assert.doesNotMatch(job.if ?? '', /always\(\)|cancelled\(\)|failure\(\)/, `${file} ${name} não pode rodar com o job anterior pulado`);
+    } else {
+      assert.equal(job.if, OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
+    }
+  }
+}
+
+console.log('PASS ci matrix: Linux, Windows, macOS, bundle unsigned, fixed AppImage, AppImage smoke, artifacts, mobile bindings, net lab and owner-only workflows');

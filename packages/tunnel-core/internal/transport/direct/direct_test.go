@@ -188,6 +188,9 @@ func TestRestrictedSessionExpires(t *testing.T) {
 	if elapsed := time.Since(started); elapsed < 200*time.Millisecond {
 		t.Fatalf("restricted session closed too early: %s", elapsed)
 	}
+	// quic-go sends CONNECTION_CLOSE before it cancels the closing side's
+	// context, so the client can see the close first.
+	waitDone(t, server)
 	if !errors.Is(client.Err(), transport.ErrRestrictedExpired) || !errors.Is(server.Err(), transport.ErrRestrictedExpired) {
 		t.Fatalf("close reasons: client %v, server %v", client.Err(), server.Err())
 	}

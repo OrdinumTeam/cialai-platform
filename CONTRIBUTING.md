@@ -90,6 +90,8 @@ Visible interface copy must not use parentheses or dash characters as separators
 
 Explain the observed problem, the resulting behavior and the exact validation performed. Mark tests that still need hardware or an external service. Include sanitized screenshots for visible changes.
 
+GitHub workflows run only when the project owner dispatches them, so pull requests get no automatic checks. Run `npm test` locally before requesting review.
+
 Before requesting review, confirm that:
 
 - Relevant automated checks pass.
