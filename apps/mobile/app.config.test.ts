@@ -40,6 +40,27 @@ describe('Expo app config', () => {
     expect(JSON.stringify(config.plugins)).toContain('targetSdkVersion');
   });
 
+  test('embeds the Outfit family of the site, one existing file per weight on both systems', () => {
+    const config = buildConfig(context);
+    const plugin = config.plugins?.find(entry => Array.isArray(entry) && entry[0] === 'expo-font') as [string, {
+      ios: { fonts: string[] }; android: { fonts: { fontFamily: string; fontDefinitions: { path: string; weight: number }[] }[] };
+    }];
+    expect(plugin).toBeDefined();
+    const [, options] = plugin;
+    expect(options.android.fonts[0]!.fontFamily).toBe('Outfit');
+    expect(options.android.fonts[0]!.fontDefinitions.map(item => item.weight)).toEqual([400, 500, 600, 700, 800]);
+    for (const path of options.ios.fonts) expect(readFileSync(join(__dirname, path)).subarray(0, 4)).toEqual(Buffer.from([0, 1, 0, 0]));
+    expect(options.android.fonts[0]!.fontDefinitions.map(item => item.path)).toEqual(options.ios.fonts);
+  });
+
+  test('allows local notifications without the remote push entitlement', () => {
+    const config = buildConfig(context);
+    expect(config.android?.permissions).toContain('android.permission.POST_NOTIFICATIONS');
+    expect(config.android?.blockedPermissions).toContain('android.permission.RECEIVE_BOOT_COMPLETED');
+    expect(JSON.stringify(config.plugins)).not.toContain('expo-notifications');
+    expect(config.ios?.entitlements).not.toHaveProperty('aps-environment');
+  });
+
   test('localizes native permission prompts from the shared dictionaries', () => {
     const config = buildConfig(context);
     expect(config.ios?.infoPlist?.CFBundleDevelopmentRegion).toBe('pt-BR');

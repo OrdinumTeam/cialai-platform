@@ -20,6 +20,12 @@ describe('mobile state transitions', () => {
     expect(transition(loading, { type: 'show-settings' })).toEqual({ kind: 'settings' });
   });
 
+  test('opens the projects and agents tabs', () => {
+    expect(transition({ kind: 'home' }, { type: 'show-projects' })).toEqual({ kind: 'projects' });
+    expect(transition({ kind: 'projects' }, { type: 'show-agents' })).toEqual({ kind: 'agents' });
+    expect(transition({ kind: 'agents' }, { type: 'show-home' })).toEqual({ kind: 'home' });
+  });
+
   test('opens the home from any screen, including an open shell', () => {
     expect(transition(loading, { type: 'show-home' })).toEqual({ kind: 'home' });
     const shell = transition(loading, { type: 'desktop-opened', desktopId, url, transport: 'direct', path: 'lan' });

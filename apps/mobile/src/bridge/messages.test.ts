@@ -73,4 +73,52 @@ describe('page bridge messages', () => {
     expect(parsePageMessage('{"type":"navigate-back","url":"https://evil.example"}')).toBeNull();
     expect(pageMessageScript({ type: 'navigate-back' })).toContain('navigate-back');
   });
+
+  test('accepts a picked project folder only with a path inside the limit', () => {
+    expect(parsePageMessage('{"type":"project-picked","path":"/p/alfa","name":"alfa"}')).toEqual({ type: 'project-picked', path: '/p/alfa', name: 'alfa' });
+    expect(parsePageMessage('{"type":"project-picked","path":"","name":"alfa"}')).toBeNull();
+    expect(parsePageMessage(JSON.stringify({ type: 'project-picked', path: `/${'x'.repeat(600)}`, name: 'x' }))).toBeNull();
+    expect(parsePageMessage('{"type":"project-picked","path":"/p/alfa"}')).toBeNull();
+  });
+
+  describe('dashboard snapshot', () => {
+    const valid = {
+      type: 'dashboard', at: 1000,
+      accounts: [{ id: 'codex', agent: 'codex', label: 'Codex', plan: 'plus', active: true, state: 'ok', fetchedAtMs: 900,
+        windows: [{ id: 'session', label: 'Limite de 5 horas', usedFraction: 0.19, resetsAtMs: 5000, durationMs: 18000000, headline: true, weekly: false }] }],
+      projects: [{ name: 'psicoapp', path: '/p/psicoapp', root: '~/p' }],
+      sessions: [{ id: 's1', name: 'psicoapp', cwd: '/p/psicoapp', status: 'running', agent: null }],
+      recent: ['/p/psicoapp']
+    };
+
+    test('accepts the shape the page sends', () => {
+      expect(parsePageMessage(JSON.stringify(valid))).toEqual(valid);
+    });
+
+    test('reads a page without recent folders as an empty list', () => {
+      const { recent: _recent, ...older } = valid;
+      expect(parsePageMessage(JSON.stringify(older))).toEqual({ ...older, recent: [] });
+    });
+
+    test('clamps the used fraction', () => {
+      const raw = { ...valid, accounts: [{ ...valid.accounts[0], windows: [{ ...valid.accounts[0]!.windows[0], usedFraction: 1.7 }] }] };
+      const parsed = parsePageMessage(JSON.stringify(raw));
+      expect(parsed?.type === 'dashboard' && parsed.accounts[0]?.windows[0]?.usedFraction).toBe(1);
+    });
+
+    test.each([
+      ['an unknown agent', { accounts: [{ ...valid.accounts[0], agent: 'gemini' }] }],
+      ['an unknown reading state', { accounts: [{ ...valid.accounts[0], state: 'great' }] }],
+      ['a fraction that is not a number', { accounts: [{ ...valid.accounts[0], windows: [{ ...valid.accounts[0]!.windows[0], usedFraction: '19%' }] }] }],
+      ['a project without path', { projects: [{ name: 'x', path: '', root: '' }] }],
+      ['too many projects', { projects: Array.from({ length: 401 }, (_, index) => ({ name: `p${index}`, path: `/p${index}`, root: '' })) }],
+      ['a text over the limit', { sessions: [{ ...valid.sessions[0], name: 'x'.repeat(513) }] }],
+      ['a missing time', { at: 0 }],
+      ['accounts that are not a list', { accounts: {} }],
+      ['too many recent folders', { recent: Array.from({ length: 11 }, (_, index) => `/r${index}`) }],
+      ['an empty recent folder', { recent: [''] }]
+    ])('rejects the whole snapshot with %s', (_name, change) => {
+      expect(parsePageMessage(JSON.stringify({ ...valid, ...change }))).toBeNull();
+    });
+  });
 });

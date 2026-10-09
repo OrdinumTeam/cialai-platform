@@ -10,6 +10,7 @@ import { getLocale, translate } from '../shared/i18n.js';
 import { baseName, dirName, isAbsolutePath, isInsideWith, joinPath, pathRoot, portablePath } from '../lib/paths.js';
 import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind } from './kinds.js';
 import { buildDemoScan } from './docgraph/fixture.js';
+import { demoParam } from '../lib/demo.js';
 
 export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
 export { baseName, dirName, isAbsolutePath, joinPath, pathRoot, portablePath };
@@ -33,7 +34,7 @@ export class FsError extends Error {
 }
 
 function demoMode() {
-  try { return new URLSearchParams(window.location.search).get('terminais') === 'demo'; } catch (_error) { return false; }
+  return demoParam('terminais') === 'demo';
 }
 
 async function call(command, args) {

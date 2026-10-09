@@ -3,32 +3,62 @@
 // fictício e uma fronteira de arquivos inerte, sem PTY ou projeto do usuário.
 import { build } from 'esbuild';
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// A raiz do pacote, para a fixture rodar de qualquer pasta.
+const packageRoot = fileURLToPath(new URL('..', import.meta.url));
 
 const entry = `
 import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {ToastProvider} from './src/components/ui.jsx';
 import PhoneWorkbench from './src/terminals/ui/PhoneWorkbench.jsx';
-import {getState} from './src/terminals/runtime.js';
-window.__phoneFixture={getState};
+import {getSession, getState} from './src/terminals/runtime.js';
+// \`attachPty\` dá um PTY de mentira às sessões vivas da demonstração, que não
+// têm um, para a verificação de ponta a ponta acompanhar o que seria escrito.
+window.__phoneFixture={getState, attachPty: () => getState().sessions.forEach((item, index) => {
+  const session = getSession(item.id);
+  if (session && session.status === 'running' && session.ptyId == null) session.ptyId = index + 1;
+})};
 import './src/styles.css'; import './src/desktop/macos.css'; import './src/mobile/mobile.css'; import './src/views/Terminais.css'; import './src/desktop/brand.css';
 createRoot(document.getElementById('root')).render(<ToastProvider><div className="ios-shell ios-shell--terminal"><div className="fixture-native"><span>●</span><strong>Mac de demonstração</strong><small>Cialai</small></div><main className="ios-content"><PhoneWorkbench/></main></div></ToastProvider>);
 `;
 
 const output = await build({
-  stdin: { contents: entry, resolveDir: process.cwd(), loader: 'jsx' },
+  stdin: { contents: entry, resolveDir: packageRoot, loader: 'jsx' },
   bundle: true,
   write: false,
   outdir: '/tmp/cialai-phone-fixture',
   format: 'iife',
   define: { 'process.env.NODE_ENV': '"production"' },
-  loader: { '.png': 'dataurl', '.svg': 'dataurl' },
+  loader: { '.png': 'dataurl', '.svg': 'dataurl', '.woff2': 'dataurl' },
   plugins: [{
     name: 'inert-phone-files',
     setup(api) {
-      api.onResolve({ filter: /lib\/native\.js$/ }, ({ importer }) => (
-        importer.endsWith('PhoneFiles.jsx') ? { path: 'files', namespace: 'fixture' } : undefined
-      ));
+      // Igual ao Vite: `?raw` entrega o texto do arquivo, como as marcas dos agentes.
+      api.onResolve({ filter: /\?raw$/ }, ({ path, resolveDir }) => ({ path: join(resolveDir, path.replace(/\?raw$/, '')), namespace: 'raw' }));
+      api.onLoad({ filter: /.*/, namespace: 'raw' }, ({ path }) => ({ contents: readFileSync(path, 'utf8'), loader: 'text' }));
+      api.onResolve({ filter: /lib\/native\.js$/ }, ({ importer, resolveDir, path }) => {
+        if (importer.endsWith('PhoneFiles.jsx')) return { path: 'files', namespace: 'fixture' };
+        // O terminal escreve num PTY que não existe aqui: a fixture guarda cada
+        // escrita em `window.__ptyWrites`, para a verificação de ponta a ponta
+        // conferir o que sairia, e o resto segue para a ponte de verdade.
+        if (importer.endsWith('runtime.js')) return { path: join(resolveDir, path), namespace: 'pty-recorder' };
+        return undefined;
+      });
+      api.onLoad({ filter: /.*/, namespace: 'pty-recorder' }, ({ path }) => ({
+        contents: `export * from ${JSON.stringify(path)};
+          import { invoke as bridgeInvoke } from ${JSON.stringify(path)};
+          export const invoke = (cmd, args) => {
+            if (cmd !== 'pty_write') return bridgeInvoke(cmd, args);
+            (window.__ptyWrites ||= []).push(args.data);
+            return Promise.resolve();
+          };`,
+        loader: 'js',
+        resolveDir: packageRoot,
+      }));
       api.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({
         contents: `export const invoke=async(cmd,{path})=>{
           if(cmd==='pty_file_read') return {path,content:'# Cialai\\n\\nEste conteúdo fictício verifica a leitura no celular. Linhas compridas devem quebrar na largura disponível sem criar rolagem horizontal.\\n\\nexport const layout = "mobile";',size:220};

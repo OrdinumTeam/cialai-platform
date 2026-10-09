@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
@@ -8,14 +8,20 @@ import type { WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import type { Transport } from 'cialai-tunnel';
 
 import type { BiometricSession } from '../auth/biometrics';
-import { pageMessageScript, parsePageMessage, shellMessageScript, type ShellMessage } from '../bridge/messages';
+import { pageMessageScript, parsePageMessage, shellMessageScript, type DashboardMessage, type ShellIntent, type ShellMessage } from '../bridge/messages';
 import { shareDownload } from '../bridge/share-download';
 import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '../config/url';
 import { localizeSensitiveReason, useI18n } from '../i18n';
 import { checkControlHealth, HEALTH_FAILURE_STRIKES, HEALTH_POLL_INTERVAL_MS } from '../network/health';
 import { logApp } from '../state/diagnostics';
-import { usePalette, useThemeMode } from '../theme';
+import type { DesktopConnectionState } from '../state/machine';
+import { useThemeMode, useTokens } from '../theme';
+import { ActionList, BottomSheet, ChoiceRow, Icon, IconButton, StatusBadge, radius, space, typography } from '../ui';
+import { STATE_KEYS, STATE_TONES } from './Desktops';
 import { TRANSPORT_DESCRIPTION_KEYS, TRANSPORT_KEYS, useTransportColor } from './TransportBadge';
+
+// Um computador vinculado, como o seletor da barra o mostra.
+export type ShellDesktop = { id: string; name: string; state: DesktopConnectionState; transport: Transport | null };
 
 type Props = {
   url: string;
@@ -32,13 +38,24 @@ type Props = {
   onConnectionRestored: () => void;
   // Volta ao início; a conexão fica aberta por um prazo para a volta ser barata.
   onHome: () => void;
+  // Pedido feito no Início, entregue à página no carregamento.
+  intent?: ShellIntent | null;
+  // Retrato que a página manda para o Início.
+  onDashboard?: (snapshot: DashboardMessage) => void;
+  // Pasta escolhida na página para virar atalho em Projetos.
+  onProjectPicked?: (path: string) => void;
+  // Computadores do seletor da barra; escolher outro abre as sessões dele.
+  desktops?: readonly ShellDesktop[];
+  onSwitchDesktop?: (desktopId: string) => void;
+  onDesktops?: () => void;
 };
 
 export function Shell({
   url, desktopId, desktopName, version, biometricSession, lockSignal, transport, reconnecting,
-  onConnectionLost, onConnectionRestored, onHome
+  onConnectionLost, onConnectionRestored, onHome, intent = null, onDashboard, onProjectPicked, desktops = [], onSwitchDesktop, onDesktops
 }: Props) {
-  const palette = usePalette();
+  const { colors } = useTokens();
+  const [picker, setPicker] = useState(false);
   const themeMode = useThemeMode();
   const transportColor = useTransportColor();
   const { locale, t } = useI18n();
@@ -158,6 +175,14 @@ export function Shell({
       onHome();
       return;
     }
+    if (message.type === 'dashboard') {
+      onDashboard?.(message);
+      return;
+    }
+    if (message.type === 'project-picked') {
+      onProjectPicked?.(message.path);
+      return;
+    }
     if (downloadBusy.current) {
       Alert.alert(t('mobile.alert.downloadBusy.title'), t('mobile.alert.downloadBusy.detail'));
       return;
@@ -170,38 +195,40 @@ export function Shell({
     } finally {
       downloadBusy.current = false;
     }
-  }, [biometricSession, emitShellState, inject, onHome, openExternal, t, url]);
+  }, [biometricSession, emitShellState, inject, onDashboard, onHome, onProjectPicked, openExternal, t, url]);
 
   const bootstrapScript = useMemo(() =>
     `window.__CIALAI_SHELL__ = ${JSON.stringify({
-      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName, locale, theme: themeMode
-    })}; true;`, [desktopId, desktopName, locale, themeMode, version]);
+      platform: Platform.OS === 'android' ? 'android' : 'ios', version, desktopId, desktopName, locale, theme: themeMode,
+      ...(intent ? { intent } : {})
+    }).replace(/</g, '\\u003c')}; true;`, [desktopId, desktopName, intent, locale, themeMode, version]);
 
   return (
-    <View style={[styles.root, { backgroundColor: palette.surface }]}>
-      <SafeAreaView edges={['top']} style={{ backgroundColor: palette.surface }}>
-        <View style={[styles.toolbar, { borderBottomColor: palette.separator }]}>
-          <View style={styles.toolbarStatus}>
-            <View style={[styles.connectedDot, { backgroundColor: reconnecting ? palette.warning : transportColor(transport) }]} />
-            <Text numberOfLines={1} style={[styles.toolbarTitle, { color: palette.label }]}>{desktopName}</Text>
-            <View style={[styles.transportBadge, { backgroundColor: palette.chip }]}>
+    <View style={[styles.root, { backgroundColor: colors.surface }]}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: colors.surface }}>
+        <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
+          <IconButton accessibilityLabel={t('mobile.home.open')} icon="chevron-left" onPress={onHome} variant="header" />
+          <Pressable accessibilityLabel={t('mobile.shell.switchDesktop', { name: desktopName })} accessibilityRole="button"
+            onPress={() => setPicker(true)}
+            style={({ pressed }) => [styles.selector, { backgroundColor: pressed ? colors.surfacePressed : colors.surfaceMuted }]}>
+            <Icon color={colors.textSecondary} name="laptop" size={18} />
+            <View style={[styles.connectedDot, { backgroundColor: reconnecting ? colors.warning : transportColor(transport) }]} />
+            <Text numberOfLines={1} style={[typography.headline, styles.toolbarTitle, { color: colors.text }]}>{desktopName}</Text>
+            <View style={[styles.transportBadge, { backgroundColor: colors.surface }]}>
               <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
-                numberOfLines={1} style={[styles.transportText, { color: palette.secondaryLabel }]}>
+                numberOfLines={1} style={[typography.caption, styles.transportText, { color: colors.textSecondary }]}>
                 {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
               </Text>
             </View>
-          </View>
-          <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={onHome}
-            style={({ pressed }) => [styles.homeButton, pressed && styles.pressed]}>
-            <Text style={[styles.homeText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
+            <Icon color={colors.textSecondary} name="chevron-down" size={18} />
           </Pressable>
         </View>
         {reconnecting ? (
-          <View accessibilityLiveRegion="polite" style={[styles.banner, { backgroundColor: palette.chip, borderBottomColor: palette.separator }]}>
-            <ActivityIndicator color={palette.warning} size="small" />
+          <View accessibilityLiveRegion="polite" style={[styles.banner, { backgroundColor: colors.warningSoft, borderBottomColor: colors.border }]}>
+            <ActivityIndicator color={colors.warning} size="small" />
             <View style={styles.bannerText}>
-              <Text style={[styles.bannerTitle, { color: palette.label }]}>{t('mobile.shell.reconnecting.title')}</Text>
-              <Text style={[styles.bannerDetail, { color: palette.secondaryLabel }]}>{t('mobile.shell.reconnecting.detail')}</Text>
+              <Text style={[typography.callout, styles.bannerTitle, { color: colors.text }]}>{t('mobile.shell.reconnecting.title')}</Text>
+              <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.shell.reconnecting.detail')}</Text>
             </View>
           </View>
         ) : null}
@@ -234,6 +261,27 @@ export function Shell({
         source={source}
         style={styles.webView}
       />
+      <BottomSheet onClose={() => setPicker(false)} title={t('mobile.desktops.title')} visible={picker}>
+        {desktops.map(desktop => {
+          const current = desktop.id === desktopId;
+          return (
+            <ChoiceRow disabled={current} icon="laptop" key={desktop.id} onPress={() => { setPicker(false); onSwitchDesktop?.(desktop.id); }}
+              selected={current} title={desktop.name}
+              detail={(
+                <View style={styles.desktopBadges}>
+                  <StatusBadge label={t(STATE_KEYS[desktop.state])} tone={STATE_TONES[desktop.state]} />
+                  {desktop.transport === 'tor' ? (
+                    <StatusBadge accessibilityLabel={t(TRANSPORT_DESCRIPTION_KEYS.tor)} label={t(TRANSPORT_KEYS.tor)} tone="warning" variant="pill" />
+                  ) : null}
+                </View>
+              )}
+              trailing={current ? <Text style={[typography.footnote, styles.current, { color: colors.primary }]}>{t('mobile.shell.current')}</Text> : null} />
+          );
+        })}
+        {onDesktops ? (
+          <ActionList groups={[[{ key: 'manage', icon: 'monitor', label: t('mobile.shell.allDesktops'), onPress: () => { setPicker(false); onDesktops(); } }]]} />
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
@@ -241,17 +289,18 @@ export function Shell({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   webView: { flex: 1, backgroundColor: 'transparent' },
-  toolbar: { minHeight: 44, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingRight: 8 },
-  toolbarStatus: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  transportBadge: { borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
-  transportText: { fontSize: 12, lineHeight: 16, fontWeight: '600' },
-  toolbarTitle: { flexShrink: 1, fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  homeButton: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  homeText: { fontSize: 17, lineHeight: 22, fontWeight: '500' },
-  pressed: { opacity: 0.55 },
-  connectedDot: { width: 8, height: 8, borderRadius: 4 },
-  banner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 16, paddingVertical: 8 },
+  toolbar: { minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: space.sm,
+    paddingHorizontal: space.md, paddingVertical: 6 },
+  selector: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: space.xs, borderRadius: radius.md, paddingHorizontal: space.sm },
+  desktopBadges: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: space.xs },
+  current: { fontWeight: '600' },
+  // O nome encolhe primeiro; o chip encolhe depois, para um texto traduzido longo não esconder o nome.
+  transportBadge: { flexShrink: 1, maxWidth: '40%', borderRadius: radius.pill, paddingHorizontal: space.xs, paddingVertical: 3 },
+  transportText: { fontWeight: '600' },
+  toolbarTitle: { flexShrink: 2 },
+  connectedDot: { width: 10, height: 10, borderRadius: 5 },
+  banner: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: space.md, paddingVertical: space.xs },
   bannerText: { flex: 1, gap: 2 },
-  bannerTitle: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  bannerDetail: { fontSize: 13, lineHeight: 18 }
+  bannerTitle: { fontWeight: '600' }
 });

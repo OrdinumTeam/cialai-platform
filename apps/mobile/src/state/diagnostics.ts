@@ -56,3 +56,9 @@ export function formatDiagnosticTime(at: number): string {
   const date = new Date(at);
   return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
+
+// Nível de log escolhido nos ajustes, guardado como o tema e a biometria.
+export const LOG_LEVEL_STORAGE_KEY = 'cialai.logLevel';
+export function normalizeLogLevel(value: unknown): DiagnosticLevel {
+  return value === 'error' || value === 'debug' ? value : 'info';
+}

@@ -5,6 +5,7 @@
 
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { invoke, isTauri, listen } from '../lib/native.js';
+import { demoParam } from '../lib/demo.js';
 import {
   PAIR_ROTATION_SECONDS,
   PAIR_TTL_SECONDS,
@@ -44,7 +45,7 @@ function queryParam(name) {
 }
 
 function previewMode() {
-  return queryParam('tunnel') === 'demo';
+  return demoParam('tunnel') === 'demo';
 }
 
 function demoReserveMode() {

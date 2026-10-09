@@ -20,7 +20,9 @@
 // cada percentual aparece com o nome da janela a que pertence. Sem leitura o
 // número não vira zero: vira o estado da leitura.
 import React, { useCallback, useEffect, useState } from 'react';
-import { Check, CirclePlus, RefreshCw } from 'lucide-react';
+import { Check, CirclePlus, Info, RefreshCw } from 'lucide-react';
+import claudeGlyph from '../../notch/glyphs/claude.svg?raw';
+import openaiGlyph from '../../notch/glyphs/openai.svg?raw';
 import { invoke } from '../../lib/native.js';
 import { demoProfiles, demoProfilesEnabled } from '../agent-profiles-demo.js';
 import { DASH, ageCopy, percentText, qualifierFor, resetCopy, statusMessage, windowLabel } from '../../notch/copy.js';
@@ -29,6 +31,7 @@ import { translate } from '../../shared/i18n.js';
 // Os dois agentes, na ordem em que aparecem. O rótulo vem do dicionário, que
 // guarda o nome do produto igual nos três idiomas.
 export const AGENTS = Object.freeze(['claude', 'codex']);
+const GLYPHS = Object.freeze({ claude: claudeGlyph, codex: openaiGlyph });
 
 // Agrupa por agente preservando a ordem em que o computador devolveu, que já
 // é o padrão primeiro e os nomeados em seguida.
@@ -125,20 +128,75 @@ function UsageCell({ profile }) {
   const qualifier = qualifierFor(usage.fidelity);
   return (
     <span className={`agent-profiles__usage${state === 'stale' ? ' is-stale' : ''}`} title={title}>
-      {headline ? (
-        <span className={`agent-profiles__window agent-profiles__window--${usageTone(headline.usedFraction)}`}>
-          <em>{windowLabel(headline)}</em>
-          <strong>{Number.isFinite(headline.usedFraction) ? `${qualifier}${percentText(headline.usedFraction)}%` : DASH}</strong>
-        </span>
-      ) : null}
-      {weekly ? (
-        <span className={`agent-profiles__window agent-profiles__window--${usageTone(weekly.usedFraction)}`}>
-          <em>{windowLabel(weekly)}</em>
-          <strong>{Number.isFinite(weekly.usedFraction) ? `${qualifier}${percentText(weekly.usedFraction)}%` : DASH}</strong>
-        </span>
-      ) : null}
+      {headline ? <WindowMeter window={headline} label={windowLabel(headline)} qualifier={qualifier} /> : null}
+      {weekly ? <WindowMeter window={weekly} label={windowLabel(weekly)} qualifier={qualifier} /> : null}
       {state === 'stale' ? <span className="agent-profiles__stale">{translate('terminal.profiles.stale')}</span> : null}
     </span>
+  );
+}
+
+// Uma janela com nome, percentual, barra e renovação. O tom da barra segue o
+// do número; sem número a barra fica vazia e o texto diz o traço.
+function WindowMeter({ window, label, qualifier }) {
+  const known = Number.isFinite(window.usedFraction);
+  const tone = usageTone(window.usedFraction);
+  const reset = resetCopy(window.resetsAtMs, Date.now(), 'remaining');
+  const width = known ? `${Math.min(100, Math.max(0, window.usedFraction * 100))}%` : '0%';
+  return (
+    <span className={`agent-profiles__window agent-profiles__window--${tone}`}>
+      <span className="agent-profiles__window-head">
+        <em>{label}</em>
+        <strong>{known ? `${qualifier}${percentText(window.usedFraction)}%` : DASH}</strong>
+      </span>
+      <span className="agent-profiles__bar" aria-hidden="true"><i style={{ width }} /></span>
+      {reset ? <small>{reset}</small> : null}
+    </span>
+  );
+}
+
+// Dois cartões fantasmas no formato das contas enquanto a lista é lida.
+function ProfilesSkeleton() {
+  return (
+    <div className="agent-profiles__skeletons" role="status" aria-busy="true" aria-label={translate('terminal.profiles.loading')}>
+      {[0, 1].map((index) => (
+        <div key={index} className="agent-profiles__skeleton" aria-hidden="true">
+          <span className="agent-profiles__shimmer agent-profiles__shimmer--title" />
+          <span className="agent-profiles__shimmer agent-profiles__shimmer--bar" />
+          <span className="agent-profiles__shimmer agent-profiles__shimmer--action" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Cartão de uma conta: nome, plano e selo de padrão, o uso por janela e a
+// ação. A conta em uso não oferece troca; as outras oferecem.
+export function ProfileRow({ profile, busy, onSelect }) {
+  return (
+    <div className={`agent-profiles__row${profile.active ? ' is-active' : ''}`}>
+      <div className="agent-profiles__identity">
+        <span className="agent-profiles__name" title={profile.account || profile.label}>{profile.label}</span>
+        <span className="agent-profiles__tags">
+          {profile.plan ? <em className="agent-profiles__tag agent-profiles__tag--plan">{profile.plan}</em> : null}
+          {profile.isDefault ? <em className="agent-profiles__tag agent-profiles__tag--default">{translate('terminal.profiles.default')}</em> : null}
+        </span>
+      </div>
+      <UsageCell profile={profile} />
+      {profile.active ? (
+        <span className="agent-profiles__current"><Check size={15} strokeWidth={2} aria-hidden="true" />{translate('terminal.profiles.inUse')}</span>
+      ) : (
+        <button
+          type="button"
+          className="agent-profiles__use"
+          disabled={busy}
+          aria-label={translate('terminal.profiles.useFor', { name: profile.label })}
+          title={translate('terminal.profiles.useFor', { name: profile.label })}
+          onClick={() => onSelect(profile)}
+        >
+          {translate('terminal.profiles.use')}
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -184,14 +242,26 @@ export default function AgentProfiles({ onCreate, onSelected }) {
   const groups = groupProfiles(profiles);
   return (
     <div className="agent-profiles">
-      <p className="agent-profiles__note">{translate('terminal.profiles.runningStays')}</p>
-      <p className="agent-profiles__note agent-profiles__note--quiet">{translate('terminal.profiles.usageNote')}</p>
-      {error ? <p className="agent-profiles__error" role="alert">{error}</p> : null}
-      {profiles == null ? <p className="agent-profiles__empty">{translate('terminal.profiles.loading')}</p> : null}
+      <div className="agent-profiles__notice" role="note">
+        <RefreshCw size={18} strokeWidth={1.9} aria-hidden="true" />
+        <div>
+          <p className="agent-profiles__note">{translate('terminal.profiles.runningStays')}</p>
+          <p className="agent-profiles__note agent-profiles__note--quiet">{translate('terminal.profiles.usageNote')}</p>
+        </div>
+        <Info className="agent-profiles__notice-info" size={16} strokeWidth={1.75} aria-hidden="true" />
+      </div>
+      {error ? (
+        <div className="agent-profiles__error" role="alert">
+          <span>{error}</span>
+          <button type="button" className="agent-profiles__retry" onClick={load}>{translate('terminal.profiles.retry')}</button>
+        </div>
+      ) : null}
+      {profiles == null ? <ProfilesSkeleton /> : null}
       {profiles != null && !groups.length ? <p className="agent-profiles__empty">{translate('terminal.profiles.none')}</p> : null}
       {groups.map((group) => (
         <section key={group.id} className="agent-profiles__group">
           <header className="agent-profiles__head">
+            <span className={`agent-profiles__glyph agent-profiles__glyph--${group.id}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: GLYPHS[group.id] || '' }} />
             <h3>{translate(`terminal.profiles.agent.${group.id}`)}</h3>
             {onCreate ? (
               <button type="button" className="agent-profiles__create" onClick={() => onCreate(group.id, load)}>
@@ -200,30 +270,7 @@ export default function AgentProfiles({ onCreate, onSelected }) {
             ) : null}
           </header>
           {group.profiles.map((profile) => (
-            <div key={profile.id} className={`agent-profiles__row${profile.active ? ' is-active' : ''}`}>
-              <div className="agent-profiles__identity">
-                <span className="agent-profiles__name" title={profile.account || profile.label}>{profile.label}</span>
-                <span className="agent-profiles__tags">
-                  {profile.isDefault ? <em className="agent-profiles__tag">{translate('terminal.profiles.default')}</em> : null}
-                  {profile.plan ? <em className="agent-profiles__tag agent-profiles__tag--plan">{profile.plan}</em> : null}
-                </span>
-              </div>
-              <UsageCell profile={profile} />
-              {profile.active ? (
-                <span className="agent-profiles__current"><Check size={15} strokeWidth={2} aria-hidden="true" />{translate('terminal.profiles.inUse')}</span>
-              ) : (
-                <button
-                  type="button"
-                  className="agent-profiles__use"
-                  disabled={busy === profile.id}
-                  aria-label={translate('terminal.profiles.useFor', { name: profile.label })}
-                  title={translate('terminal.profiles.useFor', { name: profile.label })}
-                  onClick={() => select(profile)}
-                >
-                  {translate('terminal.profiles.use')}
-                </button>
-              )}
-            </div>
+            <ProfileRow key={profile.id} profile={profile} busy={busy === profile.id} onSelect={select} />
           ))}
         </section>
       ))}

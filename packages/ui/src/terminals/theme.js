@@ -12,6 +12,20 @@ export function isDarkTheme() {
   return document.documentElement.getAttribute('data-theme') === 'dark';
 }
 
+// No celular o terminal é sempre escuro, como nas referências: o painel escuro
+// sobre a página clara separa a saída do resto da tela. No computador o
+// terminal segue a aparência.
+export function isPhoneTerminal() {
+  return document.documentElement.getAttribute('data-form-factor') === 'phone';
+}
+
+// Cores do terminal escuro do celular, as mesmas de `terminal` e `onTerminal`
+// do app nativo, e os tons de estado do tema escuro.
+const PHONE_TERMINAL = Object.freeze({
+  background: '#202127', foreground: '#e9eaf0', ok: '#3ccf76', warn: '#f0a629', bad: '#ff5c5c',
+  selection: 'rgba(255,122,178,.28)', inactiveSelection: 'rgba(255,255,255,.10)', accent: '#ff7ab2',
+});
+
 export function terminalFont() {
   return token('--mac-font-mono', '"SF Mono", SFMono-Regular, ui-monospace, Menlo, monospace');
 }
@@ -45,19 +59,20 @@ const DARK_ANSI = {
 // Objeto novo a cada chamada: o xterm so reaplica o tema quando a referencia
 // muda.
 export function buildTheme() {
-  const dark = isDarkTheme();
-  const surface = token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
-  const ink = token('--mac-label', dark ? '#f5f5f7' : '#1d1d1f');
-  const ok = token('--mac-ok', '#1f9d5b');
-  const warn = token('--mac-warn', '#c27a00');
-  const bad = token('--mac-bad', '#d83a3a');
+  const phone = isPhoneTerminal();
+  const dark = phone || isDarkTheme();
+  const surface = phone ? PHONE_TERMINAL.background : token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
+  const ink = phone ? PHONE_TERMINAL.foreground : token('--mac-label', dark ? '#f5f5f7' : '#1d1d1f');
+  const ok = phone ? PHONE_TERMINAL.ok : token('--mac-ok', '#1f9d5b');
+  const warn = phone ? PHONE_TERMINAL.warn : token('--mac-warn', '#c27a00');
+  const bad = phone ? PHONE_TERMINAL.bad : token('--mac-bad', '#d83a3a');
   return {
     background: surface,
     foreground: ink,
     cursor: ink,
     cursorAccent: surface,
-    selectionBackground: token('--mac-accent-soft-hover', 'rgba(26,79,160,.14)'),
-    selectionInactiveBackground: token('--mac-neutral-bg', 'rgba(0,0,0,.05)'),
+    selectionBackground: phone ? PHONE_TERMINAL.selection : token('--mac-accent-soft-hover', 'rgba(26,79,160,.14)'),
+    selectionInactiveBackground: phone ? PHONE_TERMINAL.inactiveSelection : token('--mac-neutral-bg', 'rgba(0,0,0,.05)'),
     red: bad,
     green: ok,
     yellow: warn,
@@ -94,8 +109,17 @@ export function opaqueColor(value, background, fallback) {
 // que so aceita #RRGGBB opaco: com var() cada busca lancava css.toColor e
 // nada era marcado. Os tokens translucidos sao compostos sobre o fundo.
 export function searchDecorations() {
-  const dark = isDarkTheme();
-  const surface = token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
+  const phone = isPhoneTerminal();
+  const dark = phone || isDarkTheme();
+  const surface = phone ? PHONE_TERMINAL.background : token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
+  if (phone) {
+    return {
+      matchBackground: opaqueColor('rgba(240,166,41,.30)', surface),
+      activeMatchBackground: opaqueColor(PHONE_TERMINAL.selection, surface),
+      matchOverviewRuler: PHONE_TERMINAL.warn,
+      activeMatchColorOverviewRuler: PHONE_TERMINAL.accent,
+    };
+  }
   return {
     matchBackground: opaqueColor(token('--terminais-editor-search'), surface, 'rgba(194,122,0,.22)'),
     activeMatchBackground: opaqueColor(token('--mac-accent-soft-hover'), surface, dark ? 'rgba(255,122,178,.24)' : 'rgba(226,59,132,.14)'),

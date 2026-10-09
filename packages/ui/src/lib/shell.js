@@ -82,6 +82,31 @@ export async function requestDownload(blob, name) {
 
 export function openExternal(url) { post({ type: 'open-external', url: String(url) }); }
 export function requestNavigateBack() { post({ type: 'navigate-back' }); }
+// Retrato do computador para o Inicio nativo; o formato esta em mobile/dashboard-snapshot.js.
+export function postDashboard(snapshot) { post(snapshot); }
+// Pasta escolhida no navegador para virar atalho em Projetos, na casca.
+export function postProjectPicked(path, name) { post({ type: 'project-picked', path: String(path), name: String(name || '') }); }
+// Nome do computador como a casca o mostra, para o resumo da sessao nova.
+export const shellDesktopName = () => {
+  const value = typeof window !== 'undefined' ? window.__CIALAI_SHELL__?.desktopName : null;
+  return typeof value === 'string' ? value : '';
+};
+
+// Pedido da casca ao abrir o terminal: retomar uma sessao, abrir uma nova numa
+// pasta, mostrar as contas ou escolher uma pasta para virar atalho. Vale uma
+// vez por id, mesmo se a pagina recarregar.
+const INTENT_KINDS = ['session', 'new-session', 'profiles', 'pick-project'];
+const INTENTS_USED_KEY = 'cialai_shell_intents';
+export function takeShellIntent(storage = typeof window !== 'undefined' ? window.localStorage : null) {
+  const intent = typeof window !== 'undefined' ? window.__CIALAI_SHELL__?.intent : null;
+  if (!intent || typeof intent.id !== 'string' || !INTENT_KINDS.includes(intent.kind)) return null;
+  let used = [];
+  try { used = JSON.parse(storage?.getItem(INTENTS_USED_KEY) || '[]'); } catch (_error) { used = []; }
+  if (!Array.isArray(used)) used = [];
+  if (used.includes(intent.id)) return null;
+  try { storage?.setItem(INTENTS_USED_KEY, JSON.stringify([...used, intent.id].slice(-20))); } catch (_error) { /* sem storage */ }
+  return intent;
+}
 
 export function requestUrlDownload(url, name) {
   const target = new URL(url, typeof location !== 'undefined' ? location.href : undefined);

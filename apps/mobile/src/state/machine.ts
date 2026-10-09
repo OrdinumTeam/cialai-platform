@@ -15,6 +15,9 @@ export type AppScreen =
   | { kind: 'home' }
   | { kind: 'desktops' }
   | { kind: 'settings' }
+  // Abas sem dados do computador por enquanto: só o estado vazio.
+  | { kind: 'projects' }
+  | { kind: 'agents' }
   // `reconnecting` mantém a página montada com a faixa nativa enquanto o caminho volta.
   | { kind: 'shell'; desktopId: string; url: string; transport: Transport | null; path: PathKind | null; reconnecting: boolean }
   | { kind: 'offline'; desktopId: string; reason: OfflineReason };
@@ -24,6 +27,8 @@ export type AppAction =
   | { type: 'show-home' }
   | { type: 'show-desktops' }
   | { type: 'show-settings' }
+  | { type: 'show-projects' }
+  | { type: 'show-agents' }
   | { type: 'desktop-opened'; desktopId: string; url: string; transport: Transport | null; path: PathKind | null }
   | { type: 'desktop-offline'; desktopId: string; reason: OfflineReason }
   | { type: 'path-changed'; desktopId: string; transport: Transport | null; path: PathKind | null }
@@ -49,6 +54,8 @@ export function transition(screen: AppScreen, action: AppAction): AppScreen {
     case 'show-home': return { kind: 'home' };
     case 'show-desktops': return { kind: 'desktops' };
     case 'show-settings': return { kind: 'settings' };
+    case 'show-projects': return { kind: 'projects' };
+    case 'show-agents': return { kind: 'agents' };
     case 'desktop-opened': {
       // Um celular revogado não volta a abrir o computador por uma tentativa atrasada.
       if (isRemoved(screen, action.desktopId)) return screen;

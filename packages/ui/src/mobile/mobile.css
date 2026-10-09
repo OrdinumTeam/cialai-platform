@@ -4,15 +4,76 @@
    fontes do aparelho e os alvos de toque maiores que os controles de 28 px
    do desktop. */
 
-/* Fonte do aparelho: system-ui resolve a Roboto no Android e a San Francisco
-   no iPhone; a lista da casca comeca pela familia da Apple e cairia na Arial
-   no Android. */
+/* Fonte do site cialai.com.br, a Outfit variavel, empacotada com a pagina:
+   o telefone mostra o mesmo texto que o app nativo, que embute a mesma
+   familia. Sem ela carregada, cai na fonte do aparelho. */
+@font-face { font-family: "Cialai Outfit"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("../fonts/Outfit-Variable.woff2") format("woff2"); }
+
 [data-form-factor="phone"] {
-  --mac-font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mac-font: "Cialai Outfit", system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mac-font-mono: ui-monospace, "SF Mono", Menlo, "Roboto Mono", "Droid Sans Mono", "Cialai JetBrains Mono", monospace;
   --font: var(--mac-font);
   --font-mono: var(--mac-font-mono);
   --phone-press-ease: cubic-bezier(.2, .7, .2, 1);
+}
+/* Tokens do celular, os mesmos do aplicativo nativo (apps/mobile/src/ui/tokens.ts)
+   para a casca e a pagina formarem uma tela so. O acento continua sendo o da
+   marca em brand.css. No claro, os neutros da casca passam a ser os do
+   telefone: fundo levemente azulado, bordas e textos das referencias. */
+[data-form-factor="phone"] {
+  --phone-primary: var(--mac-accent);
+  --phone-primary-soft: #FCE7F1;
+  --phone-on-primary: #FFFFFF;
+  --phone-bg: #F8FAFF;
+  --phone-surface: #FFFFFF;
+  --phone-surface-muted: #F2F4F9;
+  --phone-border: #E7EAF2;
+  --phone-text: #20232C;
+  --phone-text-2: #747B8B;
+  --phone-text-3: #9CA2B0;
+  --phone-success: #18A66A;
+  --phone-success-soft: #E3F5EC;
+  --phone-warning: #D38B17;
+  --phone-warning-soft: #FBF0DC;
+  --phone-danger: #E5484D;
+  --phone-danger-soft: #FDE8E9;
+  --phone-neutral: #A9AFBC;
+  --phone-terminal: #202127;
+  /* Raios do site cialai.com.br: 20 nos cards, 12 nos botões e controles. */
+  --phone-radius-card: 20px;
+  --phone-radius-control: 12px;
+  --phone-shadow-card: 0 4px 14px rgba(27, 35, 64, .06);
+  --mac-bg: var(--phone-bg);
+  --mac-label: var(--phone-text);
+  --mac-label-2: var(--phone-text-2);
+  --mac-label-3: var(--phone-text-3);
+  --mac-separator: var(--phone-border);
+  --mac-ok: var(--phone-success);
+  --mac-warn: var(--phone-warning);
+  --mac-bad: var(--phone-danger);
+  /* Usado nos estados de toque e antes sem definicao. */
+  --mac-fill: var(--mac-press);
+}
+/* No escuro os neutros da casca continuam valendo; so os tokens do celular
+   apontam para eles. */
+[data-form-factor="phone"][data-theme="dark"] {
+  --phone-primary-soft: rgba(255, 122, 178, .16);
+  --phone-on-primary: #3A1B33;
+  --phone-bg: #1c1c1e;
+  --phone-surface: #26262a;
+  --phone-surface-muted: #2f2f34;
+  --phone-border: rgba(255, 255, 255, .08);
+  --phone-text: #f5f5f7;
+  --phone-text-2: rgba(235, 235, 245, .62);
+  --phone-text-3: rgba(235, 235, 245, .40);
+  --phone-success: #3CCF76;
+  --phone-success-soft: rgba(60, 207, 118, .16);
+  --phone-warning: #F0A629;
+  --phone-warning-soft: rgba(240, 166, 41, .16);
+  --phone-danger: #FF5C5C;
+  --phone-danger-soft: rgba(255, 92, 92, .16);
+  --phone-neutral: #6C6C72;
+  --phone-shadow-card: none;
 }
 [data-form-factor="phone"] { -webkit-tap-highlight-color: transparent; }
 [data-form-factor="phone"] body { overflow: hidden; -webkit-text-size-adjust: 100%; }
@@ -58,7 +119,7 @@
    esta em cima. Os botoes de acao continuam com fundo e rotulo. */
 [data-form-factor="phone"] button, [data-form-factor="phone"] .btn { min-height: 44px; }
 [data-form-factor="phone"] .btn { height: auto; padding: 0 18px; border-radius: 12px; font-size: 16px; font-weight: 600; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
-[data-form-factor="phone"] .btn-sm { min-height: 36px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
+[data-form-factor="phone"] .btn-sm { min-height: 44px; padding: 0 12px; font-size: 13px; border-radius: 10px; }
 [data-form-factor="phone"] .mac-tool { height: 44px; min-width: 44px; padding: 0 8px; border-radius: 12px; background: transparent; color: var(--mac-label-2); font-size: 15px; font-weight: 500; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), color var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
 [data-form-factor="phone"] .mac-tool svg { stroke-width: 1.8; }
 [data-form-factor="phone"] .mac-tool--label { padding: 0 12px 0 10px; color: var(--mac-accent-text); }
@@ -87,3 +148,33 @@
 [data-form-factor="phone"] .MuiDialogContent-root { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
 @media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 [data-motion="none"][data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+/* Primitivas visuais do celular, usadas pelos componentes de mobile/ui.jsx.
+   Seguem as referencias em docs/design-references: pilulas rosa, cartoes
+   brancos com borda discreta e barras de progresso arredondadas. */
+[data-form-factor="phone"] .phone-card { background: var(--phone-surface); border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); box-shadow: var(--phone-shadow-card); padding: 16px; }
+[data-form-factor="phone"] .phone-card.is-selected { background: var(--phone-primary-soft); border-color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-segmented { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); }
+[data-form-factor="phone"] .phone-segmented__option { flex: 1; min-width: 0; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 0 12px; border: 0; border-radius: calc(var(--phone-radius-control) - 3px); background: transparent; color: var(--phone-text); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background var(--mac-fast) var(--mac-ease), color var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-segmented__option:not(.is-selected):not(:disabled):active { background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-segmented__option.is-selected { background: var(--phone-primary); color: var(--phone-on-primary); }
+[data-form-factor="phone"] .phone-segmented__option:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-segmented__count { min-width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; padding: 0 5px; border-radius: 10px; background: var(--phone-surface-muted); color: var(--phone-text-2); font-size: 12px; font-weight: 700; }
+[data-form-factor="phone"] .phone-segmented__option.is-selected .phone-segmented__count { background: var(--phone-on-primary); color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-search { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 4px 0 12px; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-search input { flex: 1; min-width: 0; min-height: 44px; border: 0; outline: 0; background: transparent; color: var(--phone-text); font: inherit; font-size: 16px; }
+[data-form-factor="phone"] .phone-search input::placeholder { color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-search:focus-within { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-icon-btn { width: 44px; height: 44px; min-height: 44px; flex: none; display: inline-flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: var(--phone-radius-control); background: transparent; color: inherit; }
+[data-form-factor="phone"] .phone-icon-btn:active { background: var(--mac-press); }
+[data-form-factor="phone"] .phone-badge { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--phone-text-2); font-size: 13px; }
+[data-form-factor="phone"] .phone-badge::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--phone-badge-fg, var(--phone-neutral)); }
+[data-form-factor="phone"] .phone-badge--pill { padding: 3px 8px; border-radius: 999px; background: var(--phone-badge-bg, var(--phone-surface-muted)); color: var(--phone-badge-fg, var(--phone-text-2)); font-size: 11px; font-weight: 600; }
+[data-form-factor="phone"] .phone-badge--success { --phone-badge-fg: var(--phone-success); --phone-badge-bg: var(--phone-success-soft); }
+[data-form-factor="phone"] .phone-badge--warning { --phone-badge-fg: var(--phone-warning); --phone-badge-bg: var(--phone-warning-soft); }
+[data-form-factor="phone"] .phone-badge--danger { --phone-badge-fg: var(--phone-danger); --phone-badge-bg: var(--phone-danger-soft); }
+[data-form-factor="phone"] .phone-badge--primary { --phone-badge-fg: var(--phone-primary); --phone-badge-bg: var(--phone-primary-soft); }
+[data-form-factor="phone"] .phone-progress { display: grid; gap: 8px; }
+[data-form-factor="phone"] .phone-progress__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-progress__head strong { font-size: 17px; color: var(--phone-text); }
+[data-form-factor="phone"] .phone-progress__track { height: 6px; overflow: hidden; border-radius: 3px; background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-progress__fill { height: 100%; border-radius: 3px; background: var(--phone-badge-fg, var(--phone-primary)); transition: width var(--mac-normal) var(--mac-ease); }

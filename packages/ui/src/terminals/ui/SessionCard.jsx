@@ -154,7 +154,7 @@ function SessionCard({
   const running = runningLabel(session);
   const activity = session.activity;
   const cpu = activity?.available && activity.cpu != null ? fmtCpu(activity.cpu) : null;
-  const memory = activity?.available && activity.memory != null ? fmtMemory(activity.memory) : null;
+  const memory = activity?.available && activity.memory > 0 ? fmtMemory(activity.memory) : null;
   const metricsUnavailable = session.status === 'running' && activity && !activity.available;
   // O uso e do agente, entao acompanha o nome dele na linha do que esta
   // rodando. A janela mais curta e a mostrada; as outras ficam na dica.

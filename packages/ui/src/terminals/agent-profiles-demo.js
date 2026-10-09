@@ -11,6 +11,8 @@
 // O formato é o mesmo de `agent_profiles`, com a leitura de uso no formato da
 // loja da Barra de IA.
 
+import { demoParam } from '../lib/demo.js';
+
 const HOUR = 3_600_000;
 
 // Rótulo de janela e estado de leitura seguem os códigos do contrato, como
@@ -46,13 +48,10 @@ function reading(over = {}) {
   };
 }
 
-// A demonstração só liga pela mesma chave que o estúdio usa.
-export function demoProfilesEnabled(search = typeof window !== 'undefined' ? window.location.search : '') {
-  try {
-    return new URLSearchParams(search).get('terminais') === 'demo';
-  } catch (_error) {
-    return false;
-  }
+// A demonstração só liga pela mesma chave que o estúdio usa, e nunca dentro
+// dos apps.
+export function demoProfilesEnabled(search) {
+  return demoParam('terminais', search) === 'demo';
 }
 
 export function demoProfiles(now = Date.now()) {

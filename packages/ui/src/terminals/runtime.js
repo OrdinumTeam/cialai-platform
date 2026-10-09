@@ -68,6 +68,7 @@ import { installImeInput } from './ime-input.js';
 // Cores que um card pode receber. `null` deixa o card transparente. Cada uma tem um
 // tom para o claro e outro para o escuro, como os tokens da camada macOS.
 import { ORGANIZATION_COLORS as SESSION_COLORS } from '../lib/organization-colors.js';
+import { demoParam } from '../lib/demo.js';
 export { SESSION_COLORS };
 
 const STORAGE_KEY = isPhone() ? 'cialai_terminals_phone' : 'cialai_terminals';
@@ -592,6 +593,10 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     // no histórico não podem sair como se fossem digitação.
     if (session.replaying) return;
     if (isTerminalFocusReport(data)) return;
+    // Modificador armado no teclado especial do celular: o caractere seguinte
+    // do teclado nativo vira a combinação. Colagem nunca é transformada.
+    if (session.inputTransform && !session.pasting) data = session.inputTransform(data);
+    if (!data) return;
     if (session.attention) clearAttention(session);
     writeTerminal(session, data);
   }));
@@ -1679,8 +1684,7 @@ export function hydrate() {
   if (state.hydrating) return state.hydrating;
   state.hydrating = (async () => {
     ensureWatchers();
-    const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
-    if (params && params.get('terminais') === 'demo') {
+    if (demoParam('terminais') === 'demo') {
       state.demo = true;
       seedDemo();
       state.hydrated = true;
@@ -1759,6 +1763,39 @@ export function openSession(cwd, { name, subtitle, color, select = true } = {}) 
   return session.id;
 }
 
+// Abre o agente na conta escolhida assim que o shell da sessao nova subir. O
+// computador recusa se houver processo em primeiro plano; a conta ativa dele
+// para os proximos shells continua a mesma.
+const LAUNCH_WAIT_MS = 30_000;
+export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WAIT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    let off = () => {};
+    let timer = null;
+    let done = false;
+    const finish = (error) => {
+      if (done) return;
+      done = true;
+      off();
+      clearTimeout(timer);
+      if (error) reject(error); else resolve();
+    };
+    const check = () => {
+      const session = state.sessions.get(id);
+      if (!session) { finish(new Error(translate('terminal.session.launchClosed'))); return; }
+      if (session.status === 'error' || session.status === 'exited') { finish(new Error(session.error || translate('terminal.session.launchClosed'))); return; }
+      if (session.status !== 'running' || session.ptyId == null) return;
+      if (state.demo) { finish(); return; }
+      done = true;
+      off();
+      clearTimeout(timer);
+      invoke('pty_launch_agent', { id: session.ptyId, agent, profile }).then(() => resolve(), reject);
+    };
+    off = subscribe((event) => { if (event.type === 'sessions') check(); });
+    timer = setTimeout(() => finish(new Error(translate('terminal.session.launchTimeout'))), timeoutMs);
+    check();
+  });
+}
+
 export async function pickAndOpen(defaultPath, options) {
   const picked = await chooseDirectory({ title: translate('terminal.session.openAt'), defaultPath: defaultPath || undefined });
   return picked ? openSession(picked, options) : null;
@@ -1823,6 +1860,38 @@ export function fitAndResize(id) {
 export function focusTerminal(id) {
   const session = state.sessions.get(id || state.selectedId);
   if (session && session.host) session.term.focus();
+}
+
+// Fecha o teclado nativo sem mexer no resto: o teclado especial e o do
+// aparelho nunca ficam abertos juntos.
+export function blurTerminal(id) {
+  const session = state.sessions.get(id || state.selectedId);
+  session?.term.textarea?.blur();
+}
+
+// Avisa quando o terminal ganha o foco, o que no celular é o teclado nativo
+// subindo. Devolve a função que desliga o aviso.
+export function onTerminalFocus(id, callback) {
+  const textarea = state.sessions.get(id)?.term.textarea;
+  if (!textarea?.addEventListener) return () => {};
+  textarea.addEventListener('focus', callback);
+  return () => textarea.removeEventListener('focus', callback);
+}
+
+// Liga o tradutor do teclado especial ao que é digitado no terminal. `null`
+// desliga. Devolve a função que desfaz a ligação, se ainda for a mesma.
+export function setInputTransform(id, transform) {
+  const session = state.sessions.get(id);
+  if (!session) return () => {};
+  session.inputTransform = typeof transform === 'function' ? transform : null;
+  return () => { if (session.inputTransform === transform) session.inputTransform = null; };
+}
+
+// Modo de cursor do programa em primeiro plano, DECCKM. Ligado, as setas e
+// Home/End saem em SS3, `ESC O A`, como vim e less esperam.
+export function applicationCursorKeys(id) {
+  const session = state.sessions.get(id || state.selectedId);
+  return Boolean(session?.term?.modes?.applicationCursorKeysMode);
 }
 
 // No iPhone, foco no terminal significa teclado aberto.
@@ -2050,14 +2119,23 @@ export function insertText(id, text) {
   return true;
 }
 
-// Tecla da fileira do celular: escreve sem mexer no foco. Quem decide se o
-// teclado do iPhone abre e o toque no proprio terminal, nao o botao; assim
-// Ctrl C ou Esc no meio da leitura nao sobem o teclado.
+// Tecla do teclado especial do celular: escreve sem mexer no foco. Quem
+// decide se o teclado do iPhone abre e o toque no proprio terminal, nao o
+// botao; assim Ctrl C ou Esc no meio da leitura nao sobem o teclado. Devolve
+// a promessa da escrita, que a repeticao das setas espera antes da proxima.
 export function sendKey(id, data) {
   const session = state.sessions.get(id || state.selectedId);
   if (!session || session.ptyId == null || session.status !== 'running') return false;
-  writeTerminal(session, data);
-  return true;
+  if (session.replaying) return false;
+  return writeTerminal(session, data);
+}
+
+// Colagem pelo xterm sem passar pelo tradutor do teclado especial: um texto
+// colado com Ctrl armado continua sendo o texto colado.
+function pasteRaw(session, text) {
+  session.pasting = true;
+  try { session.term.paste(text); }
+  finally { session.pasting = false; }
 }
 
 // Colar pelo paste do xterm, que respeita o bracketed paste do shell ou do
@@ -2065,7 +2143,7 @@ export function sendKey(id, data) {
 export function pasteText(id, text) {
   const session = state.sessions.get(id || state.selectedId);
   if (!session || session.ptyId == null || session.status !== 'running' || !text) return false;
-  session.term.paste(text);
+  pasteRaw(session, text);
   return true;
 }
 
@@ -2095,7 +2173,7 @@ export async function submitText(id, text, { enter = false } = {}) {
   session.lastWrite = null;
   // O paste do xterm respeita a colagem entre colchetes e converte as quebras
   // de linha; escrever o texto cru executaria linha por linha.
-  session.term.paste(text);
+  pasteRaw(session, text);
   const written = await (session.lastWrite || false);
   if (!written) return false;
   if (!enter) return true;

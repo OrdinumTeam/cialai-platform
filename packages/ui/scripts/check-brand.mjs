@@ -60,3 +60,21 @@ test('a busca no terminal entrega ao xterm cores opacas em hex', () => {
   assert.equal(opaqueColor('#fff8', '#000000'), '#888888');
   assert.equal(opaqueColor('var(--x)', '#ffffff', '#123456'), '#123456');
 });
+
+test('no celular o terminal é escuro nos dois temas da página, e o computador segue a aparência', () => {
+  const page = globalThis.document;
+  try {
+    for (const theme of ['light', 'dark']) {
+      globalThis.document = { documentElement: { getAttribute: (name) => ({ 'data-theme': theme, 'data-form-factor': 'phone' })[name] ?? null } };
+      const phone = buildTheme();
+      assert.equal(phone.background, '#202127', theme);
+      assert.equal(phone.foreground, '#e9eaf0');
+      assert.equal(phone.blue, '#4a8ae6', 'ANSI do tema escuro');
+      for (const value of Object.values(searchDecorations())) assert.match(value, /^#[\da-f]{6}$/);
+    }
+  } finally {
+    globalThis.document = page;
+  }
+  cssTokens.set('--mac-surface-2', '#f5f6f8');
+  assert.equal(buildTheme().background, '#f5f6f8', 'o computador no claro continua claro');
+});

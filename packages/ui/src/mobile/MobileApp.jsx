@@ -11,6 +11,7 @@ import * as remote from '../lib/remote.js';
 import { isMobileShell, onShellTheme, shellTheme } from '../lib/shell.js';
 import { VIEW_COMPONENTS } from '../views/registry.js';
 import MobileHeader from './MobileHeader.jsx';
+import { startDashboardFeed } from './dashboard-feed.js';
 import { translate } from './i18n.js';
 import { useViewportBox } from './keyboard-viewport.js';
 
@@ -32,6 +33,8 @@ export default function MobileApp() {
   const viewport = useViewportBox(true);
   const inShell = isMobileShell();
   useEffect(() => { installShellBridge({ navigate() {}, setSidebarHidden() {}, openPalette() {} }, { sidebarHidden: true }); }, []);
+  // O Inicio nativo mostra o ultimo retrato que a pagina mandou.
+  useEffect(() => startDashboardFeed(), []);
   // A aparencia escolhida nos ajustes do aplicativo vale tambem na pagina:
   // chega no bootstrap e em cada mensagem da casca.
   useEffect(() => {

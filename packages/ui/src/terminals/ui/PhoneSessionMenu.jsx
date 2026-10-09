@@ -9,39 +9,56 @@
 // Browser e abrir a pasta no gerenciador de arquivos.
 import React, { useState } from 'react';
 import {
-  ArrowDown, ArrowUp, Copy, FolderSearch, Palette, Pin, PinOff, Plus, Power, RotateCcw, Tag, TextCursorInput, UserRound,
+  ArrowDown, ArrowUp, Check, ChevronLeft, Copy, FolderSearch, Palette, Pin, PinOff, Plus, Power, RotateCcw, Tag, TextCursorInput, UserRound,
 } from 'lucide-react';
 import { Sheet } from './dialogs.jsx';
 import { SESSION_COLORS, canMoveSession } from '../runtime.js';
+import { shortPath } from '../files.js';
 import { translate } from '../../shared/i18n.js';
 
-// Uma entrada por ação, na ordem do menu do computador. `kind` é o que o
-// chamador recebe; nenhuma ação é executada aqui dentro.
-export function menuItems(session) {
+// As ações em quatro grupos, separados por divisores: identidade da sessão,
+// posição na lista, o que se faz com a pasta e o agente, e por fim as que
+// mexem no processo. `kind` é o que o chamador recebe; nenhuma ação é
+// executada aqui dentro.
+export function menuGroups(session) {
   if (!session) return [];
   const running = session.status === 'running';
   return [
-    { kind: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput },
-    { kind: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag },
-    { kind: 'color', label: translate('terminal.menu.sessionColor'), icon: Palette },
-    { kind: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin },
-    { kind: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, disabled: !canMoveSession(session.id, -1) },
-    { kind: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, disabled: !canMoveSession(session.id, 1) },
-    { kind: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus },
-    // Um terminal ja aberto nao muda de ambiente: abrir o agente com as
-    // variaveis na linha e a unica forma de trocar de conta nele.
-    {
-      kind: 'launch',
-      label: translate('terminal.profiles.launchHere'),
-      icon: UserRound,
-      disabled: !running || Boolean(session.activity?.foreground),
-      hint: session.activity?.foreground ? translate('terminal.profiles.launchBusy') : undefined,
-    },
-    { kind: 'directory', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, disabled: !running },
-    { kind: 'copy', label: translate('terminal.explorer.copyPath'), icon: Copy },
-    { kind: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw },
-    { kind: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true },
+    { id: 'identity', items: [
+      { kind: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput },
+      { kind: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag },
+      { kind: 'color', label: translate('terminal.menu.sessionColor'), icon: Palette },
+    ] },
+    { id: 'order', items: [
+      { kind: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin },
+      { kind: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, disabled: !canMoveSession(session.id, -1) },
+      { kind: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, disabled: !canMoveSession(session.id, 1) },
+    ] },
+    { id: 'folder', items: [
+      { kind: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus },
+      // Um terminal ja aberto nao muda de ambiente: abrir o agente com as
+      // variaveis na linha e a unica forma de trocar de conta nele.
+      {
+        kind: 'launch',
+        label: translate('terminal.profiles.launchHere'),
+        icon: UserRound,
+        disabled: !running || Boolean(session.activity?.foreground),
+        hint: session.activity?.foreground ? translate('terminal.profiles.launchBusy') : undefined,
+      },
+      { kind: 'directory', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, disabled: !running },
+      { kind: 'copy', label: translate('terminal.explorer.copyPath'), icon: Copy },
+    ] },
+    // Reiniciar e encerrar matam o processo; os dois pedem confirmação.
+    { id: 'process', items: [
+      { kind: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw },
+      { kind: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true },
+    ] },
   ];
+}
+
+// As mesmas ações numa lista só, na ordem do menu do computador.
+export function menuItems(session) {
+  return menuGroups(session).flatMap((group) => group.items);
 }
 
 export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
@@ -53,6 +70,8 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
     close();
     onAction(kind, session);
   };
+  const pick = (color) => { close(); onAction('color', session, color); };
+  const current = SESSION_COLORS.find((color) => color.id === session.color) || null;
   return (
     <Sheet
       open={open}
@@ -60,40 +79,55 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
       onClose={close}
       actions={<button type="button" className="btn btn-ghost" onClick={close}>{translate('terminal.common.cancel')}</button>}
     >
+      {session.cwd ? <p className="phone-menu__path">{shortPath(session.cwd)}</p> : null}
       {colors ? (
-        <div className="phone-menu phone-menu--colors" role="menu" aria-label={translate('terminal.menu.sessionColor')}>
-          <button type="button" className="phone-menu__item" role="menuitem" onClick={() => { close(); onAction('color', session, null); }}>
-            <span className="phone-menu__swatch phone-menu__swatch--none" aria-hidden="true" />
-            {translate('terminal.menu.noColor')}
+        <div className="phone-menu phone-menu--colors">
+          <button type="button" className="phone-menu__item phone-menu__back" onClick={() => setColors(false)}>
+            <ChevronLeft size={18} strokeWidth={1.75} aria-hidden="true" />
+            {translate('terminal.phone.menuBack')}
           </button>
-          {SESSION_COLORS.map((color) => (
-            <button
-              type="button"
-              key={color.id}
-              className="phone-menu__item"
-              role="menuitem"
-              onClick={() => { close(); onAction('color', session, color.id); }}
-            >
-              <span className="phone-menu__swatch" style={{ background: color.dark }} aria-hidden="true" />
-              {translate(`terminal.color.${color.id}`)}
+          <div className="phone-menu__swatches" role="menu" aria-label={translate('terminal.menu.sessionColor')}>
+            <button type="button" role="menuitemradio" aria-checked={!session.color} className="phone-menu__color" aria-label={translate('terminal.menu.noColor')} onClick={() => pick(null)}>
+              <span className="phone-menu__swatch phone-menu__swatch--none" aria-hidden="true">{!session.color ? <Check size={16} strokeWidth={2.4} /> : null}</span>
+              <span className="phone-menu__color-name">{translate('terminal.menu.noColor')}</span>
             </button>
-          ))}
+            {SESSION_COLORS.map((color) => (
+              <button
+                type="button"
+                key={color.id}
+                role="menuitemradio"
+                aria-checked={session.color === color.id}
+                className="phone-menu__color"
+                aria-label={translate(`terminal.color.${color.id}`)}
+                onClick={() => pick(color.id)}
+              >
+                <span className="phone-menu__swatch" style={{ '--swatch-light': color.light, '--swatch-dark': color.dark }} aria-hidden="true">{session.color === color.id ? <Check size={16} strokeWidth={2.4} /> : null}</span>
+                <span className="phone-menu__color-name">{translate(`terminal.color.${color.id}`)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       ) : (
         <div className="phone-menu" role="menu" aria-label={translate('terminal.session.actionsFor', { name: session.name })}>
-          {menuItems(session).map((item) => (
-            <button
-              type="button"
-              key={item.kind}
-              className={`phone-menu__item${item.danger ? ' is-danger' : ''}`}
-              role="menuitem"
-              disabled={item.disabled}
-              title={item.hint}
-              onClick={() => run(item.kind)}
-            >
-              <item.icon size={18} strokeWidth={1.75} aria-hidden="true" />
-              {item.label}
-            </button>
+          {menuGroups(session).map((group, index) => (
+            <div key={group.id} className="phone-menu__group" role="group">
+              {index > 0 ? <hr className="phone-menu__divider" aria-hidden="true" /> : null}
+              {group.items.map((item) => (
+                <button
+                  type="button"
+                  key={item.kind}
+                  className={`phone-menu__item${item.danger ? ' is-danger' : ''}`}
+                  role="menuitem"
+                  disabled={item.disabled}
+                  title={item.hint}
+                  onClick={() => run(item.kind)}
+                >
+                  <item.icon size={18} strokeWidth={1.75} aria-hidden="true" />
+                  <span className="phone-menu__label">{item.label}</span>
+                  {item.kind === 'color' && current ? <span className="phone-menu__swatch phone-menu__swatch--small" style={{ '--swatch-light': current.light, '--swatch-dark': current.dark }} aria-hidden="true" /> : null}
+                </button>
+              ))}
+            </div>
           ))}
         </div>
       )}

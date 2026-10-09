@@ -47,18 +47,27 @@ import {
 import { hydrateLocale, useI18n } from './src/i18n';
 import { checkControlHealth, HEALTH_RECHECK_TIMEOUT_MS } from './src/network/health';
 import { RequestGate } from './src/network/request-gate';
+import type { DashboardMessage, ShellIntent } from './src/bridge/messages';
+import { addFavorite, dashboardFor, forgetDashboard, recordSnapshot } from './src/dashboard/store';
+import { notificationPermission, presentNotices, requestNotificationPermission, type NotificationPermission } from './src/notifications/notify';
+import { NOTIFICATION_STORAGE_KEY, noticesFor, parseNotificationPrefs, type NotificationPrefs } from './src/notifications/watch';
+import { Agents } from './src/screens/Agents';
 import { Desktops } from './src/screens/Desktops';
-import { Home } from './src/screens/Home';
+import { Home, type IntentRequest } from './src/screens/Home';
 import { Offline } from './src/screens/Offline';
 import { Pair } from './src/screens/Pair';
+import { Projects } from './src/screens/Projects';
 import { Settings } from './src/screens/Settings';
-import { Shell } from './src/screens/Shell';
+import { Shell, type ShellDesktop } from './src/screens/Shell';
 import { openConnection, outcomeForCode, type ConnectionOutcome, type ConnectionPorts } from './src/state/connection';
-import { logApp, logCore } from './src/state/diagnostics';
+import { LOG_LEVEL_STORAGE_KEY, logApp, logCore, normalizeLogLevel } from './src/state/diagnostics';
 import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction } from './src/state/lifecycle';
 import { describeDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
+import { tabForScreen } from './src/state/tabs';
 import { interpretTunnelEvent, parseTorProgress, reservePercent, type TunnelSignal } from './src/state/tunnel-events';
-import { normalizeThemeMode, resolveScheme, THEME_STORAGE_KEY, ThemeModeContext, usePalette, type ThemeMode } from './src/theme';
+import { normalizeThemeMode, resolveScheme, THEME_STORAGE_KEY, ThemeModeContext, type ThemeMode } from './src/theme';
+import { BottomNavigation, BottomNavigationContext, type TabId, typography } from './src/ui';
+import { darkColors, lightColors } from './src/ui/tokens';
 
 type Translator = (key: string, values?: Record<string, string | number>) => string;
 
@@ -104,7 +113,6 @@ type ShellReconnect = { desktopId: string; since: number; timer: ReturnType<type
 type KeptShell = { desktopId: string; timer: ReturnType<typeof setTimeout> };
 
 function AppContent() {
-  const palette = usePalette();
   const { t } = useI18n();
   const [screen, dispatchScreen] = useReducer(transition, { kind: 'loading' } as AppScreen);
   const [store, setStore] = useState<DesktopStore>(emptyDesktopStore);
@@ -114,7 +122,12 @@ function AppContent() {
   const [failures, setFailures] = useState<ReadonlyMap<string, OfflineReason>>(() => new Map());
   const [lockSignal, setLockSignal] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>('info');
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPrefs>(() => parseNotificationPrefs(null));
+  const [notificationAccess, setNotificationAccess] = useState<NotificationPermission>('undetermined');
+  const notificationPrefsRef = useRef(notificationPrefs);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  // Pedido do Início para a próxima abertura do terminal; some ao sair dele.
+  const [shellIntent, setShellIntent] = useState<ShellIntent | null>(null);
   const [biometricPolicy, setBiometricPolicy] = useState<BiometricPolicy>('always');
   const [biometricSession] = useState(() => new BiometricSession(authenticateWithDevice));
   const [openGate] = useState(() => new RequestGate());
@@ -429,6 +442,26 @@ function AppContent() {
       } catch {
         // Sem a escolha guardada, a biometria é pedida sempre.
       }
+      try {
+        const storedLevel = await SecureStore.getItemAsync(LOG_LEVEL_STORAGE_KEY);
+        if (!cancelled && storedLevel) {
+          const level = normalizeLogLevel(storedLevel);
+          setLogLevel(level);
+          setNativeLogLevel(level);
+        }
+      } catch {
+        // Sem a escolha guardada, o núcleo fica no nível informativo.
+      }
+      try {
+        const storedNotifications = await SecureStore.getItemAsync(NOTIFICATION_STORAGE_KEY);
+        if (!cancelled && storedNotifications) {
+          const prefs = parseNotificationPrefs(storedNotifications);
+          notificationPrefsRef.current = prefs;
+          setNotificationPrefs(prefs);
+        }
+      } catch {
+        // Sem a escolha guardada, nenhum aviso sai.
+      }
       let loaded;
       try {
         loaded = await loadDesktopStore();
@@ -602,6 +635,7 @@ function AppContent() {
   // Sai da página do computador para uma tela da casca. A página some, o proxy
   // fica guardado por um prazo e um resultado atrasado de conexão não navega.
   const leaveTo = useCallback((action: AppAction) => {
+    setShellIntent(null);
     biometricSession.lock();
     setLockSignal(value => value + 1);
     openGate.invalidate();
@@ -625,9 +659,19 @@ function AppContent() {
   // O card Terminal volta ao último computador; sem um, a lista escolhe.
   const openTerminal = useCallback(() => {
     const last = findDesktop(storeRef.current, storeRef.current.lastDesktopId);
+    setShellIntent(null);
     if (last) void openSelected(last.id);
     else dispatch({ type: 'show-desktops' });
   }, [dispatch, openSelected]);
+
+  // Terminais segue o mesmo caminho do card Terminal do início.
+  const selectTab = useCallback((tab: TabId) => {
+    if (tab === 'terminals') openTerminal();
+    else if (tab === 'home') dispatch({ type: 'show-home' });
+    else if (tab === 'projects') dispatch({ type: 'show-projects' });
+    else if (tab === 'agents') dispatch({ type: 'show-agents' });
+    else dispatch({ type: 'show-settings' });
+  }, [dispatch, openTerminal]);
 
   const retry = useCallback(async () => {
     const current = screenRef.current;
@@ -642,6 +686,7 @@ function AppContent() {
         dropKeptShell(desktop.id);
         await closeDesktop(desktop.id).catch(() => undefined);
         await forgetTunnelDesktop(desktop.id).catch(() => undefined);
+        forgetDashboard(desktop.id);
         await deleteDeviceToken(desktop.id).catch(() => undefined);
         await updateStore(current => removeDesktop(current, desktop.id));
         setFailure(desktop.id, null);
@@ -652,7 +697,45 @@ function AppContent() {
 
   const describe = useCallback((desktopId: string) => describeDesktop(desktopId, { tunnelStatus, connectingId, failures }),
     [connectingId, failures, tunnelStatus]);
-  const openFromList = useCallback((desktop: DesktopEntry) => { void openSelected(desktop.id); }, [openSelected]);
+  const openFromList = useCallback((desktop: DesktopEntry) => { setShellIntent(null); void openSelected(desktop.id); }, [openSelected]);
+  // Abre o terminal com um pedido do Início: retomar uma sessão, abrir uma nova
+  // numa pasta ou mostrar as contas. A página atende uma vez por id.
+  const openWithIntent = useCallback((desktop: DesktopEntry, request: IntentRequest) => {
+    setShellIntent({ ...request, id: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}` } as ShellIntent);
+    void openSelected(desktop.id);
+  }, [openSelected]);
+  // Troca de computador pela barra da página: o proxy atual fica guardado pelo
+  // prazo de sempre e fecha assim que o outro computador abrir; se ele falhar,
+  // a volta ao anterior ainda reaproveita a página.
+  const switchDesktop = useCallback((desktopId: string) => {
+    const current = screenRef.current;
+    if (current.kind === 'shell' && current.desktopId === desktopId) return;
+    if (!findDesktop(storeRef.current, desktopId)) return;
+    setShellIntent(null);
+    biometricSession.lock();
+    setLockSignal(value => value + 1);
+    endShellReconnect();
+    if (current.kind === 'shell') keepShell(current.desktopId);
+    void openSelected(desktopId);
+  }, [biometricSession, endShellReconnect, keepShell, openSelected]);
+  // Antes de guardar o retrato novo, compara com o anterior: uma sessão que
+  // terminou ou um limite que passou do aviso vira notificação local, se o
+  // usuário ligou esse aviso nos ajustes.
+  const saveDashboard = useCallback((desktopId: string, snapshot: DashboardMessage) => {
+    const prefs = notificationPrefsRef.current;
+    if (prefs.sessions || prefs.usage) {
+      const name = findDesktop(storeRef.current, desktopId)?.name ?? t('desktop.fallback');
+      const notices = noticesFor(dashboardFor(desktopId).snapshot, snapshot, desktopId, name, prefs, t);
+      if (notices.length) void presentNotices(notices);
+    }
+    recordSnapshot(desktopId, snapshot);
+  }, [t]);
+  // Pasta escolhida na página vira atalho deste computador e a tela Projetos
+  // volta a aparecer com ele no topo.
+  const projectPicked = useCallback((desktopId: string, path: string) => {
+    addFavorite(desktopId, path);
+    leaveTo({ type: 'show-projects' });
+  }, [leaveTo]);
   const rename = useCallback((desktopId: string, name: string) => {
     void updateStore(current => renameDesktop(current, desktopId, name));
   }, [updateStore]);
@@ -661,6 +744,31 @@ function AppContent() {
     setThemeMode(next);
     SecureStore.setItemAsync(THEME_STORAGE_KEY, next).catch(() => undefined);
   }, []);
+  const changeLogLevel = useCallback((level: LogLevel) => {
+    const next = normalizeLogLevel(level);
+    setLogLevel(next);
+    setNativeLogLevel(next);
+    SecureStore.setItemAsync(LOG_LEVEL_STORAGE_KEY, next).catch(() => undefined);
+  }, []);
+  // Ligar um aviso pede a permissão do sistema antes; negada, o aviso fica desligado.
+  const changeNotification = useCallback(async (kind: keyof NotificationPrefs, enabled: boolean) => {
+    if (enabled) {
+      const access = await requestNotificationPermission();
+      setNotificationAccess(access);
+      if (access !== 'granted') return;
+    }
+    const next = { ...notificationPrefsRef.current, [kind]: enabled };
+    notificationPrefsRef.current = next;
+    setNotificationPrefs(next);
+    SecureStore.setItemAsync(NOTIFICATION_STORAGE_KEY, JSON.stringify(next)).catch(() => undefined);
+  }, []);
+  // A permissão pode mudar nos ajustes do aparelho; os ajustes do app releem ao abrir.
+  useEffect(() => {
+    if (screen.kind !== 'settings') return;
+    let cancelled = false;
+    void notificationPermission().then(access => { if (!cancelled) setNotificationAccess(access); });
+    return () => { cancelled = true; };
+  }, [screen.kind]);
   const changeBiometricPolicy = useCallback((policy: BiometricPolicy) => {
     const next = normalizeBiometricPolicy(policy);
     biometricSession.setPolicy(next);
@@ -669,6 +777,9 @@ function AppContent() {
   }, [biometricSession]);
   const systemScheme = useColorScheme();
   const scheme = resolveScheme(themeMode, systemScheme);
+  // Este componente é quem fornece o tema às telas, então as cores dele vêm da
+  // escolha já resolvida, não do contexto que ele mesmo ainda vai criar.
+  const colors = scheme === 'dark' ? darkColors : lightColors;
   const connectionLost = useCallback(() => { void reconnectShell('two health probes in a row failed'); }, [reconnectShell]);
   // Uma sondagem boa com a faixa ativa devolve a página ao normal sem mexer no WebView.
   const connectionRestored = useCallback(() => {
@@ -680,16 +791,23 @@ function AppContent() {
   }, [dispatch, endShellReconnect]);
   const diagnosticsStatus = tunnelStatus && tor ? { ...tunnelStatus, tor } : tunnelStatus;
   const selected = screen.kind === 'shell' || screen.kind === 'offline' ? findDesktop(store, screen.desktopId) : null;
-  const desktopList = <Desktops store={store} describe={describe} onForgetDesktop={forgetDesktop} onHome={() => dispatch({ type: 'show-home' })}
-    onOpen={openFromList} onPair={() => dispatch({ type: 'needs-pairing' })} onRename={rename} onSettings={() => dispatch({ type: 'show-settings' })} />;
+  const desktopList = <Desktops store={store} describe={describe} keptDesktopId={keptDesktopId} onDisconnect={disconnect}
+    onForgetDesktop={forgetDesktop} onHome={() => dispatch({ type: 'show-home' })} onIntent={openWithIntent}
+    onOpen={openFromList} onPair={() => dispatch({ type: 'needs-pairing' })} onRename={rename} />;
+  // Computadores do seletor na barra da página, com o mesmo estado da lista.
+  const shellDesktops: ShellDesktop[] = store.desktops.map(desktop => {
+    const connection = describe(desktop.id);
+    return { id: desktop.id, name: desktop.name, state: connection.state,
+      transport: connection.state === 'connected' ? connection.transport : desktop.lastTransport === '' ? null : desktop.lastTransport };
+  });
 
   let content;
   if (screen.kind === 'loading') {
     content = (
-      <View style={[styles.loading, { backgroundColor: palette.background }]}>
-        <Text style={[styles.loadingName, { color: palette.label }]}>Cialai</Text>
-        <ActivityIndicator color={palette.accent} size="large" />
-        <Text style={[styles.loadingDetail, { color: palette.secondaryLabel }]}>{t('mobile.loading.detail')}</Text>
+      <View style={[styles.loading, { backgroundColor: colors.background }]}>
+        <Text style={[typography.largeTitle, { color: colors.primary }]}>Cialai</Text>
+        <ActivityIndicator color={colors.primary} size="large" />
+        <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.loading.detail')}</Text>
       </View>
     );
   } else if (screen.kind === 'pair') {
@@ -697,24 +815,45 @@ function AppContent() {
       onCancel={store.desktops.length ? () => dispatch({ type: 'show-home' }) : undefined} />;
   } else if (screen.kind === 'home') {
     content = <Home store={store} describe={describe} keptDesktopId={keptDesktopId} onContinue={openFromList}
-      onDesktops={() => dispatch({ type: 'show-desktops' })} onDisconnect={disconnect} onPair={() => dispatch({ type: 'needs-pairing' })}
-      onSettings={() => dispatch({ type: 'show-settings' })} onTerminal={openTerminal} />;
+      onDesktops={() => dispatch({ type: 'show-desktops' })} onDisconnect={disconnect} onIntent={openWithIntent}
+      onPair={() => dispatch({ type: 'needs-pairing' })} onProjects={() => dispatch({ type: 'show-projects' })} onTerminal={openTerminal} />;
   } else if (screen.kind === 'settings') {
     content = <Settings appVersion={appVersion} coreVersion={nativeCoreVersion} desktopCount={store.desktops.length}
       biometricPolicy={biometricPolicy} logLevel={logLevel} onBack={() => dispatch({ type: 'show-home' })} onBiometricPolicy={changeBiometricPolicy}
-      onLogLevel={level => { setLogLevel(level); setNativeLogLevel(level); }}
+      notificationAccess={notificationAccess} notificationPrefs={notificationPrefs} onLogLevel={changeLogLevel} onNotification={changeNotification}
       onRefreshStatus={() => void refreshStatus()} onThemeMode={changeThemeMode} themeMode={themeMode} tunnelStatus={diagnosticsStatus} />;
   } else if (screen.kind === 'desktops') {
     content = desktopList;
+  } else if (screen.kind === 'projects') {
+    content = <Projects desktops={store.desktops} onBack={() => dispatch({ type: 'show-home' })}
+      onIntent={openWithIntent} onTerminal={openTerminal} />;
+  } else if (screen.kind === 'agents') {
+    content = <Agents describe={describe} onBack={() => dispatch({ type: 'show-home' })} onIntent={openWithIntent}
+      onPair={() => dispatch({ type: 'needs-pairing' })} store={store} />;
   } else if (screen.kind === 'offline') {
     content = <Offline desktopId={screen.desktopId} onDesktops={() => leaveTo({ type: 'show-desktops' })} onHome={showHome}
       onPair={() => leaveTo({ type: 'needs-pairing' })} onPairAgain={() => dispatch({ type: 'needs-pairing' })} onRetry={retry}
       onSettings={() => leaveTo({ type: 'show-settings' })} reason={screen.reason} reserveProgress={reservePercent(tor)} />;
   } else {
-    content = selected ? <Shell biometricSession={biometricSession} desktopId={screen.desktopId}
+    content = selected ? <Shell key={screen.desktopId} biometricSession={biometricSession} desktopId={screen.desktopId}
+      desktops={shellDesktops} onDesktops={() => leaveTo({ type: 'show-desktops' })} onSwitchDesktop={switchDesktop}
       desktopName={selected.name} lockSignal={lockSignal} onConnectionLost={connectionLost} onConnectionRestored={connectionRestored}
+      intent={shellIntent} onDashboard={snapshot => saveDashboard(screen.desktopId, snapshot)}
+      onProjectPicked={path => projectPicked(screen.desktopId, path)}
       onHome={showHome} reconnecting={screen.reconnecting} transport={screen.transport} url={screen.url} version={appVersion} />
       : desktopList;
+  }
+
+  // A barra inferior só aparece nas telas nativas de topo; a página do
+  // computador tem cabeçalho próprio e usa a tela inteira para o terminal.
+  const activeTab = tabForScreen(screen);
+  if (activeTab) {
+    content = (
+      <View style={[styles.tabbed, { backgroundColor: colors.background }]} testID="tabbed">
+        <BottomNavigationContext.Provider value>{content}</BottomNavigationContext.Provider>
+        <BottomNavigation active={activeTab} onSelect={selectTab} />
+      </View>
+    );
   }
 
   return <ThemeModeContext.Provider value={themeMode}><StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />{content}</ThemeModeContext.Provider>;
@@ -725,7 +864,6 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  loadingName: { fontSize: 28, lineHeight: 34, fontWeight: '700', letterSpacing: 0.4 },
-  loadingDetail: { fontSize: 15, lineHeight: 20 }
+  tabbed: { flex: 1 },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }
 });

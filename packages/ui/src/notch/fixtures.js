@@ -10,6 +10,7 @@
 
 import { translate } from '../desktop/i18n.js';
 import { activitySummary } from './model.js';
+import { demoParam } from '../lib/demo.js';
 
 const HOUR = 3_600_000;
 const HOME = '/Users/exemplo';
@@ -138,12 +139,7 @@ const SCENARIOS = { basic, states, single, many, collapsed: basic };
 
 /// Cenario pedido na URL, ou `null` fora do modo de demonstracao.
 export function demoScenario(search = typeof window !== 'undefined' ? window.location.search : '') {
-  let value = '';
-  try {
-    value = new URLSearchParams(search).get('notch') || '';
-  } catch (_error) {
-    return null;
-  }
+  const value = demoParam('notch', search) || '';
   if (!value.startsWith('demo:')) return null;
   const [name] = value.slice(5).split(':');
   return SCENARIOS[name] ? name : 'basic';

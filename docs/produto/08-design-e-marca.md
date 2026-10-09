@@ -13,6 +13,10 @@ O Cialai mantém o sistema visual do estúdio do Control, com seus tokens, primi
 | Regras de texto da interface | Implementado | Checks de interface e revisão dos materiais cobrem os textos atuais |
 | Interface em três idiomas | Implementado | Português do Brasil, inglês e espanhol neutro têm dicionários com paridade |
 | Capturas de paridade no macOS | Implementado | Comparações claro, escuro, Dev Browser e quatro estados móveis estão em `docs/evidence/task-1.11` |
+| Tokens e componentes do celular | Preparado | Tokens semânticos, componentes e barra inferior de cinco abas no aplicativo nativo; tokens `--phone-*` e primitivas na página do celular; testes de unidade passam, conferência em aparelho pendente de novo build nativo |
+| Início do celular | Preparado | Saudação, uso dos agentes, carrossel de computadores, projetos com favoritos e ações rápidas sobre a fundação, pela decisão 046; testes passam, conferência em aparelho pendente |
+| Computadores e Terminais do celular | Preparado | Computadores nativo com filtros, busca, card ativo e folha de ações; seletor de computador na barra da página; lista de Terminais com busca, filtros, cards compactos por fase, esqueletos, Nova sessão no rodapé e menu agrupado com confirmação ao encerrar e reiniciar; testes passam e a lista foi conferida em captura Playwright de 393 por 852, conferência em aparelho pendente |
+| Demais telas do celular no visual das referências | Pendente | Nova sessão, Agentes, Ajustes e terminal serão refeitos nas próximas etapas |
 | Capturas Linux, Windows e lojas | Pendente | Dependem das implementações integradas, builds nativos e tamanhos exigidos pelas lojas |
 
 ## Fontes da marca
@@ -160,6 +164,41 @@ Tudo que aparece surge em 140 a 240 ms, só com opacidade e deslocamento, no `--
 | iOS | PNG opaco de 1024 px em `apps/desktop/design/app-icon-1024.png`, usado como `icon` do Expo | `tools/release/check-app-icon.swift` no Codemagic: 1024 por 1024, sem alfa, sem pixel transparente, com a placa branca, o rosa e a ameixa da arte |
 | Android | Ícone adaptativo com `foregroundImage` em `apps/desktop/design/android-foreground-1024.png` e `backgroundColor #FFFFFF` no `app.config.ts`, que faz o papel da placa que o iPhone já traz desenhada | Arte dentro da zona segura de 66 dp, conferida pelo portão; pré-visualização nas máscaras circular, arredondada e quadrada |
 | Favicon e site | `tools/brand/build-site-brand.mjs`, que grava cada arquivo do site no tamanho exato do que ele substitui | Legibilidade a 32 px |
+
+## Celular: tokens e componentes
+
+As referências visuais ficam em `docs/design-references`: `cialai-telas-principais.png` traz Início, Computadores, Terminais, Nova sessão, Agentes e Ajustes, e `cialai-terminal.png` traz o terminal, o teclado especial, os comandos rápidos e a folha de mais opções.
+
+| Token | Claro | Uso |
+| --- | --- | --- |
+| `primary` | `#E23B84` | Acento da marca, o mesmo do desktop; o `#E53280` sugerido na reformulação ficou fora para manter o contrato da marca |
+| `primarySoft` | `#FCE7F1` | Superfícies selecionadas e botões secundários |
+| `background` | `#F8FAFF` | Fundo levemente azulado das telas |
+| `surface` | `#FFFFFF` | Cartões e barras |
+| `border` | `#E7EAF2` | Bordas discretas e separadores |
+| `text` e `textSecondary` | `#20232C` e `#747B8B` | Texto principal e secundário |
+| `success`, `warning` e `danger` | `#18A66A`, `#D38B17` e `#E5484D` | Estados de conexão, sessão e ações destrutivas |
+| `terminal` | `#202127` | Fundo do terminal escuro das referências |
+
+No aplicativo nativo os valores ficam em `apps/mobile/src/ui/tokens.ts`, com espaçamentos, raios, tipografia e sombra de cartão. Desde a decisão 050 os raios seguem o site cialai.com.br, 12 nos controles e 20 nos cards, e a tipografia usa a Outfit do site, embutida pelo `expo-font`; na página do celular a mesma Outfit vem em `packages/ui/src/fonts`. O escuro deriva dos valores anteriores. Na página do celular os mesmos valores são as variáveis `--phone-*` de `packages/ui/src/mobile/mobile.css`, que no claro também alimentam os neutros `--mac-*` do telefone; o acento continua vindo de `brand.css`.
+
+Os componentes nativos ficam em `apps/mobile/src/ui`: `AppHeader`, `BottomNavigation`, `PrimaryButton`, `SecondaryButton`, `IconButton`, `StatusBadge`, `SegmentedControl`, `SearchInput`, `ComputerCard`, `ProjectCard`, `AgentUsageCard`, `SessionCard`, `SectionHeader`, `ProgressIndicator`, `BottomSheet`, `EmptyState` e `SkeletonLoader`. Os ícones são do lucide, a mesma família da página, por `react-native-svg`, com um import por ícone em `icons.tsx`. Na página, `mobile/ui.jsx` traz `SegmentedControl`, `SearchInput`, `StatusBadge` e `ProgressIndicator`; carregamento e vazio usam `DataState` e a folha inferior usa `Sheet`.
+
+A barra inferior tem Início, Terminais, Projetos, Agentes e Ajustes e aparece só nas telas nativas de topo. Terminais leva ao último computador ou à lista. Na página do computador vale o cabeçalho próprio com voltar, e a barra sai também quando o teclado abre.
+
+Na página do computador, a barra nativa é o seletor: laptop, ponto de estado, nome, Direta ou Reserva e uma seta. Tocar abre uma folha nativa com os computadores vinculados; escolher outro guarda o proxy atual pelo prazo de sempre e o fecha quando o novo abre. A lista de Terminais separa a fase da sessão, que é ativa, pausada por Ctrl Z, finalizada ou com erro, da conexão do terminal com o computador, que aparece numa pílula à parte quando a ponte cai. A ordem continua a de `orderedSessions()`, com as fixadas no topo, e filtro e busca nunca reordenam.
+
+Limitações conhecidas:
+
+| Limitação | Alternativa adotada |
+| --- | --- |
+| A página do computador é desmontada ao trocar de aba e recarrega ao voltar | A barra fica fora do terminal; manter a página viva exigiria mudar a casca e o ciclo de vida da conexão |
+| O Início nativo não alcança a ponte do computador | A página manda um retrato com contas, uso, projetos e sessões, e o Início mostra a idade dele, pela decisão 046 |
+| O computador não informa sistema, memória, CPU, contagem de pastas e arquivos, nome nem foto da pessoa, e não há notificações | O card do computador mostra nome, estado, caminho e sessões abertas; na lista de Computadores, o caminho direto e o último acesso no lugar de sistema e RAM; a saudação é genérica e o sino não aparece |
+| Trocar de computador recarrega a página | A página é montada por computador; os processos continuam no computador e a lista volta com esqueletos |
+| O teclado das referências é o do sistema | O app só desenha as teclas especiais acima dele |
+| `react-native-svg` é módulo nativo | O visual em aparelho depende de um novo build do cliente de desenvolvimento |
+| O fundo escuro do terminal exige trocar o tema ANSI do xterm no claro | O token existe, mas o terminal só muda na etapa do terminal, junto com o tema |
 
 ## Regras de texto na interface
 

@@ -17,6 +17,7 @@ const mocks = {
     export const canMoveSession=(id,delta)=>fixture.canMove(id,delta);`,
   dialogs: `export const Sheet=()=>null;`,
   ui: `export const useToast=()=>()=>{};`,
+  files: `export const shortPath=(path)=>path;`,
 };
 
 const bundle = await build({
@@ -107,4 +108,27 @@ test('o card no toque abre o menu pelo botão de três pontos e pelo toque longo
   // ancorado, que não tem onde ancorar num aparelho.
   assert.match(card, /if \(touch\) \{ onMenu\(session, \{ touch: true \}\); return; \}/);
   assert.doesNotMatch(card, /\{!touch && <button/);
+});
+
+test('a folha agrupa as ações em quatro blocos, com as destrutivas no fim', () => {
+  const { menuGroups, menuItems } = load();
+  // Os objetos nascem em outro contexto do vm; o JSON tira o protótipo de lá.
+  const groups = JSON.parse(JSON.stringify(menuGroups(session).map((group) => ({ id: group.id, items: group.items.map((item) => ({ kind: item.kind, danger: item.danger })) }))));
+  assert.deepEqual(groups.map((group) => group.id), ['identity', 'order', 'folder', 'process']);
+  assert.deepEqual(groups.map((group) => group.items.map((item) => item.kind)), [
+    ['rename', 'subtitle', 'color'], ['pin', 'up', 'down'], ['clone', 'launch', 'directory', 'copy'], ['restart', 'close'],
+  ]);
+  assert.deepEqual(groups.flatMap((group) => group.items.map((item) => item.kind)), [...menuItems(session).map((item) => item.kind)]);
+  assert.equal(groups.at(-1).items.find((item) => item.kind === 'close').danger, true);
+  assert.equal(menuGroups(null).length, 0);
+});
+
+test('encerrar e reiniciar pedem confirmação na própria lista, sem abrir o terminal', () => {
+  const workbench = source('../src/terminals/ui/PhoneWorkbench.jsx');
+  const action = workbench.slice(workbench.indexOf('async function runSessionAction'), workbench.indexOf('async function endSession'));
+  assert.match(action, /kind === 'restart'\) \{ setRestartFor\(session\)/);
+  assert.match(action, /kind === 'close'\) \{ setCloseFor\(session\)/);
+  assert.doesNotMatch(action.slice(action.indexOf("kind === 'restart'")), /navigate\(|restart\(session|closeSession/);
+  assert.match(workbench, /<AppModal open=\{Boolean\(closeFor\)\}/);
+  assert.match(workbench, /<AppModal open=\{Boolean\(restartFor\)\}/);
 });

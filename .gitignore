@@ -32,6 +32,7 @@ packages/tunnel-core/cialai-tunnel
 apps/desktop/src-tauri/tauri.release.conf.json
 _INTERNO_ORDINUM/
 _INTERNAL/
+.codex-local/
 
 # Credenciais, certificados e chaves: nunca entram no repositório
 *.p12

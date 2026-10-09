@@ -625,7 +625,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__toolbar select { flex: 1; min-width: 0; height: 44px; border: 1px solid var(--mac-separator); border-radius: 8px; background: var(--mac-field); color: var(--mac-label); padding: 8px; }
 [data-form-factor="phone"] .phone-terminal__toolbar .mac-tool { flex: none; }
 [data-form-factor="phone"] .phone-terminal__back { margin-left: -8px; }
-[data-form-factor="phone"] .phone-terminal__actions { display: flex; align-items: center; gap: 0; flex: none; margin-right: -8px; }
+[data-form-factor="phone"] .phone-terminal__actions { display: flex; align-items: center; gap: 8px; flex: none; }
 [data-form-factor="phone"] .phone-terminal--list .phone-terminal__toolbar .mac-tool { margin-right: -8px; }
 [data-form-factor="phone"] .phone-terminal__state { flex: none; font-size: .75rem; color: var(--mac-label-2); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-terminal__heading { flex: 1; min-width: 0; padding: 6px 0; }
@@ -643,30 +643,169 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* Sem a posse do terminal a tela continua visivel, apagada, em vez de sumir:
    o conteudo nao pisca a cada troca de dono e o aviso fica embaixo. */
 [data-form-factor="phone"] .phone-terminal__host[aria-hidden="true"] { opacity: .38; pointer-events: none; }
-[data-form-factor="phone"] .phone-terminal__ownership { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 14px; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); text-align: left; animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-terminal__ownership { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--phone-radius-card); background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); text-align: left; animation: macSheet var(--mac-normal) var(--mac-ease) both; }
 [data-form-factor="phone"] .phone-terminal__ownership h2 { margin: 0; font-size: 16px; line-height: 1.35; }
 [data-form-factor="phone"] .phone-terminal__ownership p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--mac-label-2); }
-[data-form-factor="phone"] .phone-terminal__take-control { min-height: 44px; padding: 10px 14px; border: 0; border-radius: 12px; background: var(--mac-gradient-button); color: #fff; font: inherit; font-size: 16px; font-weight: 600; flex: none; box-shadow: var(--mac-shadow-primary); transition: transform var(--mac-fast) var(--phone-press-ease); }
+[data-form-factor="phone"] .phone-terminal__take-control { min-height: 44px; padding: 10px 14px; border: 0; border-radius: 12px; background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 16px; font-weight: 600; flex: none; box-shadow: var(--mac-shadow-primary); transition: transform var(--mac-fast) var(--phone-press-ease); }
 [data-form-factor="phone"] .phone-terminal__take-control:active { transform: scale(.97); }
 [data-form-factor="phone"] .phone-terminal__host .xterm { height: 100%; padding: 8px 4px 6px 10px; touch-action: none; }
 [data-form-factor="phone"] .phone-terminal__host .xterm-viewport { overflow-x: hidden !important; }
-/* Fileira de teclas: uma linha que rola de lado, como no Control, com
-   teclas de 44 px em superficie suave. Com o teclado do aparelho aberto a
-   fileira encolhe um pouco para nao roubar altura do terminal. */
-[data-form-factor="phone"] .phone-terminal__keys { display: flex; flex: none; gap: 6px; padding-top: 2px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-snap-type: x proximity; }
-[data-form-factor="phone"] .phone-terminal__keys::-webkit-scrollbar { display: none; }
-[data-form-factor="phone"] .phone-terminal__keys button { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 58px; min-height: 44px; padding: 0 15px; border: 0; border-radius: 10px; background: var(--mac-surface-2); color: var(--mac-label); font: inherit; font-size: 16px; font-weight: 500; white-space: nowrap; scroll-snap-align: start; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
-[data-form-factor="phone"] .phone-terminal__keys button svg { width: 18px; height: 18px; }
-[data-form-factor="phone"] .phone-terminal__keys button:disabled { opacity: .4; }
-[data-form-factor="phone"] .phone-terminal__keys button:not(:disabled):active { background: var(--mac-surface-3, var(--mac-fill)); transform: scale(.95); }
-[data-form-factor="phone"] .ios-shell--keyboard .phone-terminal__keys { padding-top: 0; }
-[data-form-factor="phone"] .ios-shell--keyboard .phone-terminal__keys button { min-height: 40px; }
+/* No celular o terminal é sempre escuro, como nas referências, nos dois temas
+   da página: o painel, o viewport e a composição do IME usam o mesmo fundo do
+   tema do xterm em theme.js. */
+[data-form-factor="phone"] .phone-terminal__scroll { background: var(--phone-terminal, #202127); }
+[data-form-factor="phone"] .phone-terminal__host,
+[data-form-factor="phone"][data-theme="dark"] .phone-terminal__host { --terminais-terminal-bg: var(--phone-terminal, #202127); --terminais-terminal-ink: #e9eaf0; }
+/* Barra do terminal, como na referencia: Teclas abre o teclado especial,
+   os favoritos ficam ao lado, tres pontos abre os comandos rapidos e o botao
+   rosa abre a caixa de texto. Alvos de 48 px; com o teclado do aparelho
+   aberto a barra encolhe um pouco para nao roubar altura do terminal. */
+[data-form-factor="phone"] .phone-keybar { display: flex; flex: none; align-items: center; gap: 8px; padding-top: 2px; }
+[data-form-factor="phone"] .phone-keybar button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 16px; font-weight: 600; white-space: nowrap; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-keybar button:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-keybar button:not(:disabled):active { transform: scale(.95); }
+/* A barra reparte a largura: o teclado especial fica um pouco mais largo,
+   enviar tem largura fixa e as teclas e o ⋯ dividem o resto por igual, para
+   caber de 320 px em diante com os três favoritos. */
+[data-form-factor="phone"] .phone-keybar__keys { flex: 1.3 1 0; min-width: 0; padding: 0; background: var(--phone-primary-soft) !important; color: var(--phone-primary) !important; }
+[data-form-factor="phone"] .phone-keybar__keys.is-armed { background: var(--phone-primary) !important; color: var(--phone-on-primary) !important; }
+[data-form-factor="phone"] .phone-keybar__key { flex: 1 1 0; min-width: 0; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-form-factor="phone"] .phone-keybar__more { flex: 1 1 0; min-width: 0; }
+[data-form-factor="phone"] .phone-keybar__send { flex: 0 0 auto; width: 48px; border-radius: var(--phone-radius-control)!important; background: var(--phone-primary) !important; color: var(--phone-on-primary) !important; box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-keybar { padding-top: 0; }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-keybar button { min-height: 44px; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal { padding-bottom: 6px; }
-/* Balao flutuante que abre a caixa de texto, no canto inferior direito e
-   acima da pilula de voltar ao fim. Alvo de toque de 52 px. */
-[data-form-factor="phone"] .phone-terminal__compose { position: absolute; right: 12px; bottom: 58px; z-index: 3; display: inline-flex; align-items: center; justify-content: center; width: 52px; height: 52px; border: 0; border-radius: 999px; background: var(--mac-gradient-button); color: #fff; box-shadow: var(--mac-shadow-primary); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
-[data-form-factor="phone"] .phone-terminal__compose:disabled { opacity: .4; }
-[data-form-factor="phone"] .phone-terminal__compose:not(:disabled):active { transform: scale(.94); }
+
+/* Teclado especial: painel branco no fluxo da coluna, abaixo do terminal,
+   que encolhe em vez de ficar coberto. Cantos de cima arredondados, puxador,
+   abas e teclas grandes. O teto de altura deixa o prompt sempre a vista; o
+   corpo rola por dentro quando a aba passa dele. */
+[data-form-factor="phone"] .phone-keys,
+[data-form-factor="phone"] .phone-quick { display: flex; flex-direction: column; flex: none; max-height: min(64dvh, 560px); margin: 0 calc(-1 * max(12px, env(safe-area-inset-right))) calc(-8px - env(safe-area-inset-bottom)) calc(-1 * max(12px, env(safe-area-inset-left))); padding: 6px 16px calc(10px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; background: var(--phone-surface); color: var(--phone-text); box-shadow: 0 -6px 24px rgba(27, 35, 64, .10); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"][data-theme="dark"] .phone-keys,
+[data-form-factor="phone"][data-theme="dark"] .phone-quick { box-shadow: 0 -1px 0 var(--phone-border); }
+[data-form-factor="phone"] .phone-keys__grabber { align-self: center; flex: none; width: 40px; height: 5px; margin: 2px 0 6px; border-radius: 999px; background: var(--phone-border); }
+[data-form-factor="phone"][data-theme="dark"] .phone-keys__grabber { background: rgba(255, 255, 255, .22); }
+[data-form-factor="phone"] .phone-keys__head { display: flex; align-items: center; gap: 4px; flex: none; min-height: 44px; }
+[data-form-factor="phone"] .phone-keys__head h2 { flex: 1; min-width: 0; margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-keys__icon,
+[data-form-factor="phone"] .phone-quick__icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-keys__icon:disabled,
+[data-form-factor="phone"] .phone-quick__icon:disabled { opacity: .35; }
+[data-form-factor="phone"] .phone-keys__head .phone-keys__icon:last-child { margin-right: -10px; color: var(--phone-text); }
+[data-form-factor="phone"] .phone-keys__tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; flex: none; margin: 4px 0 10px; }
+[data-form-factor="phone"] .phone-keys__tab { min-height: 44px; padding: 0 4px; border: 0; border-radius: 10px; background: var(--phone-surface-muted); color: var(--phone-text-2); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: background var(--mac-fast) var(--mac-ease), color var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-keys__tab.is-selected { background: var(--phone-primary); color: var(--phone-on-primary); font-weight: 600; }
+[data-form-factor="phone"] .phone-keys__body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 2px; }
+[data-form-factor="phone"] .phone-keys__grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+[data-form-factor="phone"] .phone-keys__grid--functions { grid-template-columns: repeat(6, 1fr); }
+[data-form-factor="phone"] .phone-keys__grid--symbols { grid-template-columns: repeat(7, 1fr); }
+[data-form-factor="phone"] .phone-keys__key,
+[data-form-factor="phone"] .phone-dpad__key { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; min-width: 0; min-height: 50px; padding: 0 2px; border: 1px solid var(--phone-border); border-radius: 12px; background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 15px; letter-spacing: -.01em; font-weight: 500; white-space: nowrap; box-shadow: 0 1px 0 rgba(27, 35, 64, .04); -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), border-color var(--mac-fast) var(--mac-ease), color var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"][data-theme="dark"] .phone-keys__key,
+[data-form-factor="phone"][data-theme="dark"] .phone-dpad__key { background: var(--phone-surface-muted); box-shadow: none; }
+[data-form-factor="phone"] .phone-keys__key:not(:disabled):active,
+[data-form-factor="phone"] .phone-dpad__key:not(:disabled):active { background: var(--phone-primary-soft); border-color: var(--phone-primary); transform: scale(.96); }
+[data-form-factor="phone"] .phone-keys__key:disabled,
+[data-form-factor="phone"] .phone-dpad__key:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-keys__label { overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+[data-form-factor="phone"] .phone-keys__hint { max-width: 100%; overflow: hidden; text-overflow: ellipsis; font-size: 11px; font-weight: 400; color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-keys__grid--functions .phone-keys__key { min-height: 46px; font-size: 15px; }
+[data-form-factor="phone"] .phone-keys__symbol { min-height: 46px; font-family: var(--mac-font-mono); font-size: 18px; }
+/* Modificador armado fica rosa ate a proxima tecla, ou ate o novo toque no
+   modo fixo, que ganha o cadeado. */
+[data-form-factor="phone"] .phone-keys__modifier.is-armed { background: var(--phone-primary); border-color: var(--phone-primary); color: var(--phone-on-primary); font-weight: 600; }
+[data-form-factor="phone"] .phone-keys__lock { position: absolute; top: 6px; right: 7px; }
+/* Setas em cruz: a de cima centrada sobre a de baixo, alvos de 52 px de
+   altura e largura de um terco da linha, nunca botoes pequenos em fila. */
+[data-form-factor="phone"] .phone-dpad { display: grid; grid-template-columns: repeat(3, minmax(0, 104px)); grid-template-areas: ". up ." "left down right"; justify-content: center; gap: 8px; padding: 2px 0; }
+[data-form-factor="phone"] .phone-dpad__key { min-height: 52px; }
+[data-form-factor="phone"] .phone-dpad__key--ArrowUp { grid-area: up; }
+[data-form-factor="phone"] .phone-dpad__key--ArrowLeft { grid-area: left; }
+[data-form-factor="phone"] .phone-dpad__key--ArrowDown { grid-area: down; }
+[data-form-factor="phone"] .phone-dpad__key--ArrowRight { grid-area: right; }
+[data-form-factor="phone"] .phone-keys__foot { display: flex; gap: 8px; flex: none; padding-top: 10px; }
+[data-form-factor="phone"] .phone-keys__foot-button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 48px; padding: 0 12px; border: 1.5px solid var(--phone-primary); border-radius: var(--phone-radius-control); background: transparent; color: var(--phone-primary); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-form-factor="phone"] .phone-keys__foot-button:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-keys__foot-button--close { background: var(--phone-primary-soft); border-color: transparent; }
+/* Preferencias do teclado. */
+[data-form-factor="phone"] .phone-keys__prefs { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 8px; }
+[data-form-factor="phone"] .phone-keys__prefs h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+[data-form-factor="phone"] .phone-keys__note { margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-keys__order { margin: 0 0 10px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+[data-form-factor="phone"] .phone-keys__order li { display: flex; align-items: center; gap: 2px; min-height: 48px; padding-left: 14px; border-radius: 12px; background: var(--phone-surface-muted); font-weight: 500; }
+[data-form-factor="phone"] .phone-keys__order li span { flex: 1; }
+[data-form-factor="phone"] .phone-keys__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-form-factor="phone"] .phone-keys__chip { min-height: 44px; padding: 0 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 14px; font-weight: 500; }
+[data-form-factor="phone"] .phone-keys__chip.is-selected { background: var(--phone-primary-soft); border-color: var(--phone-primary); color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-keys__chip:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-keys__radios { display: flex; flex-direction: column; gap: 6px; }
+[data-form-factor="phone"] .phone-keys__radio { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 10px 14px; border: 1px solid var(--phone-border); border-radius: 12px; }
+[data-form-factor="phone"] .phone-keys__radio.is-selected { border-color: var(--phone-primary); background: var(--phone-primary-soft); }
+[data-form-factor="phone"] .phone-keys__radio input { grid-row: span 2; width: 20px; height: 20px; accent-color: var(--phone-primary); margin: 0; }
+[data-form-factor="phone"] .phone-keys__radio span { font-weight: 500; }
+[data-form-factor="phone"] .phone-keys__radio small,
+[data-form-factor="phone"] .phone-keys__switch small { font-size: 13px; line-height: 1.35; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-keys__toggles { display: flex; flex-direction: column; gap: 4px; }
+[data-form-factor="phone"] .phone-keys__switch { position: relative; display: flex; align-items: center; gap: 12px; min-height: 52px; }
+[data-form-factor="phone"] .phone-keys__switch-text { flex: 1; display: flex; flex-direction: column; gap: 2px; font-weight: 500; }
+[data-form-factor="phone"] .phone-keys__switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+[data-form-factor="phone"] .phone-keys__switch-track { position: relative; flex: none; width: 48px; height: 28px; border-radius: 9px; background: var(--phone-border); transition: background var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-keys__switch-track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 7px; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, .2); transition: transform var(--mac-fast) var(--phone-press-ease); }
+[data-form-factor="phone"] .phone-keys__switch input:checked + .phone-keys__switch-track { background: var(--phone-primary); }
+[data-form-factor="phone"] .phone-keys__switch input:checked + .phone-keys__switch-track::after { transform: translateX(20px); }
+[data-form-factor="phone"] .phone-keys__switch input:focus-visible + .phone-keys__switch-track { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+
+/* Comandos rapidos: folha sobre o terminal, com fundo que fecha ao toque. A
+   lista so abre a previa; nada executa direto dali. */
+[data-form-factor="phone"] .phone-quick__backdrop { position: fixed; inset: 0; z-index: 39; background: rgba(15, 18, 30, .28); animation: macFade var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-quick { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; margin: 0; max-height: min(78dvh, 640px); }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-quick { bottom: calc(100dvh - var(--ios-viewport-top, 0px) - var(--ios-viewport-height, 100dvh)); padding-bottom: 10px; max-height: calc(var(--ios-viewport-height, 100dvh) - 24px); }
+[data-form-factor="phone"] .phone-quick__body { display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-bottom: 4px; }
+[data-form-factor="phone"] .phone-quick__search { display: flex; align-items: center; gap: 8px; flex: none; min-height: 46px; padding: 0 12px; border-radius: 12px; background: var(--phone-surface-muted); color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-quick__search:focus-within { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-quick__search input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--phone-text); font: inherit; font-size: 16px; outline: none; box-shadow: none; }
+[data-form-factor="phone"] .phone-quick__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
+[data-form-factor="phone"] .phone-quick__item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 6px; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text); font: inherit; text-align: left; }
+[data-form-factor="phone"] .phone-quick__item:active { background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-quick__item-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--phone-primary-soft); color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-quick__item-icon.is-danger { background: var(--phone-danger-soft); color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-quick__item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+[data-form-factor="phone"] .phone-quick__item-title { font-family: var(--mac-font-mono); font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-quick__item-description { font-size: 13px; color: var(--phone-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-quick__manage-link,
+[data-form-factor="phone"] .phone-quick__add { display: inline-flex; align-items: center; gap: 10px; flex: none; min-height: 48px; padding: 0 8px; border: 0; border-top: 1px solid var(--phone-border); border-radius: 0; background: transparent; color: var(--phone-text-2); font: inherit; font-size: 15px; font-weight: 500; }
+[data-form-factor="phone"] .phone-quick__add { width: 100%; justify-content: center; border: 1.5px dashed var(--phone-border); border-radius: 12px; color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-quick__empty { margin: 8px 0; font-size: 14px; color: var(--phone-text-2); text-align: center; }
+[data-form-factor="phone"] .phone-quick__preview { display: flex; flex-direction: column; gap: 10px; }
+[data-form-factor="phone"] .phone-quick__preview-title { margin: 0; font-size: 17px; font-weight: 600; }
+[data-form-factor="phone"] .phone-quick__preview-description { margin: -6px 0 0; font-size: 14px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-quick__code { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--phone-terminal); color: #f5f5f7; font-family: var(--mac-font-mono); font-size: 14px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; max-height: 30dvh; overflow-y: auto; }
+[data-form-factor="phone"] .phone-quick__warning { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--phone-warning-soft); color: var(--phone-warning); font-size: 14px; line-height: 1.4; }
+[data-form-factor="phone"] .phone-quick__warning svg { flex: none; margin-top: 1px; }
+[data-form-factor="phone"] .phone-quick__warning.is-confirming { background: var(--phone-danger-soft); color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-quick__actions { display: flex; gap: 8px; padding-top: 2px; }
+[data-form-factor="phone"] .phone-quick__action { flex: 1 1 0; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; min-height: 48px; padding: 0 10px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; }
+[data-form-factor="phone"] .phone-quick__action--primary { background: var(--phone-primary); color: var(--phone-on-primary); box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .phone-quick__action--danger { background: var(--phone-danger); color: #fff; }
+[data-form-factor="phone"] .phone-quick__action:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-quick__row { display: flex; align-items: center; gap: 2px; min-height: 52px; padding: 0 0 0 12px; border: 1px solid var(--phone-border); border-radius: 12px; margin-bottom: 6px; }
+[data-form-factor="phone"] .phone-quick__row-icon { flex: none; color: var(--phone-text-2); margin-right: 8px; }
+[data-form-factor="phone"] .phone-quick__row-text { flex: 1; min-width: 0; font-family: var(--mac-font-mono); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-quick__icon--danger { color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-quick__mini { flex: none; min-height: 44px; padding: 0 12px; margin-right: 4px; border: 0; border-radius: 10px; background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 14px; font-weight: 600; }
+[data-form-factor="phone"] .phone-quick__mini--danger { background: var(--phone-danger); color: #fff; }
+[data-form-factor="phone"] .phone-quick__form { display: flex; flex-direction: column; gap: 12px; }
+[data-form-factor="phone"] .phone-quick__field { display: flex; flex-direction: column; gap: 6px; font-size: 14px; font-weight: 500; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-quick__field input,
+[data-form-factor="phone"] .phone-quick__field textarea { width: 100%; min-height: 46px; padding: 10px 12px; border: 1px solid var(--phone-border); border-radius: 12px; background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 16px; resize: none; outline: none; }
+[data-form-factor="phone"] .phone-quick__field textarea { font-family: var(--mac-font-mono); }
+[data-form-factor="phone"] .phone-quick__field input:focus-visible,
+[data-form-factor="phone"] .phone-quick__field textarea:focus-visible { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-quick__check { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; }
+[data-form-factor="phone"] .phone-quick__check input { width: 20px; height: 20px; accent-color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-quick__note { margin: 0; font-size: 13px; line-height: 1.4; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-quick__error { margin: 0; font-size: 14px; line-height: 1.4; color: var(--phone-danger); }
 
 /* Caixa de texto: folha inferior que respeita o teclado do aparelho e deixa o
    terminal visivel atras. Fonte de 16 px para o iOS nao ampliar a pagina. */
@@ -681,12 +820,12 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-composer__warning { margin: 0; font-size: 13px; line-height: 1.45; color: var(--mac-warn); }
 [data-form-factor="phone"] .phone-composer__actions { display: flex; gap: 8px; }
 [data-form-factor="phone"] .phone-composer__action { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 0; border-radius: 12px; background: var(--mac-surface-2); color: var(--mac-label); font: inherit; font-size: 15px; font-weight: 500; white-space: nowrap; transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
-[data-form-factor="phone"] .phone-composer__action--primary { background: var(--mac-gradient-button); color: #fff; box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .phone-composer__action--primary { background: var(--phone-primary); color: var(--phone-on-primary); box-shadow: var(--mac-shadow-primary); }
 [data-form-factor="phone"] .phone-composer__action:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-composer__action:not(:disabled):active { transform: scale(.96); }
 
 /* Fora do fim: atalho para voltar e aviso de saida nova enquanto se le. */
-[data-form-factor="phone"] .phone-terminal__tail { position: absolute; left: 50%; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 16px 0 12px; border: 0; border-radius: 999px; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); color: var(--mac-label); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; transform: translateX(-50%); animation: macPop 160ms var(--mac-ease); }
+[data-form-factor="phone"] .phone-terminal__tail { position: absolute; left: 50%; bottom: 10px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 16px 0 12px; border: 0; border-radius: var(--phone-radius-control); background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); color: var(--mac-label); font: inherit; font-size: 14px; font-weight: 500; white-space: nowrap; transform: translateX(-50%); animation: macPop 160ms var(--mac-ease); }
 [data-form-factor="phone"] .phone-terminal__tail.is-fresh { color: var(--mac-accent-text); }
 [data-form-factor="phone"] .phone-terminal__search { display: flex; align-items: center; gap: 8px; min-height: 46px; flex: none; padding: 0 12px; background: var(--mac-surface-2); border-radius: 12px; color: var(--mac-label-2); animation: phonePaneIn 240ms var(--mac-ease) both; }
 [data-form-factor="phone"] .phone-terminal__search svg { flex: none; width: 20px; height: 20px; }
@@ -729,59 +868,98 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label-3); flex: 0 0 auto; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu:active { background: var(--mac-fill); }
 
-/* Contas dos agentes: uma linha por conta, com o uso do plano a direita. */
-.agent-profiles{display:flex;flex-direction:column;gap:14px}
-.agent-profiles__note{margin:0;font-size:13px;line-height:1.45;color:var(--mac-label-2)}
-.agent-profiles__note--quiet{font-size:12px;color:var(--mac-label-3)}
-.agent-profiles__error{margin:0;font-size:13px;line-height:1.45;color:var(--mac-bad)}
+/* Contas dos agentes: o aviso da troca no topo, um grupo por agente com a
+   marca dele e um cartao por conta, com plano, selos e uma barra por janela. */
+.agent-profiles{display:flex;flex-direction:column;gap:16px}
+.agent-profiles__notice{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px 14px;border-radius:var(--mac-radius-card,14px);background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.agent-profiles__notice > svg:first-child{margin-top:1px}
+.agent-profiles__notice-info{color:var(--mac-label-3)}
+.agent-profiles__note{margin:0;font-size:13px;line-height:1.45;font-weight:600;color:var(--mac-accent-text)}
+.agent-profiles__note--quiet{margin-top:2px;font-size:12px;font-weight:400;color:var(--mac-label-2)}
+.agent-profiles__error{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:0;padding:10px 12px;border-radius:10px;background:var(--mac-bad-bg);font-size:13px;line-height:1.45;color:var(--mac-bad)}
+.agent-profiles__error span{flex:1 1 12ch;min-width:0;overflow-wrap:anywhere}
+.agent-profiles__retry{flex:0 0 auto;min-height:30px;padding:0 12px;border:0;border-radius:8px;background:var(--mac-surface);color:var(--mac-bad);font:inherit;font-size:13px;font-weight:600}
 .agent-profiles__empty{margin:0;font-size:13px;color:var(--mac-label-3)}
-.agent-profiles__group{display:flex;flex-direction:column;gap:6px}
+.agent-profiles__skeletons{display:flex;flex-direction:column;gap:10px}
+.agent-profiles__skeleton{display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:12px;background:var(--mac-surface-2)}
+.agent-profiles__shimmer{display:block;border-radius:6px;background:linear-gradient(90deg,var(--mac-fill) 0%,var(--mac-hover,var(--mac-fill)) 50%,var(--mac-fill) 100%);background-size:200% 100%;animation:agentProfilesShimmer 1.4s ease-in-out infinite}
+.agent-profiles__shimmer--title{width:45%;height:14px}
+.agent-profiles__shimmer--bar{width:100%;height:6px;border-radius:3px}
+.agent-profiles__shimmer--action{width:30%;height:28px;border-radius:8px}
+@keyframes agentProfilesShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
+@media (prefers-reduced-motion: reduce){.agent-profiles__shimmer{animation:none}}
+.agent-profiles__group{display:flex;flex-direction:column;gap:8px}
 .agent-profiles__head{display:flex;align-items:center;gap:10px}
-.agent-profiles__head h3{margin:0;font-size:13px;font-weight:600;color:var(--mac-label-2);text-transform:uppercase;letter-spacing:.04em}
+.agent-profiles__glyph{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--mac-fill);color:var(--mac-label)}
+.agent-profiles__glyph--claude{color:#D97757}
+.agent-profiles__glyph svg{width:17px;height:17px;fill:currentColor}
+.agent-profiles__head h3{margin:0;font-size:15px;font-weight:650;color:var(--mac-label)}
 .agent-profiles__create{margin-left:auto;display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
 /* Uma conta por linha no computador: identidade, uso e acao em colunas
    proprias. A coluna do meio encolhe antes do nome, e a acao nunca some. */
-.agent-profiles__row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px 12px;min-height:44px;padding:8px 10px;border-radius:10px;background:var(--mac-surface-2)}
-.agent-profiles__row.is-active{box-shadow:inset 0 0 0 1.5px var(--mac-accent)}
-.agent-profiles__identity{display:flex;flex-direction:column;gap:3px;min-width:0}
-.agent-profiles__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:500}
+.agent-profiles__row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px 14px;min-height:44px;padding:10px 12px;border:1px solid var(--mac-separator);border-radius:12px;background:var(--mac-surface)}
+.agent-profiles__row.is-active{border-color:var(--mac-accent);box-shadow:inset 0 0 0 .5px var(--mac-accent)}
+.agent-profiles__identity{display:flex;flex-direction:column;gap:4px;min-width:0}
+.agent-profiles__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600}
 .agent-profiles__tags{display:flex;flex-wrap:wrap;align-items:center;gap:5px}
-.agent-profiles__tag{flex:0 0 auto;max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 6px;border-radius:6px;background:var(--mac-fill);color:var(--mac-label-3);font-size:11px;font-style:normal}
-.agent-profiles__tag--plan{color:var(--mac-label-2)}
+.agent-profiles__tag{flex:0 0 auto;max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:1px 8px;border-radius:999px;background:var(--mac-fill);color:var(--mac-label-2);font-size:11px;font-weight:600;font-style:normal}
+.agent-profiles__tag--plan{background:var(--mac-accent-soft);color:var(--mac-accent-text);text-transform:capitalize}
+.agent-profiles__tag--default{background:var(--mac-ok-bg);color:var(--mac-ok)}
 .agent-profiles__tag.is-warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
 /* Cada percentual vem com o nome da janela a que pertence, para dois numeros
    de periodos diferentes nunca parecerem a mesma medida. */
-.agent-profiles__usage{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
+.agent-profiles__usage{display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px 14px;min-width:0}
 .agent-profiles__usage.is-stale{opacity:.6}
-.agent-profiles__window{display:flex;flex-direction:column;align-items:flex-end;gap:1px;min-width:0}
-.agent-profiles__window em{font-size:10.5px;font-style:normal;color:var(--mac-label-3);white-space:nowrap}
-.agent-profiles__window strong{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--mac-label-2)}
-.agent-profiles__window--warn strong{color:var(--mac-warn)}
-.agent-profiles__window--bad strong{color:var(--mac-bad)}
-.agent-profiles__stale{font-size:10.5px;color:var(--mac-label-3)}
+.agent-profiles__window{display:flex;flex-direction:column;gap:4px;width:112px;min-width:0}
+.agent-profiles__window-head{display:flex;align-items:baseline;justify-content:space-between;gap:6px;min-width:0}
+.agent-profiles__window em{min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:10.5px;font-style:normal;color:var(--mac-label-3);white-space:nowrap}
+.agent-profiles__window strong{font-size:13px;font-weight:650;font-variant-numeric:tabular-nums;color:var(--mac-label)}
+.agent-profiles__window small{font-size:10.5px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.agent-profiles__bar{display:block;height:5px;border-radius:3px;background:var(--mac-fill);overflow:hidden}
+.agent-profiles__bar i{display:block;height:100%;border-radius:3px;background:var(--mac-accent)}
+.agent-profiles__window--warn strong,.agent-profiles__window--warn small{color:var(--mac-warn)}
+.agent-profiles__window--warn .agent-profiles__bar i{background:var(--mac-warn)}
+.agent-profiles__window--bad strong,.agent-profiles__window--bad small{color:var(--mac-bad)}
+.agent-profiles__window--bad .agent-profiles__bar i{background:var(--mac-bad)}
+.agent-profiles__stale{align-self:center;font-size:10.5px;color:var(--mac-label-3)}
 .agent-profiles__state{flex:0 0 auto;font-size:12px;color:var(--mac-label-3);white-space:nowrap}
 .agent-profiles__state--needsLogin{color:var(--mac-warn)}
 .agent-profiles__state--error{color:var(--mac-bad)}
-.agent-profiles__current{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--mac-accent-text)}
 /* Rotulo curto: a explicacao do efeito esta uma vez so, no topo do painel. */
-.agent-profiles__use{flex:0 0 auto;min-width:62px;min-height:30px;padding:0 14px;border:0;border-radius:9px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
+.agent-profiles__current{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--mac-accent-text)}
+.agent-profiles__use{flex:0 0 auto;min-width:62px;min-height:30px;padding:0 14px;border:0;border-radius:999px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
 .agent-profiles__use:disabled{opacity:.5}
 .agent-profiles__refresh{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:13px}
 .agent-profiles__refresh:disabled{opacity:.5}
-/* No celular a conta vira um cartao de tres linhas: nome e selos, uso, acao.
-   Nada de rolagem lateral e nada de nome cortado pelo botao. */
-[data-form-factor="phone"] .agent-profiles__row{grid-template-columns:minmax(0,1fr) auto;align-items:start;gap:8px 10px;padding:12px;min-height:0}
-[data-form-factor="phone"] .agent-profiles__identity{grid-column:1;grid-row:1}
-[data-form-factor="phone"] .agent-profiles__name{white-space:normal;overflow-wrap:anywhere;font-size:16px}
-[data-form-factor="phone"] .agent-profiles__tag{max-width:none}
+/* No celular a conta vira um cartao, como no app: nome e selos, as barras de
+   uso a toda a largura e a acao embaixo. Nada de rolagem lateral e nada de
+   nome cortado pelo botao. */
+[data-form-factor="phone"] .agent-profiles__notice{padding:14px 16px;border-radius:var(--phone-radius-card);background:var(--phone-primary-soft)}
+[data-form-factor="phone"] .agent-profiles__note{font-size:15px;color:var(--phone-primary)}
+[data-form-factor="phone"] .agent-profiles__note--quiet{font-size:13px;font-weight:400;color:var(--phone-text-2)}
+[data-form-factor="phone"] .agent-profiles__skeleton{padding:16px;border:1px solid var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface)}
+[data-form-factor="phone"] .agent-profiles__glyph{width:40px;height:40px;border-radius:12px;background:var(--phone-surface-muted)}
+[data-form-factor="phone"] .agent-profiles__glyph svg{width:24px;height:24px}
+[data-form-factor="phone"] .agent-profiles__head h3{font-size:20px;font-weight:700}
+[data-form-factor="phone"] .agent-profiles__row{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:12px;padding:16px;min-height:0;border-color:var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface);box-shadow:var(--phone-shadow-card)}
+[data-form-factor="phone"] .agent-profiles__row.is-active{border-color:var(--phone-primary)}
+[data-form-factor="phone"] .agent-profiles__name{white-space:normal;overflow-wrap:anywhere;font-size:17px}
+[data-form-factor="phone"] .agent-profiles__tag{max-width:none;padding:3px 10px;font-size:12px}
 [data-form-factor="phone"] .agent-profiles__usage,
-[data-form-factor="phone"] .agent-profiles__state{grid-column:1;grid-row:2;justify-content:flex-start}
-[data-form-factor="phone"] .agent-profiles__window{align-items:flex-start}
-[data-form-factor="phone"] .agent-profiles__window strong{font-size:15px}
+[data-form-factor="phone"] .agent-profiles__state{flex-direction:column;align-items:stretch;gap:12px;padding:12px;border-radius:var(--phone-radius-control);background:var(--phone-bg);white-space:normal}
+[data-form-factor="phone"] .agent-profiles__state{font-size:14px}
+[data-form-factor="phone"] .agent-profiles__window{width:auto;gap:6px}
+[data-form-factor="phone"] .agent-profiles__window em{font-size:13px;color:var(--phone-text-2)}
+[data-form-factor="phone"] .agent-profiles__window strong{font-size:17px}
+[data-form-factor="phone"] .agent-profiles__window small{align-self:flex-end;font-size:13px}
+[data-form-factor="phone"] .agent-profiles__bar{height:6px}
+[data-form-factor="phone"] .agent-profiles__stale{align-self:flex-start;font-size:13px}
 [data-form-factor="phone"] .agent-profiles__use,
-[data-form-factor="phone"] .agent-profiles__current{grid-column:2;grid-row:1 / span 2;align-self:center}
-[data-form-factor="phone"] .agent-profiles__use{min-height:40px;min-width:76px;font-size:15px}
-[data-form-factor="phone"] .agent-profiles__create{min-height:40px;font-size:15px}
+[data-form-factor="phone"] .agent-profiles__current{justify-content:center;min-height:46px;border-radius:var(--phone-radius-control);font-size:17px}
+[data-form-factor="phone"] .agent-profiles__use{background:var(--phone-primary-soft);color:var(--phone-primary)}
+[data-form-factor="phone"] .agent-profiles__current{background:var(--phone-surface-muted);color:var(--phone-text-2)}
+[data-form-factor="phone"] .agent-profiles__create{min-height:44px;font-size:15px;border-radius:var(--phone-radius-control)}
+[data-form-factor="phone"] .agent-profiles__retry{min-height:44px;font-size:15px}
 [data-form-factor="phone"] .agent-profiles__refresh{min-height:44px;font-size:15px}
 
 /* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
@@ -790,7 +968,8 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-menu__item:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-menu__item:not(:disabled):active { background: var(--mac-fill); }
 [data-form-factor="phone"] .phone-menu__item.is-danger { color: var(--mac-bad); }
-[data-form-factor="phone"] .phone-menu__swatch { width: 18px; height: 18px; border-radius: 6px; flex: 0 0 auto; }
+[data-form-factor="phone"] .phone-menu__swatch { width: 18px; height: 18px; border-radius: 6px; flex: 0 0 auto; background: var(--swatch-light, transparent); }
+[data-form-factor="phone"][data-theme="dark"] .phone-menu__swatch { background: var(--swatch-dark, transparent); }
 [data-form-factor="phone"] .phone-menu__swatch--none { box-shadow: inset 0 0 0 1.5px var(--mac-label-3); }
 /* O cabecalho do terminal no celular mostra o mesmo indicador do card, ao lado
    do estado escrito, em vez de so mudar a cor do texto. */
@@ -825,3 +1004,285 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .terminais-pop { position: fixed; top: max(16px, env(safe-area-inset-top)) !important; left: 12px; right: 12px !important; width: auto; max-height: 75dvh; }
 @keyframes phonePaneIn { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
 [data-motion="none"] .phone-terminal__scroll, [data-motion="none"] .phone-terminal__search, [data-motion="none"] .phone-files { animation: none; }
+
+/* ── lista de terminais do celular, no visual das referencias ────────
+   Cards brancos compactos sobre o fundo azulado, filtros em pilulas e um
+   botao de nova sessao preso ao rodape. A fase da sessao muda o card:
+   ativa com ponto verde ou barras, pausada em cinza, finalizada apagada e
+   erro com borda vermelha. A cor da sessao vira um filete na lateral. */
+[data-form-factor="phone"] .phone-terminal--list .phone-terminal__toolbar { border-bottom: 0; min-height: 56px; }
+[data-form-factor="phone"] .phone-terminal--list .phone-terminal__heading h1 { font-size: 24px; line-height: 30px; font-weight: 700; }
+[data-form-factor="phone"] .phone-terminal__new-icon { color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-terminal__filters { flex: none; display: flex; flex-direction: column; gap: 10px; }
+[data-form-factor="phone"] .phone-terminal__filters .phone-segmented { border: 0; background: transparent; padding: 0; gap: 8px; }
+[data-form-factor="phone"] .phone-terminal__filters .phone-segmented__option { border: 1px solid var(--phone-border); }
+[data-form-factor="phone"] .phone-terminal__filters .phone-segmented__option:not(.is-selected) { background: var(--phone-surface); }
+[data-form-factor="phone"] .phone-terminal__filters .phone-segmented__option.is-selected { border-color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-terminal--list .phone-terminal__sessions { display: flex; flex-direction: column; gap: 10px; padding: 2px 0 12px; }
+[data-form-factor="phone"] .phone-session { --terminais-accent: var(--terminais-accent-light, var(--phone-success)); position: relative; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 11px 12px 8px 16px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); cursor: pointer; overflow: hidden; -webkit-tap-highlight-color: transparent; transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-normal) var(--mac-ease), border-color var(--mac-normal) var(--mac-ease); }
+[data-theme="dark"][data-form-factor="phone"] .phone-session { --terminais-accent: var(--terminais-accent-dark, var(--phone-success)); }
+[data-form-factor="phone"] .phone-session.has-color::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px; border-radius: 0 3px 3px 0; background: var(--terminais-accent); }
+[data-form-factor="phone"] .phone-session:active { transform: scale(.985); }
+[data-form-factor="phone"] .phone-session:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-session--paused { --terminais-accent: var(--phone-neutral); }
+[data-form-factor="phone"] .phone-session--finished { opacity: .72; background: var(--phone-surface-muted); box-shadow: none; }
+[data-form-factor="phone"] .phone-session--error { border-color: color-mix(in srgb, var(--phone-danger) 45%, var(--phone-border)); }
+[data-form-factor="phone"] .phone-session__head { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 24px; }
+[data-form-factor="phone"] .phone-session__head .terminais-card__dot { width: 9px; height: 9px; }
+[data-form-factor="phone"] .phone-session__head .terminais-card__dot--ok,
+[data-form-factor="phone"] .phone-session__head .terminais-card__dot--busy { background: var(--terminais-accent); }
+[data-form-factor="phone"] .phone-session--paused .terminais-card__dot,
+[data-form-factor="phone"] .phone-session--finished .terminais-card__dot { background: var(--phone-neutral); }
+[data-form-factor="phone"] .phone-session--error .terminais-card__dot { background: var(--phone-danger); }
+[data-form-factor="phone"] .phone-session .terminais-activity { width: 13px; height: 12px; }
+[data-form-factor="phone"] .phone-session .terminais-activity i { width: 3px; }
+[data-form-factor="phone"] .phone-session__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 22px; font-weight: 600; }
+[data-form-factor="phone"] .phone-session__pin { flex: none; color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-session__menu { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-session__menu:active { background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-session__subtitle,
+[data-form-factor="phone"] .phone-session__agent,
+[data-form-factor="phone"] .phone-session__dir,
+[data-form-factor="phone"] .phone-session__state { padding-left: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-session__subtitle { font-size: 14px; line-height: 19px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-session__agent { font-size: 15px; line-height: 20px; font-weight: 500; color: var(--phone-text); }
+[data-form-factor="phone"] .phone-session__dir { display: flex; align-items: center; gap: 5px; font-size: 13px; line-height: 18px; color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-session__dir svg { flex: none; }
+[data-form-factor="phone"] .phone-session__dir span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-session__state { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; line-height: 18px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-session__status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-session__status--busy { color: var(--phone-success); }
+[data-form-factor="phone"] .phone-session__status--warn { color: var(--phone-warning); }
+[data-form-factor="phone"] .phone-session__status--bad { color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-session__elapsed { flex: none; color: var(--phone-text-3); font-variant-numeric: tabular-nums; }
+[data-form-factor="phone"] .phone-session__foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--phone-border); min-height: 40px; }
+[data-form-factor="phone"] .phone-session__metrics { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; line-height: 18px; color: var(--phone-text-2); font-variant-numeric: tabular-nums; }
+[data-form-factor="phone"] .phone-session__metrics em { font-style: normal; color: var(--phone-text-3); margin-right: 2px; }
+[data-form-factor="phone"] .phone-session__metrics-off { color: var(--phone-text-3); }
+[data-form-factor="phone"] .phone-session__open { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 34px; margin: 0; border: 0; border-radius: 10px; background: var(--phone-primary-soft); color: var(--phone-primary); transition: transform var(--mac-fast) var(--phone-press-ease); }
+/* O círculo fica com 34 px, como na referência; o toque vale nos 44 px em volta. */
+[data-form-factor="phone"] .phone-session__open::after { content: ""; position: absolute; inset: -5px; border-radius: 12px; }
+[data-form-factor="phone"] .phone-session__open:active { transform: scale(.92); }
+/* Esqueleto: mesmas medidas do card, brilho que passa devagar e para quando
+   o sistema pede menos movimento. */
+[data-form-factor="phone"] .phone-session--skeleton { cursor: default; gap: 8px; min-height: 140px; }
+[data-form-factor="phone"] .phone-skeleton { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--phone-surface-muted) 0%, color-mix(in srgb, var(--phone-surface-muted) 40%, var(--phone-surface)) 50%, var(--phone-surface-muted) 100%); background-size: 200% 100%; animation: phoneShimmer 1.4s ease-in-out infinite; }
+[data-form-factor="phone"] .phone-skeleton--dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+[data-form-factor="phone"] .phone-skeleton--title { width: 46%; height: 16px; }
+[data-form-factor="phone"] .phone-skeleton--line { width: 62%; margin-left: 18px; }
+[data-form-factor="phone"] .phone-skeleton--short { width: 34%; margin-left: 18px; }
+[data-form-factor="phone"] .phone-session__foot .phone-skeleton--short { margin-left: 0; flex: none; }
+[data-form-factor="phone"] .phone-skeleton--round { width: 34px; height: 34px; border-radius: 50%; margin-left: auto; }
+@keyframes phoneShimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] .phone-skeleton { animation: none; } }
+[data-motion="none"] .phone-skeleton { animation: none; }
+/* A entrada dos cards so roda quando a lista chega; trocar de filtro ou
+   buscar nao faz os cards dancarem de novo. */
+[data-form-factor="phone"] .phone-terminal__sessions:not(.is-settled) .phone-session:not(.phone-session--skeleton) { animation: phoneCardIn 220ms var(--mac-ease) both; }
+@keyframes phoneCardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+[data-motion="none"] .phone-session { animation: none !important; }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] .phone-session { animation: none !important; } }
+/* Nova sessao presa ao rodape da lista, acima da area segura. */
+[data-form-factor="phone"] .phone-terminal__quick { flex: none; position: sticky; bottom: 0; padding-top: 4px; }
+[data-form-factor="phone"] .phone-terminal__quick-button { width: 100%; min-height: 52px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 17px; font-weight: 600; box-shadow: 0 8px 20px color-mix(in srgb, var(--phone-primary) 28%, transparent); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-terminal__quick-button:disabled { opacity: .45; box-shadow: none; }
+[data-form-factor="phone"] .phone-terminal__quick-button:not(:disabled):active { transform: scale(.97); }
+[data-form-factor="phone"] .ios-shell--keyboard .phone-terminal__quick { display: none; }
+[data-form-factor="phone"] .phone-terminal__empty { padding: 32px 12px; text-align: center; }
+[data-form-factor="phone"] .phone-terminal__empty h2 { margin: 0 0 6px; font-size: 19px; }
+[data-form-factor="phone"] .phone-terminal__empty p { margin: 0; font-size: 15px; line-height: 1.45; color: var(--phone-text-2); }
+/* Menu em grupos, com divisores finos e a pasta da sessao no topo. */
+[data-form-factor="phone"] .phone-menu__path { margin: -4px 0 8px; font-size: 13px; color: var(--phone-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-menu__group { display: flex; flex-direction: column; }
+[data-form-factor="phone"] .phone-menu__divider { height: 1px; margin: 6px 12px; border: 0; background: var(--phone-border); }
+[data-form-factor="phone"] .phone-menu__item svg { flex: none; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-menu__item.is-danger svg { color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-menu__label { flex: 1; min-width: 0; }
+[data-form-factor="phone"] .phone-menu__swatch--small { width: 14px; height: 14px; border-radius: 50%; }
+[data-form-factor="phone"] .phone-menu__swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 8px; padding: 8px 4px 4px; }
+[data-form-factor="phone"] .phone-menu__color { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 64px; padding: 4px 0; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text-2); font: inherit; font-size: 12px; }
+[data-form-factor="phone"] .phone-menu__color .phone-menu__swatch { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
+[data-form-factor="phone"][data-theme="dark"] .phone-menu__color .phone-menu__swatch { color: #1c1c1e; }
+[data-form-factor="phone"] .phone-menu__color .phone-menu__swatch--none { color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-menu__color[aria-checked="true"] .phone-menu__swatch { box-shadow: 0 0 0 2px var(--phone-surface), 0 0 0 4px var(--phone-primary); }
+[data-form-factor="phone"] .phone-menu__color-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-menu__color:active { background: var(--phone-surface-muted); }
+
+/* Sessão nova e navegador de pastas no celular: tela cheia sobre a lista,
+   com cabeçalho, indicador de etapas, corpo rolável e o botão rosa embaixo,
+   como em docs/design-references. Os tons das pastas são os do aplicativo
+   nativo (apps/mobile/src/ui/tokens.ts, projectTints). */
+[data-form-factor="phone"] {
+  --phone-tint-paper: #FFFFFF; --phone-tint-ink: #DCE1EC;
+  --phone-tint-pink-cover: #FDEFF5; --phone-tint-pink-back: #F7B3CF; --phone-tint-pink-front: #EF7FAE;
+  --phone-tint-blue-cover: #EEF3FF; --phone-tint-blue-back: #AFC3F7; --phone-tint-blue-front: #7E9DEE;
+  --phone-tint-green-cover: #EAF7F0; --phone-tint-green-back: #9ADBB7; --phone-tint-green-front: #4DB883;
+  --phone-tint-orange-cover: #FFF3E6; --phone-tint-orange-back: #FFCB8E; --phone-tint-orange-front: #FFA44A;
+  --phone-tint-violet-cover: #F3EEFF; --phone-tint-violet-back: #C6B4F6; --phone-tint-violet-front: #9C82EE;
+}
+[data-form-factor="phone"][data-theme="dark"] {
+  --phone-tint-paper: #3A3A40; --phone-tint-ink: #55555C;
+  --phone-tint-pink-cover: rgba(255, 122, 178, .14); --phone-tint-pink-back: #A8577C; --phone-tint-pink-front: #E0679C;
+  --phone-tint-blue-cover: rgba(126, 157, 238, .14); --phone-tint-blue-back: #55689E; --phone-tint-blue-front: #7E9DEE;
+  --phone-tint-green-cover: rgba(77, 184, 131, .14); --phone-tint-green-back: #3F7D5E; --phone-tint-green-front: #4DB883;
+  --phone-tint-orange-cover: rgba(255, 164, 74, .14); --phone-tint-orange-back: #99683A; --phone-tint-orange-front: #E99545;
+  --phone-tint-violet-cover: rgba(156, 130, 238, .14); --phone-tint-violet-back: #66589C; --phone-tint-violet-front: #9C82EE;
+}
+[data-form-factor="phone"] .phone-folder-art { display: block; max-width: 100%; height: auto; }
+[data-form-factor="phone"] .phone-folder-art__paper { fill: var(--phone-tint-paper); }
+[data-form-factor="phone"] .phone-folder-art__ink { fill: var(--phone-tint-ink); }
+[data-form-factor="phone"] .phone-folder-art--pink { --tint-cover: var(--phone-tint-pink-cover); --tint-back: var(--phone-tint-pink-back); --tint-front: var(--phone-tint-pink-front); }
+[data-form-factor="phone"] .phone-folder-art--blue { --tint-cover: var(--phone-tint-blue-cover); --tint-back: var(--phone-tint-blue-back); --tint-front: var(--phone-tint-blue-front); }
+[data-form-factor="phone"] .phone-folder-art--green { --tint-cover: var(--phone-tint-green-cover); --tint-back: var(--phone-tint-green-back); --tint-front: var(--phone-tint-green-front); }
+[data-form-factor="phone"] .phone-folder-art--orange { --tint-cover: var(--phone-tint-orange-cover); --tint-back: var(--phone-tint-orange-back); --tint-front: var(--phone-tint-orange-front); }
+[data-form-factor="phone"] .phone-folder-art--violet { --tint-cover: var(--phone-tint-violet-cover); --tint-back: var(--phone-tint-violet-back); --tint-front: var(--phone-tint-violet-front); }
+[data-form-factor="phone"] .phone-folder-art__back { fill: var(--tint-back); }
+[data-form-factor="phone"] .phone-folder-art__front { fill: var(--tint-front); }
+
+[data-form-factor="phone"] .phone-flow { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--phone-bg); color: var(--phone-text); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); animation: macFade var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-flow__header { flex: none; min-height: 56px; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 4px; }
+[data-form-factor="phone"] .phone-flow__header h1 { margin: 0; text-align: center; font-size: 20px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-flow__body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 16px; padding: 8px 0 16px; }
+[data-form-factor="phone"] .phone-flow__section { display: grid; gap: 10px; }
+[data-form-factor="phone"] .phone-flow__section h2, [data-form-factor="phone"] .phone-flow__existing h2 { margin: 0; font-size: 17px; font-weight: 600; }
+[data-form-factor="phone"] .phone-flow__note { margin: 0; font-size: 13px; line-height: 18px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-flow__note.is-bad { color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-flow__footer { flex: none; padding: 8px 0 calc(12px + env(safe-area-inset-bottom)); }
+[data-form-factor="phone"] .phone-flow__primary { width: 100%; min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 17px; font-weight: 600; box-shadow: 0 8px 20px color-mix(in srgb, var(--phone-primary) 28%, transparent); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-flow__primary:disabled { opacity: .45; box-shadow: none; }
+[data-form-factor="phone"] .phone-flow__primary:not(:disabled):active { transform: scale(.98); }
+[data-form-factor="phone"] .phone-flow__secondary { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary-soft); color: var(--phone-primary); font: inherit; font-size: 15px; font-weight: 600; padding: 0 16px; }
+[data-form-factor="phone"] .phone-flow__secondary:active { opacity: .8; }
+[data-form-factor="phone"] .phone-flow__radio { flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--phone-border); border-radius: 50%; color: var(--phone-on-primary); }
+[data-form-factor="phone"] .is-selected .phone-flow__radio, [data-form-factor="phone"] [aria-checked="true"] > .phone-account__head .phone-flow__radio { border-color: var(--phone-primary); background: var(--phone-primary); }
+[data-form-factor="phone"] .phone-flow__existing { display: grid; gap: 8px; padding: 14px; border-radius: var(--phone-radius-card); background: var(--phone-primary-soft); }
+[data-form-factor="phone"] .phone-flow__existing p { margin: 0; font-size: 13px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-flow__existing .phone-flow__secondary { justify-content: flex-start; background: var(--phone-surface); }
+
+/* Indicador de etapas: bolinha numerada, nome ao lado e um traço até a próxima. */
+[data-form-factor="phone"] .phone-steps { flex: none; display: flex; gap: 6px; margin: 4px 0 8px; padding: 0; list-style: none; }
+[data-form-factor="phone"] .phone-steps__item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+[data-form-factor="phone"] .phone-steps__item:not(:last-child)::after { content: ""; flex: 1; min-width: 8px; height: 2px; border-radius: 1px; background: var(--phone-border); }
+[data-form-factor="phone"] .phone-steps__item.is-done:not(:last-child)::after { background: var(--phone-primary); }
+[data-form-factor="phone"] .phone-steps__item button { min-width: 0; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: var(--phone-text-3); font: inherit; font-size: 13px; }
+[data-form-factor="phone"] .phone-steps__item button:disabled { opacity: 1; }
+[data-form-factor="phone"] .phone-steps__dot { flex: none; width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--phone-surface-muted); font-size: 12px; font-weight: 600; }
+[data-form-factor="phone"] .phone-steps__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-steps__item.is-current button, [data-form-factor="phone"] .phone-steps__item.is-done button { color: var(--phone-text); font-weight: 600; }
+[data-form-factor="phone"] .phone-steps__item.is-current .phone-steps__dot, [data-form-factor="phone"] .phone-steps__item.is-done .phone-steps__dot { background: var(--phone-primary); color: var(--phone-on-primary); }
+
+/* Cartões de pasta, em grade de duas colunas como na referência. */
+[data-form-factor="phone"] .phone-project-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+[data-form-factor="phone"] .phone-project-card { position: relative; min-width: 0; display: grid; gap: 2px; padding: 6px 6px 10px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: left; transition: transform var(--mac-fast) var(--phone-press-ease), border-color var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-project-card:active { transform: scale(.98); }
+[data-form-factor="phone"] .phone-project-card.is-selected { border: 2px solid var(--phone-primary); padding: 5px 5px 9px; }
+[data-form-factor="phone"] .phone-project-card__cover { height: 96px; display: flex; align-items: center; justify-content: center; margin-bottom: 6px; border-radius: 13px; overflow: hidden; background: var(--phone-tint-pink-cover); }
+[data-form-factor="phone"] .phone-project-card__cover:has(.phone-folder-art--blue) { background: var(--phone-tint-blue-cover); }
+[data-form-factor="phone"] .phone-project-card__cover:has(.phone-folder-art--green) { background: var(--phone-tint-green-cover); }
+[data-form-factor="phone"] .phone-project-card__cover:has(.phone-folder-art--orange) { background: var(--phone-tint-orange-cover); }
+[data-form-factor="phone"] .phone-project-card__cover:has(.phone-folder-art--violet) { background: var(--phone-tint-violet-cover); }
+[data-form-factor="phone"] .phone-project-card__check { position: absolute; top: 12px; right: 12px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--phone-surface); border-radius: 50%; background: var(--phone-primary); color: var(--phone-on-primary); }
+[data-form-factor="phone"] .phone-project-card__name { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; font-weight: 600; }
+[data-form-factor="phone"] .phone-project-card__meta { padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--phone-text-2); }
+
+[data-form-factor="phone"] .phone-chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+[data-form-factor="phone"] .phone-chip { flex: none; min-height: 44px; max-width: 70vw; padding: 0 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 14px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-chip.is-selected { border-color: var(--phone-primary); background: var(--phone-primary-soft); color: var(--phone-primary); }
+
+/* Agentes e contas. */
+[data-form-factor="phone"] .phone-agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+[data-form-factor="phone"] .phone-agent { min-width: 0; min-height: 112px; display: grid; justify-items: center; align-content: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: center; }
+[data-form-factor="phone"] .phone-agent strong { font-size: 14px; }
+[data-form-factor="phone"] .phone-agent > span:last-child { font-size: 11px; line-height: 14px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-agent.is-selected { border: 2px solid var(--phone-primary); background: var(--phone-primary-soft); padding: 11px 7px; }
+[data-form-factor="phone"] .phone-agent:disabled { opacity: .5; }
+[data-form-factor="phone"] .phone-agent__icon { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-agent__glyph, [data-form-factor="phone"] .phone-agent__glyph svg { width: 24px; height: 24px; display: block; }
+[data-form-factor="phone"] .phone-agent--claude .phone-agent__icon { color: #D97757; }
+[data-form-factor="phone"] .phone-account-list { display: grid; gap: 10px; }
+[data-form-factor="phone"] .phone-account { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: left; }
+[data-form-factor="phone"] .phone-account.is-selected { border: 2px solid var(--phone-primary); padding: 13px; }
+[data-form-factor="phone"] .phone-account__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-form-factor="phone"] .phone-account__head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+[data-form-factor="phone"] .phone-account__plan { flex: none; padding: 3px 8px; border-radius: 999px; background: var(--phone-primary-soft); color: var(--phone-primary); font-size: 11px; font-weight: 600; }
+[data-form-factor="phone"] .phone-account__active { margin-left: auto; flex: none; font-size: 12px; font-weight: 600; color: var(--phone-success); }
+[data-form-factor="phone"] .phone-account__state { font-size: 13px; font-weight: 600; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-account__state--needsLogin, [data-form-factor="phone"] .phone-account__state--stale { color: var(--phone-warning); }
+[data-form-factor="phone"] .phone-account__state--error { color: var(--phone-danger); }
+[data-form-factor="phone"] .phone-account__hint, [data-form-factor="phone"] .phone-account__age { font-size: 12px; color: var(--phone-text-2); }
+
+/* Configuração: campos, cores e resumo. */
+[data-form-factor="phone"] .phone-field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-field input { min-height: 48px; padding: 0 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 16px; font-weight: 400; outline: 0; }
+[data-form-factor="phone"] .phone-field input:focus { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
+[data-form-factor="phone"] .phone-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+[data-form-factor="phone"] .phone-swatch { flex: none; width: 44px; height: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--swatch-light); color: #FFFFFF; }
+[data-form-factor="phone"][data-theme="dark"] .phone-swatch { background: var(--swatch-dark); color: #1c1c1e; }
+[data-form-factor="phone"] .phone-swatch--none { background: var(--phone-surface-muted); border: 1px dashed var(--phone-text-3); color: var(--phone-text); }
+[data-form-factor="phone"][data-theme="dark"] .phone-swatch--none { background: var(--phone-surface-muted); color: var(--phone-text); }
+[data-form-factor="phone"] .phone-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--phone-bg), 0 0 0 4px var(--phone-primary); }
+[data-form-factor="phone"] .phone-summary { margin: 0; display: grid; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); }
+[data-form-factor="phone"] .phone-summary > div { min-height: 52px; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; }
+[data-form-factor="phone"] .phone-summary > div + div { border-top: 1px solid var(--phone-border); }
+[data-form-factor="phone"] .phone-summary dt { font-size: 13px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-summary dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; }
+[data-form-factor="phone"] .phone-summary button { min-height: 44px; padding: 0 10px; border: 0; background: transparent; color: var(--phone-primary); font: inherit; font-size: 14px; font-weight: 600; }
+
+/* Navegador de pastas. */
+[data-form-factor="phone"] .phone-browser__path { flex: none; display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 2px 12px 2px 2px; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-browser__up { flex: none; width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: var(--phone-surface); color: var(--phone-text); }
+[data-form-factor="phone"] .phone-browser__up:disabled { opacity: .4; }
+[data-form-factor="phone"] .phone-browser__crumb { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; font-family: var(--mac-font-mono); font-size: 13px; color: var(--phone-text-2); }
+[data-form-factor="phone"] .phone-browser__list { display: grid; gap: 8px; }
+[data-form-factor="phone"] .phone-browser__row { display: flex; align-items: center; min-height: 56px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); }
+[data-form-factor="phone"] .phone-browser__row.is-selected { border-color: var(--phone-primary); background: var(--phone-primary-soft); }
+[data-form-factor="phone"] .phone-browser__pick { flex: 1; min-width: 0; min-height: 54px; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 12px; border: 0; background: transparent; color: var(--phone-text); font: inherit; text-align: left; }
+[data-form-factor="phone"] .phone-browser__pick > svg { flex: none; color: var(--phone-primary); }
+[data-form-factor="phone"] .phone-browser__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+
+/* Telefone na horizontal: a altura e o recurso escasso. O teclado especial
+   deixa metade da tela para o terminal, e as folhas sobre ele usam quase toda
+   a altura, rolando por dentro, em vez de cortar o fim. */
+@media (orientation: landscape) and (max-height: 500px) {
+  [data-form-factor="phone"] .phone-keys { max-height: 58dvh; padding-top: 4px; }
+  /* Sem puxador e sem rodapé: o X do cabeçalho fecha, e tocar no terminal abre
+     o teclado do aparelho. A altura fica para as teclas. */
+  [data-form-factor="phone"] .phone-keys__grabber,
+  [data-form-factor="phone"] .phone-keys__foot { display: none; }
+  [data-form-factor="phone"] .phone-keys__tabs { margin: 0 0 6px; }
+  [data-form-factor="phone"] .phone-quick { max-height: 92dvh; }
+  [data-form-factor="phone"] .phone-composer { max-height: 92dvh; overflow-y: auto; }
+  [data-form-factor="phone"] .MuiDialog-paper { max-height: 94dvh !important; }
+}
+
+/* Telefone estreito, como o iPhone SE: as abas e as teclas do teclado especial
+   e os botões do rodapé cabem inteiros com uma letra menor, sem encolher o
+   alvo de toque. */
+@media (max-width: 360px) {
+  /* As abas dividem a largura pelo tamanho do texto: Básico cede espaço a Navegação. */
+  [data-form-factor="phone"] .phone-keys__tabs { display: flex; gap: 4px; }
+  [data-form-factor="phone"] .phone-keys__tab { flex: 1 1 auto; padding: 0 6px; font-size: 12.5px; }
+  [data-form-factor="phone"] .phone-keys__key { font-size: 12px; letter-spacing: -0.2px; }
+  [data-form-factor="phone"] .phone-keys__hint { display: none; }
+  [data-form-factor="phone"] .phone-keys__foot-button { gap: 6px; padding: 0 8px; font-size: 14px; }
+  [data-form-factor="phone"] .phone-keys__foot-button svg { display: none; }
+  [data-form-factor="phone"] .agent-profiles__create { white-space: nowrap; padding: 0 12px; }
+}
+
+/* Botões do cabeçalho, como no app nativo e no site: 40 px com o raio dos
+   botões, rosa forte e ícone branco nos dois temas, para o branco ter
+   contraste. A área de toque continua com 44 px pelo ::after. */
+[data-form-factor="phone"] .phone-terminal__toolbar { gap: 8px; }
+[data-form-factor="phone"] .phone-terminal__toolbar .mac-tool,
+[data-form-factor="phone"] .phone-terminal--list .phone-terminal__toolbar .mac-tool,
+[data-form-factor="phone"] .phone-flow__header .phone-icon-btn {
+  position: relative; width: 40px; min-width: 40px; height: 40px; min-height: 40px; margin: 0; padding: 0;
+  border-radius: var(--phone-radius-control); background: #E23B84; color: #FFFFFF;
+}
+[data-form-factor="phone"] .phone-terminal__toolbar .mac-tool::after,
+[data-form-factor="phone"] .phone-flow__header .phone-icon-btn::after { content: ""; position: absolute; inset: -2px; border-radius: 14px; }
+[data-form-factor="phone"] .phone-terminal__toolbar .mac-tool:not(:disabled):active,
+[data-form-factor="phone"] .phone-flow__header .phone-icon-btn:active { background: #C9317A; }
+[data-form-factor="phone"] .phone-terminal__toolbar .mac-tool svg,
+[data-form-factor="phone"] .phone-flow__header .phone-icon-btn svg { width: 20px; height: 20px; }
+[data-form-factor="phone"] .phone-flow__header { grid-template-columns: 40px 1fr 40px; }

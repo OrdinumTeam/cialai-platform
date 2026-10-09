@@ -1,29 +1,41 @@
+import { useEffect, useState, type ReactNode } from 'react';
 import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 
+import type { AgentId, ShellIntent } from '../bridge/messages';
 import { COMMUNITIES, isCommunityUrl } from '../config/community';
-
-import { findDesktop, type DesktopEntry, type DesktopStore } from '../desktops/store';
+import { orderDesktops, orderProjects } from '../dashboard/model';
+import { chooseAccount, loadDashboard, toggleFavorite, useDashboard } from '../dashboard/store';
+import { useNow } from '../dashboard/useNow';
+import { formatAge } from '../desktops/format';
+import type { DesktopEntry, DesktopStore } from '../desktops/store';
 import { useI18n } from '../i18n';
 import type { DesktopConnection } from '../state/machine';
-import { usePalette } from '../theme';
-import { STATE_KEYS, stateColor } from './Desktops';
-import { TransportBadge } from './TransportBadge';
+import { useTokens } from '../theme';
+import { EmptyState, PrimaryButton, Screen, SectionHeader, radius, space, typography } from '../ui';
+import { AGENTS } from './agents/usage';
+import { AgentUsageSheet, AgentUsageSummary } from './home/AgentUsage';
+import { ComputerCarousel, ComputerMenu } from './home/Computers';
+import { AddFavoritesCard, FavoritesSheet, ProjectFolderCard, ProjectSheet, ProjectSkeleton, type ProjectItem } from './home/Projects';
+import { QuickActions } from './home/QuickActions';
+
+// Pedido que o Início faz ao abrir o terminal; o App acrescenta o id.
+export type IntentRequest = ShellIntent extends infer I ? I extends ShellIntent ? Omit<I, 'id'> : never : never;
 
 type Props = {
   store: DesktopStore;
   describe: (desktopId: string) => DesktopConnection;
-  // Computador cujo proxy ficou aberto ao sair do terminal; o card Continuar oferece desconectar.
+  // Computador cujo proxy ficou aberto ao sair do terminal; o card oferece desconectar.
   keptDesktopId: string | null;
   onContinue: (desktop: DesktopEntry) => void;
+  onIntent: (desktop: DesktopEntry, intent: IntentRequest) => void;
   onDisconnect: () => void;
   onDesktops: () => void;
   onPair: () => void;
   onTerminal: () => void;
-  onSettings: () => void;
+  onProjects: () => void;
 };
 
-type Glyph = 'desktops' | 'pair' | 'terminal' | 'settings';
+const GRID_SIZE = 4;
 
 // Marcas de terceiro, geradas por `tools/brand/build-community-glyphs.mjs` a
 // partir do traçado oficial, o mesmo que o site usa. São pretas sobre
@@ -32,79 +44,42 @@ const COMMUNITY_GLYPHS = {
   discord: require('../assets/discord.png'),
   whatsapp: require('../assets/whatsapp.png'),
 };
+// O rótulo visível é o nome da marca, curto como no site; o leitor de tela
+// ouve a ação inteira. A cor de cada botão segue os botões suaves do site.
 const COMMUNITY_LABELS = {
-  discord: 'mobile.home.discord',
-  whatsapp: 'mobile.home.whatsapp',
+  discord: { visible: 'Discord', spoken: 'mobile.home.discord' },
+  whatsapp: { visible: 'WhatsApp', spoken: 'mobile.home.whatsapp' },
 } as const;
+// Logo do cabeçalho, o mesmo do site: símbolo e nome numa arte só, recortada
+// de brand/logo/cialai-lockup-1-4k.png.
+const LOCKUP = require('../assets/cialai-lockup.png');
+const LOCKUP_HEIGHT = 40;
+const LOCKUP_WIDTH = Math.round(LOCKUP_HEIGHT * 238 / 120);
 
-// Glifos desenhados só com View, no acento, para o início ter ícones sem
-// dependência nova: monitor, código QR, janela de terminal e controles.
-function GlyphTile({ glyph }: { glyph: Glyph }) {
-  const palette = usePalette();
-  const stroke = { borderColor: palette.accent };
-  const fill = { backgroundColor: palette.accent };
-  let shape;
-  if (glyph === 'desktops') {
-    shape = (
-      <View style={styles.glyph}>
-        <View style={[styles.monitorScreen, stroke]} />
-        <View style={[styles.monitorStand, fill]} />
-      </View>
-    );
-  } else if (glyph === 'pair') {
-    shape = (
-      <View style={styles.glyph}>
-        <View style={[styles.qrFinder, styles.qrTopLeft, stroke]} />
-        <View style={[styles.qrFinder, styles.qrTopRight, stroke]} />
-        <View style={[styles.qrFinder, styles.qrBottomLeft, stroke]} />
-        <View style={[styles.qrModule, styles.qrBottomRight, fill]} />
-      </View>
-    );
-  } else if (glyph === 'terminal') {
-    shape = (
-      <View style={[styles.glyph, styles.terminalWindow, stroke]}>
-        <View style={[styles.terminalChevron, stroke]} />
-        <View style={[styles.terminalCursor, fill]} />
-      </View>
-    );
-  } else {
-    shape = (
-      <View style={[styles.glyph, styles.sliders]}>
-        {[2, 12, 7].map(offset => (
-          <View key={offset} style={styles.sliderRow}>
-            <View style={[styles.sliderTrack, fill]} />
-            <View style={[styles.sliderKnob, fill, { left: offset }]} />
-          </View>
-        ))}
-      </View>
-    );
-  }
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.tile, { backgroundColor: palette.chip }]}>
-      {shape}
-    </View>
-  );
-}
+// Início: logo fixo no topo, uso dos agentes, computadores, projetos e atalhos. Os
+// dados do computador vêm do último retrato que a página mandou; cada parte
+// cai no próprio estado vazio sem bloquear as outras.
+export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onDisconnect, onDesktops, onPair, onTerminal, onProjects }: Props) {
+  const { colors } = useTokens();
+  const { locale, t } = useI18n();
+  const dashboard = useDashboard();
+  const now = useNow();
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const [agentSheet, setAgentSheet] = useState<AgentId | null>(null);
+  const [menuFor, setMenuFor] = useState<DesktopEntry | null>(null);
+  const [projectSheet, setProjectSheet] = useState<ProjectItem | null>(null);
+  const [favoritesOpen, setFavoritesOpen] = useState(false);
+  useEffect(() => { void loadDashboard(); }, []);
 
-export function Home({ store, describe, keptDesktopId, onContinue, onDisconnect, onDesktops, onPair, onTerminal, onSettings }: Props) {
-  const palette = usePalette();
-  const { t } = useI18n();
-  const last = findDesktop(store, store.lastDesktopId);
-  const connection = last ? describe(last.id) : null;
-  const transport = last && connection
-    ? connection.state === 'connected' ? connection.transport : last.lastTransport === '' ? null : last.lastTransport
-    : null;
-  const count = store.desktops.length;
-  const countText = count === 0 ? t('mobile.home.desktopsCount.none')
-    : count === 1 ? t('mobile.home.desktopsCount.one') : t('mobile.home.desktopsCount.many', { count });
-  const actions: { glyph: Glyph; label: string; title: string; hint: string; onPress: () => void }[] = [
-    { glyph: 'desktops', label: t('mobile.home.openDesktops'), title: t('mobile.home.desktops'), hint: countText, onPress: onDesktops },
-    { glyph: 'pair', label: t('mobile.home.openPair'), title: t('mobile.home.pair'), hint: t('mobile.home.pairHint'), onPress: onPair },
-    { glyph: 'terminal', label: t('mobile.home.openTerminal'), title: t('mobile.home.terminal'),
-      hint: last ? last.name : t('mobile.home.terminalChoose'), onPress: onTerminal },
-    { glyph: 'settings', label: t('mobile.desktops.openSettings'), title: t('mobile.home.settings'), hint: t('mobile.home.settingsHint'), onPress: onSettings }
-  ];
-  const surface = { backgroundColor: palette.surface, borderColor: palette.separator };
+  const desktops = orderDesktops(store.desktops, store.lastDesktopId, describe);
+  const focused = desktops.find(desktop => desktop.id === focusedId) ?? desktops[0] ?? null;
+  const entry = focused ? dashboard.desktops[focused.id] : undefined;
+  const snapshot = entry?.snapshot ?? null;
+  const favorites = entry?.favorites ?? [];
+  const projects = orderProjects(snapshot?.projects ?? [], favorites);
+  const favoriteProjects = projects.filter(project => project.favorite);
+  const loading = !dashboard.loaded;
+  const intent = (request: IntentRequest) => { if (focused) onIntent(focused, request); };
 
   // Abre no navegador do sistema. O endereço é conferido antes: um valor
   // inesperado aqui viraria abertura de app de terceiro.
@@ -117,113 +92,131 @@ export function Home({ store, describe, keptDesktopId, onContinue, onDisconnect,
     }
   };
 
+  let projectGrid: ReactNode;
+  if (loading) {
+    projectGrid = <View style={styles.grid}>{[0, 1].map(index => <ProjectSkeleton key={index} />)}</View>;
+  } else if (!snapshot) {
+    projectGrid = <Text style={[typography.callout, styles.note, { color: colors.textSecondary }]}>{t('mobile.home.projects.noSnapshot')}</Text>;
+  } else if (!projects.length) {
+    projectGrid = <Text style={[typography.callout, styles.note, { color: colors.textSecondary }]}>{t('mobile.home.projects.none')}</Text>;
+  } else {
+    const cells: ReactNode[] = favoriteProjects.length
+      ? favoriteProjects.slice(0, GRID_SIZE).map(project => <ProjectFolderCard key={project.path} onOpen={setProjectSheet} project={project} />)
+      : [<AddFavoritesCard key="add" onPress={() => setFavoritesOpen(true)} />,
+        ...projects.slice(0, GRID_SIZE - 1).map(project => <ProjectFolderCard key={project.path} onOpen={setProjectSheet} project={project} />)];
+    const rows: ReactNode[][] = [];
+    for (let index = 0; index < cells.length; index += 2) rows.push(cells.slice(index, index + 2));
+    projectGrid = rows.map((row, index) => (
+      <View key={index} style={styles.grid}>{row}{row.length === 1 ? <View style={styles.spacer} /> : null}</View>
+    ));
+  }
+
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+    <Screen>
+      {/* O cabeçalho fica fora da rolagem, como nas outras telas. */}
+      <View style={styles.brand}>
+        <Image accessibilityIgnoresInvertColors accessibilityLabel="Cialai" accessibilityRole="header" accessible resizeMode="contain"
+          source={LOCKUP} style={styles.lockup} />
+      </View>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.home.title')}</Text>
-          <Text style={[styles.subtitle, { color: palette.secondaryLabel }]}>{t('mobile.home.subtitle')}</Text>
-        </View>
 
-        {last && connection ? (
-          <View style={[styles.card, styles.continueCard, surface]}>
-            <Pressable accessibilityLabel={t('mobile.home.continueIn', { name: last.name })} accessibilityRole="button"
-              disabled={connection.state === 'connecting'} onPress={() => onContinue(last)}
-              style={({ pressed }) => [styles.continueMain, pressed && styles.pressed]}>
-              <View style={[styles.dot, { backgroundColor: stateColor(palette, connection.state) }]} />
-              <View style={styles.continueText}>
-                <Text style={[styles.continueLabel, { color: palette.accent }]}>{t('mobile.home.continue')}</Text>
-                <Text numberOfLines={1} style={[styles.continueName, { color: palette.label }]}>{last.name}</Text>
-                <View style={styles.continueMetaRow}>
-                  <Text style={[styles.continueState, { color: palette.secondaryLabel }]}>{t(STATE_KEYS[connection.state])}</Text>
-                  {transport ? <TransportBadge transport={transport} /> : null}
-                </View>
-              </View>
-            </Pressable>
-            {keptDesktopId === last.id ? (
-              <Pressable accessibilityRole="button" onPress={onDisconnect} style={styles.disconnect}>
-                <Text style={[styles.disconnectText, { color: palette.accent }]}>{t('mobile.home.disconnect')}</Text>
-              </Pressable>
-            ) : null}
+        {!desktops.length ? (
+          <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <EmptyState action={{ label: t('mobile.home.quick.pair'), onPress: onPair, icon: 'qr-code' }}
+              detail={t('mobile.home.empty.detail')} icon="laptop" title={t('mobile.home.empty.title')} />
           </View>
-        ) : null}
+        ) : <>
+          <View style={styles.agents}>
+            {AGENTS.map(agent => (
+              <AgentUsageSummary agent={agent} chosenId={entry?.accounts[agent]} key={agent} loading={loading} now={now}
+                onOpen={setAgentSheet} snapshot={snapshot} />
+            ))}
+          </View>
+          {snapshot ? (
+            <Text style={[typography.caption, styles.updated, { color: colors.textTertiary }]}>
+              {t('mobile.home.agent.updated', { age: formatAge(snapshot.at, now, locale, t) })}
+            </Text>
+          ) : null}
 
-        <View style={styles.grid}>
-          {actions.map(action => (
-            <Pressable accessibilityLabel={action.label} accessibilityRole="button" key={action.glyph} onPress={action.onPress}
-              style={({ pressed }) => [styles.card, surface, pressed && styles.pressed]}>
-              <GlyphTile glyph={action.glyph} />
-              <Text style={[styles.cardTitle, { color: palette.label }]}>{action.title}</Text>
-              <Text numberOfLines={2} style={[styles.cardHint, { color: palette.secondaryLabel }]}>{action.hint}</Text>
-            </Pressable>
-          ))}
-        </View>
+          <SectionHeader actionAccessibilityLabel={t('mobile.home.openDesktops')} actionLabel={t('mobile.common.seeAll')} onAction={onDesktops}
+            title={t('mobile.home.desktops')} />
+          <ComputerCarousel describe={describe} desktops={desktops} keptDesktopId={keptDesktopId} onDisconnect={onDisconnect}
+            onFocus={setFocusedId} onMenu={setMenuFor} onOpen={onContinue} />
+
+          <SectionHeader actionAccessibilityLabel={t('mobile.home.projects.seeAll')} actionLabel={t('mobile.common.seeAll')} onAction={onProjects}
+            title={t('mobile.home.projects')} />
+          {projectGrid}
+          {snapshot && favoriteProjects.length ? (
+            <PrimaryButton accessibilityLabel={t('mobile.home.projects.manage')} icon="star" label={t('mobile.home.projects.manage')}
+              onPress={() => setFavoritesOpen(true)} style={styles.manage} />
+          ) : null}
+        </>}
+
+        <SectionHeader title={t('mobile.home.quick.title')} />
+        <QuickActions actions={[
+          { icon: 'plus', label: t('mobile.home.quick.short.newSession'), accessibilityLabel: t('mobile.home.quick.newSession'),
+            onPress: () => intent({ kind: 'new-session' }), disabled: !focused },
+          { icon: 'qr-code', label: t('mobile.home.quick.short.pair'), accessibilityLabel: t('mobile.home.quick.pair'), onPress: onPair },
+          { icon: 'terminal', label: t('mobile.home.quick.short.terminals'), accessibilityLabel: t('mobile.home.quick.terminals'),
+            onPress: onTerminal, disabled: !focused },
+          { icon: 'bot', label: t('mobile.home.quick.short.agents'), accessibilityLabel: t('mobile.home.quick.agents'),
+            onPress: () => intent({ kind: 'profiles' }), disabled: !focused }
+        ]} />
 
         <View style={styles.community}>
-          <Text accessibilityRole="header" style={[styles.communityTitle, { color: palette.label }]}>{t('mobile.home.community')}</Text>
-          <Text style={[styles.communityHint, { color: palette.secondaryLabel }]}>{t('mobile.home.communityHint')}</Text>
+          <Text accessibilityRole="header" style={[typography.headline, { color: colors.text }]}>{t('mobile.home.community')}</Text>
+          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.home.communityHint')}</Text>
           <View style={styles.communityRow}>
             {COMMUNITIES.map(space => {
-              const label = t(COMMUNITY_LABELS[space.id]);
+              const label = COMMUNITY_LABELS[space.id];
               return (
-                <Pressable accessibilityLabel={label} accessibilityRole="link" key={space.id} onPress={() => openCommunity(space.url)}
-                  style={({ pressed }) => [styles.communityButton, surface, pressed && styles.pressed]}>
+                <Pressable accessibilityLabel={t(label.spoken)} accessibilityRole="link" key={space.id} onPress={() => openCommunity(space.url)}
+                  style={({ pressed }) => [styles.communityButton, { backgroundColor: pressed ? colors.primarySoftPressed : colors.primarySoft }]}>
                   <Image accessibilityIgnoresInvertColors resizeMode="contain" source={COMMUNITY_GLYPHS[space.id]}
-                    style={[styles.communityGlyph, { tintColor: palette.label }]} />
-                  <Text numberOfLines={1} style={[styles.communityLabel, { color: palette.label }]}>{label}</Text>
+                    style={[styles.communityGlyph, { tintColor: colors.text }]} />
+                  <Text numberOfLines={1} style={[typography.callout, styles.communityLabel, { color: colors.text }]}>{label.visible}</Text>
                 </Pressable>
               );
             })}
           </View>
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      <AgentUsageSheet agent={agentSheet} chosenId={agentSheet ? entry?.accounts[agentSheet] : undefined} now={now} onClose={() => setAgentSheet(null)}
+        onChoose={(agent, accountId) => { if (focused) chooseAccount(focused.id, agent, accountId); }}
+        onManage={() => { setAgentSheet(null); intent({ kind: 'profiles' }); }} snapshot={snapshot} />
+      <ComputerMenu desktop={menuFor} kept={!!menuFor && keptDesktopId === menuFor.id} onClose={() => setMenuFor(null)}
+        onDesktops={onDesktops} onDisconnect={onDisconnect} onOpen={onContinue} />
+      <ProjectSheet onClose={() => setProjectSheet(null)}
+        onContinue={sessionId => intent({ kind: 'session', sessionId })} onNewSession={cwd => intent({ kind: 'new-session', cwd })}
+        onToggleFavorite={path => {
+          if (!focused) return;
+          toggleFavorite(focused.id, path);
+          setProjectSheet(current => current && current.path === path ? { ...current, favorite: !current.favorite } : current);
+        }}
+        project={projectSheet} snapshot={snapshot} />
+      <FavoritesSheet onClose={() => setFavoritesOpen(false)} onToggle={path => { if (focused) toggleFavorite(focused.id, path); }}
+        projects={projects} visible={favoritesOpen} />
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  content: { paddingHorizontal: 20, paddingBottom: 24, gap: 12 },
-  header: { paddingHorizontal: 4, paddingTop: 20, paddingBottom: 4 },
-  title: { fontSize: 34, lineHeight: 41, fontWeight: '700', letterSpacing: 0.2 },
-  subtitle: { marginTop: 4, fontSize: 17, lineHeight: 22 },
-  card: { width: '48%', minHeight: 92, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, overflow: 'hidden', padding: 16 },
-  continueCard: { width: '100%', padding: 0 },
-  continueMain: { minHeight: 92, flexDirection: 'row', alignItems: 'center', padding: 16 },
-  dot: { width: 10, height: 10, borderRadius: 5, marginRight: 12 },
-  continueText: { flex: 1 },
-  continueLabel: { fontSize: 13, lineHeight: 18, fontWeight: '600', textTransform: 'uppercase' },
-  continueName: { marginTop: 2, fontSize: 20, lineHeight: 25, fontWeight: '700' },
-  continueMetaRow: { marginTop: 8, flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  continueState: { fontSize: 15, lineHeight: 20 },
-  disconnect: { alignSelf: 'flex-end', minHeight: 44, justifyContent: 'center', paddingHorizontal: 16 },
-  disconnectText: { fontSize: 15, fontWeight: '600' },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: 12 },
-  cardTitle: { marginTop: 12, fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  cardHint: { marginTop: 2, fontSize: 13, lineHeight: 18 },
-  pressed: { opacity: 0.7 },
-  community: { marginTop: 8, paddingHorizontal: 4, gap: 2 },
-  communityTitle: { fontSize: 17, lineHeight: 22, fontWeight: '600' },
-  communityHint: { fontSize: 13, lineHeight: 18 },
-  communityRow: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  communityButton: { flexGrow: 1, flexBasis: '46%', minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 14, borderWidth: StyleSheet.hairlineWidth, borderRadius: 999 },
+  content: { paddingHorizontal: space.lg, paddingTop: space.xxs, paddingBottom: space.xl, gap: space.sm },
+  brand: { minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg },
+  lockup: { width: LOCKUP_WIDTH, height: LOCKUP_HEIGHT },
+  agents: { flexDirection: 'row', gap: space.sm, alignItems: 'stretch' },
+  updated: { textAlign: 'right', marginTop: -4 },
+  grid: { flexDirection: 'row', gap: space.sm },
+  spacer: { flex: 1 },
+  note: { paddingVertical: space.xs },
+  manage: { minHeight: 44 },
+  emptyCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.lg },
+  community: { marginTop: space.xs, gap: 2 },
+  communityRow: { marginTop: space.xs, flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
+  // Botão suave do site: fundo rosa claro, texto e marca escuros, raio dos botões.
+  communityButton: { flexGrow: 1, flexBasis: '46%', minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: space.xs,
+    paddingHorizontal: space.md, borderRadius: radius.control },
   communityGlyph: { width: 18, height: 18 },
-  communityLabel: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  tile: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
-  glyph: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  monitorScreen: { width: 22, height: 15, borderWidth: 2, borderRadius: 4 },
-  monitorStand: { width: 10, height: 2, borderRadius: 1, marginTop: 3 },
-  qrFinder: { position: 'absolute', width: 9, height: 9, borderWidth: 2, borderRadius: 2 },
-  qrTopLeft: { top: 0, left: 0 },
-  qrTopRight: { top: 0, right: 0 },
-  qrBottomLeft: { bottom: 0, left: 0 },
-  qrModule: { position: 'absolute', width: 5, height: 5, borderRadius: 1 },
-  qrBottomRight: { bottom: 1, right: 1 },
-  terminalWindow: { height: 17, borderWidth: 2, borderRadius: 4, flexDirection: 'row', justifyContent: 'center', gap: 3 },
-  terminalChevron: { width: 6, height: 6, borderTopWidth: 2, borderRightWidth: 2, transform: [{ rotate: '45deg' }] },
-  terminalCursor: { width: 6, height: 2, borderRadius: 1, alignSelf: 'flex-end', marginBottom: 3 },
-  sliders: { gap: 2 },
-  sliderRow: { width: 22, height: 6, justifyContent: 'center' },
-  sliderTrack: { width: 22, height: 2, borderRadius: 1 },
-  sliderKnob: { position: 'absolute', width: 6, height: 6, borderRadius: 3 }
+  communityLabel: { fontWeight: '600' }
 });

@@ -68,12 +68,21 @@ packaged:
   https://developer.android.com/jetpack/androidx/releases/localbroadcastmanager
 
 Provider glyphs bundled with the desktop interface, in
-packages/ui/src/notch/glyphs with their own NOTICE.md:
+packages/ui/src/notch/glyphs with their own NOTICE.md, and copied unchanged
+into the mobile app at apps/mobile/src/ui/agent-glyphs.ts:
 
 - @lobehub/icons-static-svg 1.95.0: MIT, Copyright LobeHub; the Claude and
   OpenAI marks identify the provider of each profile in the AI bar and only
   say which product the usage belongs to
   https://github.com/lobehub/lobe-icons/blob/master/LICENSE
+
+Outfit, the typeface of cialai.com.br, bundled with the mobile app in
+apps/mobile/src/assets/fonts as static TTF files, weights 400 to 800, and with
+the phone page in packages/ui/src/fonts as the variable WOFF2; the license text
+ships next to the files as OFL.txt and OFL-Outfit.txt:
+
+- Outfit 1.100: OFL-1.1, Copyright 2021 The Outfit Project Authors
+  https://github.com/Outfitio/Outfit-Fonts
 
 Planned dependencies, not yet bundled:
 

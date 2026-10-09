@@ -24,7 +24,8 @@ import {
   type PairStage
 } from '../state/pair-progress';
 import { interpretTunnelEvent, reservePercent } from '../state/tunnel-events';
-import { usePalette } from '../theme';
+import { useTokens } from '../theme';
+import { Card, Icon, PrimaryButton, SecondaryButton, StatusBadge, TOUCH_TARGET, radius, space, typography } from '../ui';
 import { pairErrorMessage } from './pair-errors';
 
 type Props = {
@@ -48,7 +49,7 @@ const STAGE_TICK_MS = 250;
 export const PAIR_SLOW_HINT_MS = 8_000;
 
 export function Pair({ initialError, notice, device, onPaired, onCancel }: Props) {
-  const palette = usePalette();
+  const { colors } = useTokens();
   const { t } = useI18n();
   const [permission, requestPermission] = useCameraPermissions();
   const [inspection, setInspection] = useState<PairInspection | null>(null);
@@ -143,91 +144,80 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
     const percent = reservePercent(progress.tor);
     const slow = busy && progress.stage === 'reserve' && elapsedMs >= PAIR_SLOW_HINT_MS;
     return (
-      <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
         <ScrollView contentContainerStyle={styles.confirmContent}>
-          <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>
+          <Text accessibilityRole="header" style={[typography.largeTitle, { color: colors.text }]}>
             {t('mobile.pair.confirmTitle', { name: inspection.desktop.name })}
           </Text>
           {inspection.known ? (
             <View style={styles.known}>
-              <View style={[styles.chip, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-                <Text style={[styles.chipText, { color: palette.secondaryLabel }]}>{t('mobile.pair.known')}</Text>
-              </View>
-              <Text style={[styles.knownDetail, { color: palette.secondaryLabel }]}>{t('mobile.pair.knownDetail')}</Text>
+              <StatusBadge label={t('mobile.pair.known')} tone="primary" variant="pill" />
+              <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.pair.knownDetail')}</Text>
             </View>
           ) : null}
-          <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-            <Text style={[styles.label, { color: palette.secondaryLabel }]}>{t('mobile.pair.fingerprint')}</Text>
-            <Text selectable style={[styles.fingerprint, { color: palette.label }]}>
+          <Card style={styles.card}>
+            <Text style={[typography.footnote, styles.label, { color: colors.textSecondary }]}>{t('mobile.pair.fingerprint')}</Text>
+            <Text selectable style={[styles.fingerprint, { color: colors.text }]}>
               {formatFingerprint(inspection.desktop.fingerprint)}
             </Text>
-            <Text style={[styles.hint, { color: palette.tertiaryLabel }]}>{t('mobile.pair.fingerprintHint')}</Text>
+            <Text style={[typography.footnote, { color: colors.textTertiary }]}>{t('mobile.pair.fingerprintHint')}</Text>
             {inspection.approvalCode ? (
               <View style={styles.approval}>
-                <Text style={[styles.label, { color: palette.secondaryLabel }]}>{t('mobile.pair.approvalCode')}</Text>
-                <Text selectable accessibilityLabel={t('mobile.pair.approvalCode')} style={[styles.approvalCode, { color: palette.label }]}>
+                <Text style={[typography.footnote, styles.label, { color: colors.textSecondary }]}>{t('mobile.pair.approvalCode')}</Text>
+                <Text selectable accessibilityLabel={t('mobile.pair.approvalCode')} style={[styles.approvalCode, { color: colors.text }]}>
                   {inspection.approvalCode}
                 </Text>
-                <Text style={[styles.hint, { color: palette.tertiaryLabel }]}>{t('mobile.pair.approvalHint')}</Text>
+                <Text style={[typography.footnote, { color: colors.textTertiary }]}>{t('mobile.pair.approvalHint')}</Text>
               </View>
             ) : null}
-          </View>
+          </Card>
           {busy ? (
-            <View accessibilityLiveRegion="polite" style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-              {PAIR_STAGES.map(stage => {
-                const status = stageStatus(progress, stage);
-                return (
-                  <View key={stage} style={styles.stage}>
-                    <View style={styles.stageIndicator}>
-                      {status === 'current' ? <ActivityIndicator color={palette.accent} size="small" />
-                        : <View style={[styles.stageDot, { backgroundColor: status === 'done' ? palette.success : palette.separator }]} />}
+            <View accessibilityLiveRegion="polite">
+              <Card style={styles.card}>
+                {PAIR_STAGES.map(stage => {
+                  const status = stageStatus(progress, stage);
+                  return (
+                    <View key={stage} style={styles.stage}>
+                      <View style={styles.stageIndicator}>
+                        {status === 'current' ? <ActivityIndicator color={colors.primary} size="small" />
+                          : <View style={[styles.stageDot, { backgroundColor: status === 'done' ? colors.success : colors.border }]} />}
+                      </View>
+                      <View style={styles.stageText}>
+                        <Text style={[typography.body, {
+                          color: status === 'pending' ? colors.textTertiary : status === 'current' ? colors.text : colors.textSecondary,
+                          fontWeight: status === 'current' ? '600' : '400'
+                        }]}>{t(STAGE_KEYS[stage])}</Text>
+                        {stage === 'reserve' && status === 'current' && percent !== null ? (
+                          <Text style={[typography.footnote, { color: colors.textSecondary }]}>
+                            {t('mobile.reserve.progress', { progress: percent })}
+                          </Text>
+                        ) : null}
+                        {stage === 'reserve' && status === 'current' && slow ? (
+                          <Text style={[typography.footnote, { color: colors.textSecondary }]}>
+                            {t('mobile.pair.elapsed', { seconds: Math.floor(elapsedMs / 1000) })}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
-                    <View style={styles.stageText}>
-                      <Text style={[styles.stageLabel, {
-                        color: status === 'pending' ? palette.tertiaryLabel : status === 'current' ? palette.label : palette.secondaryLabel,
-                        fontWeight: status === 'current' ? '600' : '400'
-                      }]}>{t(STAGE_KEYS[stage])}</Text>
-                      {stage === 'reserve' && status === 'current' && percent !== null ? (
-                        <Text style={[styles.stageDetail, { color: palette.secondaryLabel }]}>
-                          {t('mobile.reserve.progress', { progress: percent })}
-                        </Text>
-                      ) : null}
-                      {stage === 'reserve' && status === 'current' && slow ? (
-                        <Text style={[styles.stageDetail, { color: palette.secondaryLabel }]}>
-                          {t('mobile.pair.elapsed', { seconds: Math.floor(elapsedMs / 1000) })}
-                        </Text>
-                      ) : null}
-                    </View>
-                  </View>
-                );
-              })}
-              {slow ? (
-                <Text style={[styles.slowHint, { color: palette.secondaryLabel }]}>{t('mobile.pair.slowHint')}</Text>
-              ) : null}
+                  );
+                })}
+                {slow ? <Text style={[typography.footnote, styles.slowHint, { color: colors.textSecondary }]}>{t('mobile.pair.slowHint')}</Text> : null}
+              </Card>
             </View>
           ) : (
-            <Pressable accessibilityRole="button" onPress={() => void confirm()}
-              style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, pressed && styles.pressedScale]}>
-              <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.confirm')}</Text>
-            </Pressable>
+            <PrimaryButton label={t('mobile.pair.confirm')} onPress={() => void confirm()} size="lg" style={styles.primary} />
           )}
-          {busy ? (
-            <Pressable accessibilityRole="button" onPress={() => void cancelPairing()} style={styles.secondary}>
-              <Text style={[styles.secondaryText, { color: palette.danger }]}>{t('mobile.pair.cancel')}</Text>
-            </Pressable>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={resetCode} style={styles.secondary}>
-              <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.anotherCode')}</Text>
-            </Pressable>
-          )}
-          {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
+          {busy
+            ? <SecondaryButton label={t('mobile.pair.cancel')} onPress={() => void cancelPairing()} variant="link-danger" />
+            : <SecondaryButton label={t('mobile.pair.anotherCode')} onPress={resetCode} variant="link" />}
+          {error ? <Text accessibilityRole="alert" style={[typography.callout, styles.error, { color: colors.danger }]}>{error}</Text> : null}
         </ScrollView>
       </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.safeArea, { backgroundColor: palette.background }]}>
+    <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {permission?.granted ? (
         <CameraView
           barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
@@ -235,37 +225,36 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <SafeAreaView style={styles.cameraOverlay}>
-        {onCancel ? (
-          <Pressable accessibilityRole="button" onPress={onCancel}
-            style={[styles.cancel, { backgroundColor: palette.overlay }]}>
-            <Text style={[styles.cancelText, { color: palette.accent }]}>{t('mobile.pair.back')}</Text>
-          </Pressable>
-        ) : null}
-        <View style={[styles.instructions, { backgroundColor: palette.overlay }]}>
-          <Text accessibilityRole="header" style={[styles.cameraTitle, { color: palette.label }]}>{t('mobile.pair.title')}</Text>
-          <Text style={[styles.body, { color: palette.secondaryLabel }]}>{t('mobile.pair.instruction')}</Text>
-          {notice ? <Text accessibilityRole="alert" style={[styles.notice, { color: palette.label }]}>{notice}</Text> : null}
-          {reading ? (
-            <View style={styles.reading}>
-              <ActivityIndicator color={palette.accent} size="small" />
-              <Text style={[styles.readingText, { color: palette.secondaryLabel }]}>{t('mobile.pair.stage.reading')}</Text>
-            </View>
+      <SafeAreaView style={styles.safeArea}>
+        {/* Rola quando o cartão não cabe: na horizontal ou com fonte grande. */}
+        <ScrollView bounces={false} contentContainerStyle={styles.cameraOverlay}>
+          {onCancel ? (
+            <Pressable accessibilityRole="button" onPress={onCancel}
+              style={({ pressed }) => [styles.cancel, { backgroundColor: colors.overlay }, pressed && styles.pressed]}>
+              <Icon color={colors.primary} name="chevron-left" size={20} />
+              <Text style={[typography.headline, { color: colors.primary }]}>{t('mobile.pair.back')}</Text>
+            </Pressable>
           ) : null}
-          {!permission?.granted ? (
-            <>
-              <Text style={[styles.permissionText, { color: palette.secondaryLabel }]}>{t('mobile.pair.cameraUse')}</Text>
-              <Pressable accessibilityRole="button" onPress={() => void requestPermission()}
-                style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, pressed && styles.pressedScale]}>
-                <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.pair.allowCamera')}</Text>
-              </Pressable>
-            </>
-          ) : null}
-          <Pressable accessibilityRole="button" disabled={reading} onPress={() => void pasteCode()} style={styles.secondary}>
-            <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.pair.pasteCode')}</Text>
-          </Pressable>
-          {error ? <Text accessibilityRole="alert" style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
-        </View>
+          <View style={[styles.instructions, { backgroundColor: colors.overlay }]}>
+            <Text accessibilityRole="header" style={[typography.largeTitle, { color: colors.text }]}>{t('mobile.pair.title')}</Text>
+            <Text style={[typography.body, { color: colors.textSecondary }]}>{t('mobile.pair.instruction')}</Text>
+            {notice ? <Text accessibilityRole="alert" style={[typography.callout, styles.strong, { color: colors.text }]}>{notice}</Text> : null}
+            {reading ? (
+              <View style={styles.reading}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.pair.stage.reading')}</Text>
+              </View>
+            ) : null}
+            {!permission?.granted ? (
+              <>
+                <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.pair.cameraUse')}</Text>
+                <PrimaryButton icon="qr-code" label={t('mobile.pair.allowCamera')} onPress={() => void requestPermission()} size="lg" />
+              </>
+            ) : null}
+            <SecondaryButton disabled={reading} label={t('mobile.pair.pasteCode')} onPress={() => void pasteCode()} variant="link" />
+            {error ? <Text accessibilityRole="alert" style={[typography.callout, styles.error, { color: colors.danger }]}>{error}</Text> : null}
+          </View>
+        </ScrollView>
       </SafeAreaView>
     </View>
   );
@@ -273,42 +262,28 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  cameraOverlay: { flex: 1, justifyContent: 'flex-end', padding: 20 },
-  cancel: { alignSelf: 'flex-start', marginBottom: 'auto', minHeight: 44, justifyContent: 'center', borderRadius: 22, paddingHorizontal: 16 },
-  cancelText: { fontSize: 16, fontWeight: '600' },
-  instructions: { borderRadius: 24, padding: 22 },
-  cameraTitle: { fontSize: 28, lineHeight: 34, fontWeight: '700' },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: '700' },
-  body: { marginTop: 8, fontSize: 17, lineHeight: 24 },
-  notice: { marginTop: 14, fontSize: 15, lineHeight: 21, fontWeight: '600' },
-  reading: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14 },
-  readingText: { fontSize: 15 },
-  permissionText: { marginTop: 14, fontSize: 15, lineHeight: 21 },
-  confirmContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
-  approval: { marginTop: 14, gap: 4 },
-  approvalCode: { fontSize: 28, fontVariant: ['tabular-nums'], letterSpacing: 6, fontWeight: '600' },
-  known: { marginTop: 14, gap: 8 },
-  chip: { alignSelf: 'flex-start', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 },
-  chipText: { fontSize: 13, fontWeight: '600' },
-  knownDetail: { fontSize: 15, lineHeight: 21 },
-  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 18, padding: 18, marginTop: 20 },
-  label: { fontSize: 13, fontWeight: '600' },
+  cameraOverlay: { flexGrow: 1, justifyContent: 'flex-end', padding: space.lg, gap: space.md },
+  cancel: { alignSelf: 'flex-start', marginBottom: 'auto', minHeight: TOUCH_TARGET, flexDirection: 'row', alignItems: 'center', gap: 2,
+    borderRadius: radius.control, paddingLeft: space.xs, paddingRight: space.md },
+  pressed: { opacity: 0.7 },
+  instructions: { borderRadius: radius.xl, padding: space.lg, gap: space.xs },
+  strong: { fontWeight: '600', marginTop: space.xxs },
+  reading: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xxs },
+  confirmContent: { flexGrow: 1, justifyContent: 'center', padding: space.xl, gap: space.xs },
+  known: { marginTop: space.xs, gap: space.xs, alignItems: 'flex-start' },
+  card: { marginTop: space.md, gap: space.xxs },
+  label: { fontWeight: '600' },
+  approval: { marginTop: space.sm, gap: space.xxs },
+  approvalCode: { ...typography.largeTitle, fontVariant: ['tabular-nums'], letterSpacing: 6, fontWeight: '600' },
   fingerprint: {
-    marginTop: 6, fontSize: 22, lineHeight: 30, letterSpacing: 1, fontVariant: ['tabular-nums'],
+    fontSize: 22, lineHeight: 30, letterSpacing: 1, fontVariant: ['tabular-nums'],
     fontFamily: Platform.select({ ios: 'Menlo', android: 'monospace' })
   },
-  hint: { marginTop: 8, fontSize: 14, lineHeight: 20 },
-  stage: { flexDirection: 'row', alignItems: 'flex-start', minHeight: 36, paddingVertical: 4 },
+  stage: { flexDirection: 'row', alignItems: 'flex-start', minHeight: 36, paddingVertical: space.xxs },
   stageIndicator: { width: 28, height: 24, alignItems: 'center', justifyContent: 'center' },
   stageDot: { width: 8, height: 8, borderRadius: 4 },
-  stageText: { flex: 1, marginLeft: 8 },
-  stageLabel: { fontSize: 16, lineHeight: 24 },
-  stageDetail: { fontSize: 14, lineHeight: 20 },
-  slowHint: { marginTop: 10, fontSize: 14, lineHeight: 20 },
-  primary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginTop: 24 },
-  primaryText: { fontSize: 17, fontWeight: '600' },
-  pressedScale: { transform: [{ scale: 0.98 }] },
-  secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 4 },
-  secondaryText: { fontSize: 17, fontWeight: '600' },
-  error: { textAlign: 'center', marginTop: 12, fontSize: 15, lineHeight: 21 }
+  stageText: { flex: 1, marginLeft: space.xs },
+  slowHint: { marginTop: space.xs },
+  primary: { marginTop: space.lg },
+  error: { textAlign: 'center', marginTop: space.xs }
 });

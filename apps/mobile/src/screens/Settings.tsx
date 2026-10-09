@@ -1,21 +1,29 @@
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useState, type ReactNode } from 'react';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import type { Locale } from '@cialai/i18n';
 
 import type { LogLevel, TunnelStatus } from 'cialai-tunnel';
 
 import { BIOMETRIC_POLICIES, type BiometricPolicy } from '../auth/biometrics';
+import { APP_LICENSE, licensesFor } from '../config/licenses';
 import { useI18n } from '../i18n';
+import type { NotificationPermission } from '../notifications/notify';
+import { DEFAULT_NOTIFICATION_PREFS, type NotificationPrefs } from '../notifications/watch';
 import { formatDiagnosticTime, useDiagnosticLog } from '../state/diagnostics';
-import { THEME_MODES, usePalette, type ThemeMode } from '../theme';
+import { THEME_MODES, useTokens, type ThemeMode } from '../theme';
+import { AppHeader, BottomSheet, BrandMark, Card, Icon, Notice, OptionTiles, Screen, SecondaryButton, SegmentedControl, Toggle,
+  space, typography, type IconName } from '../ui';
 import { PATH_KEYS, TOR_STATE_KEYS, TRANSPORT_KEYS } from './TransportBadge';
+
 
 const LANGUAGE_OPTIONS: readonly { value: Locale; key: string }[] = [
   { value: 'pt-BR', key: 'language.portuguese' },
   { value: 'en', key: 'language.english' },
   { value: 'es', key: 'language.spanish' },
 ];
+
+const THEME_ICONS: Readonly<Record<ThemeMode, IconName>> = { system: 'sun-moon', light: 'sun', dark: 'moon' };
+const LOG_LEVELS: readonly LogLevel[] = ['error', 'info', 'debug'];
 
 const CORE_STATE_KEYS: Readonly<Record<TunnelStatus['state'], string>> = {
   idle: 'mobile.settings.coreState.idle',
@@ -31,6 +39,8 @@ const PUBLIC_NETWORKS: readonly { name: string; detail: string }[] = [
   { name: 'mobile.settings.network.dnssd', detail: 'mobile.settings.network.dnssdDetail' }
 ];
 
+type Sheet = 'diagnostics' | 'technical' | 'licenses' | null;
+
 type Props = {
   desktopCount: number;
   tunnelStatus: TunnelStatus | null;
@@ -39,25 +49,63 @@ type Props = {
   logLevel: LogLevel;
   themeMode?: ThemeMode;
   biometricPolicy?: BiometricPolicy;
+  notificationPrefs?: NotificationPrefs;
+  notificationAccess?: NotificationPermission;
   onBack: () => void;
   onLogLevel: (level: LogLevel) => void;
   onThemeMode?: (mode: ThemeMode) => void;
   onBiometricPolicy?: (policy: BiometricPolicy) => void;
+  onNotification?: (kind: keyof NotificationPrefs, enabled: boolean) => void;
   onRefreshStatus: () => void;
 };
 
+function Section({ title, children }: { title: string; children: ReactNode }) {
+  const { colors } = useTokens();
+  return (
+    <View style={styles.section}>
+      <Text accessibilityRole="header" style={[typography.headline, { color: colors.text }]}>{title}</Text>
+      {children}
+    </View>
+  );
+}
+
+function LinkRow({ icon, label, onPress, first }: { icon: IconName; label: string; onPress: () => void; first?: boolean }) {
+  const { colors } = useTokens();
+  return (
+    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress}
+      style={({ pressed }) => [styles.linkRow, !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+        pressed && { opacity: 0.6 }]}>
+      <Icon color={colors.textSecondary} name={icon} size={20} />
+      <Text style={[typography.callout, styles.flex, { color: colors.text }]}>{label}</Text>
+      <Icon color={colors.textTertiary} name="chevron-right" size={18} />
+    </Pressable>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  const { colors } = useTokens();
+  return (
+    <View style={[styles.infoRow, { borderTopColor: colors.border }]}>
+      <Text style={[typography.footnote, styles.flex, { color: colors.textSecondary }]}>{label}</Text>
+      <Text selectable style={[typography.callout, styles.infoValue, { color: colors.text }]}>{value}</Text>
+    </View>
+  );
+}
+
 export function Settings({
   desktopCount, tunnelStatus, appVersion, coreVersion, logLevel, themeMode = 'system', biometricPolicy = 'always',
-  onBack, onLogLevel, onThemeMode, onBiometricPolicy, onRefreshStatus
+  notificationPrefs = DEFAULT_NOTIFICATION_PREFS, notificationAccess = 'undetermined',
+  onBack, onLogLevel, onThemeMode, onBiometricPolicy, onNotification, onRefreshStatus
 }: Props) {
-  const palette = usePalette();
+  const { colors } = useTokens();
   const { locale, setLocale, t } = useI18n();
-  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false);
+  const [sheet, setSheet] = useState<Sheet>(null);
   const diagnosticLog = useDiagnosticLog();
   const active = tunnelStatus?.active ?? null;
   const tor = tunnelStatus?.tor ?? null;
   const none = t('mobile.settings.diagnostics.none');
   const unavailable = t('mobile.settings.coreState.unavailable');
+  const blocked = notificationAccess === 'denied';
 
   const rows: { label: string; value: string }[] = [
     { label: 'mobile.settings.diagnostics.core', value: tunnelStatus ? t(CORE_STATE_KEYS[tunnelStatus.state]) : unavailable },
@@ -68,143 +116,131 @@ export function Settings({
     { label: 'mobile.settings.diagnostics.desktops', value: String(tunnelStatus?.desktops ?? desktopCount) },
     { label: 'mobile.settings.diagnostics.coreVersion', value: coreVersion }
   ];
+  const system = `${t(Platform.OS === 'ios' ? 'mobile.settings.technical.ios' : 'mobile.settings.technical.android')} ${String(Platform.Version)}`;
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
-      <View style={styles.header}>
-        <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={onBack} style={styles.back}>
-          <Text style={[styles.backText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
-        </Pressable>
-        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t('mobile.settings.title')}</Text>
-      </View>
+    <Screen>
+      <AppHeader backLabel={t('mobile.home.open')} onBack={onBack} title={t('mobile.settings.title')} />
       <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('language.label')}</Text>
-        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          {LANGUAGE_OPTIONS.map(option => (
-            <Pressable accessibilityLabel={t(option.key)} accessibilityRole="button"
-              accessibilityState={{ selected: option.value === locale }} key={option.value}
-              onPress={() => setLocale(option.value)}
-              style={[styles.segmentItem, option.value === locale && { backgroundColor: palette.accent }]}>
-              <Text style={{ color: option.value === locale ? palette.accentText : palette.label, fontWeight: '600' }}>
-                {t(option.key)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.appearance')}</Text>
-        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          {THEME_MODES.map(mode => (
-            <Pressable accessibilityLabel={t(`mobile.settings.appearance.${mode}`)} accessibilityRole="button"
-              accessibilityState={{ selected: mode === themeMode }} key={mode} onPress={() => onThemeMode?.(mode)}
-              style={[styles.segmentItem, mode === themeMode && { backgroundColor: palette.accent }]}>
-              <Text style={{ color: mode === themeMode ? palette.accentText : palette.label, fontWeight: '600' }}>
-                {t(`mobile.settings.appearance.${mode}`)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.biometrics')}</Text>
-        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          {BIOMETRIC_POLICIES.map(policy => (
-            <Pressable accessibilityLabel={t(`mobile.settings.biometrics.${policy}`)} accessibilityRole="button"
-              accessibilityState={{ selected: policy === biometricPolicy }} key={policy} onPress={() => onBiometricPolicy?.(policy)}
-              style={[styles.segmentItem, policy === biometricPolicy && { backgroundColor: palette.accent }]}>
-              <Text style={{ color: policy === biometricPolicy ? palette.accentText : palette.label, fontWeight: '600' }}>
-                {t(`mobile.settings.biometrics.${policy}`)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={[styles.hint, { color: palette.secondaryLabel }]}>{t(`mobile.settings.biometricsHint.${biometricPolicy}`)}</Text>
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.logLevel')}</Text>
-        <View style={[styles.segment, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          {(['error', 'info', 'debug'] as const).map(level => (
-            <Pressable accessibilityRole="button" key={level} onPress={() => onLogLevel(level)}
-              style={[styles.segmentItem, level === logLevel && { backgroundColor: palette.accent }]}>
-              <Text style={{ color: level === logLevel ? palette.accentText : palette.label, fontWeight: '600' }}>
-                {t(`mobile.settings.log.${level}`)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <Section title={t('mobile.settings.appearance')}>
+          <OptionTiles onChange={mode => onThemeMode?.(mode)} value={themeMode}
+            options={THEME_MODES.map(mode => ({ value: mode, label: t(`mobile.settings.appearance.${mode}`), icon: THEME_ICONS[mode] }))} />
+        </Section>
 
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.title')}</Text>
-        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: diagnosticsOpen }}
-            onPress={() => {
-              if (!diagnosticsOpen) onRefreshStatus();
-              setDiagnosticsOpen(open => !open);
-            }} style={styles.rowButton}>
-            <Text style={[styles.rowButtonText, { color: palette.accent }]}>
-              {t(diagnosticsOpen ? 'mobile.settings.diagnostics.hide' : 'mobile.settings.diagnostics.show')}
-            </Text>
-          </Pressable>
-          {diagnosticsOpen ? (
-            <>
-              {rows.map(row => (
-                <View key={row.label} style={[styles.row, { borderTopColor: palette.separator }]}>
-                  <Text style={[styles.rowLabel, { color: palette.secondaryLabel }]}>{t(row.label)}</Text>
-                  <Text selectable style={[styles.rowValue, { color: palette.label }]}>{row.value}</Text>
-                </View>
-              ))}
-              <View style={[styles.row, styles.rowStacked, { borderTopColor: palette.separator }]}>
-                <Text style={[styles.rowLabel, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.networks')}</Text>
-                {PUBLIC_NETWORKS.map(network => (
-                  <View key={network.name} style={styles.network}>
-                    <Text style={[styles.networkName, { color: palette.label }]}>{t(network.name)}</Text>
-                    <Text style={[styles.networkDetail, { color: palette.secondaryLabel }]}>{t(network.detail)}</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={[styles.row, styles.rowStacked, { borderTopColor: palette.separator }]}>
-                <Text style={[styles.rowLabel, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.log')}</Text>
-                {diagnosticLog.length ? [...diagnosticLog].reverse().map(line => (
-                  <Text key={`${line.at}:${line.message}`} selectable style={[styles.logLine, { color: palette.label }]}>
-                    <Text style={{ color: palette.tertiaryLabel }}>{formatDiagnosticTime(line.at)}</Text>
-                    {' '}
-                    {line.message}
-                  </Text>
-                )) : <Text style={[styles.networkDetail, { color: palette.secondaryLabel }]}>{t('mobile.settings.diagnostics.logEmpty')}</Text>}
-              </View>
-              <Pressable accessibilityRole="button" onPress={onRefreshStatus} style={[styles.rowButton, styles.refresh, { borderTopColor: palette.separator }]}>
-                <Text style={[styles.rowButtonText, { color: palette.accent }]}>{t('mobile.settings.diagnostics.refresh')}</Text>
-              </Pressable>
-            </>
+        <Section title={t('language.label')}>
+          <SegmentedControl onChange={value => void setLocale(value)} value={locale}
+            options={LANGUAGE_OPTIONS.map(option => ({ value: option.value, label: t(option.key) }))} />
+        </Section>
+
+        <Section title={t('mobile.settings.biometrics')}>
+          <SegmentedControl onChange={policy => onBiometricPolicy?.(policy)} value={biometricPolicy}
+            options={BIOMETRIC_POLICIES.map(policy => ({ value: policy, label: t(`mobile.settings.biometrics.${policy}`) }))} />
+          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t(`mobile.settings.biometricsHint.${biometricPolicy}`)}</Text>
+        </Section>
+
+        <Section title={t('mobile.settings.notifications')}>
+          <Card style={styles.group}>
+            <Toggle icon="circle-check" label={t('mobile.settings.notifications.sessions')} onChange={value => onNotification?.('sessions', value)}
+              value={notificationPrefs.sessions && !blocked} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
+            <Toggle icon="bell" label={t('mobile.settings.notifications.usage')} onChange={value => onNotification?.('usage', value)}
+              value={notificationPrefs.usage && !blocked} />
+          </Card>
+          {blocked ? (
+            <Notice detail={t('mobile.settings.notifications.blocked')} icon="circle-alert" tone="warning">
+              <SecondaryButton label={t('mobile.settings.notifications.openSystem')} onPress={() => void Linking.openSettings().catch(() => undefined)}
+                variant="neutral" />
+            </Notice>
           ) : null}
-        </View>
+          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.notifications.hint')}</Text>
+        </Section>
 
-        <Text style={[styles.section, { color: palette.secondaryLabel }]}>{t('mobile.settings.about')}</Text>
-        <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          <Text style={[styles.cardDetail, { color: palette.label }]}>{t('mobile.settings.appVersion', { version: appVersion })}</Text>
-          <Text style={[styles.cardDetail, { color: palette.secondaryLabel }]}>{t('mobile.settings.licenses')}</Text>
-        </View>
+        <Section title={t('mobile.settings.diagnostics.section')}>
+          <Card style={styles.group}>
+            <Text style={[typography.footnote, styles.groupLabel, { color: colors.textSecondary }]}>{t('mobile.settings.logLevel')}</Text>
+            <SegmentedControl onChange={onLogLevel} value={logLevel}
+              options={LOG_LEVELS.map(level => ({ value: level, label: t(`mobile.settings.log.${level}`) }))} />
+            <View style={styles.links}>
+              <LinkRow first icon="scroll-text" label={t('mobile.settings.diagnostics.show')}
+                onPress={() => { onRefreshStatus(); setSheet('diagnostics'); }} />
+              <LinkRow icon="cpu" label={t('mobile.settings.technical.title')} onPress={() => setSheet('technical')} />
+            </View>
+          </Card>
+        </Section>
+
+        <Section title={t('mobile.settings.about')}>
+          <Card style={styles.group}>
+            <View style={styles.about}>
+              <BrandMark size={36} />
+              <View style={styles.flex}>
+                <Text style={[typography.headline, { color: colors.text }]}>{t('mobile.settings.about.version', { version: appVersion })}</Text>
+                <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.about.detail')}</Text>
+              </View>
+            </View>
+            <LinkRow icon="file-text" label={t('mobile.settings.licenses.title')} onPress={() => setSheet('licenses')} />
+          </Card>
+        </Section>
       </ScrollView>
-    </SafeAreaView>
+
+      <BottomSheet onClose={() => setSheet(null)} title={t('mobile.settings.diagnostics.title')} visible={sheet === 'diagnostics'}>
+        {rows.map(row => <InfoRow key={row.label} label={t(row.label)} value={row.value} />)}
+        <View style={[styles.stacked, { borderTopColor: colors.border }]}>
+          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.diagnostics.networks')}</Text>
+          {PUBLIC_NETWORKS.map(network => (
+            <View key={network.name} style={styles.network}>
+              <Text style={[typography.callout, styles.strong, { color: colors.text }]}>{t(network.name)}</Text>
+              <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t(network.detail)}</Text>
+            </View>
+          ))}
+        </View>
+        <View style={[styles.stacked, { borderTopColor: colors.border }]}>
+          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.diagnostics.log')}</Text>
+          {diagnosticLog.length ? [...diagnosticLog].reverse().map(line => (
+            <Text key={`${line.at}:${line.message}`} selectable style={[styles.logLine, { color: colors.text }]}>
+              <Text style={{ color: colors.textTertiary }}>{formatDiagnosticTime(line.at)}</Text>
+              {' '}
+              {line.message}
+            </Text>
+          )) : <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.diagnostics.logEmpty')}</Text>}
+        </View>
+        <SecondaryButton icon="refresh" label={t('mobile.settings.diagnostics.refresh')} onPress={onRefreshStatus} variant="soft" />
+      </BottomSheet>
+
+      <BottomSheet onClose={() => setSheet(null)} title={t('mobile.settings.technical.title')} visible={sheet === 'technical'}>
+        <InfoRow label={t('mobile.settings.technical.system')} value={system} />
+        <InfoRow label={t('mobile.settings.technical.app')} value={appVersion} />
+        <InfoRow label={t('mobile.settings.diagnostics.coreVersion')} value={coreVersion} />
+        <InfoRow label={t('mobile.settings.technical.language')} value={locale} />
+        <InfoRow label={t('mobile.settings.logLevel')} value={t(`mobile.settings.log.${logLevel}`)} />
+      </BottomSheet>
+
+      <BottomSheet onClose={() => setSheet(null)} title={t('mobile.settings.licenses.title')} visible={sheet === 'licenses'}>
+        <Text style={[typography.callout, { color: colors.text }]}>
+          {t('mobile.settings.licenses.app', { name: APP_LICENSE.name, license: APP_LICENSE.license })}
+        </Text>
+        <Text style={[typography.footnote, { color: colors.textSecondary }]}>{APP_LICENSE.copyright}</Text>
+        <Text style={[typography.footnote, styles.groupLabel, { color: colors.textSecondary }]}>{t('mobile.settings.licenses.thirdParty')}</Text>
+        {licensesFor(Platform.OS).map(item => <InfoRow key={item.name} label={item.name} value={item.license} />)}
+        <Text style={[typography.footnote, { color: colors.textTertiary }]}>{t('mobile.settings.licenses.notice')}</Text>
+      </BottomSheet>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  header: { minHeight: 56, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 16 },
-  back: { position: 'absolute', left: 8, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
-  backText: { fontSize: 16, fontWeight: '600' },
-  title: { fontSize: 18, fontWeight: '700' },
-  content: { padding: 18, gap: 12 },
-  section: { marginTop: 10, marginLeft: 4, fontSize: 13, fontWeight: '600', textTransform: 'uppercase' },
-  hint: { marginTop: -4, marginHorizontal: 4, fontSize: 13, lineHeight: 18 },
-  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingHorizontal: 16, paddingVertical: 6 },
-  cardDetail: { marginVertical: 5, fontSize: 14, lineHeight: 20 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 16, paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth },
-  rowStacked: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
-  rowLabel: { flexShrink: 1, fontSize: 14, lineHeight: 20 },
-  rowValue: { flexShrink: 1, textAlign: 'right', fontSize: 15, lineHeight: 20, fontWeight: '600' },
+  content: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.xl },
+  section: { gap: space.sm },
+  group: { gap: space.xs, paddingVertical: space.xs },
+  groupLabel: { fontWeight: '600' },
+  divider: { height: StyleSheet.hairlineWidth },
+  flex: { flex: 1, minWidth: 0 },
+  links: { marginTop: space.xs },
+  linkRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  about: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
+  infoRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
+  infoValue: { flexShrink: 1, textAlign: 'right', fontWeight: '600' },
+  stacked: { gap: space.xs, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
   network: { gap: 2 },
-  networkName: { fontSize: 15, lineHeight: 20, fontWeight: '600' },
-  networkDetail: { fontSize: 13, lineHeight: 18 },
-  logLine: { fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] },
-  rowButton: { minHeight: 44, justifyContent: 'center' },
-  refresh: { borderTopWidth: StyleSheet.hairlineWidth },
-  rowButtonText: { fontSize: 15, fontWeight: '600' },
-  segment: { flexDirection: 'row', borderWidth: StyleSheet.hairlineWidth, borderRadius: 12, padding: 3 },
-  segmentItem: { flex: 1, minHeight: 38, justifyContent: 'center', alignItems: 'center', borderRadius: 9 }
+  strong: { fontWeight: '600' },
+  logLine: { ...typography.footnote, fontSize: 12, lineHeight: 17, fontVariant: ['tabular-nums'] }
 });

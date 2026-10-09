@@ -10,6 +10,9 @@ do Codenotch, https://github.com/vinzdg/codenotch, tambem MIT.
 | `claude.svg` | `icons/claude.svg` | anel de um perfil do Claude Code |
 | `openai.svg` | `icons/openai.svg` | anel de um perfil do Codex |
 
+Os dois desenhos tambem estao copiados sem mudanca em
+`apps/mobile/src/ui/agent-glyphs.ts`, nos cards de uso do Inicio do aplicativo.
+
 Mudancas em relacao ao original: o bloco `<metadata>` com a proveniencia C2PA
 foi retirado, porque so descreve o arquivo e pesava mais que o desenho; e
 `width` e `height` passaram de `1em` para `24`, com o estilo inline removido,

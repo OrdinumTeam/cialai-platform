@@ -23,6 +23,8 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/terminals/ui/AgentProfiles.jsx', import.meta.url))],
   bundle: true, write: false, format: 'cjs', external: ['react', 'react-dom', 'lucide-react'],
   plugins: [{ name: 'profiles-boundaries', setup(api) {
+    api.onResolve({ filter: /\.svg\?raw$/ }, ({ path }) => ({ path, namespace: 'glyph' }));
+    api.onLoad({ filter: /.*/, namespace: 'glyph' }, () => ({ contents: 'export default "<svg></svg>";', loader: 'js' }));
     api.onResolve({ filter: /\.(js|jsx)$/ }, ({ path }) => {
       const key = path.split('/').at(-1).replace(/\.jsx?$/, '');
       if (mocks[key]) return { path: key, namespace: 'fixture' };
@@ -189,8 +191,11 @@ test('cada estado de leitura tem nome próprio, e nenhum deles é zero por cento
 test('Claude Code e Codex mostram plano e percentual pelo mesmo caminho', () => {
   const { api } = load();
   const html = renderToStaticMarkup(React.createElement(api.default, {}));
-  // Sem dados ainda: a primeira pintura diz que está lendo, não zero.
+  // Sem dados ainda: a primeira pintura são cartões fantasmas que dizem que
+  // estão lendo, não zero.
   assert.match(html, /Lendo as contas/);
+  assert.match(html, /agent-profiles__skeleton/);
+  assert.match(html, /aria-busy="true"/);
   assert.doesNotMatch(html, /0%/);
   const text = source('../src/terminals/ui/AgentProfiles.jsx');
   // O mesmo componente desenha os dois provedores: nada é condicionado ao
@@ -212,4 +217,34 @@ test('o item de menu que abre o agente numa conta existe nos dois lados e respei
   const menu = source('../src/terminals/ui/PhoneSessionMenu.jsx');
   assert.match(menu, /kind: 'launch'/);
   assert.match(menu, /disabled: !running \|\| Boolean\(session\.activity\?\.foreground\)/);
+});
+
+test('cada conta vira um cartão com plano, selo de padrão e uma barra por janela', () => {
+  const { api } = load();
+  const html = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[0], busy: false, onSelect: () => {} }));
+  assert.match(html, /agent-profiles__tag--plan">max</);
+  assert.match(html, /agent-profiles__tag--default">padrão</);
+  assert.equal((html.match(/agent-profiles__bar/g) || []).length, 2, 'cinco horas e semanal, cada uma com a sua barra');
+  assert.match(html, /width:41%/);
+  assert.match(html, /41%/);
+  assert.match(html, /Usar claude nas novas sessões/);
+  // A conta em uso perto do limite pinta a barra de alarme e não oferece troca.
+  const active = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[1], busy: false, onSelect: () => {} }));
+  assert.match(active, /is-active/);
+  assert.match(active, /agent-profiles__window--bad/);
+  assert.match(active, /Em uso/);
+  assert.doesNotMatch(active, /agent-profiles__use"/);
+  // Sem leitura, nenhuma barra e nenhum número.
+  const login = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[2], busy: false, onSelect: () => {} }));
+  assert.doesNotMatch(login, /agent-profiles__bar|\d+%/);
+  assert.match(login, /aguardando login/);
+});
+
+test('o erro de leitura aparece como alerta com a opção de tentar de novo', () => {
+  const text = source('../src/terminals/ui/AgentProfiles.jsx');
+  assert.match(text, /className="agent-profiles__error" role="alert"/);
+  assert.match(text, /className="agent-profiles__retry" onClick=\{load\}/);
+  assert.match(text, /terminal\.profiles\.retry/);
+  const css = source('../src/views/Terminais.css');
+  assert.match(css, /prefers-reduced-motion: reduce\)\{\.agent-profiles__shimmer\{animation:none\}/);
 });

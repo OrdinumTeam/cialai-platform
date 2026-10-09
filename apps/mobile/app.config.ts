@@ -8,6 +8,14 @@ const IOS_TOR_POD_VERSION = '409.11.2';
 // Serviço DNS-SD anunciado pelo computador e procurado pelo NWBrowser do iOS.
 const LAN_DISCOVERY_SERVICE = '_cialai._udp';
 
+// Outfit, a fonte do site, um arquivo por peso. O iOS agrupa os cinco pela
+// família tipográfica "Outfit" gravada nos arquivos; no Android o plugin monta
+// a mesma família em XML. As telas pedem `fontFamily: 'Outfit'` e o peso.
+export const OUTFIT_WEIGHTS = [
+  ['Regular', 400], ['Medium', 500], ['SemiBold', 600], ['Bold', 700], ['ExtraBold', 800]
+] as const;
+const outfitPath = (name: string) => `./src/assets/fonts/Outfit-${name}.ttf`;
+
 function resolveAppEnvironment(): AppEnvironment {
   const value = process.env.APP_ENV?.trim() || 'development';
   if (value === 'development' || value === 'preview' || value === 'production') return value;
@@ -78,8 +86,12 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       },
       allowBackup: false,
       softwareKeyboardLayoutMode: 'resize',
-      permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC'],
+      // Os avisos locais dos ajustes pedem POST_NOTIFICATIONS no Android 13 ou mais novo.
+      permissions: ['android.permission.CAMERA', 'android.permission.INTERNET', 'android.permission.USE_BIOMETRIC',
+        'android.permission.POST_NOTIFICATIONS'],
       blockedPermissions: [
+        // O expo-notifications pede para reagendar avisos depois de religar; aqui todo aviso é imediato.
+        'android.permission.RECEIVE_BOOT_COMPLETED',
         'android.permission.READ_EXTERNAL_STORAGE',
         'android.permission.SYSTEM_ALERT_WINDOW',
         'android.permission.USE_FINGERPRINT',
@@ -87,6 +99,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         'android.permission.WRITE_EXTERNAL_STORAGE'
       ]
     },
+    // O expo-notifications fica fora dos plugins de propósito: o dele grava o
+    // aps-environment de push remoto, e os avisos do Cialai são só locais.
     plugins: [
       'expo-dev-client',
       ['expo-camera', {
@@ -96,6 +110,10 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       }],
       ['expo-secure-store', { configureAndroidBackup: false }],
       ['expo-local-authentication', { faceIDPermission: permissions.NSFaceIDUsageDescription }],
+      ['expo-font', {
+        ios: { fonts: OUTFIT_WEIGHTS.map(([name]) => outfitPath(name)) },
+        android: { fonts: [{ fontFamily: 'Outfit', fontDefinitions: OUTFIT_WEIGHTS.map(([name, weight]) => ({ path: outfitPath(name), weight })) }] }
+      }],
       ['./plugins/with-loopback-network-security.cjs'],
       ['./plugins/with-android-release-signing.cjs'],
       ['./plugins/with-android-data-extraction.cjs'],

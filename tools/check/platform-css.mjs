@@ -74,6 +74,13 @@ for (const [weight, file] of [['400', 'JetBrainsMono-Regular.woff2'], ['700', 'J
 }
 assert.match(readFileSync(`${ui}/fonts/OFL.txt`, 'utf8'), /JetBrains Mono Project Authors[\s\S]*SIL Open Font License, Version 1\.1/);
 
+// O telefone usa a Outfit do site, variável, empacotada com a página.
+const phoneCss = readFileSync(`${ui}/mobile/mobile.css`, 'utf8');
+assert.match(phoneCss, /@font-face \{ font-family: "Cialai Outfit"; font-style: normal; font-weight: 100 900; font-display: swap; src: url\("\.\.\/fonts\/Outfit-Variable\.woff2"\) format\("woff2"\); \}/);
+assert.match(phoneCss, /\[data-form-factor="phone"\] \{\n  --mac-font: "Cialai Outfit",/);
+assert.equal(readFileSync(`${ui}/fonts/Outfit-Variable.woff2`).subarray(0, 4).toString('latin1'), 'wOF2', 'Outfit-Variable.woff2 não é WOFF2');
+assert.match(readFileSync(`${ui}/fonts/OFL-Outfit.txt`, 'utf8'), /Outfit Project Authors[\s\S]*SIL Open Font License, Version 1\.1/);
+
 // Interruptor estilizado, sem o atributo switch exclusivo do WebKit do macOS.
 assert.doesNotMatch(shell, /\[switch\]/);
 for (const rule of ['input[type=checkbox].mac-switch{', 'input[type=checkbox].mac-switch::after{', 'input[type=checkbox].mac-switch:checked{', 'input[type=checkbox].mac-switch:checked::after{']) {

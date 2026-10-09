@@ -21,13 +21,17 @@ try {
       }
     });
   });
-  const select = `document.querySelector('.terminais-card').click()`;
+  const select = `document.querySelector('.phone-session').click()`;
   const files = `document.querySelector('[aria-label="Arquivos da sessão"]').click()`;
   const preview = `Array.from(document.querySelectorAll('.phone-files__entry')).find((entry)=>entry.textContent==='README.md').click()`;
-  const report = `document.title=JSON.stringify({pane:document.querySelector('.phone-terminal').className,width:innerWidth,scroll:document.documentElement.scrollWidth,hosts:document.querySelectorAll('.phone-terminal__host').length,cols:window.__phoneFixture.getState().selected?.term.cols,pre:document.querySelector('pre')?.scrollWidth,client:document.querySelector('pre')?.clientWidth,accent:getComputedStyle(document.documentElement).getPropertyValue('--mac-accent').trim()})`;
+  const keys = `document.querySelector('.phone-keybar__keys').click()`;
+  const quick = `document.querySelector('.phone-keybar__more').click()`;
+  const report = `document.title=JSON.stringify({sheet:Math.round(document.querySelector('.phone-keys,.phone-quick')?.getBoundingClientRect().height||0),visibleTerminal:Math.round(document.querySelector('.phone-terminal__scroll')?.getBoundingClientRect().height||0),pane:document.querySelector('.phone-terminal').className,width:innerWidth,scroll:document.documentElement.scrollWidth,hosts:document.querySelectorAll('.phone-terminal__host').length,cols:window.__phoneFixture.getState().selected?.term.cols,pre:document.querySelector('pre')?.scrollWidth,client:document.querySelector('pre')?.clientWidth,accent:getComputedStyle(document.documentElement).getPropertyValue('--mac-accent').trim()})`;
   for (const [name, width, height, actions, pane] of [
     ['list', 393, 852, [], 'list'],
     ['terminal', 393, 852, [select], 'terminal'],
+    ['keys', 393, 852, [select, keys], 'terminal'],
+    ['quick', 393, 852, [select, quick], 'terminal'],
     ['files', 393, 852, [select, files], 'files'],
     ['preview-landscape', 852, 393, [select, files, preview], 'preview'],
     ['back', 393, 852, [select, files, preview, `document.querySelector('[aria-label="Voltar para arquivos"]').click()`, `document.querySelector('[aria-label="Voltar para terminal"]').click()`, `document.querySelector('[aria-label="Voltar para sessões"]').click()`], 'list'],
@@ -43,6 +47,9 @@ try {
     assert.equal(state.hosts, pane === 'terminal' ? 1 : 0, `${name} must mount one pane only`);
     assert.equal(state.accent.toLowerCase(), '#ff7ab2', `${name} must use the Cialai pink accent`);
     if (pane === 'terminal') assert.ok(state.cols >= 2 && state.cols < 80, 'phone terminal must fit fewer columns than desktop');
+    // O teclado especial encolhe o terminal sem cobri-lo: o prompt continua a vista.
+    if (name === 'keys') assert.ok(state.sheet > 200 && state.visibleTerminal >= 240, 'special keyboard must leave the terminal visible');
+    if (name === 'quick') assert.ok(state.sheet > 200, 'quick commands sheet must open');
     if (pane === 'preview') assert.equal(state.pre, state.client, 'file text must wrap without horizontal overflow');
     console.log('PASS', name, JSON.stringify(state));
   }

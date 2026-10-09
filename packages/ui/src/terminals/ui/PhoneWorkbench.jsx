@@ -1,44 +1,36 @@
 // SPDX-License-Identifier: Apache-2.0
-import React, { useEffect, useReducer, useRef, useState } from 'react';
-import { ArrowDown, ChevronLeft, ClipboardPaste, FolderOpen, MessageSquarePlus, MoreHorizontal, Plus, RotateCcw, Search, UserRound } from 'lucide-react';
+import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { ArrowDown, ChevronLeft, ClipboardPaste, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
-import { onNavigateBack, requestNavigateBack } from '../../lib/shell.js';
-import { bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, moveSessionBy, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setSessionColor, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
+import { onNavigateBack, postProjectPicked, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
+import { baseName } from '../files.js';
+import { applicationCursorKeys, blurTerminal, bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, launchAgentWhenReady, moveSessionBy, onTerminalFocus, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setInputTransform, setSessionColor, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
 import { phoneRoute, phoneRouteStorage, readPhoneRoute, writePhoneRoute } from '../phone-navigation.js';
 import { useRuntimeEvents } from '../hooks.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
 import PhoneComposer from './PhoneComposer.jsx';
+import PhoneKeyboardSheet, { keyHandlers, keyLabel, keyName } from './PhoneKeyboardSheet.jsx';
+import PhoneQuickCommands from './PhoneQuickCommands.jsx';
+import { KEY_CATALOG, PASTE_KEY, keyboardPrefsStorage, readKeyboardPrefs, writeKeyboardPrefs } from '../keyboard-prefs.js';
+import { MODIFIERS } from '../key-encoder.js';
+import { bindSessionKeys, sessionKeyController } from '../special-keys.js';
 import PhoneSessionMenu from './PhoneSessionMenu.jsx';
 import AgentProfiles from './AgentProfiles.jsx';
 import { NameDialog, Sheet } from './dialogs.jsx';
-import NewSessionPopover from './NewSessionPopover.jsx';
-import SessionCard from './SessionCard.jsx';
+import DirectoryBrowser from './DirectoryBrowser.jsx';
+import NewSessionFlow from './NewSessionFlow.jsx';
+import PhoneSessionCard, { PhoneSessionSkeleton } from './PhoneSessionCard.jsx';
+import { SearchInput, SegmentedControl } from '../../mobile/ui.jsx';
+import { countSessions, filterSessions, sessionPhase } from '../phone-session-list.js';
 import PhoneFiles from './PhoneFiles.jsx';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
-// Teclas da fileira. Enter vem logo depois de Esc, porque e a tecla mais
-// usada com um agente; Shift Tab alterna o modo do Claude Code; Ctrl D
-// encerra a entrada; Ctrl L limpa a tela. Cada entrada: rotulo, sequencia e
-// nome acessivel.
-const ESC = String.fromCharCode(27);
-const control = (letter) => String.fromCharCode(letter.charCodeAt(0) - 64);
-const KEYS = [
-  ['Esc', ESC, 'Esc'],
-  ['Enter', '\r', 'Enter'],
-  ['Tab', '\t', 'Tab'],
-  ['Shift Tab', `${ESC}[Z`, 'Shift Tab'],
-  ['Ctrl C', control('C'), 'Ctrl C'],
-  ['↑', `${ESC}[A`, 'terminal.phone.arrowUp'],
-  ['↓', `${ESC}[B`, 'terminal.phone.arrowDown'],
-  ['Ctrl D', control('D'), 'Ctrl D'],
-  ['Ctrl L', control('L'), 'Ctrl L'],
-];
+// Vibração curta nas teclas, onde o WebView oferece: Android sim, iOS não.
+const canVibrate = () => typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+const modifierLabels = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' };
 
-// Ler a area de transferencia exige contexto seguro e um gesto do usuario.
-const canPaste = () => typeof navigator !== 'undefined' && typeof navigator.clipboard?.readText === 'function';
-
-function PhoneTerminal({ session, visible, interactive, onTakeControl, onPress, onCompose }) {
+function PhoneTerminal({ session, visible, onTakeControl, onPress }) {
   const host = useRef(null);
   const [tail, setTail] = useState({ detached: false, fresh: false });
   useEffect(() => watchTail(session.id, setTail), [session.id]);
@@ -53,7 +45,6 @@ function PhoneTerminal({ session, visible, interactive, onTakeControl, onPress, 
   useEffect(() => { if (visible) fitAndResize(session.id); }, [session.id, session.status, visible]);
   return <div className="phone-terminal__scroll">
     <div className="phone-terminal__host" aria-hidden={!visible} inert={visible ? undefined : ''} ref={host} />
-    <button type="button" className="phone-terminal__compose" disabled={!interactive} aria-label={translate('terminal.phone.composer.open')} title={translate('terminal.phone.composer.open')} onPointerDown={onPress} onClick={onCompose}><MessageSquarePlus size={22} aria-hidden="true" /></button>
     {visible && tail.detached && <button type="button" className={`phone-terminal__tail${tail.fresh ? ' is-fresh' : ''}`} onPointerDown={onPress} onClick={() => { scrollToBottom(session.id); onPress(null, true); }}><ArrowDown size={15} aria-hidden="true" />{translate(tail.fresh ? 'terminal.phone.newOutput' : 'terminal.phone.backToEnd')}</button>}
     {!visible && session.status === 'running' && <div className="phone-terminal__ownership" role="status">
       <h2>{translate('terminal.phone.otherDeviceTitle')}</h2>
@@ -66,9 +57,22 @@ function PhoneTerminal({ session, visible, interactive, onTakeControl, onPress, 
 export default function PhoneWorkbench() {
   useI18n();
   const notify = useToast();
-  const [picker, setPicker] = useState(false);
-  const [confirmClose, setConfirmClose] = useState(false);
+  // Sessão nova em tela cheia; `path` vem preenchido quando o pedido do
+  // aplicativo já trouxe a pasta, e o fluxo começa na etapa do agente.
+  const [picker, setPicker] = useState(null);
+  // Pasta pedida pela tela Projetos do aplicativo para virar atalho.
+  const [pickProject, setPickProject] = useState(false);
+  // Sessões à espera de confirmação para encerrar ou reiniciar. A confirmação
+  // aparece na própria lista, sem abrir o terminal antes.
+  const [closeFor, setCloseFor] = useState(null);
+  const [restartFor, setRestartFor] = useState(null);
   const [composing, setComposing] = useState(false);
+  // Teclado especial e comandos rapidos: um painel de cada vez, e nunca o
+  // teclado especial junto com o do aparelho.
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [keyboardPrefs, setKeyboardPrefs] = useState(() => readKeyboardPrefs(keyboardPrefsStorage()));
+  const [keyState, setKeyState] = useState({ armed: {}, mode: 'oneShot', any: false });
   // Sessão cujo menu de ações está aberto, o pedido de nome em curso e a
   // sessão que está trocando de pasta pelo navegador de pastas.
   const [menuFor, setMenuFor] = useState(null);
@@ -79,6 +83,10 @@ export default function PhoneWorkbench() {
   const [launchFor, setLaunchFor] = useState(null);
   const [closing, setClosing] = useState(false);
   const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState('all');
+  // A entrada dos cards anima só quando a lista chega; depois disso, filtro e
+  // busca trocam os cards sem animação.
+  const [settled, setSettled] = useState(false);
   const [route, navigate] = useReducer(phoneRoute, undefined, () => readPhoneRoute(phoneRouteStorage()));
   useRuntimeEvents(['sessions', 'viewport', 'theme']);
   const { hydrated } = getState();
@@ -96,14 +104,34 @@ export default function PhoneWorkbench() {
   };
   useEffect(() => { heading.current?.focus(); }, [pane]);
   useEffect(() => { writePhoneRoute(phoneRouteStorage(), route); }, [route]);
+  useEffect(() => {
+    if (!hydrated || settled) return undefined;
+    const timer = setTimeout(() => setSettled(true), 400);
+    return () => clearTimeout(timer);
+  }, [hydrated, settled]);
+  // O voltar do aparelho fecha antes a tela cheia que estiver aberta.
   useEffect(() => onNavigateBack(() => {
-    if (pane === 'list') requestNavigateBack();
+    if (quickOpen) setQuickOpen(false);
+    else if (keysOpen) setKeysOpen(false);
+    else if (picker) setPicker(null);
+    else if (folderFor) setFolderFor(null);
+    else if (pickProject) { setPickProject(false); requestNavigateBack(); }
+    else if (pane === 'list') requestNavigateBack();
     else navigate({ type: 'back' });
-  }), [pane]);
+  }), [pane, picker, folderFor, pickProject, keysOpen, quickOpen]);
   // Rota restaurada depois de recarregar: a sessao aparece com a hidratacao.
   useEffect(() => { if (selected) selectSession(selected.id); }, [selected?.id]);
   useEffect(() => {
-    hydrate().catch((error) => notify(error.message, 'warning'));
+    hydrate().then(() => {
+      // Pedido feito no Inicio do aplicativo, consumido uma vez.
+      const intent = takeShellIntent();
+      if (!intent) return;
+      if (intent.kind === 'profiles') setProfiles(true);
+      else if (intent.kind === 'session' && getSession(intent.sessionId)) { selectSession(intent.sessionId); navigate({ type: 'select', id: intent.sessionId }); }
+      // A pasta do pedido só preenche o fluxo: a sessão abre no toque final.
+      else if (intent.kind === 'new-session') setPicker({ path: typeof intent.cwd === 'string' ? intent.cwd : '' });
+      else if (intent.kind === 'pick-project') setPickProject(true);
+    }).catch((error) => notify(error.message, 'warning'));
     viewMounted(true);
     const off = subscribe((event) => { if (event.type === 'error') notify(event.message, 'warning'); });
     return () => { off(); viewMounted(false); };
@@ -113,7 +141,64 @@ export default function PhoneWorkbench() {
   const terminalVisible = isDemo() || Boolean(selected?.viewport?.owned) || ['exited', 'error'].includes(selected?.status);
   const open = (id) => { selectSession(id); navigate({ type: 'select', id }); };
   const interactive = Boolean(selected) && selected.status === 'running' && terminalVisible;
-  const sendAndRestore = (data) => { sendKey(selected.id, data); press(null, true); };
+  // Um controlador por sessao aberta: modificadores armados, sequencias e
+  // repeticao num lugar so. O que o teclado nativo digita passa por ele no
+  // caminho para o PTY.
+  const keySessionId = pane === 'terminal' ? selected?.id : null;
+  const controller = useMemo(() => (keySessionId ? sessionKeyController(keySessionId, {
+    sendKey, applicationCursorKeys, vibrate: canVibrate() ? (ms) => navigator.vibrate(ms) : null,
+  }) : null), [keySessionId]);
+  useEffect(() => (controller ? bindSessionKeys(controller, keySessionId, { setInputTransform, onState: setKeyState }) : undefined),
+    [controller, keySessionId]);
+  useEffect(() => {
+    controller?.setMode(keyboardPrefs.modifierMode);
+    controller?.setHaptics(keyboardPrefs.haptics);
+  }, [controller, keyboardPrefs.modifierMode, keyboardPrefs.haptics]);
+  // Sair do terminal fecha os paineis; trocar de sessao comeca sem
+  // modificador armado, porque o controlador e outro.
+  useEffect(() => {
+    if (keySessionId) return;
+    setKeysOpen(false);
+    setQuickOpen(false);
+  }, [keySessionId]);
+  // O teclado do aparelho subiu pelo toque no terminal: o especial fecha. Os
+  // modificadores armados continuam e valem para o proximo caractere.
+  useEffect(() => (keySessionId ? onTerminalFocus(keySessionId, () => setKeysOpen(false)) : undefined), [keySessionId, selected?.status]);
+  // Exibicao automatica, uma vez por entrada na sessao, e so com o teclado do
+  // aparelho fechado.
+  const autoOpened = useRef(null);
+  useEffect(() => {
+    if (!keySessionId || !interactive || !keyboardPrefs.autoOpen) return;
+    if (autoOpened.current === keySessionId) return;
+    autoOpened.current = keySessionId;
+    if (!terminalHasFocus(keySessionId)) setKeysOpen(true);
+  }, [keySessionId, interactive, keyboardPrefs.autoOpen]);
+  useEffect(() => { if (!keySessionId) autoOpened.current = null; }, [keySessionId]);
+  const openKeys = () => {
+    if (keysOpen) { setKeysOpen(false); return; }
+    // Com o painel aberto o teclado do aparelho fica fechado: nenhuma tecla
+    // do painel devolve o foco ao terminal.
+    focused.current = false;
+    blurTerminal(selected.id);
+    setQuickOpen(false);
+    setKeysOpen(true);
+  };
+  const openQuick = () => {
+    blurTerminal(selected.id);
+    setKeysOpen(false);
+    setQuickOpen(true);
+  };
+  const nativeKeyboard = () => {
+    setKeysOpen(false);
+    focusTerminal(selected.id);
+  };
+  const updateKeyboardPrefs = (next) => setKeyboardPrefs(writeKeyboardPrefs(keyboardPrefsStorage(), next));
+  const armedLabel = MODIFIERS.filter((name) => keyState.armed?.[name]).map((name) => modifierLabels[name]).join(' ');
+  async function deliverQuick(command, enter) {
+    const sent = await submitText(selected.id, command, { enter });
+    if (!sent) notify(translate('terminal.phone.composer.notSent'), 'warning');
+    return sent;
+  }
   async function paste() {
     try {
       const text = await navigator.clipboard.readText();
@@ -124,12 +209,13 @@ export default function PhoneWorkbench() {
       notify(translate('terminal.phone.clipboardDenied'), 'warning');
     }
   }
-  const filtered = sessions.filter(session => [session.name, session.subtitle, session.cwd].some(value => value?.toLocaleLowerCase().includes(query.toLocaleLowerCase().trim())));
+  const phaseOf = (session) => sessionPhase(describe(session));
+  const filtered = filterSessions(sessions, { query, filter, phaseOf });
+  const activeCount = countSessions(sessions, 'active', phaseOf);
+  const countLabel = translate(sessions.length === 1 ? 'terminal.phone.sessionCountOne' : 'terminal.phone.sessionCountMany', { count: sessions.length.toLocaleString(getLocale()) });
   const title = pane === 'list' ? translate('terminal.phone.terminals') : pane === 'files' ? translate('terminal.phone.files') : pane === 'preview' ? route.path.split('/').at(-1) : selected.name;
   const status = pane === 'terminal' ? describe(selected) : null;
-  const subtitle = pane === 'list'
-    ? translate(sessions.length === 1 ? 'terminal.phone.sessionCountOne' : 'terminal.phone.sessionCountMany', { count: sessions.length.toLocaleString(getLocale()) })
-    : pane === 'terminal' ? status.label : selected.name;
+  const subtitle = pane === 'list' ? null : pane === 'terminal' ? status.label : selected.name;
   const subtitleTone = status?.tone === 'busy' ? ' is-busy' : status?.tone === 'bad' ? ' is-bad' : '';
   // Cria a pasta do perfil e abre um terminal já nele, para o login ser feito
   // pelo próprio programa. Nenhuma credencial passa pelo Cialai.
@@ -140,8 +226,7 @@ export default function PhoneWorkbench() {
       const sessionId = openSession(getState().selected?.cwd || sessions[0]?.cwd || '');
       if (!sessionId) return;
       open(sessionId);
-      const session = getSession(sessionId);
-      if (session?.ptyId != null) await invoke('pty_launch_agent', { id: session.ptyId, agent: request.agent, profile: id });
+      await launchAgentWhenReady(sessionId, request.agent, id);
     } catch (error) {
       notify(error.message, 'warning');
     }
@@ -164,23 +249,37 @@ export default function PhoneWorkbench() {
       catch (_error) { notify(translate('terminal.common.copyFailed'), 'warning'); }
       return;
     }
-    if (kind === 'restart') { restart(session.id).catch(error => notify(error.message, 'warning')); return; }
-    if (kind === 'close') { selectSession(session.id); navigate({ type: 'select', id: session.id }); setConfirmClose(true); }
+    if (kind === 'restart') { setRestartFor(session); return; }
+    if (kind === 'close') { setCloseFor(session); }
   }
 
   async function endSession() {
+    const target = closeFor;
+    if (!target) return;
     setClosing(true);
-    try { await closeSession(selected.id); setConfirmClose(false); if (!getSession(selected.id)) navigate({ type: 'reset' }); }
+    try {
+      await closeSession(target.id);
+      setCloseFor(null);
+      if (route.sessionId === target.id && !getSession(target.id)) navigate({ type: 'reset' });
+    } catch (error) { notify(error.message, 'warning'); }
+    finally { setClosing(false); }
+  }
+
+  async function restartSession() {
+    const target = restartFor;
+    if (!target) return;
+    setClosing(true);
+    try { await restart(target.id); setRestartFor(null); }
     catch (error) { notify(error.message, 'warning'); }
     finally { setClosing(false); }
   }
   return <div className={`view active phone-terminal phone-terminal--${pane}`} id="view-terminais">
     <div className="phone-terminal__toolbar">
       {pane !== 'list' && <button type="button" className="mac-tool phone-terminal__back" aria-label={translate(pane === 'terminal' ? 'terminal.phone.backSessions' : pane === 'files' ? 'terminal.phone.backTerminal' : 'terminal.phone.backFiles')} onClick={() => navigate({ type: 'back' })}><ChevronLeft size={26} /></button>}
-      <div className="phone-terminal__heading"><h1 tabIndex={-1} ref={heading}>{title}</h1><span className={subtitleTone.trim() || undefined}>{status ? <ActivityIndicator tone={status.tone} animated={status.animated} className="phone-terminal__activity" /> : null}{subtitle}</span></div>
+      <div className="phone-terminal__heading"><h1 tabIndex={-1} ref={heading}>{title}</h1>{subtitle ? <span className={subtitleTone.trim() || undefined}>{status ? <ActivityIndicator tone={status.tone} animated={status.animated} className="phone-terminal__activity" /> : null}{subtitle}</span> : null}</div>
       {pane === 'list' && <div className="phone-terminal__actions">
         <button type="button" className="mac-tool" disabled={!available} aria-label={translate('terminal.profiles.title')} title={translate('terminal.profiles.title')} onClick={() => setProfiles(true)}><UserRound size={22} /></button>
-        <button type="button" className="mac-tool" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker(true)}><Plus size={24} /></button>
+        <button type="button" className="mac-tool phone-terminal__new-icon" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker({ path: '' })}><Plus size={24} /></button>
       </div>}
       {pane === 'terminal' && <div className="phone-terminal__actions">
         <button type="button" className="mac-tool" disabled={!supported || selected.status !== 'running'} aria-label={translate('terminal.phone.sessionFiles')} onClick={() => navigate({ type: 'files' })}><FolderOpen size={22} /></button>
@@ -189,16 +288,34 @@ export default function PhoneWorkbench() {
     </div>
     {!available && <p className="phone-terminal__notice">{translate('terminal.common.desktopOnly')}</p>}
     {pane === 'list' ? <>
-      <label className="phone-terminal__search"><Search size={16} aria-hidden="true" /><span className="sr-only">{translate('terminal.phone.searchSessions')}</span><input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={translate('terminal.session.searchPlaceholder')} /></label>
-      <div className="phone-terminal__sessions" aria-label={translate('terminal.phone.terminalSessions')}>
-        {filtered.map((session, index) => <SessionCard key={session.id} session={session} selected={false} order={index} touch onSelect={open} onMenu={setMenuFor} />)}
-        {!hydrated && <p role="status">{translate('terminal.phone.loadingSessions')}</p>}
-        {hydrated && sessions.length > 0 && !filtered.length && <p>{translate('terminal.phone.noSessionsFound')}</p>}
-        {hydrated && available && !sessions.length && <div className="page-empty"><h2>{translate('terminal.session.noneOpen')}</h2><p>{translate('terminal.phone.emptyDescription')}</p><button type="button" className="btn btn-primary" onClick={() => setPicker(true)}>{translate('terminal.session.new')}</button></div>}
+      <div className="phone-terminal__filters">
+        <SearchInput value={query} onChange={setQuery} placeholder={translate('terminal.session.searchPlaceholder')} label={translate('terminal.phone.searchSessions')} />
+        <SegmentedControl
+          label={translate('terminal.phone.filterLabel')}
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { value: 'all', label: translate('terminal.phone.filter.all') },
+            { value: 'active', label: translate('terminal.phone.filter.active'), count: hydrated ? activeCount : undefined },
+            { value: 'finished', label: translate('terminal.phone.filter.finished') },
+          ]}
+        />
       </div>
+      <div className={`phone-terminal__sessions${settled ? ' is-settled' : ''}`} aria-label={`${translate('terminal.phone.terminalSessions')}, ${countLabel}`} aria-busy={!hydrated || undefined}>
+        {hydrated ? filtered.map((session) => <PhoneSessionCard key={session.id} session={session} onSelect={open} onMenu={setMenuFor} />) : null}
+        {!hydrated && <>
+          <span className="sr-only" role="status">{translate('terminal.phone.loadingSessions')}</span>
+          <PhoneSessionSkeleton /><PhoneSessionSkeleton /><PhoneSessionSkeleton />
+        </>}
+        {hydrated && sessions.length > 0 && !filtered.length && <div className="phone-terminal__empty"><p>{translate(query.trim() ? 'terminal.phone.noSessionsFound' : 'terminal.phone.noSessionsInFilter')}</p></div>}
+        {hydrated && available && !sessions.length && <div className="phone-terminal__empty"><h2>{translate('terminal.session.noneOpen')}</h2><p>{translate('terminal.phone.emptyDescription')}</p></div>}
+      </div>
+      {available && <div className="phone-terminal__quick">
+        <button type="button" className="phone-terminal__quick-button" onClick={() => setPicker({ path: '' })}><Plus size={20} strokeWidth={2.2} aria-hidden="true" />{translate('terminal.session.new')}</button>
+      </div>}
     </> : pane === 'terminal' ? <>
       {!supported && <p className="phone-terminal__notice" role="status">{translate('terminal.phone.updateDesktop')}</p>}
-      {supported && <PhoneTerminal key={selected.id} session={selected} visible={terminalVisible} interactive={interactive} onPress={press} onCompose={() => setComposing(true)} onTakeControl={() => requestTerminalControl(selected.id).catch(error => notify(error.message, 'warning'))} />}
+      {supported && <PhoneTerminal key={selected.id} session={selected} visible={terminalVisible} onPress={press} onTakeControl={() => requestTerminalControl(selected.id).catch(error => notify(error.message, 'warning'))} />}
       {supported && <PhoneComposer
         open={composing}
         sessionId={selected.id}
@@ -213,18 +330,54 @@ export default function PhoneWorkbench() {
       />}
       {['exited', 'error', 'disconnected'].includes(selected.status) && <p className={`phone-terminal__notice${selected.status === 'error' || (selected.status === 'exited' && selected.exitCode !== 0) ? ' is-bad' : ''}`} role="status">{selected.error || describe(selected).label}</p>}
       {['exited', 'error'].includes(selected.status) && <button type="button" className="btn btn-ghost" onClick={() => reopen(selected.id)}><RotateCcw size={16} />{translate('terminal.phone.reopenTerminal')}</button>}
-      {supported && <div className="phone-terminal__keys" aria-label={translate('terminal.phone.terminalKeys')}>
-        {KEYS.map(([label, data, name]) => <button type="button" disabled={!interactive} key={label} aria-label={name.startsWith('terminal.') ? translate(name) : name} onPointerDown={press} onClick={() => sendAndRestore(data)}>{label}</button>)}
-        {canPaste() && <button type="button" disabled={!interactive} aria-label={translate('terminal.phone.pasteLabel')} onPointerDown={press} onClick={paste}><ClipboardPaste size={16} aria-hidden="true" />{translate('terminal.phone.paste')}</button>}
+      {supported && controller && <PhoneKeyboardSheet
+        open={keysOpen}
+        controller={controller}
+        state={keyState}
+        interactive={interactive}
+        prefs={keyboardPrefs}
+        onPrefsChange={updateKeyboardPrefs}
+        canVibrate={canVibrate()}
+        onPaste={paste}
+        onNativeKeyboard={nativeKeyboard}
+        onClose={() => setKeysOpen(false)}
+      />}
+      {supported && controller && !keysOpen && <div className="phone-keybar" role="toolbar" aria-label={translate('terminal.phone.terminalKeys')}>
+        <button type="button" className={`phone-keybar__keys${keyState.any ? ' is-armed' : ''}`} aria-expanded={keysOpen} aria-label={keyState.any ? translate('terminal.phone.keys.openArmed', { keys: armedLabel }) : translate('terminal.phone.keys.open')} onMouseDown={(event) => event.preventDefault()} onClick={openKeys}>
+          <Keyboard size={22} aria-hidden="true" />
+        </button>
+        {keyboardPrefs.favorites.map((id) => (id === PASTE_KEY
+          ? <button key={id} type="button" className="phone-keybar__key" disabled={!interactive} aria-label={keyName(id)} onPointerDown={press} onMouseDown={(event) => event.preventDefault()} onClick={paste}>{keyLabel(id)}</button>
+          : <button key={id} type="button" className={`phone-keybar__key${KEY_CATALOG[id].icon ? ' phone-keybar__key--icon' : ''}`} disabled={!interactive} aria-label={keyName(id)} {...keyHandlers(controller, KEY_CATALOG[id].key, KEY_CATALOG[id].mods, press)}>
+            {KEY_CATALOG[id].icon === 'paste' ? <ClipboardPaste size={20} aria-hidden="true" /> : keyLabel(id)}
+          </button>))}
+        <button type="button" className="phone-keybar__more" disabled={!interactive} aria-label={translate('terminal.phone.quick.open')} onMouseDown={(event) => event.preventDefault()} onClick={openQuick}><MoreHorizontal size={22} aria-hidden="true" /></button>
+        <button type="button" className="phone-keybar__send" disabled={!interactive} aria-label={translate('terminal.phone.composer.open')} onMouseDown={(event) => event.preventDefault()} onClick={() => { setKeysOpen(false); setComposing(true); }}><Send size={20} aria-hidden="true" /></button>
       </div>}
+      {supported && <PhoneQuickCommands
+        open={quickOpen}
+        interactive={interactive}
+        onClose={() => setQuickOpen(false)}
+        onInsert={(command) => deliverQuick(command, false)}
+        onRun={(command) => deliverQuick(command, true)}
+      />}
     </> : <PhoneFiles key={selected.id} session={selected} path={route.path} preview={pane === 'preview'} onPreview={path => navigate({ type: 'preview', path })} />}
-    {picker && <NewSessionPopover onClose={() => setPicker(false)} onPick={(path, name) => { setPicker(false); const id = openSession(path, { name }); if (id) open(id); }} />}
-    {folderFor && <NewSessionPopover
+    {picker && <NewSessionFlow initialPath={picker.path} onClose={() => setPicker(null)} onNotify={notify}
+      onOpen={(id) => { setPicker(null); open(id); }} />}
+    {pickProject && <DirectoryBrowser
+      title={translate('terminal.browser.addProject')}
+      onClose={() => { setPickProject(false); try { requestNavigateBack(); } catch (_error) { /* sem casca */ } }}
+      onConfirm={(path) => {
+        setPickProject(false);
+        try { postProjectPicked(path, baseName(path)); } catch (error) { notify(error.message, 'warning'); }
+      }}
+    />}
+    {folderFor && <DirectoryBrowser
       startPath={folderFor.cwd}
       title={translate('terminal.session.changeFolderTitle')}
       confirmLabel={translate('terminal.menu.changeFolder')}
       onClose={() => setFolderFor(null)}
-      onPick={(path) => {
+      onConfirm={(path) => {
         const session = folderFor;
         setFolderFor(null);
         if (!path || path === session.cwd) return;
@@ -275,9 +428,13 @@ export default function PhoneWorkbench() {
         else setSessionSubtitle(request.sessionId, value);
       }}
     />
-    <AppModal open={confirmClose} title={translate('terminal.phone.closeNamed', { name: selected?.name })} onClose={() => { if (!closing) setConfirmClose(false); }} footer={<>
-      <button type="button" className="btn btn-ghost" autoFocus disabled={closing} onClick={() => setConfirmClose(false)}>{translate('terminal.common.cancel')}</button>
+    <AppModal open={Boolean(closeFor)} title={translate('terminal.phone.closeNamed', { name: closeFor?.name })} onClose={() => { if (!closing) setCloseFor(null); }} footer={<>
+      <button type="button" className="btn btn-ghost" autoFocus disabled={closing} onClick={() => setCloseFor(null)}>{translate('terminal.common.cancel')}</button>
       <button type="button" className="btn btn-danger" disabled={closing} onClick={endSession}>{translate(closing ? 'terminal.phone.closing' : 'terminal.menu.closeSession')}</button>
     </>}><p>{translate('terminal.phone.closeDescription')}</p></AppModal>
+    <AppModal open={Boolean(restartFor)} title={translate('terminal.phone.restartNamed', { name: restartFor?.name })} onClose={() => { if (!closing) setRestartFor(null); }} footer={<>
+      <button type="button" className="btn btn-ghost" autoFocus disabled={closing} onClick={() => setRestartFor(null)}>{translate('terminal.common.cancel')}</button>
+      <button type="button" className="btn btn-danger" disabled={closing} onClick={restartSession}>{translate(closing ? 'terminal.phone.restarting' : 'terminal.menu.restartTerminal')}</button>
+    </>}><p>{translate('terminal.phone.restartDescription')}</p></AppModal>
   </div>;
 }

@@ -4,6 +4,7 @@ import { AppState, Text } from 'react-native';
 
 import App, { HOME_PROXY_GRACE_MS, SHELL_RECONNECT_DEADLINE_MS } from './App';
 import { setLocale } from './src/i18n';
+import { darkColors, lightColors } from './src/ui/tokens';
 import { clearDiagnostics, recentDiagnostics } from './src/state/diagnostics';
 
 const mockTunnel = {
@@ -60,6 +61,14 @@ jest.mock('react-native-safe-area-context', () => require('react-native-safe-are
 jest.mock('react-native-webview', () => ({ WebView: 'WebView' }));
 jest.mock('expo-camera', () => ({ CameraView: 'CameraView', useCameraPermissions: () => [{ granted: false }, jest.fn()] }));
 jest.mock('expo-clipboard', () => ({ getStringAsync: jest.fn(async () => '') }));
+jest.mock('expo-notifications', () => ({
+  setNotificationHandler: jest.fn(),
+  setNotificationChannelAsync: jest.fn(async () => null),
+  getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: true })),
+  requestPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
+  scheduleNotificationAsync: jest.fn(async () => 'id'),
+  AndroidImportance: { DEFAULT: 3 }
+}));
 const mockSecure = new Map();
 jest.mock('expo-secure-store', () => ({
   getItemAsync: async key => mockSecure.get(key) ?? null,
@@ -117,7 +126,7 @@ const createNodeMock = element => {
   return node;
 };
 
-// O app abre sempre no início. Quem precisa do terminal toca em Continuar,
+// O app abre sempre no início. Quem precisa do terminal toca em Abrir terminal,
 // que é o único caminho a partir do hub, e é o que a pessoa faz no aparelho.
 async function render({ home = false } = {}) {
   let tree;
@@ -128,7 +137,7 @@ async function render({ home = false } = {}) {
 }
 
 async function continueToTerminal(tree) {
-  await press(tree, 'Continuar em Mac de Foco');
+  await press(tree, 'Abrir terminal em Mac de Foco');
 }
 
 beforeEach(async () => {
@@ -424,20 +433,34 @@ test('the appearance chosen in settings reaches the page and is remembered', asy
   expect(webView().props.injectedJavaScriptBeforeContentLoaded).toContain('"theme":"system"');
   // Do terminal ao início e do início aos ajustes.
   await press(tree, 'Ir para o início');
-  await press(tree, 'Abrir ajustes');
+  await press(tree, 'Ajustes');
   await press(tree, 'Escuro');
   expect(mockSecure.get('cialai.theme')).toBe('dark');
   // O voltar dos ajustes leva ao início, não à lista.
   await press(tree, 'Ir para o início');
-  expect(text(tree)).toMatch(/Continuar/);
-  expect(text(tree)).not.toMatch(/Escolha onde deseja continuar/);
+  expect(text(tree)).toMatch(/Abrir terminal/);
+  expect(text(tree)).not.toMatch(/Computadores Todos Conectados/);
+  await act(async () => tree.unmount());
+});
+
+// O fundo das abas segue a escolha dos ajustes, não o sistema: o App é quem
+// fornece o tema e não pode ler o próprio contexto.
+test('a dark appearance chosen in settings paints the tab background even with a light system', async () => {
+  mockSecure.set('cialai.theme', 'dark');
+  const tree = await render({ home: true });
+  const background = () => [tree.root.findByProps({ testID: 'tabbed' }).props.style].flat(Infinity)
+    .reduce((color, style) => style?.backgroundColor ?? color, null);
+  expect(background()).toBe(darkColors.background);
+  await press(tree, 'Ajustes');
+  await press(tree, 'Claro');
+  expect(background()).toBe(lightColors.background);
   await act(async () => tree.unmount());
 });
 
 test('the biometric policy chosen in settings is remembered', async () => {
   const tree = await render();
   await press(tree, 'Ir para o início');
-  await press(tree, 'Abrir ajustes');
+  await press(tree, 'Ajustes');
   await press(tree, 'Desligada');
   expect(mockSecure.get('cialai.biometrics')).toBe('off');
   expect(text(tree)).toMatch(/Nunca pede confirmação/);
@@ -449,15 +472,47 @@ test('opens on the home without a last computer and the terminal card leads to t
   const tree = await render({ home: true });
   expect(mockTunnel.connect).not.toHaveBeenCalled();
   expect(text(tree)).toMatch(/Início/);
-  expect(text(tree)).toMatch(/Um vinculado/);
-  expect(text(tree)).not.toMatch(/Continuar/);
-  await press(tree, 'Abrir o terminal');
-  expect(text(tree)).toMatch(/Escolha onde deseja continuar/);
+  expect(text(tree)).toMatch(/Ações rápidas/);
+  expect(text(tree)).toMatch(/Mac de Foco/);
+  await press(tree, 'Ver terminais');
+  expect(text(tree)).toMatch(/Computadores Todos Conectados/);
   expect(mockTunnel.connect).not.toHaveBeenCalled();
   // O voltar da lista leva ao início.
   await press(tree, 'Ir para o início');
-  expect(text(tree)).toMatch(/Seus computadores a um toque/);
+  expect(text(tree)).toMatch(/Ações rápidas/);
   await act(async () => tree.unmount());
+});
+
+// A barra inferior fica nas telas nativas de topo e some na página do computador.
+test('the bottom navigation switches tabs and is absent from the terminal page', async () => {
+  mockStore.load.mockResolvedValue({ store: { ...stored, lastDesktopId: null }, legacyDiscarded: false });
+  const tree = await render({ home: true });
+  const tab = label => tree.root.findAll(node => node.props.accessibilityRole === 'tab' && node.props.accessibilityLabel === label)[0];
+  expect(tab('Início').props.accessibilityState).toEqual({ selected: true });
+  await press(tree, 'Projetos');
+  expect(text(tree)).toMatch(/Seus projetos aparecem aqui/);
+  expect(tab('Projetos').props.accessibilityState).toEqual({ selected: true });
+  await press(tree, 'Agentes');
+  expect(text(tree)).toMatch(/Ainda sem leitura das contas/);
+  await press(tree, 'Ajustes');
+  expect(tab('Ajustes').props.accessibilityState).toEqual({ selected: true });
+  // Sem último computador, Terminais leva à lista, que destaca a aba.
+  await press(tree, 'Terminais');
+  expect(text(tree)).toMatch(/Computadores Todos Conectados/);
+  expect(tab('Terminais').props.accessibilityState).toEqual({ selected: true });
+  expect(mockTunnel.connect).not.toHaveBeenCalled();
+  await press(tree, 'Início');
+  expect(text(tree)).toMatch(/Ações rápidas/);
+  await act(async () => tree.unmount());
+
+  // Com a página do computador aberta, a barra não aparece.
+  mockStore.load.mockResolvedValue({ store: stored, legacyDiscarded: false });
+  const shell = await render();
+  const tabs = () => shell.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function');
+  expect(tabs()).toHaveLength(0);
+  await press(shell, 'Ir para o início');
+  expect(tabs()).toHaveLength(5);
+  await act(async () => shell.unmount());
 });
 
 // O app abre sempre no início, mesmo com o último computador respondendo:
@@ -466,9 +521,9 @@ test('opens on the home with a healthy last computer and continues from there', 
   const tree = await render({ home: true });
   expect(mockTunnel.connect).not.toHaveBeenCalled();
   expect(webViewMounts).toHaveLength(0);
-  expect(text(tree)).toMatch(/Continuar/);
+  expect(text(tree)).toMatch(/Abrir terminal/);
   expect(text(tree)).toMatch(/Mac de Foco/);
-  await press(tree, 'Continuar em Mac de Foco');
+  await press(tree, 'Abrir terminal em Mac de Foco');
   expect(mockTunnel.connect).toHaveBeenCalledTimes(1);
   expect(tree.root.findAll(node => node.props.source?.uri)[0].props.source.uri).toBe(proxyUrl);
   await act(async () => tree.unmount());
@@ -500,13 +555,13 @@ test('going to the home keeps the proxy open and returning to the terminal reuse
   const webView = () => tree.root.findAll(node => node.props.source?.uri);
   expect(webView()).toHaveLength(1);
   await press(tree, 'Ir para o início');
-  expect(text(tree)).toMatch(/Continuar/);
+  expect(text(tree)).toMatch(/Abrir terminal/);
   expect(text(tree)).toMatch(/Desconectar/);
   expect(webView()).toHaveLength(0);
   expect(mockTunnel.closeDesktop).not.toHaveBeenCalled();
   await advance(HOME_PROXY_GRACE_MS - 1_000);
   expect(mockTunnel.closeDesktop).not.toHaveBeenCalled();
-  await press(tree, 'Abrir o terminal');
+  await press(tree, 'Ver terminais');
   expect(mockTunnel.closeDesktop).not.toHaveBeenCalled();
   expect(mockTunnel.openDesktop).toHaveBeenCalledTimes(2);
   expect(webView()[0].props.source.uri).toBe(proxyUrl);
@@ -515,6 +570,28 @@ test('going to the home keeps the proxy open and returning to the terminal reuse
   await advance(HOME_PROXY_GRACE_MS);
   expect(mockTunnel.closeDesktop).not.toHaveBeenCalled();
   expect(recentDiagnostics().map(line => line.message)).toContain(`app: proxy kept for ${HOME_PROXY_GRACE_MS} ms while on the home`);
+  await act(async () => tree.unmount());
+});
+
+test('the bar of the terminal page switches to another computer and closes the previous proxy once it opens', async () => {
+  const otherId = 'd_BBBBBBBBBBBBBBBBBBBBBB';
+  const otherUrl = `http://127.0.0.1:47401/?k=${'M'.repeat(43)}`;
+  mockStore.load.mockResolvedValue({ store: { ...stored, desktops: [...stored.desktops, { ...stored.desktops[0], id: otherId,
+    name: 'Estúdio', deviceId: 'dev_BBBBBBBBBBBBBBBBBBBBBB' }] }, legacyDiscarded: false });
+  mockStore.tokens.set(otherId, token);
+  mockTunnel.connect.mockImplementation(async id => ({ desktopId: id, transport: 'direct', path: 'lan', elapsedMs: 10 }));
+  mockTunnel.openDesktop.mockImplementation(async id => id === otherId
+    ? { url: otherUrl, port: 47401, nonce: 'M'.repeat(43) } : { url: proxyUrl, port: 47400, nonce: 'N'.repeat(43) });
+  const tree = await render();
+  const webView = () => tree.root.findAll(node => node.props.source?.uri);
+  expect(webView()[0].props.source.uri).toBe(proxyUrl);
+  await act(async () => { labelled(tree, 'Trocar de computador, atual Mac de Foco').props.onPress(); });
+  await act(async () => { pressable(tree, 'Estúdio').props.onPress(); });
+  await flush();
+  expect(mockTunnel.openDesktop).toHaveBeenLastCalledWith(otherId, token, expect.anything());
+  expect(webView()).toHaveLength(1);
+  expect(webView()[0].props.source.uri).toBe(otherUrl);
+  expect(mockTunnel.closeDesktop).toHaveBeenCalledWith(desktopId);
   await act(async () => tree.unmount());
 });
 
@@ -527,7 +604,7 @@ test('the proxy kept for the home closes after the grace period and on an explic
   expect(text(tree)).not.toMatch(/Desconectar/);
   expect(recentDiagnostics().map(line => line.message)).toContain(`app: proxy closed ${HOME_PROXY_GRACE_MS} ms after leaving the terminal`);
   // A volta depois do prazo abre o proxy de novo.
-  await press(tree, 'Continuar em Mac de Foco');
+  await press(tree, 'Abrir terminal em Mac de Foco');
   expect(mockTunnel.openDesktop).toHaveBeenCalledTimes(2);
   expect(text(tree)).toMatch(/Mac de Foco/);
   await press(tree, 'Ir para o início');

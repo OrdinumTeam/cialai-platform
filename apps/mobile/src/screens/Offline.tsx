@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { retryDelay } from '../state/connection';
 import type { OfflineReason } from '../state/machine';
 import { useI18n } from '../i18n';
 import { RequestGate } from '../network/request-gate';
-import { usePalette } from '../theme';
+import { useTokens } from '../theme';
+import { PrimaryButton, ProgressIndicator, SecondaryButton, StatusBadge, space, typography } from '../ui';
 
 const reasonKeys: Record<OfflineReason, { title: string; detail: string }> = {
   reconnecting: { title: 'mobile.offline.reconnecting.title', detail: 'mobile.offline.reconnecting.detail' },
@@ -31,7 +32,7 @@ type Props = {
 };
 
 export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, onDesktops, onSettings, onPair, onPairAgain }: Props) {
-  const palette = usePalette();
+  const { colors } = useTokens();
   const { t } = useI18n();
   const [checking, setChecking] = useState(false);
   const [gate] = useState(() => new RequestGate());
@@ -84,55 +85,35 @@ export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, o
   };
 
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: palette.background }]}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={[styles.status, { backgroundColor: palette.surface, borderColor: palette.separator }]}>
-          <View style={[styles.statusDot, { backgroundColor: connecting ? palette.warning : palette.danger }]} />
-          <Text style={[styles.statusText, { color: palette.secondaryLabel }]}>
-            {t(connecting ? 'mobile.offline.statusConnecting' : 'mobile.offline.status')}
-          </Text>
+        <View style={styles.status}>
+          <StatusBadge label={t(connecting ? 'mobile.offline.statusConnecting' : 'mobile.offline.status')}
+            tone={connecting ? 'warning' : 'danger'} variant="pill" />
         </View>
-        <Text accessibilityRole="header" style={[styles.title, { color: palette.label }]}>{t(copy.title)}</Text>
-        <Text style={[styles.body, { color: palette.secondaryLabel }]}>{t(copy.detail)}</Text>
+        <Text accessibilityRole="header" style={[typography.largeTitle, { color: colors.text }]}>{t(copy.title)}</Text>
+        <Text style={[typography.body, styles.body, { color: colors.textSecondary }]}>{t(copy.detail)}</Text>
         {reason === 'reserve-preparing' && reserveProgress !== null ? (
           <View accessibilityLiveRegion="polite" style={styles.progress}>
-            <View style={styles.progressHeader}>
-              <Text style={[styles.progressLabel, { color: palette.label }]}>{t('mobile.transport.torDescription')}</Text>
-              <Text style={[styles.progressValue, { color: palette.secondaryLabel }]}>
-                {t('mobile.reserve.progress', { progress: reserveProgress })}
-              </Text>
-            </View>
-            <View style={[styles.progressTrack, { backgroundColor: palette.separator }]}>
-              <View style={[styles.progressFill, { backgroundColor: palette.warning, width: `${reserveProgress}%` }]} />
-            </View>
+            <ProgressIndicator detail={t('mobile.reserve.progress', { progress: reserveProgress })}
+              label={t('mobile.transport.torDescription')} tone="warning" value={reserveProgress / 100} />
           </View>
         ) : null}
-        {removed ? (
-          <Pressable accessibilityRole="button" onPress={() => leave(onPairAgain)}
-            style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }]}>
-            <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.offline.pairAgain')}</Text>
-          </Pressable>
-        ) : (
-          <Pressable accessibilityRole="button" disabled={checking} onPress={() => void retry()}
-            style={({ pressed }) => [styles.primary, { backgroundColor: pressed ? palette.accentPressed : palette.accent }, checking && styles.disabled]}>
-            {checking ? <ActivityIndicator color={palette.accentText} />
-              : <Text style={[styles.primaryText, { color: palette.accentText }]}>{t('mobile.offline.retry')}</Text>}
-          </Pressable>
-        )}
-        <Pressable accessibilityLabel={t('mobile.home.open')} accessibilityRole="button" onPress={() => leave(onHome)} style={styles.secondary}>
-          <Text style={[styles.secondaryText, { color: palette.accent }]}>{t('mobile.home.back')}</Text>
-        </Pressable>
+        <View style={styles.actions}>
+          {removed
+            ? <PrimaryButton label={t('mobile.offline.pairAgain')} onPress={() => leave(onPairAgain)} size="lg" />
+            : <PrimaryButton label={t('mobile.offline.retry')} loading={checking} onPress={() => void retry()} size="lg" />}
+          <SecondaryButton accessibilityLabel={t('mobile.home.open')} icon="house" label={t('mobile.home.back')}
+            onPress={() => leave(onHome)} variant="link" />
+        </View>
         <View style={styles.shortcuts}>
-          <Pressable accessibilityLabel={t('mobile.home.openDesktops')} accessibilityRole="button" onPress={() => leave(onDesktops)} style={styles.shortcut}>
-            <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.desktops')}</Text>
-          </Pressable>
-          <Pressable accessibilityLabel={t('mobile.desktops.openSettings')} accessibilityRole="button" onPress={() => leave(onSettings)} style={styles.shortcut}>
-            <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.settings')}</Text>
-          </Pressable>
+          <SecondaryButton accessibilityLabel={t('mobile.home.openDesktops')} label={t('mobile.home.desktops')}
+            onPress={() => leave(onDesktops)} variant="link" />
+          <SecondaryButton accessibilityLabel={t('mobile.desktops.openSettings')} label={t('mobile.home.settings')}
+            onPress={() => leave(onSettings)} variant="link" />
           {removed ? null : (
-            <Pressable accessibilityLabel={t('mobile.home.openPair')} accessibilityRole="button" onPress={() => leave(onPair)} style={styles.shortcut}>
-              <Text style={[styles.shortcutText, { color: palette.accent }]}>{t('mobile.home.pair')}</Text>
-            </Pressable>
+            <SecondaryButton accessibilityLabel={t('mobile.home.openPair')} label={t('mobile.home.pair')}
+              onPress={() => leave(onPair)} variant="link" />
           )}
         </View>
       </ScrollView>
@@ -142,24 +123,10 @@ export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, o
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 28, paddingVertical: 32 },
-  status: { minHeight: 32, alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: StyleSheet.hairlineWidth, borderRadius: 16, paddingHorizontal: 12, marginBottom: 24 },
-  statusDot: { width: 8, height: 8, borderRadius: 4 },
-  statusText: { fontSize: 13, fontWeight: '600' },
-  title: { fontSize: 28, lineHeight: 34, fontWeight: '700' },
-  body: { marginTop: 12, fontSize: 17, lineHeight: 25 },
-  progress: { marginTop: 24, gap: 8 },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: 12 },
-  progressLabel: { flexShrink: 1, fontSize: 15, fontWeight: '600' },
-  progressValue: { fontSize: 15, fontVariant: ['tabular-nums'] },
-  progressTrack: { height: 6, borderRadius: 3, overflow: 'hidden' },
-  progressFill: { height: 6, borderRadius: 3 },
-  primary: { minHeight: 50, borderRadius: 25, alignItems: 'center', justifyContent: 'center', marginTop: 32 },
-  primaryText: { fontSize: 17, fontWeight: '600' },
-  secondary: { minHeight: 44, alignItems: 'center', justifyContent: 'center', marginTop: 8 },
-  secondaryText: { fontSize: 17, fontWeight: '600' },
-  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4, marginTop: 4 },
-  shortcut: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 12 },
-  shortcutText: { fontSize: 15, fontWeight: '600' },
-  disabled: { opacity: 0.62 }
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: space.xl, paddingVertical: space.xxl },
+  status: { flexDirection: 'row', marginBottom: space.lg },
+  body: { marginTop: space.sm },
+  progress: { marginTop: space.lg },
+  actions: { marginTop: space.xxl, gap: space.xxs },
+  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.xxs }
 });
