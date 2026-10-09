@@ -673,6 +673,14 @@ function AppContent() {
     void closeDesktop(kept).catch(() => undefined).then(() => refreshStatus());
   }, [refreshStatus, releaseKeptShell]);
 
+  // A aba Terminais volta ao último lugar dela: a lista de computadores, se a
+  // pessoa foi por último a Gerenciar computadores, ou a página do computador.
+  const terminalsList = useRef(false);
+  useEffect(() => {
+    if (screen.kind === 'desktops') terminalsList.current = true;
+    else if (screen.kind === 'shell') terminalsList.current = false;
+  }, [screen.kind]);
+
   // O card Terminal volta ao último computador; sem um, a lista escolhe.
   const openTerminal = useCallback(() => {
     const last = findDesktop(storeRef.current, storeRef.current.lastDesktopId);
@@ -681,9 +689,13 @@ function AppContent() {
     else dispatch({ type: 'show-desktops' });
   }, [dispatch, openSelected]);
 
-  // Terminais segue o mesmo caminho do card Terminal do início.
+  // Terminais segue o mesmo caminho do card Terminal do início, menos quando a
+  // lista de computadores foi o último lugar da aba.
   const selectTab = useCallback((tab: TabId) => {
-    if (tab === 'terminals') openTerminal();
+    if (tab === 'terminals') {
+      if (terminalsList.current) dispatch({ type: 'show-desktops' });
+      else openTerminal();
+    }
     else if (tab === 'home') dispatch({ type: 'show-home' });
     else if (tab === 'projects') dispatch({ type: 'show-projects' });
     else if (tab === 'agents') dispatch({ type: 'show-agents' });

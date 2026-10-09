@@ -446,6 +446,7 @@ export default Object.freeze({
   'terminal.phone.arrowDown': 'Down arrow',
   'terminal.phone.newOutput': 'New output, go to end',
   'terminal.phone.backToEnd': 'Go to end',
+  'terminal.phone.opening': 'Opening the terminal…',
   'terminal.phone.otherDeviceTitle': 'The terminal is on another device',
   'terminal.phone.otherDeviceDescription': 'Take control to fit the content to the width of this screen.',
   'terminal.phone.takeControl': 'Fit to screen and take control',

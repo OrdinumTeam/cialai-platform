@@ -254,6 +254,8 @@ export default Object.freeze({
   'mobile.settings.title': 'Configuración',
   'mobile.shell.allDesktops': 'Administrar computadoras',
   'mobile.shell.current': 'Actual',
+  'mobile.shell.loading.detail': 'Conectando a {name}. La terminal aparece en cuanto la página responda.',
+  'mobile.shell.loading.title': 'Abriendo la terminal',
   'mobile.shell.reconnecting.detail': 'La página sigue aquí mientras vuelve el camino hasta la computadora.',
   'mobile.shell.reconnecting.title': 'Reconectando',
   'mobile.shell.switchDesktop': 'Cambiar de computadora, actual {name}',

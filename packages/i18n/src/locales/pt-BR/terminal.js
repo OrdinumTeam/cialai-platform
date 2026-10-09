@@ -446,6 +446,7 @@ export default Object.freeze({
   'terminal.phone.arrowDown': 'Seta para baixo',
   'terminal.phone.newOutput': 'Saída nova, voltar ao fim',
   'terminal.phone.backToEnd': 'Voltar ao fim',
+  'terminal.phone.opening': 'Abrindo o terminal…',
   'terminal.phone.otherDeviceTitle': 'O terminal está em outro dispositivo',
   'terminal.phone.otherDeviceDescription': 'Assuma o controle para ajustar o conteúdo à largura desta tela.',
   'terminal.phone.takeControl': 'Ajustar à tela e assumir controle',

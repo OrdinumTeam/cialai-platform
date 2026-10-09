@@ -1894,6 +1894,16 @@ export function applicationCursorKeys(id) {
   return Boolean(session?.term?.modes?.applicationCursorKeysMode);
 }
 
+// O terminal ainda não está acessível: o shell está abrindo ou a página
+// ainda não recebeu a primeira medida do computador para saber de quem é a tela.
+export function terminalAttaching(id) {
+  const session = state.sessions.get(id || state.selectedId);
+  if (!session) return false;
+  if (session.status === 'starting') return true;
+  if (state.demo || session.status !== 'running') return false;
+  return session.ptyId == null || !session.viewport?.latest;
+}
+
 // No iPhone, foco no terminal significa teclado aberto.
 export function terminalHasFocus(id) {
   const session = state.sessions.get(id || state.selectedId);
