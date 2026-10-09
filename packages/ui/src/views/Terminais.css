@@ -644,6 +644,12 @@ body.is-dragging-path *{cursor:grabbing !important}
    o conteudo nao pisca a cada troca de dono e o aviso fica embaixo. */
 [data-form-factor="phone"] .phone-terminal__host[aria-hidden="true"] { opacity: .38; pointer-events: none; }
 [data-form-factor="phone"] .phone-terminal__ownership { position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: var(--phone-radius-card); background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(20px) saturate(160%); backdrop-filter: blur(20px) saturate(160%); box-shadow: var(--mac-shadow-popover); text-align: left; animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-terminal__loading { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: var(--mac-surface-2); color: var(--phone-text-2); animation: phoneLoadingIn var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-terminal__loading p { margin: 0; font-size: 15px; font-weight: 600; }
+[data-form-factor="phone"] .phone-terminal__spinner { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--phone-primary-soft); border-top-color: var(--phone-primary); animation: phoneSpin .8s linear infinite; }
+@keyframes phoneSpin { to { transform: rotate(360deg); } }
+@keyframes phoneLoadingIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] .phone-terminal__spinner { animation-duration: 2.4s; } }
 [data-form-factor="phone"] .phone-terminal__ownership h2 { margin: 0; font-size: 16px; line-height: 1.35; }
 [data-form-factor="phone"] .phone-terminal__ownership p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--mac-label-2); }
 [data-form-factor="phone"] .phone-terminal__take-control { min-height: 44px; padding: 10px 14px; border: 0; border-radius: 12px; background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 16px; font-weight: 600; flex: none; box-shadow: var(--mac-shadow-primary); transition: transform var(--mac-fast) var(--phone-press-ease); }
@@ -667,7 +673,8 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* A barra reparte a largura: o teclado especial fica um pouco mais largo,
    enviar tem largura fixa e as teclas e o ⋯ dividem o resto por igual, para
    caber de 320 px em diante com os três favoritos. */
-[data-form-factor="phone"] .phone-keybar__keys { flex: 1.3 1 0; min-width: 0; padding: 0; background: var(--phone-primary-soft) !important; color: var(--phone-primary) !important; }
+[data-form-factor="phone"] .phone-keybar__native { flex: 1.3 1 0; min-width: 0; padding: 0; background: var(--phone-primary-soft) !important; color: var(--phone-primary) !important; }
+[data-form-factor="phone"] .phone-keybar__keys { flex: 1 1 0; min-width: 0; padding: 0; }
 [data-form-factor="phone"] .phone-keybar__keys.is-armed { background: var(--phone-primary) !important; color: var(--phone-on-primary) !important; }
 [data-form-factor="phone"] .phone-keybar__key { flex: 1 1 0; min-width: 0; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-form-factor="phone"] .phone-keybar__more { flex: 1 1 0; min-width: 0; }

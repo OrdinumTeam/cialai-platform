@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
@@ -56,6 +56,10 @@ export function Shell({
 }: Props) {
   const { colors } = useTokens();
   const [picker, setPicker] = useState(false);
+  // Cobre o WebView até a página carregar: sem isso o Android mostra a tela
+  // branca enquanto o HTML e o script chegam pelo túnel.
+  const [pageReady, setPageReady] = useState(false);
+  const [cover] = useState(() => new Animated.Value(1));
   const themeMode = useThemeMode();
   const transportColor = useTransportColor();
   const { locale, t } = useI18n();
@@ -68,6 +72,10 @@ export function Shell({
   const originWhitelist = useMemo(() => controlOriginWhitelist(url), [url]);
   // A mesma URL rende o mesmo objeto: a página não recarrega quando o proxy é reaproveitado.
   const source = useMemo(() => ({ uri: url }), [url]);
+
+  useEffect(() => {
+    Animated.timing(cover, { toValue: pageReady ? 0 : 1, duration: pageReady ? 220 : 0, useNativeDriver: true }).start();
+  }, [cover, pageReady]);
 
   const inject = useCallback((script: string) => {
     if (loaded.current) webView.current?.injectJavaScript(script);
@@ -233,34 +241,50 @@ export function Shell({
           </View>
         ) : null}
       </SafeAreaView>
-      <WebView
-        ref={webView}
-        allowsBackForwardNavigationGestures={false}
-        allowsLinkPreview={false}
-        contentInsetAdjustmentBehavior="never"
-        domStorageEnabled
-        injectedJavaScriptBeforeContentLoaded={bootstrapScript}
-        javaScriptEnabled
-        keyboardDisplayRequiresUserAction={false}
-        onContentProcessDidTerminate={() => webView.current?.reload()}
-        onError={handleError}
-        onLoad={() => {
-          loaded.current = true;
-          biometricSession.lock();
-          emitShellState(false);
-        }}
-        onMessage={event => void handleMessage(event)}
-        onOpenWindow={event => void openExternal(event.nativeEvent.targetUrl)}
-        onShouldStartLoadWithRequest={allowNavigation}
-        originWhitelist={originWhitelist}
-        overScrollMode="never"
-        // Puxar para atualizar recarregava a página inteira a cada arrasto no
-        // topo do terminal, e o conteúdo piscava. A página se restaura sozinha.
-        pullToRefreshEnabled={false}
-        sharedCookiesEnabled={false}
-        source={source}
-        style={styles.webView}
-      />
+      <View style={styles.page}>
+        <WebView
+          ref={webView}
+          allowsBackForwardNavigationGestures={false}
+          allowsLinkPreview={false}
+          contentInsetAdjustmentBehavior="never"
+          domStorageEnabled
+          injectedJavaScriptBeforeContentLoaded={bootstrapScript}
+          javaScriptEnabled
+          keyboardDisplayRequiresUserAction={false}
+          onContentProcessDidTerminate={() => webView.current?.reload()}
+          onError={handleError}
+          onLoadStart={() => setPageReady(false)}
+          onLoadEnd={() => setPageReady(true)}
+          onLoad={() => {
+            loaded.current = true;
+            biometricSession.lock();
+            emitShellState(false);
+          }}
+          onMessage={event => void handleMessage(event)}
+          onOpenWindow={event => void openExternal(event.nativeEvent.targetUrl)}
+          onShouldStartLoadWithRequest={allowNavigation}
+          originWhitelist={originWhitelist}
+          overScrollMode="never"
+          // Puxar para atualizar recarregava a página inteira a cada arrasto no
+          // topo do terminal, e o conteúdo piscava. A página se restaura sozinha.
+          pullToRefreshEnabled={false}
+          sharedCookiesEnabled={false}
+          source={source}
+          style={[styles.webView, { backgroundColor: colors.surface }]}
+        />
+        <Animated.View accessibilityLiveRegion="polite" pointerEvents={pageReady ? 'none' : 'auto'} testID="shell-loading"
+          style={[StyleSheet.absoluteFill, styles.loading, { backgroundColor: colors.surface, opacity: cover }]}>
+          {pageReady ? null : (
+            <>
+              <ActivityIndicator color={colors.primary} size="large" />
+              <Text style={[typography.headline, styles.loadingTitle, { color: colors.text }]}>{t('mobile.shell.loading.title')}</Text>
+              <Text style={[typography.footnote, styles.loadingDetail, { color: colors.textSecondary }]}>
+                {t('mobile.shell.loading.detail', { name: desktopName })}
+              </Text>
+            </>
+          )}
+        </Animated.View>
+      </View>
       <BottomSheet onClose={() => setPicker(false)} title={t('mobile.desktops.title')} visible={picker}>
         {desktops.map(desktop => {
           const current = desktop.id === desktopId;
@@ -288,7 +312,11 @@ export function Shell({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  webView: { flex: 1, backgroundColor: 'transparent' },
+  page: { flex: 1 },
+  webView: { flex: 1 },
+  loading: { alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingHorizontal: space.xl },
+  loadingTitle: { fontWeight: '600', textAlign: 'center' },
+  loadingDetail: { textAlign: 'center' },
   toolbar: { minHeight: 56, borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row', alignItems: 'center', gap: space.sm,
     paddingHorizontal: space.md, paddingVertical: 6 },
   selector: { flex: 1, minWidth: 0, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: space.xs, borderRadius: radius.md, paddingHorizontal: space.sm },

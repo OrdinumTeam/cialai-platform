@@ -12,7 +12,7 @@ const boundaries = {
   runtime: `export const getSession=()=>fixture.session, getState=()=>({hydrated:fixture.hydrated??true}), orderedSessions=()=>fixture.sessions??[fixture.session], isDemo=()=>fixture.demo, supportsPhoneTerminal=()=>true, describe=()=>({label:'Em execução'});
     export const SESSION_COLORS=[{id:'verde',light:'#1f9d5b',dark:'#3ccf76'}], canMoveSession=()=>true, launchAgentWhenReady=async()=>{}, changeDirectory=async()=>{}, moveSessionBy=()=>{}, renameSession=()=>{}, restart=async()=>{}, setSessionColor=()=>{}, setSessionSubtitle=()=>{}, togglePinned=()=>{};
   export const applicationCursorKeys=()=>false, blurTerminal=()=>{}, onTerminalFocus=()=>()=>{}, setInputTransform=()=>()=>{};
-  export const bracketedPaste=()=>true, closeSession=async()=>{}, fitAndResize=()=>{}, focusTerminal=()=>{}, hostTerminal=()=>{}, hydrate=async()=>{}, insertText=()=>{}, openSession=()=>{}, pasteText=()=>false, releaseTerminal=()=>{}, reopen=()=>{}, requestTerminalControl=async()=>{}, scrollToBottom=()=>{}, selectSession=()=>{}, sendKey=()=>false, submitText=async()=>true, subscribe=()=>()=>{}, terminalHasFocus=()=>false, viewMounted=()=>{}, watchTail=()=>()=>{};`,
+  export const bracketedPaste=()=>true, closeSession=async()=>{}, fitAndResize=()=>{}, focusTerminal=()=>{}, hostTerminal=()=>{}, hydrate=async()=>{}, insertText=()=>{}, openSession=()=>{}, pasteText=()=>false, releaseTerminal=()=>{}, reopen=()=>{}, requestTerminalControl=async()=>{}, scrollToBottom=()=>{}, selectSession=()=>{}, sendKey=()=>false, submitText=async()=>true, subscribe=()=>()=>{}, terminalAttaching=()=>false, terminalHasFocus=()=>false, viewMounted=()=>{}, watchTail=()=>()=>{};`,
   native: `export const hasBridge=()=>true, NATIVE_ONLY_MESSAGE='', invoke=async()=>[];`,
   AgentProfiles: `export default ()=>null;`,
   'phone-navigation': `export const initialPhoneRoute=()=>({pane:'terminal',sessionId:'fixture',path:null}), phoneRoute=state=>state, phoneRouteStorage=()=>null, readPhoneRoute=()=>fixture.route??({pane:'terminal',sessionId:'fixture',path:null}), writePhoneRoute=()=>{};`,
@@ -69,12 +69,14 @@ test('a barra do terminal traz Teclas, os favoritos, comandos rapidos e o botao 
   const bar=html.match(/<div class="phone-keybar"[\s\S]*?<\/div>/)?.[0]||'';
   assert.ok(bar,'a barra aparece com o terminal aberto');
   const labels=[...bar.matchAll(/aria-label="([^"]+)"/g)].map(match=>match[1]);
-  assert.deepEqual(labels,['Teclas do terminal','Abrir o teclado especial','Esc','Tab','Colar no computador, Ctrl V','Comandos rápidos','Escrever texto para o terminal']);
+  assert.deepEqual(labels,['Teclas do terminal','Teclado do aparelho','Esc','Tab','Colar no computador, Ctrl V','Abrir o teclado especial','Comandos rápidos','Escrever texto para o terminal']);
   // Colar fica à direita do Tab e antes do ⋯, só com o ícone.
   const pasteButton=bar.match(/<button[^>]*aria-label="Colar no computador, Ctrl V"[^>]*>([\s\S]*?)<\/button>/)?.[1]??'';
   assert.match(pasteButton,/<svg/);
   assert.equal(pasteButton.replace(/<[^>]*>/g,'').trim(),'','Colar sem texto na barra');
   assert.match(bar,/phone-keybar__keys[^>]*aria-expanded="false"/);
+  // O teclado do aparelho abre pela barra, sem tocar no terminal.
+  assert.match(bar,/phone-keybar__native/);
   // O botão do teclado especial é só o ícone: o nome fica para o leitor de tela.
   const keysButton=bar.match(/<button[^>]*class="phone-keybar__keys"[^>]*>([\s\S]*?)<\/button>/)?.[1]??'';
   assert.match(keysButton,/<svg/);
