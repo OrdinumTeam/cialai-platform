@@ -327,6 +327,7 @@ function AppContent() {
         dropKeptShell(desktopId);
         await closeDesktop(desktopId).catch(() => undefined);
         await deleteDeviceToken(desktopId).catch(() => undefined);
+        forgetDashboard(desktopId);
         await updateStore(current => removeDesktop(current, desktopId));
         setFailure(desktopId, null);
         endShellReconnect();

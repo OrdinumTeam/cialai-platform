@@ -28,13 +28,17 @@ const ENDED = new Set(['exited', 'error']);
 // Mesmo limiar de aviso do Início; o segundo é o limite esgotado.
 const THRESHOLDS = [0.75, 1] as const;
 const AGENT_KEYS = { codex: 'mobile.home.agent.codex', claude: 'mobile.home.agent.claude' } as const;
+// Com a página aberta chega um retrato por minuto. Um intervalo maior quer
+// dizer que o app ficou sem ouvir o computador, como o retrato guardado em
+// disco desde a última abertura: o que mudou nesse meio não é novidade.
+export const CONTINUOUS_SNAPSHOT_MS = 3 * 60_000;
 
 // Compara o retrato anterior com o novo e devolve só as mudanças que valem
-// aviso. Sem retrato anterior não há aviso: a primeira leitura não é mudança.
-// Sessão que sumiu do retrato foi fechada por alguém e não vira aviso.
+// aviso. Sem retrato anterior recente não há aviso: a primeira leitura não é
+// mudança. Sessão que sumiu do retrato foi fechada por alguém e não vira aviso.
 export function noticesFor(previous: DashboardMessage | null, next: DashboardMessage, desktopId: string,
   desktopName: string, prefs: NotificationPrefs, t: Translate): LocalNotice[] {
-  if (!previous) return [];
+  if (!previous || next.at < previous.at || next.at - previous.at > CONTINUOUS_SNAPSHOT_MS) return [];
   const notices: LocalNotice[] = [];
   if (prefs.sessions) {
     const before = new Map(previous.sessions.map(session => [session.id, session.status]));
@@ -42,8 +46,10 @@ export function noticesFor(previous: DashboardMessage | null, next: DashboardMes
       const was = before.get(session.id);
       if (!was || !LIVE.has(was) || !ENDED.has(session.status)) continue;
       const name = session.name || baseName(session.cwd);
+      // A sessão reaberta mantém o id; o instante do retrato separa um
+      // encerramento do seguinte.
       notices.push({
-        key: `${desktopId}:session:${session.id}:${session.status}`,
+        key: `${desktopId}:session:${session.id}:${session.status}:${previous.at}`,
         title: t(session.status === 'error' ? 'mobile.notify.session.failed' : 'mobile.notify.session.ended', { name }),
         body: t('mobile.notify.session.detail', { computer: desktopName })
       });

@@ -130,10 +130,14 @@ export function baseName(path: string): string {
   return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path;
 }
 
-// Sessões abertas dentro da pasta do projeto, inclusive em subpastas.
+const ENDED_STATUSES = new Set(['exited', 'error']);
+
+// Sessões abertas dentro da pasta do projeto, inclusive em subpastas, com a
+// barra do Windows também. As que terminaram não contam como abertas.
 export function sessionsIn(snapshot: DashboardMessage | null, path: string): DashboardSession[] {
   const root = path.replace(/[\\/]+$/, '');
-  return (snapshot?.sessions ?? []).filter(session => session.cwd === root || session.cwd.startsWith(`${root}/`));
+  return (snapshot?.sessions ?? []).filter(session => !ENDED_STATUSES.has(session.status) &&
+    (session.cwd === root || session.cwd.startsWith(`${root}/`) || session.cwd.startsWith(`${root}\\`)));
 }
 
 export function liveSessions(snapshot: DashboardMessage | null): DashboardSession[] {

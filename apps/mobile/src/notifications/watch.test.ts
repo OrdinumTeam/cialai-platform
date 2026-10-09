@@ -1,6 +1,6 @@
 import type { DashboardMessage } from '../bridge/messages';
 import { setLocale, t } from '../i18n';
-import { noticesFor, parseNotificationPrefs } from './watch';
+import { CONTINUOUS_SNAPSHOT_MS, noticesFor, parseNotificationPrefs } from './watch';
 
 const window = (id: string, usedFraction: number) =>
   ({ id, label: id === 'session' ? 'Limite de 5 horas' : 'Limite semanal', usedFraction, resetsAtMs: 10, durationMs: null, headline: id === 'session', weekly: id === 'weekly' });
@@ -22,6 +22,19 @@ test('reads stored preferences and falls back to everything off', () => {
 
 test('the first reading of a computer never notifies', () => {
   expect(noticesFor(null, snapshot([['s1', 'exited']], 1), 'd', 'Mac', all, t)).toEqual([]);
+});
+
+test('a snapshot kept from an earlier opening is not a baseline for notices', () => {
+  const before = snapshot([['s1', 'running']], 0.5);
+  const after = (at: number) => ({ ...snapshot([['s1', 'exited']], 0.8), at });
+  expect(noticesFor(before, after(before.at + CONTINUOUS_SNAPSHOT_MS + 1), 'd', 'Mac', all, t)).toEqual([]);
+  expect(noticesFor(before, after(before.at - 1), 'd', 'Mac', all, t)).toEqual([]);
+  expect(noticesFor(before, after(before.at + 60_000), 'd', 'Mac', all, t)).toHaveLength(2);
+});
+
+test('a reopened session that ends again gets a new notice key', () => {
+  const ended = (at: number) => noticesFor({ ...snapshot([['s1', 'running']], 0.1), at }, { ...snapshot([['s1', 'exited']], 0.1), at: at + 1 }, 'd', 'Mac', all, t);
+  expect(ended(1)[0]!.key).not.toBe(ended(120_000)[0]!.key);
 });
 
 test('a running session that ends or fails notifies; one that just disappears does not', () => {

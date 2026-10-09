@@ -23,9 +23,17 @@ const MAX_PATH = 512;
 
 const empty = (): DesktopDashboard => ({ snapshot: null, favorites: [], accounts: {} });
 
+type Desktops = DashboardState['desktops'];
+type Change = (desktops: Desktops) => Desktops;
+
 let files: StoreFiles = deviceFiles;
 let state: DashboardState = { loaded: false, desktops: {} };
 let loading: Promise<void> | null = null;
+// Mudanças feitas antes de o arquivo ser lido, refeitas sobre ele.
+let pending: Change[] = [];
+// Só grava depois de ler o arquivo: gravar antes, ou depois de uma leitura que
+// falhou, apagaria o que só o disco tem, como os favoritos dos outros computadores.
+let writable = false;
 const listeners = new Set<() => void>();
 
 function emit(next: DashboardState) {
@@ -64,23 +72,38 @@ export function parseDashboardFile(raw: string | null): Record<string, DesktopDa
 }
 
 function persist() {
+  if (!writable) return;
   const contents = JSON.stringify({ version: 1, desktops: state.desktops });
   files.write(DASHBOARD_FILE, contents).catch(() => undefined);
 }
 
+function apply(change: Change) {
+  emit({ ...state, desktops: change(state.desktops) });
+  if (state.loaded) { persist(); return; }
+  pending.push(change);
+  void loadDashboard();
+}
+
 function update(desktopId: string, change: (entry: DesktopDashboard) => DesktopDashboard) {
-  const before = state.desktops[desktopId] ?? empty();
-  emit({ ...state, desktops: { ...state.desktops, [desktopId]: change(before) } });
-  persist();
+  apply(desktops => ({ ...desktops, [desktopId]: change(desktops[desktopId] ?? empty()) }));
 }
 
 export function loadDashboard(): Promise<void> {
   if (!loading) {
-    loading = files.read(DASHBOARD_FILE)
-      .catch(() => null)
-      .then(raw => {
-        // Um retrato que chegou antes da leitura terminar vence o do disco.
-        emit({ loaded: true, desktops: { ...parseDashboardFile(raw), ...state.desktops } });
+    loading = files.read(DASHBOARD_FILE).then(
+      raw => {
+        // Um retrato ou favorito que chegou antes da leitura terminar é
+        // refeito sobre o disco, sem apagar o resto do que estava lá.
+        const changes = pending;
+        pending = [];
+        writable = true;
+        emit({ loaded: true, desktops: changes.reduce((desktops, change) => change(desktops), parseDashboardFile(raw)) });
+        if (changes.length) persist();
+      },
+      () => {
+        // Sem ler, o arquivo fica como está; o que mudar nesta abertura vale só na memória.
+        pending = [];
+        emit({ ...state, loaded: true });
       });
   }
   return loading;
@@ -133,11 +156,13 @@ export function chooseAccount(desktopId: string, agent: AgentId, accountId: stri
 }
 
 export function forgetDashboard(desktopId: string) {
-  if (!(desktopId in state.desktops)) return;
-  const desktops = { ...state.desktops };
-  delete desktops[desktopId];
-  emit({ ...state, desktops });
-  persist();
+  if (state.loaded && !(desktopId in state.desktops)) return;
+  apply(desktops => {
+    if (!(desktopId in desktops)) return desktops;
+    const next = { ...desktops };
+    delete next[desktopId];
+    return next;
+  });
 }
 
 export function dashboardFor(desktopId: string | null | undefined): DesktopDashboard {
@@ -157,5 +182,7 @@ export function useDashboard(): DashboardState {
 export function resetDashboardForTests(nextFiles: StoreFiles, loaded = false) {
   files = nextFiles;
   loading = null;
+  pending = [];
+  writable = loaded;
   state = { loaded, desktops: {} };
 }

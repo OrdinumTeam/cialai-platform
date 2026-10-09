@@ -100,9 +100,17 @@ describe('ordering', () => {
     const sessions = [
       { id: '1', name: 'a', cwd: '/p/app', status: 'running', agent: null },
       { id: '2', name: 'b', cwd: '/p/app/web', status: 'running', agent: null },
-      { id: '3', name: 'c', cwd: '/p/application', status: 'running', agent: null }
+      { id: '3', name: 'c', cwd: '/p/application', status: 'running', agent: null },
+      { id: '4', name: 'd', cwd: '/p/app', status: 'exited', agent: null },
+      { id: '5', name: 'e', cwd: '/p/app/api', status: 'error', agent: null }
     ];
     expect(sessionsIn(snapshot([], { sessions }), '/p/app/').map(session => session.id)).toEqual(['1', '2']);
+    const windows = [
+      { id: 'w1', name: 'a', cwd: 'C:\\Users\\a\\proj', status: 'running', agent: null },
+      { id: 'w2', name: 'b', cwd: 'C:\\Users\\a\\proj\\api', status: 'starting', agent: null },
+      { id: 'w3', name: 'c', cwd: 'C:\\Users\\a\\project', status: 'running', agent: null }
+    ];
+    expect(sessionsIn(snapshot([], { sessions: windows }), 'C:\\Users\\a\\proj\\').map(session => session.id)).toEqual(['w1', 'w2']);
   });
 
   test('each project keeps the same tint', () => {
@@ -143,6 +151,29 @@ describe('dashboard store', () => {
     forgetDashboard('d1');
     expect(dashboardFor('d1').snapshot).toBeNull();
     expect(parseDashboardFile(files.get('dashboard.json') ?? null).d1).toBeUndefined();
+  });
+
+  test('a change before the file is read keeps what only the disk had', async () => {
+    const { files, store } = memory();
+    files.set('dashboard.json', JSON.stringify({ version: 1, desktops: {
+      d1: { snapshot: null, favorites: ['/a'], accounts: { codex: 'w' } },
+      d2: { snapshot: null, favorites: ['/b'], accounts: {} } } }));
+    resetDashboardForTests(store);
+    recordSnapshot('d1', snapshot());
+    expect(files.get('dashboard.json')).toContain('"/b"');
+    await loadDashboard();
+    expect(dashboardFor('d1')).toEqual({ snapshot: snapshot(), favorites: ['/a'], accounts: { codex: 'w' } });
+    expect(dashboardFor('d2').favorites).toEqual(['/b']);
+    expect(parseDashboardFile(files.get('dashboard.json') ?? null).d1?.snapshot?.at).toBe(10);
+  });
+
+  test('a file that cannot be read is never overwritten', async () => {
+    const written: string[] = [];
+    resetDashboardForTests({ read: async () => { throw new Error('io'); }, write: async (_name, value) => { written.push(value); }, remove: async () => {} });
+    await loadDashboard();
+    toggleFavorite('d1', '/p');
+    expect(dashboardFor('d1').favorites).toEqual(['/p']);
+    expect(written).toEqual([]);
   });
 
   test('a broken or foreign file becomes no data instead of a made-up snapshot', () => {
