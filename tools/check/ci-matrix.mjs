@@ -40,6 +40,8 @@ for (const required of [
   'playwright/cli.js install --with-deps chromium',
   'npm run test:browser',
   'npm run check:performance',
+  'git worktree add --detach "$RUNNER_TEMP/perf-main" FETCH_HEAD',
+  'npm run check:performance -- --comparar "$RUNNER_TEMP/perf-main/apps/desktop/dist"',
   'npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json',
   'node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage',
   'actions/upload-artifact@v4',
@@ -59,6 +61,14 @@ for (const required of [
 assert.ok(
   workflow.indexOf('npm run test:browser') < workflow.indexOf('npm run check:performance'),
   'o orçamento de desempenho precisa rodar depois dos checks de navegador',
+);
+// No runner a medida absoluta depende da máquina sorteada; o orçamento compara
+// com a main construída ao lado, e o worktree dela sai antes do bundle.
+assert.ok(
+  workflow.indexOf('git worktree add --detach') < workflow.indexOf('npm run check:performance')
+    && workflow.indexOf('npm run check:performance') < workflow.indexOf('git worktree remove --force')
+    && workflow.indexOf('git worktree remove --force') < workflow.indexOf('fix-appimage.mjs'),
+  'o build da main vem antes do orçamento e sai antes do bundle',
 );
 assert.ok(
   workflow.indexOf('path: packages/tunnel-core/build/tor/downloads') < workflow.indexOf('npm run sidecar --workspace @cialai/desktop'),

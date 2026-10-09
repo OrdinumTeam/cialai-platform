@@ -90,12 +90,29 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:browser
 
+      # O runner muda de máquina a cada rodada e é mais lento que o computador
+      # da linha de base, então o orçamento compara este commit com a main,
+      # construída ao lado num worktree e aberta alternada na mesma máquina.
+      - name: Build da main para o orçamento de desempenho
+        if: runner.os == 'Linux'
+        run: |
+          git fetch --no-tags --depth=1 origin main
+          git worktree add --detach "$RUNNER_TEMP/perf-main" FETCH_HEAD
+          cd "$RUNNER_TEMP/perf-main"
+          npm ci
+          npm run build:ui --workspace @cialai/desktop
+
       # Orçamento de desempenho num computador simulado mais simples. Roda
       # depois dos checks de navegador, que já instalaram o Chromium e já
       # construíram apps/desktop/dist.
       - name: Orçamento de desempenho
         if: runner.os == 'Linux'
-        run: npm run check:performance
+        run: npm run check:performance -- --comparar "$RUNNER_TEMP/perf-main/apps/desktop/dist"
+
+      # O worktree da main sai antes do bundle, que precisa do disco.
+      - name: Remover o build da main
+        if: always() && runner.os == 'Linux'
+        run: git worktree remove --force "$RUNNER_TEMP/perf-main" || true
 
       # A CI não recebe a chave do atualizador; o bundle sai sem os arquivos assinados do updater.
       # No Linux o linuxdeploy do AppImage confere as dependências de todo ELF do bundle e não segue o $ORIGIN do tor
