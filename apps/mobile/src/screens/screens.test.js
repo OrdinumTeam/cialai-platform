@@ -336,6 +336,27 @@ async function renderHome(props = {}, { dashboard = snapshot(), favorites = [] }
   return { tree, handlers };
 }
 
+test('Home keeps two half-width usage cards and scrolls sideways when an agent has more profiles', async () => {
+  jest.useFakeTimers({ now: NOW });
+  const single = await renderHome();
+  expect(single.tree.root.findAll(node => node.props.testID === 'agent-usage-scroll')).toHaveLength(0);
+  await act(async () => single.tree.unmount());
+  const base = snapshot();
+  const work = { ...base.accounts[0], id: 'codex-work', label: 'Trabalho', active: false };
+  const { tree } = await renderHome({}, { dashboard: snapshot({ accounts: [...base.accounts, work] }) });
+  const scroll = tree.root.findAll(node => node.props.testID === 'agent-usage-scroll' && node.props.horizontal);
+  expect(scroll).not.toHaveLength(0);
+  // O card e o Pressable dentro dele carregam o mesmo rótulo, um logo depois do outro.
+  const cards = tree.root.findAll(node => typeof node.props.accessibilityHint === 'string' && node.props.accessibilityHint.startsWith('Ver uso do') && typeof node.props.onPress === 'function')
+    .filter((card, index, all) => index === 0 || all[index - 1].props.accessibilityLabel !== card.props.accessibilityLabel);
+  expect(cards.map(card => card.props.accessibilityLabel.split(',').slice(0, 2).join(','))).toEqual(['Codex, Codex', 'Codex, Trabalho', 'Claude Code, Entre na conta no computador']);
+  // Tocar no card do segundo perfil abre os detalhes dele.
+  await act(async () => { cards[1].props.onPress(); });
+  expect(text(tree)).toContain('Trabalho');
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
 test('Home shows the logo, real agent usage and the connected computer first, without addresses', async () => {
   jest.useFakeTimers({ now: NOW });
   const { tree, handlers } = await renderHome({ keptDesktopId: desktopId });
