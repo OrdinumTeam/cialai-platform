@@ -1,15 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 export const initialPhoneRoute = () => ({ pane: 'list', sessionId: null, path: null });
 
-// A rota volta depois de recarregar a pagina: puxar para atualizar na casca
-// ou o iOS encerrar o processo do WebView. Sem isso o telefone caia na lista
-// e perdia o terminal aberto. Fica no localStorage, como a seção em cialai_view.
+// A rota volta depois de recarregar a pagina dentro do mesmo WebView, como
+// quando o iOS encerra o processo da página. Fica no sessionStorage: sair da
+// aba Terminais desmonta o WebView, e voltar a ela abre na lista de sessões,
+// não no terminal que ficou aberto.
 export const PHONE_ROUTE_KEY = 'cialai_terminals_phone_route';
 const RESTORABLE_PANES = ['terminal', 'files', 'preview'];
 
 export function phoneRouteStorage() {
-  try { return typeof window !== 'undefined' ? window.localStorage : null; }
-  catch (_error) { return null; }
+  try {
+    if (typeof window === 'undefined') return null;
+    // A rota guardada antes no localStorage deixaria a primeira volta presa no terminal.
+    window.localStorage?.removeItem(PHONE_ROUTE_KEY);
+    return window.sessionStorage;
+  } catch (_error) { return null; }
 }
 
 export function readPhoneRoute(storage) {
