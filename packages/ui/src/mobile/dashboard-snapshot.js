@@ -9,6 +9,10 @@ import { windowLabel } from '../notch/copy.js';
 
 export const DASHBOARD_LIMITS = Object.freeze({ accounts: 20, windows: 8, projects: 400, sessions: 100, recent: 10, text: 512 });
 const AGENTS = new Set(['codex', 'claude']);
+// O computador nomeia o agente da sessao como o mostra, "Claude Code" ou
+// "Codex"; o retrato leva o id do contrato.
+const SESSION_AGENTS = Object.freeze({ codex: 'codex', claude: 'claude', 'claude code': 'claude' });
+const sessionAgent = (activity) => SESSION_AGENTS[String(activity?.agent || activity?.foreground?.agent || '').toLowerCase()] || null;
 
 const clip = (value) => (typeof value === 'string' ? value.slice(0, DASHBOARD_LIMITS.text) : '');
 const finite = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
@@ -54,7 +58,7 @@ export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now 
     projects: (Array.isArray(repos?.repos) ? repos.repos : [])
       .filter((repo) => repo && typeof repo.path === 'string' && repo.path)
       .slice(0, DASHBOARD_LIMITS.projects)
-      .map((repo) => ({ name: clip(repo.name || repo.path.split('/').at(-1)), path: clip(repo.path), root: clip(repo.root || '') })),
+      .map((repo) => ({ name: clip(repo.name || repo.path.split(/[\\/]/).filter(Boolean).at(-1) || repo.path), path: clip(repo.path), root: clip(repo.root || '') })),
     sessions: (Array.isArray(sessions) ? sessions : [])
       .filter((session) => session && typeof session.id === 'string' && typeof session.cwd === 'string')
       .slice(0, DASHBOARD_LIMITS.sessions)
@@ -63,7 +67,7 @@ export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now 
         name: clip(session.name || ''),
         cwd: clip(session.cwd),
         status: clip(session.status || ''),
-        agent: AGENTS.has(session.activity?.agent) ? session.activity.agent : null,
+        agent: sessionAgent(session.activity),
       })),
     // Ultimas pastas em que o telefone abriu sessao, a mais nova primeiro.
     recent: (Array.isArray(recent) ? recent : [])

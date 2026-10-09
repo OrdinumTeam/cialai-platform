@@ -71,6 +71,20 @@ test('o retrato leva contas, janelas, projetos e sessoes sem o e-mail', () => {
   assert.deepEqual(result.sessions, [{ id: 's1', name: 'psicoapp', cwd: '/home/pessoa/Projects/psicoapp', status: 'running', agent: 'codex' }]);
 });
 
+test('o agente da sessao chega pelo nome que o computador mostra e o projeto do Windows tem nome', () => {
+  const result = snapshot.buildDashboardSnapshot({
+    repos: { repos: [{ path: 'C:\\Users\\pessoa\\proj\\' }] },
+    sessions: [
+      { id: 'a', cwd: '/p', status: 'running', activity: { agent: 'Claude Code' } },
+      { id: 'b', cwd: '/p', status: 'running', activity: { agent: null, foreground: { agent: 'Codex' } } },
+      { id: 'c', cwd: '/p', status: 'running', activity: { agent: 'Gemini' } },
+      { id: 'd', cwd: '/p', status: 'running' },
+    ],
+  });
+  assert.deepEqual(result.sessions.map((session) => session.agent), ['claude', 'codex', null, null]);
+  assert.equal(result.projects[0].name, 'proj');
+});
+
 test('integracoes ausentes viram listas vazias e os limites valem', () => {
   const empty = snapshot.buildDashboardSnapshot({ accounts: null, repos: null, sessions: undefined, now: 1 });
   assert.deepEqual([empty.accounts, empty.projects, empty.sessions].map((list) => list.length), [0, 0, 0]);

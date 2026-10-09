@@ -75,6 +75,13 @@ export function needsConfirmation(entry) {
   return Boolean(entry?.confirm) || isDestructive(entry?.command);
 }
 
+// Se a entrega pede o segundo toque. Executar pede quando o comando precisa
+// de confirmação; Inserir também, se houver quebra de linha, porque num shell
+// sem colagem entre colchetes cada quebra executa a linha anterior.
+export function confirmsBefore(entry, enter) {
+  return needsConfirmation(entry) && (enter || /[\r\n]/.test(String(entry?.command || '')));
+}
+
 // Erro de validação como chave de tradução, ou `null` quando pode salvar.
 export function validateCommand(entry) {
   const command = String(entry?.command || '').trim();

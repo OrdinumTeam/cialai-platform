@@ -67,6 +67,14 @@ test('comandos destrutivos pedem confirmação', async () => {
   assert.equal(needsConfirmation({ command: 'make deploy', confirm: true }), true);
 });
 
+test('Inserir um comando de várias linhas que pede confirmação também pede', async () => {
+  const { confirmsBefore } = await loadCommands();
+  assert.equal(confirmsBefore({ command: 'rm -rf build' }, true), true);
+  assert.equal(confirmsBefore({ command: 'rm -rf build' }, false), false, 'uma linha só fica escrita, sem executar');
+  assert.equal(confirmsBefore({ command: 'rm -rf build\nls' }, false), true);
+  assert.equal(confirmsBefore({ command: 'git status\nls' }, false), false, 'sem perigo não há segundo toque');
+});
+
 test('validação, limite e storage corrompido', async () => {
   const { saveCommand, readCommands, filterCommands, QUICK_COMMANDS_KEY, MAX_COMMANDS } = await loadCommands();
   assert.equal(saveCommand([], { command: '   ' }).error, 'terminal.phone.quick.error.empty');

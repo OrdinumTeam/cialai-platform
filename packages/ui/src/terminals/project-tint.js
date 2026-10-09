@@ -10,9 +10,15 @@ export function projectTint(name) {
   return PROJECT_TINTS[hash % PROJECT_TINTS.length];
 }
 
-// Sessoes abertas dentro da pasta, inclusive em subpastas.
+const ENDED_STATUSES = new Set(['exited', 'error']);
+
+// Sessoes abertas dentro da pasta, inclusive em subpastas, com a barra do
+// Windows tambem. As que terminaram nao contam como abertas.
 export function sessionsInFolder(sessions, path) {
   const root = String(path || '').replace(/[\\/]+$/, '');
   if (!root) return [];
-  return (sessions || []).filter((session) => session.cwd === root || String(session.cwd || '').startsWith(`${root}/`));
+  return (sessions || []).filter((session) => {
+    const cwd = String(session.cwd || '');
+    return !ENDED_STATUSES.has(session.status) && (cwd === root || cwd.startsWith(`${root}/`) || cwd.startsWith(`${root}\\`));
+  });
 }

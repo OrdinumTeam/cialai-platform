@@ -10,7 +10,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDown, ArrowUp, ChevronLeft, CornerDownLeft, Pencil, Play, Plus, Search, Settings2, Terminal, Trash2, TriangleAlert, X } from 'lucide-react';
 import {
-  filterCommands, isDestructive, moveCommand, needsConfirmation, quickCommandsStorage, readCommands, removeCommand, saveCommand, writeCommands,
+  confirmsBefore, filterCommands, isDestructive, moveCommand, needsConfirmation, quickCommandsStorage, readCommands, removeCommand, saveCommand, writeCommands,
 } from '../quick-commands.js';
 import { translate } from '../../shared/i18n.js';
 
@@ -30,7 +30,7 @@ export function Preview({ entry, interactive, onInsert, onRun }) {
   const destructive = isDestructive(entry.command);
   const deliver = async (enter) => {
     if (busy) return;
-    if (enter && confirm && !confirming) { setConfirming(true); return; }
+    if (confirmsBefore(entry, enter) && !confirming) { setConfirming(true); return; }
     setBusy(true);
     try { await (enter ? onRun(entry.command) : onInsert(entry.command)); }
     finally { setBusy(false); }
