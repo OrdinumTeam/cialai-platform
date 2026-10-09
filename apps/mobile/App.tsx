@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, Platform, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { Alert, AppState, BackHandler, Platform, StyleSheet, useColorScheme, View } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as SecureStore from 'expo-secure-store';
@@ -53,7 +53,7 @@ import { notificationPermission, presentNotices, requestNotificationPermission, 
 import { NOTIFICATION_STORAGE_KEY, noticesFor, parseNotificationPrefs, type NotificationPrefs } from './src/notifications/watch';
 import { Agents } from './src/screens/Agents';
 import { Desktops } from './src/screens/Desktops';
-import { Home, type IntentRequest } from './src/screens/Home';
+import { Home, type IntentRequest, type StoreState } from './src/screens/Home';
 import { Offline } from './src/screens/Offline';
 import { Pair } from './src/screens/Pair';
 import { Projects } from './src/screens/Projects';
@@ -62,11 +62,11 @@ import { Shell, type ShellDesktop } from './src/screens/Shell';
 import { openConnection, outcomeForCode, type ConnectionOutcome, type ConnectionPorts } from './src/state/connection';
 import { LOG_LEVEL_STORAGE_KEY, logApp, logCore, normalizeLogLevel } from './src/state/diagnostics';
 import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction } from './src/state/lifecycle';
-import { describeDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
-import { tabForScreen } from './src/state/tabs';
+import { describeDesktop, guardAction, screenRequiresDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
+import { lockedTabs, tabForScreen } from './src/state/tabs';
 import { interpretTunnelEvent, parseTorProgress, reservePercent, type TunnelSignal } from './src/state/tunnel-events';
 import { normalizeThemeMode, resolveScheme, THEME_STORAGE_KEY, ThemeModeContext, type ThemeMode } from './src/theme';
-import { BottomNavigation, BottomNavigationContext, type TabId, typography } from './src/ui';
+import { BottomNavigation, BottomNavigationContext, type TabId } from './src/ui';
 import { darkColors, lightColors } from './src/ui/tokens';
 
 type Translator = (key: string, values?: Record<string, string | number>) => string;
@@ -116,6 +116,9 @@ function AppContent() {
   const { t } = useI18n();
   const [screen, dispatchScreen] = useReducer(transition, { kind: 'loading' } as AppScreen);
   const [store, setStore] = useState<DesktopStore>(emptyDesktopStore);
+  const [storeState, setStoreState] = useState<StoreState>('loading');
+  // Aviso mostrado no primeiro acesso e levado à tela de vínculo.
+  const [pairNotice, setPairNotice] = useState<string | null>(null);
   const [tunnelStatus, setTunnelStatus] = useState<TunnelStatus | null>(null);
   const [tor, setTor] = useState<TorProgress | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
@@ -146,8 +149,11 @@ function AppContent() {
   const nativeCoreVersion = useMemo(() => coreVersion(), []);
 
   // A referência acompanha cada ação no mesmo instante, para eventos nativos que
-  // chegam antes da próxima renderização decidirem com a tela certa.
-  const dispatch = useCallback((action: AppAction) => {
+  // chegam antes da próxima renderização decidirem com a tela certa. Toda
+  // navegação passa pela guarda: sem computador vinculado, as telas que dependem
+  // dele viram o início, venha o pedido da barra, de um atalho ou do núcleo.
+  const dispatch = useCallback((requested: AppAction) => {
+    const action = guardAction(requested, storeRef.current.desktops.length > 0);
     screenRef.current = transition(screenRef.current, action);
     dispatchScreen(action);
   }, []);
@@ -420,6 +426,29 @@ function AppContent() {
     if (keptShell.current) clearTimeout(keptShell.current.timer);
   }, [endShellReconnect]);
 
+  // Lê os computadores guardados. Uma falha de leitura não é primeiro acesso:
+  // o início mostra o erro com nova tentativa, e nada é gravado por cima.
+  const loadStore = useCallback(async (cancelled: () => boolean = () => false) => {
+    setStoreState('loading');
+    let loaded;
+    try {
+      loaded = await loadDesktopStore();
+    } catch {
+      if (cancelled()) return;
+      logApp('error', 'the saved computers could not be read');
+      setStoreState('error');
+      dispatch({ type: 'show-home' });
+      return;
+    }
+    if (cancelled()) return;
+    storeRef.current = loaded.store;
+    setStore(loaded.store);
+    if (loaded.legacyDiscarded && !loaded.store.desktops.length) setPairNotice(t('mobile.pair.notice.legacy'));
+    setStoreState('ready');
+    void refreshStatus();
+    dispatch({ type: 'show-home' });
+  }, [dispatch, refreshStatus, t]);
+
   useEffect(() => {
     let cancelled = false;
     const bootstrap = async () => {
@@ -462,29 +491,15 @@ function AppContent() {
       } catch {
         // Sem a escolha guardada, nenhum aviso sai.
       }
-      let loaded;
-      try {
-        loaded = await loadDesktopStore();
-      } catch {
-        if (!cancelled) dispatch({ type: 'needs-pairing', error: t('mobile.error.storeLoad') });
-        return;
-      }
       if (cancelled) return;
-      storeRef.current = loaded.store;
-      setStore(loaded.store);
-      void refreshStatus();
-      if (!loaded.store.desktops.length) {
-        dispatch({ type: 'needs-pairing', ...(loaded.legacyDiscarded ? { notice: t('mobile.pair.notice.legacy') } : {}) });
-        return;
-      }
-      // O app abre sempre no início, mesmo com o último computador respondendo.
-      // O início é o hub: de lá o card Continuar leva ao terminal num toque, e
-      // Computadores, Vincular e Ajustes ficam à mão sem passar pelo terminal.
-      dispatch({ type: 'show-home' });
+      // O app abre sempre no início, mesmo com o último computador respondendo
+      // ou sem nenhum vinculado. O início é o hub: de lá o card Continuar leva
+      // ao terminal num toque, e o primeiro acesso convida a vincular.
+      await loadStore(() => cancelled);
     };
     void bootstrap();
     return () => { cancelled = true; };
-  }, [biometricSession, dispatch, openSelected, refreshStatus, t]);
+  }, [biometricSession, dispatch, loadStore]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
@@ -602,9 +617,9 @@ function AppContent() {
         return;
       }
       case 'legacy-discarded':
-        if (screenRef.current.kind === 'pair' && !storeRef.current.desktops.length) {
-          dispatch({ type: 'needs-pairing', notice: t('mobile.pair.notice.legacy') });
-        }
+        if (storeRef.current.desktops.length) return;
+        setPairNotice(t('mobile.pair.notice.legacy'));
+        if (screenRef.current.kind === 'pair') dispatch({ type: 'needs-pairing', notice: t('mobile.pair.notice.legacy') });
         return;
       case 'log':
         logCore(signal.level, signal.message);
@@ -628,6 +643,7 @@ function AppContent() {
     inflight.current = null;
     await saveDeviceToken(result.desktopId, result.token);
     await updateStore(current => recordPair(current, result));
+    setPairNotice(null);
     setFailure(result.desktopId, null);
     await openSelected(result.desktopId);
   }, [openGate, openSelected, setFailure, updateStore]);
@@ -690,10 +706,25 @@ function AppContent() {
         await deleteDeviceToken(desktop.id).catch(() => undefined);
         await updateStore(current => removeDesktop(current, desktop.id));
         setFailure(desktop.id, null);
-        if (!storeRef.current.desktops.length) dispatch({ type: 'needs-pairing' });
       })() }
     ]);
-  }, [dispatch, dropKeptShell, setFailure, t, updateStore]);
+  }, [dropKeptShell, setFailure, t, updateStore]);
+
+  // O último vínculo saiu: a tela que dependia dele volta ao início, que
+  // passa a mostrar o primeiro acesso. Computador só desconectado não conta.
+  useEffect(() => {
+    if (storeState === 'ready' && !store.desktops.length && screenRequiresDesktop(screenRef.current)) dispatch({ type: 'show-home' });
+  }, [dispatch, store, storeState]);
+
+  // No Android, o voltar do sistema na tela de vínculo leva ao início em vez de fechar o app.
+  useEffect(() => {
+    if (screen.kind !== 'pair') return;
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      dispatch({ type: 'show-home' });
+      return true;
+    });
+    return () => subscription.remove();
+  }, [dispatch, screen.kind]);
 
   const describe = useCallback((desktopId: string) => describeDesktop(desktopId, { tunnelStatus, connectingId, failures }),
     [connectingId, failures, tunnelStatus]);
@@ -802,21 +833,16 @@ function AppContent() {
   });
 
   let content;
-  if (screen.kind === 'loading') {
-    content = (
-      <View style={[styles.loading, { backgroundColor: colors.background }]}>
-        <Text style={[typography.largeTitle, { color: colors.primary }]}>Cialai</Text>
-        <ActivityIndicator color={colors.primary} size="large" />
-        <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.loading.detail')}</Text>
-      </View>
-    );
-  } else if (screen.kind === 'pair') {
+  if (screen.kind === 'pair') {
     content = <Pair device={device} initialError={screen.error} notice={screen.notice} onPaired={paired}
-      onCancel={store.desktops.length ? () => dispatch({ type: 'show-home' }) : undefined} />;
-  } else if (screen.kind === 'home') {
-    content = <Home store={store} describe={describe} keptDesktopId={keptDesktopId} onContinue={openFromList}
+      onCancel={() => dispatch({ type: 'show-home' })} />;
+  } else if (screen.kind === 'home' || screen.kind === 'loading') {
+    // O carregamento já é o início, com o esqueleto até a loja ser lida.
+    content = <Home store={store} storeState={screen.kind === 'loading' ? 'loading' : storeState} onRetryStore={() => void loadStore()}
+      notice={pairNotice ?? undefined} describe={describe} keptDesktopId={keptDesktopId} onContinue={openFromList}
       onDesktops={() => dispatch({ type: 'show-desktops' })} onDisconnect={disconnect} onIntent={openWithIntent}
-      onPair={() => dispatch({ type: 'needs-pairing' })} onProjects={() => dispatch({ type: 'show-projects' })} onTerminal={openTerminal} />;
+      onPair={() => dispatch({ type: 'needs-pairing', ...(pairNotice ? { notice: pairNotice } : {}) })}
+      onProjects={() => dispatch({ type: 'show-projects' })} onTerminal={openTerminal} />;
   } else if (screen.kind === 'settings') {
     content = <Settings appVersion={appVersion} coreVersion={nativeCoreVersion} desktopCount={store.desktops.length}
       biometricPolicy={biometricPolicy} logLevel={logLevel} onBack={() => dispatch({ type: 'show-home' })} onBiometricPolicy={changeBiometricPolicy}
@@ -851,7 +877,7 @@ function AppContent() {
     content = (
       <View style={[styles.tabbed, { backgroundColor: colors.background }]} testID="tabbed">
         <BottomNavigationContext.Provider value>{content}</BottomNavigationContext.Provider>
-        <BottomNavigation active={activeTab} onSelect={selectTab} />
+        <BottomNavigation active={activeTab} disabled={lockedTabs(storeState === 'ready' && store.desktops.length > 0)} onSelect={selectTab} />
       </View>
     );
   }
@@ -864,6 +890,5 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  tabbed: { flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16 }
+  tabbed: { flex: 1 }
 });

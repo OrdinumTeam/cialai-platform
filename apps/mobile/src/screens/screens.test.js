@@ -76,6 +76,7 @@ const offlineProps = overrides => ({
   onHome: () => {}, onDesktops: () => {}, onSettings: () => {}, onPair: () => {}, onPairAgain: () => {}, ...overrides
 });
 const homeHandlers = () => ({
+  storeState: 'ready', onRetryStore: jest.fn(),
   onContinue: jest.fn(), onIntent: jest.fn(), onDisconnect: jest.fn(), onDesktops: jest.fn(), onPair: jest.fn(), onTerminal: jest.fn(), onProjects: jest.fn()
 });
 
@@ -541,8 +542,14 @@ test('Home without computers offers pairing and shows an offline computer withou
     tree = create(<Home store={{ version: 2, lastDesktopId: null, desktops: [] }} describe={() => ({ state: 'idle', transport: null })}
       keptDesktopId={null} {...handlers} />);
   });
-  expect(text(tree)).toContain('Vincule seu primeiro computador');
-  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  const rendered = text(tree);
+  for (const expected of ['Conecte seu primeiro computador', 'Vincule seu computador para acessar seus terminais e projetos de qualquer lugar.',
+    'Vincular computador', 'Como vincular', 'Comunidade']) {
+    expect(rendered).toContain(expected);
+  }
+  // Sem computador, o painel e os atalhos que dependem dele não aparecem.
+  expect(rendered).not.toMatch(/Ações rápidas|Seus projetos/);
+  expect(rendered).not.toMatch(forbiddenPunctuation);
   await tap(tree, 'Vincular computador');
   expect(handlers.onPair).toHaveBeenCalledTimes(1);
   await act(async () => tree.update(<Home store={{ ...store, desktops: [store.desktops[0]] }}
@@ -550,6 +557,29 @@ test('Home without computers offers pairing and shows an offline computer withou
   expect(text(tree)).toMatch(/Fora de alcance/);
   expect(text(tree)).toMatch(/Reserva/);
   expect(text(tree)).not.toMatch(/Desconectar/);
+  await act(async () => tree.unmount());
+});
+
+// O primeiro acesso só aparece com a loja lida e vazia: carregando há o
+// esqueleto, e uma falha de leitura oferece nova tentativa, nunca o vínculo.
+test('Home shows a skeleton while loading and a retry when the store fails, never the first access', async () => {
+  resetDashboardForTests(memoryFiles(), true);
+  const handlers = homeHandlers();
+  const empty = { version: 2, lastDesktopId: null, desktops: [] };
+  let tree;
+  await act(async () => {
+    tree = create(<Home {...handlers} describe={() => ({ state: 'idle', transport: null })} keptDesktopId={null} store={empty} storeState="loading" />);
+  });
+  expect(text(tree)).not.toMatch(/Conecte seu primeiro computador|Comunidade/);
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Abrindo seus computadores' && node.props.accessible)).not.toHaveLength(0);
+  await act(async () => tree.update(<Home {...handlers} describe={() => ({ state: 'idle', transport: null })} keptDesktopId={null}
+    store={empty} storeState="error" />));
+  expect(text(tree)).toMatch(/Não foi possível abrir os computadores guardados/);
+  expect(text(tree)).not.toMatch(/Conecte seu primeiro computador/);
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Vincular computador')).toHaveLength(0);
+  await tap(tree, 'Tentar de novo');
+  expect(handlers.onRetryStore).toHaveBeenCalledTimes(1);
+  expect(handlers.onPair).not.toHaveBeenCalled();
   await act(async () => tree.unmount());
 });
 

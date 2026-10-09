@@ -81,6 +81,32 @@ export function transition(screen: AppScreen, action: AppAction): AppScreen {
   }
 }
 
+// Ações que levam a telas que dependem de um computador vinculado. Sem nenhum
+// vínculo, elas viram o início: é a única checagem de acesso da casca, valendo
+// para a barra inferior, os atalhos, o voltar e as respostas atrasadas do núcleo.
+function requiresDesktop(action: AppAction): boolean {
+  switch (action.type) {
+    case 'show-desktops':
+    case 'show-projects':
+    case 'show-agents':
+    case 'desktop-opened':
+    case 'desktop-offline':
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function guardAction(action: AppAction, hasDesktops: boolean): AppAction {
+  return !hasDesktops && requiresDesktop(action) ? { type: 'show-home' } : action;
+}
+
+// Tela que deixou de fazer sentido porque o último vínculo saiu.
+export function screenRequiresDesktop(screen: AppScreen): boolean {
+  return screen.kind === 'desktops' || screen.kind === 'projects' || screen.kind === 'agents' ||
+    screen.kind === 'shell' || screen.kind === 'offline';
+}
+
 export type DesktopConnectionState = 'idle' | 'connecting' | 'connected' | 'offline' | 'removed';
 
 export type DesktopStateInput = {

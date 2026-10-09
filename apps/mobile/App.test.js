@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { act, create } from 'react-test-renderer';
-import { AppState, Text } from 'react-native';
+import { Alert, AppState, Text } from 'react-native';
 
 import App, { HOME_PROXY_GRACE_MS, SHELL_RECONNECT_DEADLINE_MS } from './App';
 import { setLocale } from './src/i18n';
+import { Pair } from './src/screens/Pair';
 import { darkColors, lightColors } from './src/ui/tokens';
 import { clearDiagnostics, recentDiagnostics } from './src/state/diagnostics';
 
@@ -245,11 +246,118 @@ test('a missing token asks to pair that desktop again', async () => {
   await act(async () => tree.unmount());
 });
 
-test('discarded Headscale profiles lead to pairing with a notice', async () => {
+test('discarded Headscale profiles show a notice on the first access that follows to pairing', async () => {
   mockStore.load.mockResolvedValue({ store: { version: 2, desktops: [], lastDesktopId: null }, legacyDiscarded: true });
   const tree = await render({ home: true });
+  expect(text(tree)).toMatch(/Conecte seu primeiro computador/);
+  expect(text(tree)).toMatch(/Esta versão do Cialai conecta de um jeito novo/);
+  await act(async () => { pressable(tree, 'Vincular computador').props.onPress(); });
+  await flush();
+  expect(tree.root.findAllByType(Pair)).toHaveLength(1);
   expect(text(tree)).toMatch(/Esta versão do Cialai conecta de um jeito novo/);
   expect(mockTunnel.connect).not.toHaveBeenCalled();
+  await act(async () => tree.unmount());
+});
+
+const emptyStore = { version: 2, desktops: [], lastDesktopId: null };
+const tabNode = (tree, label) => tree.root.findAll(node => node.props.accessibilityRole === 'tab' && node.props.accessibilityLabel === label &&
+  typeof node.props.onPress === 'function')[0];
+const tabStates = tree => ['Início', 'Terminais', 'Projetos', 'Agentes', 'Ajustes'].map(label => !!tabNode(tree, label).props.disabled);
+
+// Primeira instalação: o app abre no início com o convite, a barra fica à
+// vista com só Início e Ajustes livres, e o vínculo libera tudo sem reiniciar.
+test('the first install opens on the home with the computer tabs locked until a computer is linked', async () => {
+  mockStore.load.mockResolvedValue({ store: emptyStore, legacyDiscarded: false });
+  mockStore.tokens = new Map();
+  const tree = await render({ home: true });
+  expect(text(tree)).toMatch(/Conecte seu primeiro computador/);
+  expect(tree.root.findAllByType(Pair)).toHaveLength(0);
+  expect(tabStates(tree)).toEqual([false, true, true, true, false]);
+  expect(tabNode(tree, 'Início').props.accessibilityState.selected).toBe(true);
+
+  // Ajustes continua acessível e volta ao início.
+  await press(tree, 'Ajustes');
+  expect(tabNode(tree, 'Ajustes').props.accessibilityState.selected).toBe(true);
+  await press(tree, 'Início');
+  expect(text(tree)).toMatch(/Conecte seu primeiro computador/);
+
+  // O fluxo de vínculo existente abre por cima e o voltar retorna ao início.
+  await act(async () => { pressable(tree, 'Vincular computador').props.onPress(); });
+  await flush();
+  const pair = () => tree.root.findAllByType(Pair)[0];
+  expect(pair()).toBeTruthy();
+  await act(async () => { pair().props.onCancel(); });
+  await flush();
+  expect(text(tree)).toMatch(/Conecte seu primeiro computador/);
+
+  await act(async () => { pressable(tree, 'Vincular computador').props.onPress(); });
+  await flush();
+  await act(async () => {
+    await pair().props.onPaired({ desktopId, deviceId: 'dev_AAAAAAAAAAAAAAAAAAAAAA', token,
+      desktop: { id: desktopId, name: 'Mac de Foco', fingerprint: '0123456789ABCDEF' }, transport: 'direct' });
+  });
+  await flush();
+  // O vínculo grava o computador e abre a página dele; de volta, o painel substitui o convite.
+  expect(mockStore.tokens.get(desktopId)).toBe(token);
+  expect(mockTunnel.connect).toHaveBeenCalledTimes(1);
+  expect(tree.root.findAll(node => node.props.source?.uri)[0].props.source.uri).toBe(proxyUrl);
+  await press(tree, 'Ir para o início');
+  expect(text(tree)).not.toMatch(/Conecte seu primeiro computador/);
+  expect(text(tree)).toMatch(/Mac de Foco/);
+  expect(text(tree)).toMatch(/Ações rápidas/);
+  expect(tabStates(tree)).toEqual([false, false, false, false, false]);
+  await press(tree, 'Agentes');
+  expect(tabNode(tree, 'Agentes').props.accessibilityState.selected).toBe(true);
+  await act(async () => tree.unmount());
+});
+
+// Reabrir o app com o vínculo guardado vai direto ao painel, mesmo com o
+// computador fora de alcance: desconectado não é desvinculado.
+test('reopening with a linked computer that is offline keeps the dashboard and every tab free', async () => {
+  mockStore.load.mockResolvedValue({ store: { ...stored, lastDesktopId: null }, legacyDiscarded: false });
+  mockTunnel.status.mockResolvedValue({ state: 'offline', active: null, tor: { state: 'ready', progress: 100 }, desktops: 1 });
+  mockTunnel.connect.mockRejectedValue(coded('no_path'));
+  const tree = await render({ home: true });
+  expect(text(tree)).not.toMatch(/Conecte seu primeiro computador/);
+  expect(text(tree)).toMatch(/Mac de Foco/);
+  expect(tabStates(tree)).toEqual([false, false, false, false, false]);
+  await press(tree, 'Projetos');
+  expect(tabNode(tree, 'Projetos').props.accessibilityState.selected).toBe(true);
+  await act(async () => tree.unmount());
+});
+
+// Esquecer o último computador devolve o primeiro acesso e trava as abas de novo.
+test('forgetting the last computer returns to the first access and locks the tabs again', async () => {
+  mockStore.load.mockResolvedValue({ store: { ...stored, lastDesktopId: null }, legacyDiscarded: false });
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation((title, detail, buttons) => {
+    buttons.find(button => button.style === 'destructive').onPress();
+  });
+  const tree = await render({ home: true });
+  await press(tree, 'Ver terminais');
+  await act(async () => { labelled(tree, 'Opções de Mac de Foco').props.onPress(); });
+  await act(async () => { pressable(tree, 'Esquecer').props.onPress(); });
+  await flush();
+  expect(alert).toHaveBeenCalledTimes(1);
+  expect(mockStore.save).toHaveBeenLastCalledWith(emptyStore);
+  expect(text(tree)).toMatch(/Conecte seu primeiro computador/);
+  expect(tabStates(tree)).toEqual([false, true, true, true, false]);
+  alert.mockRestore();
+  await act(async () => tree.unmount());
+});
+
+// Uma falha ao ler os computadores guardados não é primeiro acesso: o início
+// mostra o erro com nova tentativa e não oferece um vínculo por cima.
+test('a failure reading the saved computers shows a retry instead of the first access', async () => {
+  mockStore.load.mockRejectedValueOnce(new Error('keychain locked'));
+  const tree = await render({ home: true });
+  expect(text(tree)).toMatch(/Não foi possível abrir os computadores guardados/);
+  expect(text(tree)).not.toMatch(/Conecte seu primeiro computador/);
+  expect(tree.root.findAllByType(Pair)).toHaveLength(0);
+  expect(mockStore.save).not.toHaveBeenCalled();
+  await act(async () => { pressable(tree, 'Tentar de novo').props.onPress(); });
+  await flush();
+  expect(text(tree)).toMatch(/Mac de Foco/);
+  expect(tabStates(tree)).toEqual([false, false, false, false, false]);
   await act(async () => tree.unmount());
 });
 

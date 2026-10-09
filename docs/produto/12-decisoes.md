@@ -54,6 +54,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 046 | Preparado | Início do celular com retrato enviado pela página, pedido ao abrir o terminal, favoritos no aparelho e ícones lucide por `react-native-svg`; testes passam, conferência em aparelho pendente de novo build nativo |
 | 047 | Preparado | Projetos com atalhos por computador e sessão nova em três etapas na página, com agente e conta escolhidos para a sessão; testes e capturas passam, fluxo completo em aparelho pendente de novo build nativo |
 | 048 | Preparado | Teclado especial e comandos rápidos na página do terminal, com sequências conferidas contra o xterm e em PTY local com bash, less, vim, Claude Code e Codex; conferência em aparelho pendente |
+| 051 | Preparado | Primeiro acesso no início com convite ilustrado e as abas que dependem de computador travadas por uma guarda única na navegação; testes passam, conferência em aparelho pendente |
 
 ## 001 Nome Cialai
 
@@ -378,3 +379,12 @@ Decisão: as chaves de demonstração da URL, `terminais`, `tunnel` e `notch`, p
 Alternativa rejeitada: a fonte variável também no app nativo. O Android não escolhe peso numa fonte variável pelo `fontWeight`, e cinco arquivos estáticos dão o mesmo desenho nos dois sistemas.
 
 Consequência: o app precisa de um build novo para levar as fontes. A demonstração continua valendo em navegador puro, onde rodam a fixture do telefone e as checagens de navegador. As telas nativas podem ser vistas no navegador por uma prévia com react-native-web mantida fora do repositório, que não substitui o aparelho: a fonte, o interruptor e a área segura só ficam iguais no build nativo.
+
+## 051 Primeiro acesso no início, com as abas do computador travadas
+
+Data: 09/10/2026. Contexto: sem computador vinculado, o app abria direto na tela de vínculo, quase vazia, sem a identidade nem a barra inferior. Uma falha ao ler `desktops.json` também levava a ela, o que convidava a vincular por cima de vínculos que só não tinham sido lidos.
+
+Decisão: o app abre sempre no início, inclusive sem computador. Enquanto a loja é lida, o início mostra um esqueleto e a barra; lida e vazia, mostra o convite com ilustração, "Conecte seu primeiro computador", o botão Vincular computador e os três passos do vínculo; com falha de leitura, mostra o erro com Tentar de novo e não oferece vínculo. O aviso de perfis antigos do Headscale aparece no convite e segue para a tela de vínculo. A checagem de acesso fica num lugar só, `guardAction` em `state/machine.ts`, aplicada pelo `dispatch` do `App.tsx`: sem vínculo, as ações que levam a Computadores, Projetos, Agentes, terminal e tela sem conexão viram o início, venham da barra, de um atalho ou do núcleo. A barra mostra Terminais, Projetos e Agentes em cinza e sem toque, por `lockedTabs`; Início e Ajustes ficam livres. Esquecer o último computador devolve o início ao convite. Computador desconectado continua vinculado e não trava nada. O fluxo de vínculo, o armazenamento e os protocolos não mudaram: a tela de vínculo ganha voltar ao início sempre, inclusive pelo voltar do Android, e o vínculo bem-sucedido continua abrindo o terminal do computador novo, de onde o voltar leva ao painel já liberado.
+
+Consequência: a tela de vínculo deixa de ser a abertura do app e passa a ser só o fluxo aberto pelo convite, pelo atalho Vincular e pela lista de computadores. Testes de `App.test.js` cobrem primeira instalação, vínculo, reabertura com computador fora de alcance, remoção do último computador e falha de leitura; a conferência em aparelho fica pendente de novo build.
+

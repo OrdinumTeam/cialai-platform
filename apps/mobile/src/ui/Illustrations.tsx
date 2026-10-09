@@ -1,4 +1,4 @@
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { useTokens } from '../theme';
 import { projectTints } from './tokens';
@@ -26,6 +26,53 @@ export function LaptopIllustration({ width = 112, online = true }: LaptopProps) 
       <Path d={online ? 'M18 46 C 38 30, 58 52, 94 28 L94 58 L18 58 Z' : 'M18 50 L94 50 L94 58 L18 58 Z'} fill="#FFFFFF" opacity={0.18} />
       <Path d="M4 64 L108 64 L102 72 Q101 74 98 74 L14 74 Q11 74 10 72 Z" fill={base} />
       <Rect fill={body} height="2" opacity={0.25} rx="1" width="20" x="46" y="65" />
+    </Svg>
+  );
+}
+
+type WelcomeProps = { width?: number };
+
+// Primeiro acesso: o notebook com o terminal aceso e o celular ao lado, com o
+// código de vínculo na tela e um traço pontilhado ligando os dois.
+export function WelcomeIllustration({ width = 240 }: WelcomeProps) {
+  const { colors, scheme } = useTokens();
+  const body = scheme === 'dark' ? '#4A4B55' : '#2B2D36';
+  const base = scheme === 'dark' ? '#6B6E7A' : '#C9CEDA';
+  const paper = scheme === 'dark' ? '#F4F4F7' : '#FFFFFF';
+  return (
+    <Svg accessibilityElementsHidden height={Math.round(width * 160 / 240)} importantForAccessibility="no-hide-descendants" viewBox="0 0 240 160" width={width}>
+      <Defs>
+        <LinearGradient id="welcomeScreen" x1="0" x2="1" y1="0" y2="1">
+          <Stop offset="0" stopColor="#FF8DC0" />
+          <Stop offset="0.55" stopColor="#B04DE0" />
+          <Stop offset="1" stopColor="#3E2A8C" />
+        </LinearGradient>
+      </Defs>
+      <Circle cx="118" cy="84" fill={colors.primarySoft} r="70" />
+      <Circle cx="34" cy="38" fill={colors.primary} opacity={0.35} r="4" />
+      <Circle cx="216" cy="30" fill={colors.primary} opacity={0.5} r="3" />
+      <Circle cx="24" cy="128" fill={colors.primary} opacity={0.25} r="6" />
+      <G transform="translate(22 34) scale(1.2)">
+        <Rect fill={body} height="58" rx="5" width="84" x="14" y="4" />
+        <Rect fill="url(#welcomeScreen)" height="50" rx="2" width="76" x="18" y="8" />
+        <Rect fill="#FFFFFF" height="3" opacity={0.9} rx="1.5" width="8" x="24" y="16" />
+        <Rect fill="#FFFFFF" height="3" opacity={0.6} rx="1.5" width="30" x="35" y="16" />
+        <Rect fill="#FFFFFF" height="3" opacity={0.45} rx="1.5" width="40" x="24" y="24" />
+        <Rect fill="#FFFFFF" height="3" opacity={0.45} rx="1.5" width="26" x="24" y="32" />
+        <Rect fill="#FFFFFF" height="4" opacity={0.9} rx="1" width="6" x="24" y="40" />
+        <Path d="M4 64 L108 64 L102 72 Q101 74 98 74 L14 74 Q11 74 10 72 Z" fill={base} />
+        <Rect fill={body} height="2" opacity={0.25} rx="1" width="20" x="46" y="65" />
+      </G>
+      <Path d="M150 46 Q 186 14 198 64" fill="none" stroke={colors.primary} strokeDasharray="2 6" strokeLinecap="round" strokeWidth="2.5" />
+      <Rect fill={body} height="82" rx="10" width="48" x="174" y="66" />
+      <Rect fill={paper} height="70" rx="6" width="40" x="178" y="72" />
+      <Rect fill="none" height="10" rx="2" stroke={colors.primary} strokeWidth="2.5" width="10" x="184" y="82" />
+      <Rect fill="none" height="10" rx="2" stroke={colors.primary} strokeWidth="2.5" width="10" x="202" y="82" />
+      <Rect fill="none" height="10" rx="2" stroke={colors.primary} strokeWidth="2.5" width="10" x="184" y="100" />
+      <Rect fill={colors.primary} height="4" rx="1" width="4" x="203" y="101" />
+      <Rect fill={colors.primary} height="4" rx="1" width="4" x="208" y="106" />
+      <Rect fill={colors.primary} height="4" rx="1" width="4" x="203" y="111" />
+      <Rect fill={body} height="4" opacity={0.2} rx="2" width="24" x="186" y="126" />
     </Svg>
   );
 }

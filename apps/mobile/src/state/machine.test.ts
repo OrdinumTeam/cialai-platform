@@ -1,6 +1,6 @@
 import type { TunnelStatus } from 'cialai-tunnel';
 
-import { describeDesktop, transition, type AppScreen, type OfflineReason } from './machine';
+import { describeDesktop, guardAction, screenRequiresDesktop, transition, type AppScreen, type OfflineReason } from './machine';
 
 const desktopId = 'd_AAAAAAAAAAAAAAAAAAAAAA';
 const otherDesktopId = 'd_BBBBBBBBBBBBBBBBBBBBBB';
@@ -125,4 +125,25 @@ describe('desktop state in the list', () => {
       tunnelStatus: status('connected', active), connectingId: desktopId, failures: new Map([[desktopId, 'removed']])
     })).toEqual({ state: 'removed', transport: null });
   });
+});
+
+// A guarda é a única checagem de acesso: sem vínculo, toda tela que depende de
+// um computador vira o início; com vínculo, nada muda, mesmo desconectado.
+test('without a linked computer the guard turns computer screens into the home', () => {
+  const blocked = [
+    { type: 'show-desktops' }, { type: 'show-projects' }, { type: 'show-agents' },
+    { type: 'desktop-opened', desktopId: 'd', url: 'u', transport: null, path: null },
+    { type: 'desktop-offline', desktopId: 'd', reason: 'no-path' }
+  ] as const;
+  for (const action of blocked) {
+    expect(guardAction(action, false)).toEqual({ type: 'show-home' });
+    expect(guardAction(action, true)).toBe(action);
+  }
+  for (const action of [{ type: 'show-home' }, { type: 'show-settings' }, { type: 'needs-pairing' }] as const) {
+    expect(guardAction(action, false)).toBe(action);
+  }
+  expect(screenRequiresDesktop({ kind: 'agents' })).toBe(true);
+  expect(screenRequiresDesktop({ kind: 'offline', desktopId: 'd', reason: 'removed' })).toBe(true);
+  expect(screenRequiresDesktop({ kind: 'settings' })).toBe(false);
+  expect(screenRequiresDesktop({ kind: 'pair' })).toBe(false);
 });

@@ -6,7 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { setLocale } from '../i18n';
 import { Agents } from '../screens/Agents';
 import { Projects } from '../screens/Projects';
-import { tabForScreen } from '../state/tabs';
+import { lockedTabs, tabForScreen } from '../state/tabs';
 import { dashboardFor, recordSnapshot, resetDashboardForTests, toggleFavorite } from '../dashboard/store';
 import {
   AppHeader, BottomNavigation, ChoiceRow, Notice, ComputerCard, EmptyState, PrimaryButton, ProgressIndicator, ProjectCard,
@@ -33,7 +33,8 @@ test('the active tab follows the screen and native-only screens have none', () =
   expect(tabForScreen({ kind: 'projects' })).toBe('projects');
   expect(tabForScreen({ kind: 'agents' })).toBe('agents');
   expect(tabForScreen({ kind: 'settings' })).toBe('settings');
-  expect(tabForScreen({ kind: 'loading' })).toBeNull();
+  // O carregamento já desenha o início com o esqueleto.
+  expect(tabForScreen({ kind: 'loading' })).toBe('home');
   expect(tabForScreen({ kind: 'pair' })).toBeNull();
   expect(tabForScreen({ kind: 'offline', desktopId: 'd', reason: 'no-path' })).toBeNull();
   expect(tabForScreen({ kind: 'shell', desktopId: 'd', url: 'u', transport: null, path: null, reconnecting: false })).toBeNull();
@@ -47,6 +48,22 @@ test('BottomNavigation lists five tabs, marks the active one and reports the cho
   expect(tabs.map(node => node.props.accessibilityState.selected)).toEqual([false, false, true, false, false]);
   await act(async () => { labelled(tree, 'Agentes').props.onPress(); });
   expect(onSelect).toHaveBeenCalledWith('agents');
+  await act(async () => tree.unmount());
+});
+
+// Sem computador vinculado, Terminais, Projetos e Agentes ficam em cinza e sem
+// toque; Início e Ajustes seguem livres.
+test('BottomNavigation greys out and disables the tabs that need a computer', async () => {
+  const onSelect = jest.fn();
+  expect(lockedTabs(true)).toEqual([]);
+  const tree = await render(<SafeAreaProvider initialMetrics={metrics}>
+    <BottomNavigation active="home" disabled={lockedTabs(false)} onSelect={onSelect} />
+  </SafeAreaProvider>);
+  const tabs = tree.root.findAll(node => node.props.accessibilityRole === 'tab' && typeof node.props.onPress === 'function');
+  expect(tabs.map(node => !!node.props.accessibilityState.disabled)).toEqual([false, true, true, true, false]);
+  expect(tabs.map(node => !!node.props.disabled)).toEqual([false, true, true, true, false]);
+  await act(async () => { labelled(tree, 'Ajustes').props.onPress(); });
+  expect(onSelect).toHaveBeenCalledWith('settings');
   await act(async () => tree.unmount());
 });
 

@@ -11,18 +11,26 @@ import type { DesktopEntry, DesktopStore } from '../desktops/store';
 import { useI18n } from '../i18n';
 import type { DesktopConnection } from '../state/machine';
 import { useTokens } from '../theme';
-import { EmptyState, PrimaryButton, Screen, SectionHeader, radius, space, typography } from '../ui';
+import { Notice, PrimaryButton, Screen, SectionHeader, radius, space, typography } from '../ui';
 import { AGENTS } from './agents/usage';
 import { AgentUsageSheet, AgentUsageSummary } from './home/AgentUsage';
 import { ComputerCarousel, ComputerMenu } from './home/Computers';
 import { AddFavoritesCard, FavoritesSheet, ProjectFolderCard, ProjectSheet, ProjectSkeleton, type ProjectItem } from './home/Projects';
 import { QuickActions } from './home/QuickActions';
+import { FirstComputer, HomeSkeleton, StoreError } from './home/Welcome';
 
 // Pedido que o Início faz ao abrir o terminal; o App acrescenta o id.
 export type IntentRequest = ShellIntent extends infer I ? I extends ShellIntent ? Omit<I, 'id'> : never : never;
 
+// Leitura da loja de computadores: o primeiro acesso só aparece com ela pronta e vazia.
+export type StoreState = 'loading' | 'ready' | 'error';
+
 type Props = {
   store: DesktopStore;
+  storeState: StoreState;
+  onRetryStore: () => void;
+  // Aviso que acompanha o primeiro acesso, como a troca do jeito de conectar.
+  notice?: string;
   describe: (desktopId: string) => DesktopConnection;
   // Computador cujo proxy ficou aberto ao sair do terminal; o card oferece desconectar.
   keptDesktopId: string | null;
@@ -59,7 +67,7 @@ const LOCKUP_WIDTH = Math.round(LOCKUP_HEIGHT * 238 / 120);
 // Início: logo fixo no topo, uso dos agentes, computadores, projetos e atalhos. Os
 // dados do computador vêm do último retrato que a página mandou; cada parte
 // cai no próprio estado vazio sem bloquear as outras.
-export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onDisconnect, onDesktops, onPair, onTerminal, onProjects }: Props) {
+export function Home({ store, storeState, onRetryStore, notice, describe, keptDesktopId, onContinue, onIntent, onDisconnect, onDesktops, onPair, onTerminal, onProjects }: Props) {
   const { colors } = useTokens();
   const { locale, t } = useI18n();
   const dashboard = useDashboard();
@@ -120,10 +128,10 @@ export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onD
       </View>
       <ScrollView contentContainerStyle={styles.content}>
 
-        {!desktops.length ? (
-          <View style={[styles.emptyCard, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <EmptyState action={{ label: t('mobile.home.quick.pair'), onPress: onPair, icon: 'qr-code' }}
-              detail={t('mobile.home.empty.detail')} icon="laptop" title={t('mobile.home.empty.title')} />
+        {storeState === 'loading' ? <HomeSkeleton /> : storeState === 'error' ? <StoreError onRetry={onRetryStore} /> : !desktops.length ? (
+          <View style={styles.welcome}>
+            {notice ? <Notice detail={notice} icon="info" tone="warning" /> : null}
+            <FirstComputer onPair={onPair} />
           </View>
         ) : <>
           <View style={styles.agents}>
@@ -150,20 +158,20 @@ export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onD
             <PrimaryButton accessibilityLabel={t('mobile.home.projects.manage')} icon="star" label={t('mobile.home.projects.manage')}
               onPress={() => setFavoritesOpen(true)} style={styles.manage} />
           ) : null}
+
+          <SectionHeader title={t('mobile.home.quick.title')} />
+          <QuickActions actions={[
+            { icon: 'plus', label: t('mobile.home.quick.short.newSession'), accessibilityLabel: t('mobile.home.quick.newSession'),
+              onPress: () => intent({ kind: 'new-session' }), disabled: !focused },
+            { icon: 'qr-code', label: t('mobile.home.quick.short.pair'), accessibilityLabel: t('mobile.home.quick.pair'), onPress: onPair },
+            { icon: 'terminal', label: t('mobile.home.quick.short.terminals'), accessibilityLabel: t('mobile.home.quick.terminals'),
+              onPress: onTerminal, disabled: !focused },
+            { icon: 'bot', label: t('mobile.home.quick.short.agents'), accessibilityLabel: t('mobile.home.quick.agents'),
+              onPress: () => intent({ kind: 'profiles' }), disabled: !focused }
+          ]} />
         </>}
 
-        <SectionHeader title={t('mobile.home.quick.title')} />
-        <QuickActions actions={[
-          { icon: 'plus', label: t('mobile.home.quick.short.newSession'), accessibilityLabel: t('mobile.home.quick.newSession'),
-            onPress: () => intent({ kind: 'new-session' }), disabled: !focused },
-          { icon: 'qr-code', label: t('mobile.home.quick.short.pair'), accessibilityLabel: t('mobile.home.quick.pair'), onPress: onPair },
-          { icon: 'terminal', label: t('mobile.home.quick.short.terminals'), accessibilityLabel: t('mobile.home.quick.terminals'),
-            onPress: onTerminal, disabled: !focused },
-          { icon: 'bot', label: t('mobile.home.quick.short.agents'), accessibilityLabel: t('mobile.home.quick.agents'),
-            onPress: () => intent({ kind: 'profiles' }), disabled: !focused }
-        ]} />
-
-        <View style={styles.community}>
+        {storeState === 'loading' ? null : <View style={styles.community}>
           <Text accessibilityRole="header" style={[typography.headline, { color: colors.text }]}>{t('mobile.home.community')}</Text>
           <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.home.communityHint')}</Text>
           <View style={styles.communityRow}>
@@ -179,7 +187,7 @@ export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onD
               );
             })}
           </View>
-        </View>
+        </View>}
       </ScrollView>
 
       <AgentUsageSheet agent={agentSheet} chosenId={agentSheet ? entry?.accounts[agentSheet] : undefined} now={now} onClose={() => setAgentSheet(null)}
@@ -202,7 +210,7 @@ export function Home({ store, describe, keptDesktopId, onContinue, onIntent, onD
 }
 
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: space.lg, paddingTop: space.xxs, paddingBottom: space.xl, gap: space.sm },
+  content: { flexGrow: 1, paddingHorizontal: space.lg, paddingTop: space.xxs, paddingBottom: space.xl, gap: space.sm },
   brand: { minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg },
   lockup: { width: LOCKUP_WIDTH, height: LOCKUP_HEIGHT },
   agents: { flexDirection: 'row', gap: space.sm, alignItems: 'stretch' },
@@ -211,7 +219,8 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   note: { paddingVertical: space.xs },
   manage: { minHeight: 44 },
-  emptyCard: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.lg },
+  // Primeiro acesso: o convite ocupa o meio da área livre, acima da comunidade.
+  welcome: { flexGrow: 1, justifyContent: 'center', gap: space.sm },
   community: { marginTop: space.xs, gap: 2 },
   communityRow: { marginTop: space.xs, flexDirection: 'row', flexWrap: 'wrap', gap: space.xs },
   // Botão suave do site: fundo rosa claro, texto e marca escuros, raio dos botões.

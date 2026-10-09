@@ -17,7 +17,12 @@ export const TABS: readonly { id: TabId; icon: IconName; label: string }[] = [
   { id: 'settings', icon: 'settings', label: 'mobile.tabs.settings' }
 ];
 
-type Props = { active: TabId | null; onSelect: (tab: TabId) => void };
+type Props = {
+  active: TabId | null;
+  onSelect: (tab: TabId) => void;
+  // Abas que ainda não têm o que mostrar: ícone e rótulo em cinza, sem toque.
+  disabled?: readonly TabId[];
+};
 
 // Esconde a barra enquanto o teclado está aberto: o espaço vai para o campo.
 function useKeyboardVisible(): boolean {
@@ -32,7 +37,7 @@ function useKeyboardVisible(): boolean {
 
 // Barra inferior das telas nativas. Em paisagem o rótulo fica ao lado do ícone
 // para a barra ocupar menos altura.
-export function BottomNavigation({ active, onSelect }: Props) {
+export function BottomNavigation({ active, onSelect, disabled = [] }: Props) {
   const { colors } = useTokens();
   const { t } = useI18n();
   const insets = useSafeAreaInsets();
@@ -46,10 +51,12 @@ export function BottomNavigation({ active, onSelect }: Props) {
         paddingBottom: Math.max(insets.bottom, space.xs), paddingLeft: insets.left, paddingRight: insets.right }]}>
       {TABS.map(tab => {
         const selected = tab.id === active;
-        const color = selected ? colors.primary : colors.textSecondary;
+        const locked = disabled.includes(tab.id);
+        const color = selected ? colors.primary : locked ? colors.textTertiary : colors.textSecondary;
         return (
-          <Pressable accessibilityLabel={t(tab.label)} accessibilityRole="tab" accessibilityState={{ selected }} key={tab.id}
-            onPress={() => onSelect(tab.id)} style={({ pressed }) => [styles.tab, landscape && styles.tabLandscape, pressed && styles.pressed]}>
+          <Pressable accessibilityLabel={t(tab.label)} accessibilityRole="tab" accessibilityState={locked ? { selected, disabled: true } : { selected }}
+            disabled={locked} key={tab.id} onPress={() => onSelect(tab.id)}
+            style={({ pressed }) => [styles.tab, landscape && styles.tabLandscape, pressed && styles.pressed]}>
             <Icon color={color} name={tab.icon} size={landscape ? 20 : 22} strokeWidth={selected ? 2.1 : 1.8} />
             <Text maxFontSizeMultiplier={1.3} numberOfLines={1}
               style={[styles.label, { color, fontWeight: selected ? '600' : '500' }]}>{t(tab.label)}</Text>
