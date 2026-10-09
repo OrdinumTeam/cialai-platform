@@ -18,7 +18,8 @@ type BaseProps = {
 };
 
 // `link` e `link-danger` são ações de texto, sem fundo, como "Outro código".
-export type SecondaryVariant = 'soft' | 'neutral' | 'outline' | 'danger' | 'link' | 'link-danger';
+// `bordered` é o botão branco com borda fina, ao lado de uma ação principal.
+export type SecondaryVariant = 'soft' | 'neutral' | 'outline' | 'bordered' | 'danger' | 'link' | 'link-danger';
 
 type Visual = { background: string; pressed: string; text: string; border?: string };
 
@@ -57,6 +58,7 @@ export function SecondaryButton({ variant = 'soft', ...props }: BaseProps & { va
   const { colors } = useTokens();
   const visual: Visual = variant === 'neutral' ? { background: colors.surfaceMuted, pressed: colors.surfacePressed, text: colors.text }
     : variant === 'outline' ? { background: colors.surface, pressed: colors.primarySoft, text: colors.primary, border: colors.primary }
+    : variant === 'bordered' ? { background: colors.surface, pressed: colors.surfacePressed, text: colors.text, border: colors.border }
       : variant === 'danger' ? { background: colors.danger, pressed: colors.danger, text: colors.onDanger }
         : variant === 'link' ? { background: 'transparent', pressed: colors.primarySoft, text: colors.primary }
           : variant === 'link-danger' ? { background: 'transparent', pressed: colors.dangerSoft, text: colors.danger }

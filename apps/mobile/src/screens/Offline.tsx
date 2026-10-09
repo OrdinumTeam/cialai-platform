@@ -7,7 +7,7 @@ import type { OfflineReason } from '../state/machine';
 import { useI18n } from '../i18n';
 import { RequestGate } from '../network/request-gate';
 import { useTokens } from '../theme';
-import { PrimaryButton, ProgressIndicator, SecondaryButton, StatusBadge, space, typography } from '../ui';
+import { Card, PrimaryButton, ProgressIndicator, SecondaryButton, StatusBadge, space, typography } from '../ui';
 
 const reasonKeys: Record<OfflineReason, { title: string; detail: string }> = {
   reconnecting: { title: 'mobile.offline.reconnecting.title', detail: 'mobile.offline.reconnecting.detail' },
@@ -87,35 +87,36 @@ export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, o
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.status}>
-          <StatusBadge label={t(connecting ? 'mobile.offline.statusConnecting' : 'mobile.offline.status')}
-            tone={connecting ? 'warning' : 'danger'} variant="pill" />
-        </View>
-        <Text accessibilityRole="header" style={[typography.largeTitle, { color: colors.text }]}>{t(copy.title)}</Text>
-        <Text style={[typography.body, styles.body, { color: colors.textSecondary }]}>{t(copy.detail)}</Text>
-        {reason === 'reserve-preparing' && reserveProgress !== null ? (
-          <View accessibilityLiveRegion="polite" style={styles.progress}>
-            <ProgressIndicator detail={t('mobile.reserve.progress', { progress: reserveProgress })}
-              label={t('mobile.transport.torDescription')} tone="warning" value={reserveProgress / 100} />
+        {/* Tudo num card só; as ações em coluna, cada uma na linha inteira. */}
+        <Card style={styles.card}>
+          <View style={styles.status}>
+            <StatusBadge label={t(connecting ? 'mobile.offline.statusConnecting' : 'mobile.offline.status')}
+              tone={connecting ? 'warning' : 'danger'} variant="pill" />
           </View>
-        ) : null}
-        <View style={styles.actions}>
-          {removed
-            ? <PrimaryButton label={t('mobile.offline.pairAgain')} onPress={() => leave(onPairAgain)} size="lg" />
-            : <PrimaryButton label={t('mobile.offline.retry')} loading={checking} onPress={() => void retry()} size="lg" />}
-          <SecondaryButton accessibilityLabel={t('mobile.home.open')} icon="house" label={t('mobile.home.back')}
-            onPress={() => leave(onHome)} variant="link" />
-        </View>
-        <View style={styles.shortcuts}>
-          <SecondaryButton accessibilityLabel={t('mobile.home.openDesktops')} label={t('mobile.home.desktops')}
-            onPress={() => leave(onDesktops)} variant="link" />
-          <SecondaryButton accessibilityLabel={t('mobile.desktops.openSettings')} label={t('mobile.home.settings')}
-            onPress={() => leave(onSettings)} variant="link" />
-          {removed ? null : (
-            <SecondaryButton accessibilityLabel={t('mobile.home.openPair')} label={t('mobile.home.pair')}
-              onPress={() => leave(onPair)} variant="link" />
-          )}
-        </View>
+          <Text accessibilityRole="header" style={[typography.largeTitle, { color: colors.text }]}>{t(copy.title)}</Text>
+          <Text style={[typography.body, styles.body, { color: colors.textSecondary }]}>{t(copy.detail)}</Text>
+          {reason === 'reserve-preparing' && reserveProgress !== null ? (
+            <View accessibilityLiveRegion="polite" style={styles.progress}>
+              <ProgressIndicator detail={t('mobile.reserve.progress', { progress: reserveProgress })}
+                label={t('mobile.transport.torDescription')} tone="warning" value={reserveProgress / 100} />
+            </View>
+          ) : null}
+          <View style={styles.actions}>
+            {removed
+              ? <PrimaryButton label={t('mobile.offline.pairAgain')} onPress={() => leave(onPairAgain)} size="lg" />
+              : <PrimaryButton label={t('mobile.offline.retry')} loading={checking} onPress={() => void retry()} size="lg" />}
+            <SecondaryButton accessibilityLabel={t('mobile.home.open')} icon="house" label={t('mobile.home.back')}
+              onPress={() => leave(onHome)} size="lg" variant="bordered" />
+            <SecondaryButton accessibilityLabel={t('mobile.home.openDesktops')} icon="monitor" label={t('mobile.home.desktops')}
+              onPress={() => leave(onDesktops)} size="lg" variant="bordered" />
+            <SecondaryButton accessibilityLabel={t('mobile.desktops.openSettings')} icon="settings" label={t('mobile.home.settings')}
+              onPress={() => leave(onSettings)} size="lg" variant="bordered" />
+            {removed ? null : (
+              <SecondaryButton accessibilityLabel={t('mobile.home.openPair')} icon="qr-code" label={t('mobile.home.pair')}
+                onPress={() => leave(onPair)} size="lg" variant="bordered" />
+            )}
+          </View>
+        </Card>
       </ScrollView>
     </SafeAreaView>
   );
@@ -123,10 +124,10 @@ export function Offline({ desktopId, reason, reserveProgress, onRetry, onHome, o
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: space.xl, paddingVertical: space.xxl },
+  content: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: space.lg, paddingVertical: space.xxl },
+  card: { padding: space.lg },
   status: { flexDirection: 'row', marginBottom: space.lg },
   body: { marginTop: space.sm },
   progress: { marginTop: space.lg },
-  actions: { marginTop: space.xxl, gap: space.xxs },
-  shortcuts: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: space.xxs }
+  actions: { marginTop: space.xl, gap: space.sm }
 });
