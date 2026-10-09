@@ -20,7 +20,7 @@ type CardProps = {
   chosenId?: string;
   loading: boolean;
   now: number;
-  onOpen: (agent: AgentId) => void;
+  onOpen: (agent: AgentId, accountId?: string) => void;
 };
 
 // Card de meia largura do Início: marca, nome, plano e as janelas de uso.
@@ -40,7 +40,7 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
   const summary = agentSummary(snapshot, agent, chosenId);
   const accountLabel = summary.accounts.length > 1 ? summary.account?.label : null;
   return (
-    <Card accessibilityHint={t('mobile.home.agent.details', { agent: name })} onPress={() => onOpen(agent)} style={styles.card}
+    <Card accessibilityHint={t('mobile.home.agent.details', { agent: name })} onPress={() => onOpen(agent, chosenId)} style={styles.card}
       accessibilityLabel={[name, accountLabel, summary.account?.plan,
         ...(summary.readable ? summary.rows.map(window => `${window.label} ${percentOf(window.usedFraction)}%`) : [t(stateKey(summary, !!snapshot))])]
         .filter(Boolean).join(', ')}>
