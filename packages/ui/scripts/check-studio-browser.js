@@ -123,10 +123,11 @@ const rootStyle = getComputedStyle(document.documentElement);
 assert(rootStyle.getPropertyValue('--mac-accent').trim().toLowerCase() === (dark ? '#ff7ab2' : '#e23b84'), 'Cialai accent missing');
 
 if (document.documentElement.dataset.formFactor === 'phone') {
-  await until(() => document.querySelector('.phone-terminal__sessions .terminais-card'), 'phone session list');
+  // Só cards de sessão: o esqueleto da lista também usa .phone-session, sem data-session-id.
+  await until(() => document.querySelector('.phone-terminal__sessions .phone-session[data-session-id]'), 'phone session list');
   assert(!document.querySelector('.phone-terminal__host'), 'Phone list must not mount a terminal renderer');
   assert(!document.querySelector('.ios-tabbar'), 'Cialai phone entry must expose only Terminais');
-  document.querySelector('.phone-terminal__sessions .terminais-card').click();
+  document.querySelector('.phone-terminal__sessions .phone-session[data-session-id]').click();
   await until(() => document.querySelector('.phone-terminal__host .xterm'), 'phone terminal');
   assertTerminalSurface(document.querySelector('.phone-terminal__host'));
   assert(document.querySelectorAll('.phone-terminal__host').length === 1, 'Phone must mount one terminal pane');
