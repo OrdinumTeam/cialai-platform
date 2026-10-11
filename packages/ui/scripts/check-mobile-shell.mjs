@@ -86,3 +86,28 @@ test('navigate-back percorre a ponte nos dois sentidos', async () => {
   assert.equal(received, 1);
   assert.deepEqual(sent, ['{"type":"navigate-back"}']);
 });
+
+test('o painel da pagina chega a casca como view, so para lista, terminal e arquivos', async () => {
+  const shellBundle = await build({
+    entryPoints: ['src/lib/shell.js'],
+    bundle: true,
+    write: false,
+    format: 'cjs',
+  });
+  const load = (window) => {
+    const context = vm.createContext({ module: { exports: {} }, exports: {}, window, setTimeout, clearTimeout });
+    vm.runInContext(shellBundle.outputFiles[0].text, context);
+    return context.module.exports;
+  };
+  const sent = [];
+  const shell = load({ ReactNativeWebView: { postMessage: (message) => sent.push(message) } });
+  assert.deepEqual([...shell.VIEW_PANES], ['list', 'terminal', 'files']);
+  shell.postView('terminal');
+  assert.deepEqual(sent, ['{"type":"view","pane":"terminal"}']);
+  shell.postView('preview');
+  shell.postView(undefined);
+  assert.deepEqual(sent, ['{"type":"view","pane":"terminal"}'], 'painel fora do contrato nao sai');
+  // Sem a casca, no navegador de desenvolvimento, o efeito roda e nada acontece.
+  assert.doesNotThrow(() => load({}).postView('terminal'));
+  assert.doesNotThrow(() => load({ __CIALAI_SHELL__: {} }).postView('list'), 'casca anunciada sem postMessage tambem nao derruba a pagina');
+});

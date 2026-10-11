@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ArrowDown, ChevronLeft, ChevronUp, ClipboardPaste, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
-import { onNavigateBack, postProjectPicked, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
+import { onNavigateBack, postProjectPicked, postView, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
 import { baseName } from '../files.js';
 import { applicationCursorKeys, blurTerminal, bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, launchAgentWhenReady, moveSessionBy, onTerminalFocus, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setInputTransform, setSessionColor, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalAttaching, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
 import { phoneRoute, phoneRouteStorage, readPhoneRoute, writePhoneRoute } from '../phone-navigation.js';
@@ -121,6 +121,8 @@ export default function PhoneWorkbench() {
   };
   useEffect(() => { heading.current?.focus(); }, [pane]);
   useEffect(() => { writePhoneRoute(phoneRouteStorage(), route); }, [route]);
+  // A casca mostra a barra dela so na lista; a previa conta como arquivos.
+  useEffect(() => { postView(pane === 'list' ? 'list' : pane === 'terminal' ? 'terminal' : 'files'); }, [pane]);
   useEffect(() => {
     if (!hydrated || settled) return undefined;
     const timer = setTimeout(() => setSettled(true), 400);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Render the shipping phone screen with inert session data and no PTY or network.
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
@@ -121,4 +122,11 @@ test('a lista mostra esqueletos enquanto as sessoes chegam e o botao Nova sessao
 test('sem sessoes a lista convida a abrir uma pasta',()=>{
   const html=render({list:true,sessions:[]});
   assert.match(html,/Nenhuma sessão aberta|phone-terminal__empty/);
+});
+
+test('a pagina avisa a casca qual painel esta na tela, com a previa contando como arquivos',async()=>{
+  const source=await readFile('src/terminals/ui/PhoneWorkbench.jsx','utf8');
+  assert.match(source,/import \{[^}]*\bpostView\b[^}]*\} from '\.\.\/\.\.\/lib\/shell\.js'/);
+  assert.match(source,/postView\(pane === 'list' \? 'list' : pane === 'terminal' \? 'terminal' : 'files'\)/);
+  assert.match(source,/postView\(pane === 'list'/);
 });

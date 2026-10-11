@@ -82,6 +82,15 @@ export async function requestDownload(blob, name) {
 
 export function openExternal(url) { post({ type: 'open-external', url: String(url) }); }
 export function requestNavigateBack() { post({ type: 'navigate-back' }); }
+// Painel que a pagina esta mostrando, para a casca esconder a barra dela
+// enquanto a sessao ocupa a tela. Nunca lanca: fora da casca ou com painel
+// desconhecido, nada sai.
+export const VIEW_PANES = ['list', 'terminal', 'files'];
+export function postView(pane) {
+  if (!isMobileShell() || !VIEW_PANES.includes(pane)) return;
+  try { post({ type: 'view', pane }); }
+  catch (_error) { /* sem casca para receber */ }
+}
 // Retrato do computador para o Inicio nativo; o formato esta em mobile/dashboard-snapshot.js.
 export function postDashboard(snapshot) { post(snapshot); }
 // Pasta escolhida no navegador para virar atalho em Projetos, na casca.
