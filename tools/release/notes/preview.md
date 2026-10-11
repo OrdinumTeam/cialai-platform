@@ -6,11 +6,12 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **Windows works from the keyboard again.** In 0.2.9 nothing typed reached the application on Windows 11 while clicks still worked: the window asked the WebView2 to take focus on every focus event, Windows raises that event from the WebView2 itself, and the two handed the focus back and forth forever. The call now runs only on macOS and Linux.
-* **The Windows terminal has its colours and its font.** The content security policy blocked the style sheet xterm injects at runtime, because a hash had been added to `style-src` and a hash makes the browser ignore `'unsafe-inline'`.
-* **`claude` and `codex` are found right after installing on Windows.** The default PATH folders were empty and the PATH was copied once at launch. The usual installer folders are now on the list and the PATH is read from the registry for every new shell, so nothing has to be configured.
-* **No more `[I` when clicking back into the terminal on Windows.** The focus reports the terminal emits are discarded before they reach Windows PowerShell, whose PSReadLine echoed them as text.
-* **The drag hint names Alt outside macOS.**
+* **A native phone Home, with Projects and Agents tabs.** The app opens on the Codex and Claude Code usage, your computers, your favourite projects and quick actions. With more than one profile per agent the usage cards scroll sideways.
+* **A device keyboard button in the phone terminal bar.** It opens and closes the keyboard without touching the terminal. Esc, Tab and Paste stay in the bar, and the special keys moved to an expand button.
+* **No more blank page while the terminal loads.** The phone shows a loading screen until the computer page answers, and the page says Opening the terminal until the session is ready.
+* **Local notices** for a finished session and for a usage limit close to its end, switched on one by one in the phone Settings.
+* **The keyboard works on Windows.** The window kept asking the WebView2 for focus on every focus event, which the WebView2 itself raises on Windows, so no key ever landed. The terminal also gets its colours and font back, `claude` and `codex` are found right after installing, and clicking back into the terminal no longer leaves `[I` on the command line.
+* **The terminal bar and the loading screen are served by the computer,** so the phone shows them once the desktop app is updated.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

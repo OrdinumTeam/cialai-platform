@@ -18,6 +18,8 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 * A performance budget, `npm run check:performance`, measured on a computer simulated four times slower and over the production build. It records how long the studio takes to become usable, the payload of the first paint, the long tasks and the frame rate of the animated sheet, compares them with a versioned baseline and prints the change. Passing it by turning animation off is impossible: the animation scenario runs with motion on and the check asserts the sheet still animates
 * The application icon and every brand mark are generated, not drawn by hand. The icon is the mantis head in colour on a white rounded plate, built from two finished brand pieces that carry the artwork in the same place, so the desktop plate is the approved piece reduced and no curve is rasterized here. `tools/brand/build-app-icons.mjs` writes the three icon sources and the interface mark from the white and the black master, and `tools/brand/build-site-brand.mjs` writes the brand files of the website, each one at the exact size of the file it replaces so no page markup has to change. The gate cross reads the gradient ends and the symbol height from the generator, so the files and the code cannot drift apart
 * A `cialai` command in the terminal. The app writes it on first launch and checks it on every launch, so it repairs itself when the application moves. It only opens Cialai, with no arguments and no subcommands. On macOS and Linux it lands in `~/.local/bin` and the app never edits a shell file: when the folder is outside the PATH, Preferences shows the exact line to paste. On Windows it lands in `%LOCALAPPDATA%` and the folder is added to the user `Path` in the registry, read without expanding so `%USERPROFILE%` entries survive. A file with that name that is not ours is never overwritten or deleted, and removing the command from Preferences keeps it removed
+* A native phone Home, with Projects and Agents tabs. Home shows the Codex and Claude Code usage, the computers, the favourite projects and quick actions from the last snapshot the computer sent; Projects lists the folders with sessions and Agents shows every account with its plan and usage windows. With more than one profile per agent the usage cards scroll sideways. Without a paired computer the tabs that depend on one are locked
+* Local notices on the phone for a finished session and for a usage limit close to its end, switched on one by one in Settings. A notice is only raised between consecutive snapshots, so opening the app does not repeat an old one
 
 ### Fixed
 
@@ -59,6 +61,24 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 ### Release status
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.2.11 preview
+
+Preview dated 2026-10-11. The phone gets a native Home, Projects and Agents tabs, local notices and a terminal bar with the device keyboard button, and the Windows fixes that only reached the site as the 0.2.10 installer go out to every system through the updater. The number skips 0.2.10 because that installer already carries it, and the updater only offers a higher version.
+
+### Added
+
+* A native phone Home with Projects and Agents tabs, built from the snapshot the computer sends. Usage cards scroll sideways when an agent has more than one profile, and tapping one opens that profile
+* Local notices for a finished session and for a usage limit close to its end, raised only between consecutive snapshots
+* A device keyboard button in the phone terminal bar, which opens and closes the keyboard without touching the terminal. Esc, Tab and Paste stay in the bar and the special keys moved to an expand button
+
+### Fixed
+
+* The phone no longer shows a blank page while the computer page loads. The native shell covers the web view until the page answers, and the page shows Opening the terminal until the session is reachable, for at most 10 seconds
+* Going back to the Terminals tab opens the session list instead of the last terminal, and the tab returns to the computer list when that was the last place in it
+* The phone screen for an unreachable computer keeps everything in one card with one action per line
+* Session snapshots name the agent again, project names come from Windows paths too, and a multi-line quick command asks for confirmation before Insert runs it
+* On Windows the keyboard and the mouse wheel reach the application, the terminal has colours and its font, `claude` and `codex` are found right after installing, and clicking back into the terminal no longer leaves `[I` on the command line
 
 ## 0.2.9 preview
 
