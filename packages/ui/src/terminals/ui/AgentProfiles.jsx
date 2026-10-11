@@ -11,10 +11,12 @@
 // que começou, e a tela diz isso.
 //
 // O mesmo componente serve o computador e o celular, com a mesma lista, as
-// mesmas ações e os mesmos números. O que muda é a apresentação: no celular a
-// conta vira um cartão de três linhas, para nome, plano e uso caberem na
-// largura do aparelho sem rolagem lateral; no computador as mesmas partes
-// ficam lado a lado.
+// mesmas ações e os mesmos números. As contas ficam numa lista plana, na ordem
+// em que o computador as devolveu, e cada linha carrega o símbolo do agente
+// dela; os botões de perfil novo, um por agente, ficam no rodapé ao lado de
+// reler as contas. O que muda é a apresentação: no celular a conta vira um
+// cartão, para nome, plano e uso caberem na largura do aparelho sem rolagem
+// lateral; no computador as mesmas partes ficam lado a lado.
 //
 // O uso vem do mesmo lugar para os dois provedores, a loja da Barra de IA, e
 // cada percentual aparece com o nome da janela a que pertence. Sem leitura o
@@ -39,6 +41,13 @@ export function groupProfiles(list) {
   return AGENTS
     .map((id) => ({ id, profiles: (list || []).filter((profile) => profile.agent === id) }))
     .filter((group) => group.profiles.length);
+}
+
+// Lista plana na ordem do computador: Claude Code e depois Codex, o padrão
+// primeiro em cada um. A conta ativa não sobe, para as linhas não pularem a
+// cada troca.
+export function flattenProfiles(list) {
+  return groupProfiles(list).flatMap((group) => group.profiles);
 }
 
 // Janela do anel do perfil, que é a declarada pelo provedor. Nenhuma outra é
@@ -169,11 +178,14 @@ function ProfilesSkeleton() {
   );
 }
 
-// Cartão de uma conta: nome, plano e selo de padrão, o uso por janela e a
-// ação. A conta em uso não oferece troca; as outras oferecem.
+// Cartão de uma conta: o símbolo do agente, nome, plano e selo de padrão, o
+// uso por janela e a ação. A conta em uso não oferece troca; as outras
+// oferecem. O símbolo leva o nome do agente para o leitor de tela, já que a
+// lista não tem mais um título por agente.
 export function ProfileRow({ profile, busy, onSelect }) {
   return (
     <div className={`agent-profiles__row${profile.active ? ' is-active' : ''}`}>
+      <span className="agent-profiles__glyph" role="img" aria-label={translate(`terminal.profiles.agent.${profile.agent}`)} dangerouslySetInnerHTML={{ __html: GLYPHS[profile.agent] || '' }} />
       <div className="agent-profiles__identity">
         <span className="agent-profiles__name" title={profile.account || profile.label}>{profile.label}</span>
         <span className="agent-profiles__tags">
@@ -239,7 +251,7 @@ export default function AgentProfiles({ onCreate, onSelected }) {
     }
   };
 
-  const groups = groupProfiles(profiles);
+  const rows = flattenProfiles(profiles);
   return (
     <div className="agent-profiles">
       <div className="agent-profiles__notice" role="note">
@@ -257,26 +269,27 @@ export default function AgentProfiles({ onCreate, onSelected }) {
         </div>
       ) : null}
       {profiles == null ? <ProfilesSkeleton /> : null}
-      {profiles != null && !groups.length ? <p className="agent-profiles__empty">{translate('terminal.profiles.none')}</p> : null}
-      {groups.map((group) => (
-        <section key={group.id} className="agent-profiles__group">
-          <header className="agent-profiles__head">
-            <span className={`agent-profiles__glyph agent-profiles__glyph--${group.id}`} aria-hidden="true" dangerouslySetInnerHTML={{ __html: GLYPHS[group.id] || '' }} />
-            <h3>{translate(`terminal.profiles.agent.${group.id}`)}</h3>
-            {onCreate ? (
-              <button type="button" className="agent-profiles__create" onClick={() => onCreate(group.id, load)}>
-                <CirclePlus size={15} strokeWidth={1.75} aria-hidden="true" />{translate('terminal.profiles.create')}
-              </button>
-            ) : null}
-          </header>
-          {group.profiles.map((profile) => (
+      {profiles != null && !rows.length ? <p className="agent-profiles__empty">{translate('terminal.profiles.none')}</p> : null}
+      {rows.length ? (
+        <div className="agent-profiles__list">
+          {rows.map((profile) => (
             <ProfileRow key={profile.id} profile={profile} busy={busy === profile.id} onSelect={select} />
           ))}
-        </section>
-      ))}
-      <button type="button" className="agent-profiles__refresh" disabled={reloading} onClick={reload}>
-        <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />{translate(reloading ? 'terminal.profiles.refreshing' : 'terminal.profiles.refresh')}
-      </button>
+        </div>
+      ) : null}
+      {/* Um botão de perfil novo por agente, mesmo para o agente ainda sem
+          conta nenhuma: é por aqui que a primeira nasce. */}
+      <div className="agent-profiles__actions">
+        {onCreate ? AGENTS.map((id) => (
+          <button key={id} type="button" className="agent-profiles__create" onClick={() => onCreate(id, load)}>
+            <CirclePlus size={15} strokeWidth={1.75} aria-hidden="true" />
+            {translate('terminal.profiles.createFor', { agent: translate(`terminal.profiles.agent.${id}`) })}
+          </button>
+        )) : null}
+        <button type="button" className="agent-profiles__refresh" disabled={reloading} onClick={reload}>
+          <RefreshCw size={14} strokeWidth={1.75} aria-hidden="true" />{translate(reloading ? 'terminal.profiles.refreshing' : 'terminal.profiles.refresh')}
+        </button>
+      </div>
     </div>
   );
 }

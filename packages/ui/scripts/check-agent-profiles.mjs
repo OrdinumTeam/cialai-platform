@@ -127,6 +127,39 @@ test('as contas são agrupadas por agente, na ordem que o computador devolveu', 
   assert.deepEqual([...api.AGENTS], ['claude', 'codex']);
 });
 
+test('a lista plana segue a ordem do computador, Claude Code e depois Codex, sem subir a conta ativa', () => {
+  const { api } = load();
+  const rows = api.flattenProfiles(LIST);
+  assert.deepEqual([...rows.map((profile) => profile.id)], ['claude', 'claude-webrota', 'codex-nova', 'codex-erro', 'codex-velho']);
+  // A conta ativa é a segunda e fica onde está: as linhas não pulam a cada troca.
+  assert.equal(rows[1].active, true);
+  assert.equal(api.flattenProfiles([]).length, 0);
+  assert.equal(api.flattenProfiles(null).length, 0);
+});
+
+test('cada linha carrega o símbolo do agente dela, e a tela não agrupa mais por agente', () => {
+  const { api } = load();
+  const claude = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[0], busy: false, onSelect: () => {} }));
+  assert.match(claude, /agent-profiles__glyph/);
+  assert.match(claude, /role="img"/);
+  assert.match(claude, /aria-label="Claude Code"/);
+  const codex = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[2], busy: false, onSelect: () => {} }));
+  assert.match(codex, /aria-label="Codex"/);
+  const text = source('../src/terminals/ui/AgentProfiles.jsx');
+  assert.match(text, /agent-profiles__list/);
+  assert.doesNotMatch(text, /agent-profiles__group|agent-profiles__head/);
+  // Um botão de perfil novo por agente no rodapé, com o nome do agente no rótulo.
+  assert.match(text, /terminal\.profiles\.createFor/);
+  assert.match(text, /onCreate\(id, load\)/);
+  assert.match(text, /agent-profiles__actions/);
+  // O símbolo não tem cor de marca, no computador nem no celular.
+  const css = source('../src/views/Terminais.css');
+  assert.doesNotMatch(css, /#D97757/i);
+  assert.doesNotMatch(css, /agent-profiles__glyph--claude/);
+  assert.match(css, /\.agent-profiles__list\{display:flex;flex-direction:column/);
+  assert.match(css, /\.agent-profiles__row\{display:grid;grid-template-columns:auto minmax\(0,1fr\) auto auto/);
+});
+
 test('a tela avisa que a troca vale só para sessões novas', () => {
   const { api } = load();
   const html = renderToStaticMarkup(React.createElement(api.default, {}));

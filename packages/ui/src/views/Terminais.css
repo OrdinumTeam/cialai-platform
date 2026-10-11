@@ -47,9 +47,9 @@
 /* ── estrutura ─────────────────────────────────────────────────────── */
 
 .terminais-page{--terminais-sessions:240px;--terminais-explorer:260px}
-.terminais-sessions{display:flex;flex-direction:column;flex:0 0 var(--terminais-sessions);width:var(--terminais-sessions);min-width:0;min-height:0;background:var(--mac-bg)}
+.terminais-sessions{display:flex;flex-direction:column;flex:0 0 var(--terminais-sessions);width:var(--terminais-sessions);min-width:0;min-height:0;background:var(--mac-bg);container-type:inline-size;container-name:sessions}
 .terminais-explorer{display:flex;flex-direction:column;flex:0 0 var(--terminais-explorer);width:var(--terminais-explorer);min-width:0;min-height:0;background:var(--mac-bg)}
-.terminais-work{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0}
+.terminais-work{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;container-type:inline-size;container-name:work}
 .terminais-page.is-sessions-collapsed .terminais-sessions,.terminais-page.is-explorer-collapsed .terminais-explorer{display:none}
 
 .terminais-splitter{position:relative;flex:0 0 auto;z-index:2;user-select:none;-webkit-user-select:none}
@@ -179,13 +179,21 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    o percentual, na linha do agente, e o unico com tom de alerta. */
 .terminais-card__agent-row{display:flex;align-items:center;gap:4px;min-width:0;padding-left:17px;overflow:hidden;animation:macRowIn 180ms var(--mac-ease) both}
 .terminais-card__model{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.terminais-card__profile{flex:0 0 auto;padding:0 5px;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1px var(--mac-separator-strong);font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);white-space:nowrap}
+.terminais-card__profile{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1px var(--mac-separator-strong);font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-card__agent-row{flex-wrap:wrap;row-gap:3px}
 /* Esforco, contexto usado e custo da sessao do agente: chips neutros, e o
    contexto sobe de tom quando a janela esta perto do fim. */
-.terminais-card__chip{flex:0 0 auto;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.terminais-card__chip{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
 .terminais-card__chip--warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
 .terminais-card__chip--bad{background:var(--mac-bad-bg,var(--mac-warn-bg));color:var(--mac-bad);font-weight:600}
+/* Coluna estreita: a linha do agente dobra, o tempo decorrido desce para uma
+   linha propria e os chips ficam mais juntos, em vez de cortar o nome. */
+@container sessions (max-width:230px){
+  .terminais-card__running-row{flex-wrap:wrap;row-gap:2px}
+  .terminais-card__running{flex:1 1 auto}
+  .terminais-card__elapsed{flex:1 1 100%;margin-left:0}
+  .terminais-card__agent-row{gap:3px}
+}
 /* Sem o hook do Claude Code: um botao pequeno instala a linha de estado. */
 .terminais-card__install{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:17px;padding:0 6px;border:0;border-radius:5px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:10.5px;font-weight:600;line-height:15px;white-space:nowrap;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-card__install:hover{background:var(--mac-accent-soft-hover)}
@@ -310,8 +318,8 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-work__dot--warn{background:var(--mac-warn)}
 .terminais-work__dot--bad{background:var(--mac-bad)}
 .terminais-work__dot--muted{background:var(--mac-label-4)}
-.terminais-work__name{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap}
-.terminais-work__path{min-width:0;font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-work__name{flex:0 1 auto;min-width:4ch;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-work__path{flex:0 2 auto;min-width:0;font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-work__branch{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:20px;padding:0 7px;border-radius:6px;background:var(--mac-surface-2);font-size:11.5px;font-weight:500;color:var(--mac-label-2);white-space:nowrap}
 .terminais-work__branch em{font-style:normal;color:var(--mac-warn);font-variant-numeric:tabular-nums}
 .terminais-work__running{flex:0 0 auto;font-size:12px;color:var(--mac-label-2);white-space:nowrap}
@@ -320,6 +328,11 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-work__actions{display:flex;align-items:center;gap:2px;flex:0 0 auto}
 .terminais-work__sep{width:1px;height:16px;margin:0 4px;background:var(--mac-separator)}
 .terminais-work__font{min-width:16px;text-align:center;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+/* Cabecalho em area estreita: o que nao cabe sai por etapas, do menos
+   essencial ao mais, e o nome da sessao e o ultimo a encolher. */
+@container work (max-width:680px){.terminais-work__running{display:none}}
+@container work (max-width:560px){.terminais-work__subtitle{display:none}}
+@container work (max-width:480px){.terminais-work__path{display:none}.terminais-work__font{display:none}}
 /* A divisao nunca transborda: o editor pode encolher, os minimos cedem em
    janela baixa e o corpo corta o que passar. Sem isso, com pouca altura os
    dois painéis somavam mais que 100% e o terminal subia por cima do texto
@@ -875,8 +888,9 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label-3); flex: 0 0 auto; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__menu:active { background: var(--mac-fill); }
 
-/* Contas dos agentes: o aviso da troca no topo, um grupo por agente com a
-   marca dele e um cartao por conta, com plano, selos e uma barra por janela. */
+/* Contas dos agentes: o aviso da troca no topo, uma lista plana com o simbolo
+   do agente em cada linha, plano, selos e uma barra por janela, e no rodape um
+   botao de perfil novo por agente ao lado de reler as contas. */
 .agent-profiles{display:flex;flex-direction:column;gap:16px}
 .agent-profiles__notice{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:10px;padding:12px 14px;border-radius:var(--mac-radius-card,14px);background:var(--mac-accent-soft);color:var(--mac-accent-text)}
 .agent-profiles__notice > svg:first-child{margin-top:1px}
@@ -895,16 +909,17 @@ body.is-dragging-path *{cursor:grabbing !important}
 .agent-profiles__shimmer--action{width:30%;height:28px;border-radius:8px}
 @keyframes agentProfilesShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 @media (prefers-reduced-motion: reduce){.agent-profiles__shimmer{animation:none}}
-.agent-profiles__group{display:flex;flex-direction:column;gap:8px}
-.agent-profiles__head{display:flex;align-items:center;gap:10px}
-.agent-profiles__glyph{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--mac-fill);color:var(--mac-label)}
-.agent-profiles__glyph--claude{color:#D97757}
-.agent-profiles__glyph svg{width:17px;height:17px;fill:currentColor}
-.agent-profiles__head h3{margin:0;font-size:15px;font-weight:650;color:var(--mac-label)}
-.agent-profiles__create{margin-left:auto;display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
-/* Uma conta por linha no computador: identidade, uso e acao em colunas
-   proprias. A coluna do meio encolhe antes do nome, e a acao nunca some. */
-.agent-profiles__row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:10px 14px;min-height:44px;padding:10px 12px;border:1px solid var(--mac-separator);border-radius:12px;background:var(--mac-surface)}
+.agent-profiles__list{display:flex;flex-direction:column;gap:8px}
+/* Simbolo do agente na cor do texto, sem cor de marca: a mesma regra vale
+   para os dois agentes e para os que vierem. */
+.agent-profiles__glyph{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--mac-fill);color:var(--mac-label-2)}
+.agent-profiles__glyph svg{width:15px;height:15px;fill:currentColor}
+.agent-profiles__actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.agent-profiles__create{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
+/* Uma conta por linha no computador: simbolo do agente, identidade, uso e
+   acao em colunas proprias. A coluna do uso encolhe antes do nome, e a acao
+   nunca some. */
+.agent-profiles__row{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:10px 14px;min-height:44px;padding:10px 12px;border:1px solid var(--mac-separator);border-radius:12px;background:var(--mac-surface)}
 .agent-profiles__row.is-active{border-color:var(--mac-accent);box-shadow:inset 0 0 0 .5px var(--mac-accent)}
 .agent-profiles__identity{display:flex;flex-direction:column;gap:4px;min-width:0}
 .agent-profiles__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:14px;font-weight:600}
@@ -936,7 +951,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 .agent-profiles__current{flex:0 0 auto;display:inline-flex;align-items:center;gap:4px;font-size:13px;font-weight:600;color:var(--mac-accent-text)}
 .agent-profiles__use{flex:0 0 auto;min-width:62px;min-height:30px;padding:0 14px;border:0;border-radius:999px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
 .agent-profiles__use:disabled{opacity:.5}
-.agent-profiles__refresh{align-self:flex-start;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:13px}
+.agent-profiles__refresh{margin-left:auto;display:inline-flex;align-items:center;gap:6px;min-height:30px;padding:0 10px;border:0;border-radius:8px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:13px}
 .agent-profiles__refresh:disabled{opacity:.5}
 /* No celular a conta vira um cartao, como no app: nome e selos, as barras de
    uso a toda a largura e a acao embaixo. Nada de rolagem lateral e nada de
@@ -945,10 +960,11 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__note{font-size:15px;color:var(--phone-primary)}
 [data-form-factor="phone"] .agent-profiles__note--quiet{font-size:13px;font-weight:400;color:var(--phone-text-2)}
 [data-form-factor="phone"] .agent-profiles__skeleton{padding:16px;border:1px solid var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface)}
-[data-form-factor="phone"] .agent-profiles__glyph{width:40px;height:40px;border-radius:12px;background:var(--phone-surface-muted)}
-[data-form-factor="phone"] .agent-profiles__glyph svg{width:24px;height:24px}
-[data-form-factor="phone"] .agent-profiles__head h3{font-size:20px;font-weight:700}
-[data-form-factor="phone"] .agent-profiles__row{grid-template-columns:minmax(0,1fr);align-items:stretch;gap:12px;padding:16px;min-height:0;border-color:var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface);box-shadow:var(--phone-shadow-card)}
+[data-form-factor="phone"] .agent-profiles__glyph{width:32px;height:32px;border-radius:10px;background:var(--phone-surface-muted)}
+[data-form-factor="phone"] .agent-profiles__glyph svg{width:20px;height:20px}
+/* Simbolo e nome na primeira linha; uso, estado e acao tomam a linha inteira. */
+[data-form-factor="phone"] .agent-profiles__row{grid-template-columns:auto minmax(0,1fr);align-items:stretch;gap:12px;padding:16px;min-height:0;border-color:var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface);box-shadow:var(--phone-shadow-card)}
+[data-form-factor="phone"] .agent-profiles__usage,[data-form-factor="phone"] .agent-profiles__state,[data-form-factor="phone"] .agent-profiles__use,[data-form-factor="phone"] .agent-profiles__current{grid-column:1 / -1}
 [data-form-factor="phone"] .agent-profiles__row.is-active{border-color:var(--phone-primary)}
 [data-form-factor="phone"] .agent-profiles__name{white-space:normal;overflow-wrap:anywhere;font-size:17px}
 [data-form-factor="phone"] .agent-profiles__tag{max-width:none;padding:3px 10px;font-size:12px}
@@ -965,9 +981,10 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__current{justify-content:center;min-height:46px;border-radius:var(--phone-radius-control);font-size:17px}
 [data-form-factor="phone"] .agent-profiles__use{background:var(--phone-primary-soft);color:var(--phone-primary)}
 [data-form-factor="phone"] .agent-profiles__current{background:var(--phone-surface-muted);color:var(--phone-text-2)}
-[data-form-factor="phone"] .agent-profiles__create{min-height:44px;font-size:15px;border-radius:var(--phone-radius-control)}
+[data-form-factor="phone"] .agent-profiles__actions{flex-direction:column;align-items:stretch}
+[data-form-factor="phone"] .agent-profiles__create{justify-content:center;min-height:44px;font-size:15px;border-radius:var(--phone-radius-control)}
 [data-form-factor="phone"] .agent-profiles__retry{min-height:44px;font-size:15px}
-[data-form-factor="phone"] .agent-profiles__refresh{min-height:44px;font-size:15px}
+[data-form-factor="phone"] .agent-profiles__refresh{margin-left:0;justify-content:center;min-height:44px;font-size:15px}
 
 /* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
 [data-form-factor="phone"] .phone-menu { display: flex; flex-direction: column; margin: 0 -8px; }
@@ -1149,25 +1166,25 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-flow { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--phone-bg); color: var(--phone-text); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); animation: macFade var(--mac-normal) var(--mac-ease) both; }
 [data-form-factor="phone"] .phone-flow__header { flex: none; min-height: 56px; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 4px; }
 [data-form-factor="phone"] .phone-flow__header h1 { margin: 0; text-align: center; font-size: 20px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-[data-form-factor="phone"] .phone-flow__body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 16px; padding: 8px 0 16px; }
-[data-form-factor="phone"] .phone-flow__section { display: grid; gap: 10px; }
+[data-form-factor="phone"] .phone-flow__body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 12px; padding: 6px 0 12px; }
+[data-form-factor="phone"] .phone-flow__section { display: grid; gap: 8px; }
 [data-form-factor="phone"] .phone-flow__section h2, [data-form-factor="phone"] .phone-flow__existing h2 { margin: 0; font-size: 17px; font-weight: 600; }
 [data-form-factor="phone"] .phone-flow__note { margin: 0; font-size: 13px; line-height: 18px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-flow__note.is-bad { color: var(--phone-danger); }
-[data-form-factor="phone"] .phone-flow__footer { flex: none; padding: 8px 0 calc(12px + env(safe-area-inset-bottom)); }
-[data-form-factor="phone"] .phone-flow__primary { width: 100%; min-height: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 17px; font-weight: 600; box-shadow: 0 8px 20px color-mix(in srgb, var(--phone-primary) 28%, transparent); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-flow__footer { flex: none; padding: 6px 0 calc(10px + env(safe-area-inset-bottom)); }
+[data-form-factor="phone"] .phone-flow__primary { width: 100%; min-height: 50px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary); color: var(--phone-on-primary); font: inherit; font-size: 17px; font-weight: 600; box-shadow: 0 8px 20px color-mix(in srgb, var(--phone-primary) 28%, transparent); transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-fast) var(--mac-ease); }
 [data-form-factor="phone"] .phone-flow__primary:disabled { opacity: .45; box-shadow: none; }
 [data-form-factor="phone"] .phone-flow__primary:not(:disabled):active { transform: scale(.98); }
 [data-form-factor="phone"] .phone-flow__secondary { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-primary-soft); color: var(--phone-primary); font: inherit; font-size: 15px; font-weight: 600; padding: 0 16px; }
 [data-form-factor="phone"] .phone-flow__secondary:active { opacity: .8; }
 [data-form-factor="phone"] .phone-flow__radio { flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 2px solid var(--phone-border); border-radius: 50%; color: var(--phone-on-primary); }
 [data-form-factor="phone"] .is-selected .phone-flow__radio, [data-form-factor="phone"] [aria-checked="true"] > .phone-account__head .phone-flow__radio { border-color: var(--phone-primary); background: var(--phone-primary); }
-[data-form-factor="phone"] .phone-flow__existing { display: grid; gap: 8px; padding: 14px; border-radius: var(--phone-radius-card); background: var(--phone-primary-soft); }
+[data-form-factor="phone"] .phone-flow__existing { display: grid; gap: 8px; padding: 12px; border-radius: var(--phone-radius-card); background: var(--phone-primary-soft); }
 [data-form-factor="phone"] .phone-flow__existing p { margin: 0; font-size: 13px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-flow__existing .phone-flow__secondary { justify-content: flex-start; background: var(--phone-surface); }
 
 /* Indicador de etapas: bolinha numerada, nome ao lado e um traço até a próxima. */
-[data-form-factor="phone"] .phone-steps { flex: none; display: flex; gap: 6px; margin: 4px 0 8px; padding: 0; list-style: none; }
+[data-form-factor="phone"] .phone-steps { flex: none; display: flex; gap: 6px; margin: 2px 0 6px; padding: 0; list-style: none; }
 [data-form-factor="phone"] .phone-steps__item { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
 [data-form-factor="phone"] .phone-steps__item:not(:last-child)::after { content: ""; flex: 1; min-width: 8px; height: 2px; border-radius: 1px; background: var(--phone-border); }
 [data-form-factor="phone"] .phone-steps__item.is-done:not(:last-child)::after { background: var(--phone-primary); }
@@ -1197,20 +1214,19 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-chip.is-selected { border-color: var(--phone-primary); background: var(--phone-primary-soft); color: var(--phone-primary); }
 
 /* Agentes e contas. */
-[data-form-factor="phone"] .phone-agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-[data-form-factor="phone"] .phone-agent { min-width: 0; min-height: 112px; display: grid; justify-items: center; align-content: center; gap: 6px; padding: 12px 8px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: center; }
+[data-form-factor="phone"] .phone-agent-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+[data-form-factor="phone"] .phone-agent { min-width: 0; min-height: 96px; display: grid; justify-items: center; align-content: center; gap: 6px; padding: 10px 8px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: center; }
 [data-form-factor="phone"] .phone-agent strong { font-size: 14px; }
 [data-form-factor="phone"] .phone-agent > span:last-child { font-size: 11px; line-height: 14px; color: var(--phone-text-2); }
-[data-form-factor="phone"] .phone-agent.is-selected { border: 2px solid var(--phone-primary); background: var(--phone-primary-soft); padding: 11px 7px; }
+[data-form-factor="phone"] .phone-agent.is-selected { border: 2px solid var(--phone-primary); background: var(--phone-primary-soft); padding: 9px 7px; }
 [data-form-factor="phone"] .phone-agent:disabled { opacity: .5; }
-[data-form-factor="phone"] .phone-agent__icon { width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--phone-surface-muted); }
-[data-form-factor="phone"] .phone-agent__glyph, [data-form-factor="phone"] .phone-agent__glyph svg { width: 24px; height: 24px; display: block; }
-[data-form-factor="phone"] .phone-agent--claude .phone-agent__icon { color: #D97757; }
-[data-form-factor="phone"] .phone-account-list { display: grid; gap: 10px; }
-[data-form-factor="phone"] .phone-account { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: left; }
-[data-form-factor="phone"] .phone-account.is-selected { border: 2px solid var(--phone-primary); padding: 13px; }
+[data-form-factor="phone"] .phone-agent__icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--phone-surface-muted); }
+[data-form-factor="phone"] .phone-agent__glyph, [data-form-factor="phone"] .phone-agent__glyph svg { width: 22px; height: 22px; display: block; }
+[data-form-factor="phone"] .phone-account-list { display: grid; gap: 8px; }
+[data-form-factor="phone"] .phone-account { display: grid; gap: 10px; min-height: 44px; padding: 12px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: left; }
+[data-form-factor="phone"] .phone-account.is-selected { border: 2px solid var(--phone-primary); padding: 11px; }
 [data-form-factor="phone"] .phone-account__head { display: flex; align-items: center; gap: 8px; min-width: 0; }
-[data-form-factor="phone"] .phone-account__head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+[data-form-factor="phone"] .phone-account__head strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
 [data-form-factor="phone"] .phone-account__plan { flex: none; padding: 3px 8px; border-radius: 999px; background: var(--phone-primary-soft); color: var(--phone-primary); font-size: 11px; font-weight: 600; }
 [data-form-factor="phone"] .phone-account__active { margin-left: auto; flex: none; font-size: 12px; font-weight: 600; color: var(--phone-success); }
 [data-form-factor="phone"] .phone-account__state { font-size: 13px; font-weight: 600; color: var(--phone-text-2); }
@@ -1222,14 +1238,14 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-field { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-field input { min-height: 48px; padding: 0 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 16px; font-weight: 400; outline: 0; }
 [data-form-factor="phone"] .phone-field input:focus { box-shadow: 0 0 0 2px var(--mac-accent-ring); }
-[data-form-factor="phone"] .phone-swatches { display: flex; flex-wrap: wrap; gap: 10px; }
+[data-form-factor="phone"] .phone-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-form-factor="phone"] .phone-swatch { flex: none; width: 44px; height: 44px; min-height: 44px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%; background: var(--swatch-light); color: #FFFFFF; }
 [data-form-factor="phone"][data-theme="dark"] .phone-swatch { background: var(--swatch-dark); color: #1c1c1e; }
 [data-form-factor="phone"] .phone-swatch--none { background: var(--phone-surface-muted); border: 1px dashed var(--phone-text-3); color: var(--phone-text); }
 [data-form-factor="phone"][data-theme="dark"] .phone-swatch--none { background: var(--phone-surface-muted); color: var(--phone-text); }
 [data-form-factor="phone"] .phone-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px var(--phone-bg), 0 0 0 4px var(--phone-primary); }
 [data-form-factor="phone"] .phone-summary { margin: 0; display: grid; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); }
-[data-form-factor="phone"] .phone-summary > div { min-height: 52px; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; }
+[data-form-factor="phone"] .phone-summary > div { min-height: 48px; display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 4px 6px 4px 14px; }
 [data-form-factor="phone"] .phone-summary > div + div { border-top: 1px solid var(--phone-border); }
 [data-form-factor="phone"] .phone-summary dt { font-size: 13px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-summary dd { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; }

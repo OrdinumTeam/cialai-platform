@@ -347,6 +347,7 @@ export default Object.freeze({
   'terminal.profiles.agent.claude': 'Claude Code',
   'terminal.profiles.agent.codex': 'Codex',
   'terminal.profiles.create': 'Create profile',
+  'terminal.profiles.createFor': 'New {agent} profile',
   'terminal.profiles.created': 'Profile {name} created. Open a terminal on it to log in.',
   'terminal.profiles.createTitle': 'Name of the new profile',
   'terminal.profiles.createDescription': 'Lowercase letters, digits and hyphen, up to 32 characters. The folder is created empty and the login is done by the program itself, in the terminal that opens next.',
