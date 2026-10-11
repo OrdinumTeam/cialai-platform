@@ -115,6 +115,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
         android: { fonts: [{ fontFamily: 'Outfit', fontDefinitions: OUTFIT_WEIGHTS.map(([name, weight]) => ({ path: outfitPath(name), weight })) }] }
       }],
       ['./plugins/with-loopback-network-security.cjs'],
+      // O SDK do iOS 27 exige o ciclo de vida UIScene; sem ele o app não abre.
+      ['./plugins/with-ios-scene-lifecycle.cjs'],
       ['./plugins/with-android-release-signing.cjs'],
       ['./plugins/with-android-data-extraction.cjs'],
       ['./plugins/with-android-locales.cjs', { locales: [...SUPPORTED_LOCALES] }],
