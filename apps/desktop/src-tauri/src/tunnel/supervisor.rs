@@ -211,6 +211,10 @@ impl Supervisor {
             crate::diagnostics::note(&format!("[tunnel] sidecar não encontrado: {error}"));
             error
         })?;
+        // Uma linha no `app.log` diz de onde o sidecar saiu: no Linux o caminho
+        // muda entre AppImage, deb e rpm, e é a primeira coisa a conferir
+        // quando a rede não sobe numa instalação de cliente.
+        crate::diagnostics::note(&format!("[tunnel] sidecar em {}", binary.display()));
         let tor_binary = resolve_tor_binary(app)?;
         let state_dir = app
             .path()
@@ -1270,6 +1274,25 @@ mod tests {
             sidecar_beside(Path::new("/opt/cialai/cialai-desktop"), None).unwrap(),
             Path::new("/opt/cialai").join(SIDECAR_NAME)
         );
+    }
+
+    /// Os pacotes `.deb` e `.rpm` instalam `cialai-desktop` e o sidecar em
+    /// `/usr/bin`, sem AppRun e portanto sem `APPDIR`: o sidecar é o vizinho
+    /// do executável, e um `APPDIR` vazio herdado do ambiente não muda isso.
+    #[test]
+    fn deb_and_rpm_sidecar_lives_in_usr_bin_beside_the_executable() {
+        let desktop = Path::new("/usr/bin/cialai-desktop");
+        let expected = Path::new("/usr/bin").join(SIDECAR_NAME);
+        assert_eq!(sidecar_beside(desktop, None).unwrap(), expected);
+        assert_eq!(
+            sidecar_beside(desktop, Some(OsStr::new(""))).unwrap(),
+            expected
+        );
+        assert_eq!(
+            sidecar_beside(Path::new("/usr/lib/cialai/cialai-desktop"), None).unwrap(),
+            Path::new("/usr/lib/cialai").join(SIDECAR_NAME)
+        );
+        assert!(sidecar_beside(Path::new("/"), None).is_err());
     }
 
     /// Variáveis do processo trocadas só por um teste de cada vez; o valor

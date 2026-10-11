@@ -138,8 +138,10 @@ func ParseOnionAddress(host string) (string, ed25519.PublicKey, error) {
 }
 
 // LoadOrCreateOnionKey reads the key at path or creates it on first use. A
-// corrupt or readable-by-others key is an error and is never replaced, since a
-// new key would change the onion address carried by every pairing.
+// corrupt key or a key owned by another user is an error and is never
+// replaced, since a new key would change the onion address carried by every
+// pairing. A key the current user left readable by the group or by others is
+// tightened to 0600 and used.
 func LoadOrCreateOnionKey(path string, random io.Reader) (*OnionKey, bool, error) {
 	if !filepath.IsAbs(path) {
 		return nil, false, errors.New("onion key path must be absolute")
@@ -176,14 +178,14 @@ func readOnionKey(path string) (*OnionKey, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: not a regular file", ErrOnionKeyCorrupt)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("%w: got %04o", ErrOnionKeyPermissions, info.Mode().Perm())
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	if err := ensurePrivateOnionKey(file); err != nil {
+		return nil, err
+	}
 	raw, err := io.ReadAll(io.LimitReader(file, maxOnionKeyBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read onion key: %w", err)
@@ -197,6 +199,32 @@ func readOnionKey(path string) (*OnionKey, error) {
 	}
 	defer clear(seed)
 	return OnionKeyFromSeed(seed)
+}
+
+// ensurePrivateOnionKey keeps the open key readable by its owner only. A key
+// the current user left open to the group or to others, as a umask or a
+// manual copy does, is tightened to 0600 and accepted; refusing it would keep
+// the reserve connection down until someone fixes the mode by hand. A key
+// owned by another user is still refused. Windows has no POSIX mode bits.
+func ensurePrivateOnionKey(file *os.File) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat onion key: %w", err)
+	}
+	mode := info.Mode().Perm()
+	if mode&0o077 == 0 {
+		return nil
+	}
+	if !ownedByCaller(info) {
+		return fmt.Errorf("%w: got %04o", ErrOnionKeyPermissions, mode)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		return fmt.Errorf("%w: got %04o and chmod failed: %v", ErrOnionKeyPermissions, mode, err)
+	}
+	return nil
 }
 
 // publishExclusive makes data appear at path only when nothing exists there.

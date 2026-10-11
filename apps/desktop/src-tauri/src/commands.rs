@@ -116,13 +116,36 @@ fn tunnel_join_error(error: impl std::fmt::Display) -> RpcProblem {
     }
 }
 
+/// Código do erro devolvido quando a rede não foi montada no `setup`. A
+/// interface não o traduz, para a mensagem chegar como está.
+const NETWORK_SETUP_CODE: &str = "network_setup";
+
+/// Supervisor do túnel, ou o motivo de ele não existir. Quando `start_network`
+/// falha no `setup`, só o `NetworkSetup` fica gerenciado; receber o
+/// `State<Supervisor>` direto no comando devolveria o "state not managed" do
+/// Tauri, e a interface mostrava "Rede com problema" sem dizer por quê.
+fn tunnel_supervisor(app: &AppHandle) -> Result<Supervisor, RpcProblem> {
+    if let Some(supervisor) = app.try_state::<Supervisor>() {
+        return Ok(supervisor.inner().clone());
+    }
+    let reason = app
+        .try_state::<crate::NetworkSetup>()
+        .and_then(|setup| setup.problem().map(str::to_owned))
+        .unwrap_or_else(|| "A rede não foi montada neste computador.".into());
+    Err(RpcProblem {
+        code: NETWORK_SETUP_CODE.into(),
+        message: reason,
+        retryable: false,
+    })
+}
+
 #[tauri::command(async)]
 pub async fn tunnel_call(
-    supervisor: State<'_, Supervisor>,
+    app: AppHandle,
     command: String,
     args: serde_json::Value,
 ) -> Result<serde_json::Value, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
+    let supervisor = tunnel_supervisor(&app)?;
     tauri::async_runtime::spawn_blocking(move || supervisor.call(&command, args))
         .await
         .map_err(tunnel_join_error)?
@@ -131,18 +154,16 @@ pub async fn tunnel_call(
 /// Apaga a chave da API do Headscale deixada por versões anteriores; a
 /// conectividade v2 não usa servidor de controle.
 #[tauri::command(async)]
-pub async fn tunnel_delete_api_key(supervisor: State<'_, Supervisor>) -> Result<(), RpcProblem> {
-    let supervisor = supervisor.inner().clone();
+pub async fn tunnel_delete_api_key(app: AppHandle) -> Result<(), RpcProblem> {
+    let supervisor = tunnel_supervisor(&app)?;
     tauri::async_runtime::spawn_blocking(move || supervisor.delete_api_key())
         .await
         .map_err(tunnel_join_error)?
 }
 
 #[tauri::command(async)]
-pub async fn tunnel_doctor(
-    supervisor: State<'_, Supervisor>,
-) -> Result<serde_json::Value, RpcProblem> {
-    let supervisor = supervisor.inner().clone();
+pub async fn tunnel_doctor(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    let supervisor = tunnel_supervisor(&app)?;
     tauri::async_runtime::spawn_blocking(move || supervisor.doctor())
         .await
         .map_err(tunnel_join_error)?

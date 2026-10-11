@@ -176,3 +176,18 @@ test('erros do tunel com codigo conhecido seguem o idioma ativo', async () => {
   assert.ok(TUNNEL_ERROR_KEYS.net_not_ready);
   setLocale('pt-BR');
 });
+
+test('a rede caida e o motivo visivel seguem o retrato, com o erro do sidecar na frente', async () => {
+  const { initialTunnelSnapshot, networkFailed, networkFailureReason, applyNetStatus } = await load();
+  assert.equal(networkFailed(initialTunnelSnapshot()), false, 'ainda nem começou');
+  assert.equal(networkFailed({ ...initialTunnelSnapshot(), startup: 'starting' }), false);
+  assert.equal(networkFailed({ ...initialTunnelSnapshot(), startup: 'failed' }), true, 'net.start recusado pelo app ou pelo sidecar');
+  assert.equal(networkFailed({ ...initialTunnelSnapshot(), startup: 'started', supervisor: 'failed' }), true, 'reinícios esgotados');
+  const failedNet = { ...readyNet(), state: 'failed', direct: { state: 'failed', port: 0, candidates: [] }, error: { code: 'direct_listen', message: 'O ouvinte direto não pôde abrir uma porta UDP.' } };
+  const snapshot = applyNetStatus(initialTunnelSnapshot(), failedNet);
+  assert.equal(networkFailed(snapshot), true, 'o estado do sidecar basta');
+  assert.equal(networkFailureReason(snapshot, 'motivo da interface'), 'O ouvinte direto não pôde abrir uma porta UDP.');
+  assert.equal(networkFailureReason({ ...initialTunnelSnapshot(), startup: 'failed' }, ' bundle não encontrado em /usr/lib/cialai '), 'bundle não encontrado em /usr/lib/cialai');
+  assert.equal(networkFailureReason({ ...initialTunnelSnapshot(), startup: 'failed' }), '', 'sem motivo conhecido a frase fica vazia');
+  assert.equal(networkFailed(applyNetStatus(initialTunnelSnapshot(), readyNet())), false, 'rede de pé não é problema');
+});

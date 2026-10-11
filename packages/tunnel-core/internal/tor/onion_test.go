@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,14 +125,6 @@ func TestLoadOrCreateOnionKeyNeverReplacesBadKeys(t *testing.T) {
 		t.Fatal("corrupt key was replaced")
 	}
 	if runtime.GOOS != "windows" {
-		key, _ := GenerateOnionKey(nil)
-		open := filepath.Join(dir, "open.key")
-		if err := os.WriteFile(open, []byte(base64.RawURLEncoding.EncodeToString(key.seed)), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := LoadOrCreateOnionKey(open, nil); !errors.Is(err, ErrOnionKeyPermissions) {
-			t.Fatalf("world readable key err = %v", err)
-		}
 		link := filepath.Join(dir, "link.key")
 		if err := os.Symlink(corrupt, link); err != nil {
 			t.Fatal(err)
@@ -139,6 +132,35 @@ func TestLoadOrCreateOnionKeyNeverReplacesBadKeys(t *testing.T) {
 		if _, _, err := LoadOrCreateOnionKey(link, nil); !errors.Is(err, ErrOnionKeyCorrupt) {
 			t.Fatalf("symlinked key err = %v", err)
 		}
+	}
+}
+
+// A umask or a manual copy leaves the key readable by the group or by others.
+// The owner's key is tightened to 0600 and keeps the same onion address,
+// instead of leaving the reserve connection down until someone fixes the mode.
+func TestLoadOrCreateOnionKeyRepairsKeysTheOwnerLeftOpen(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX mode bits only")
+	}
+	for _, mode := range []os.FileMode{0o644, 0o640, 0o604, 0o666, 0o660} {
+		t.Run(fmt.Sprintf("%04o", mode), func(t *testing.T) {
+			key, _ := GenerateOnionKey(nil)
+			path := filepath.Join(t.TempDir(), "open.key")
+			if err := os.WriteFile(path, []byte(base64.RawURLEncoding.EncodeToString(key.seed)+"\n"), mode); err != nil {
+				t.Fatal(err)
+			}
+			loaded, created, err := LoadOrCreateOnionKey(path, nil)
+			if err != nil || created {
+				t.Fatalf("load after chmod %04o: created=%v err=%v", mode, created, err)
+			}
+			if loaded.Address() != key.Address() {
+				t.Fatalf("address changed from %s to %s", key.Address(), loaded.Address())
+			}
+			info, err := os.Stat(path)
+			if err != nil || info.Mode().Perm() != 0o600 {
+				t.Fatalf("key mode after repair = %04o (err %v), want 0600", info.Mode().Perm(), err)
+			}
+		})
 	}
 }
 

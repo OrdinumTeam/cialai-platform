@@ -54,15 +54,25 @@ pub fn bundled_tor_executable(resources: &Path) -> PathBuf {
     resources.join(TOR_RESOURCE_DIR).join("tor").join(name)
 }
 
+/// O erro leva o caminho conferido: no Linux o `resource_dir()` varia entre
+/// AppImage, deb e rpm, e o `app.log` precisa dizer onde o bundle foi
+/// procurado quando a rede não sobe.
 fn validate_mobile_static_dir(resources: &Path) -> Result<PathBuf, String> {
     let directory = resources.join(MOBILE_RESOURCE_DIR);
     if !directory.join(MOBILE_ENTRY).is_file() {
-        return Err("bundle da página do celular não encontrado".into());
+        return Err(format!(
+            "bundle da página do celular não encontrado em {}",
+            directory.display()
+        ));
     }
     // `dunce` evita o prefixo `\\?\` do Windows, que vazaria para o
     // `staticDir` entregue ao sidecar Go.
-    dunce::canonicalize(&directory)
-        .map_err(|error| format!("bundle da página do celular inválido: {error}"))
+    dunce::canonicalize(&directory).map_err(|error| {
+        format!(
+            "bundle da página do celular inválido em {}: {error}",
+            directory.display()
+        )
+    })
 }
 
 #[cfg(test)]
@@ -83,7 +93,12 @@ mod tests {
         ));
         let mobile = root.join(MOBILE_RESOURCE_DIR);
         fs::create_dir_all(&mobile).unwrap();
-        assert!(validate_mobile_static_dir(&root).is_err());
+        // Sem a entrada, o motivo diz onde o bundle foi procurado.
+        let missing = validate_mobile_static_dir(&root).unwrap_err();
+        assert!(
+            missing.contains(&mobile.display().to_string()),
+            "o erro precisa levar o caminho conferido: {missing}"
+        );
         fs::write(mobile.join(MOBILE_ENTRY), "<!doctype html>").unwrap();
         let resolved = validate_mobile_static_dir(&root).unwrap();
         assert!(resolved.is_absolute());

@@ -45,10 +45,12 @@ type Options struct {
 	Random io.Reader
 }
 
-// Open loads the identity in Dir or creates it on first use. A corrupt or
-// world-readable key is an error, never silently replaced, because a new key
-// would invalidate every pairing. The record is rewritten whenever it does not
-// describe the key, which also discards identity.json v1.
+// Open loads the identity in Dir or creates it on first use. A corrupt key or
+// a key owned by another user is an error, never silently replaced, because a
+// new key would invalidate every pairing. A key the current user left readable
+// by the group or by others is tightened to 0600 and used. The record is
+// rewritten whenever it does not describe the key, which also discards
+// identity.json v1.
 func Open(options Options) (*Identity, Record, bool, error) {
 	if options.Dir == "" || !filepath.IsAbs(options.Dir) {
 		return nil, Record{}, false, errors.New("identity directory must be absolute")
@@ -100,14 +102,14 @@ func readKey(role Role, path string) (*Identity, error) {
 	if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("%w: not a regular file", ErrCorrupt)
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		return nil, fmt.Errorf("%w: got %04o", ErrPermissions, info.Mode().Perm())
-	}
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
+	if err := ensurePrivate(file); err != nil {
+		return nil, err
+	}
 	raw, err := io.ReadAll(io.LimitReader(file, maxKeyBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("read identity key: %w", err)
@@ -120,6 +122,33 @@ func readKey(role Role, path string) (*Identity, error) {
 		return nil, ErrCorrupt
 	}
 	return FromSeed(role, seed)
+}
+
+// ensurePrivate keeps the open key readable by its owner only. A key the
+// current user left open to the group or to others, as a umask or a manual
+// copy does, is tightened to 0600 and accepted; refusing it would keep the
+// tunnel down until someone fixes the mode by hand. A key owned by another
+// user is still refused, because tightening it would hide that another
+// account wrote it. Windows has no POSIX mode bits to check.
+func ensurePrivate(file *os.File) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	info, err := file.Stat()
+	if err != nil {
+		return fmt.Errorf("stat identity key: %w", err)
+	}
+	mode := info.Mode().Perm()
+	if mode&0o077 == 0 {
+		return nil
+	}
+	if !ownedByCaller(info) {
+		return fmt.Errorf("%w: got %04o", ErrPermissions, mode)
+	}
+	if err := file.Chmod(0o600); err != nil {
+		return fmt.Errorf("%w: got %04o and chmod failed: %v", ErrPermissions, mode, err)
+	}
+	return nil
 }
 
 // writeExclusive publishes data at path only if nothing exists there. The

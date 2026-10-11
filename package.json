@@ -34,6 +34,7 @@
     "check:css-cascade": "node tools/check/css-cascade.mjs",
     "check:dialog-geometry": "node tools/check/dialog-geometry.mjs",
     "check:native-i18n": "node tools/check/native-i18n.mjs",
+    "check:linux-tunnel": "node tools/check/linux-tunnel.mjs",
     "i18n:native": "node tools/i18n/native-catalog.mjs",
     "dev:desktop": "npm run dev --workspace @cialai/desktop",
     "build:desktop": "npm run build --workspace @cialai/desktop",

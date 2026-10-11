@@ -13,6 +13,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -171,18 +172,6 @@ func TestOpenRejectsCorruptOrExposedKeys(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	t.Run("world readable", func(t *testing.T) {
-		dir := t.TempDir()
-		if _, _, _, err := Open(Options{Role: RoleDesktop, Dir: dir}); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Chmod(filepath.Join(dir, KeyFileName), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, _, err := Open(Options{Role: RoleDesktop, Dir: dir}); !errors.Is(err, ErrPermissions) {
-			t.Fatalf("expected ErrPermissions, got %v", err)
-		}
-	})
 	t.Run("symlink", func(t *testing.T) {
 		dir := t.TempDir()
 		target := filepath.Join(t.TempDir(), "elsewhere.key")
@@ -198,6 +187,39 @@ func TestOpenRejectsCorruptOrExposedKeys(t *testing.T) {
 	})
 	if _, _, _, err := Open(Options{Role: RoleDesktop, Dir: "relative"}); err == nil {
 		t.Fatal("relative directory was accepted")
+	}
+}
+
+// A umask or a manual copy leaves the key readable by the group or by others.
+// The owner's key is tightened to 0600 and keeps the same identity, instead of
+// refusing it until someone fixes the mode by hand.
+func TestOpenRepairsKeysTheOwnerLeftOpen(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX mode bits only")
+	}
+	for _, mode := range []os.FileMode{0o644, 0o640, 0o604, 0o666, 0o660} {
+		t.Run(fmt.Sprintf("%04o", mode), func(t *testing.T) {
+			dir := t.TempDir()
+			_, first, _, err := Open(Options{Role: RoleDesktop, Dir: dir})
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, KeyFileName)
+			if err := os.Chmod(path, mode); err != nil {
+				t.Fatal(err)
+			}
+			_, second, created, err := Open(Options{Role: RoleDesktop, Dir: dir})
+			if err != nil || created {
+				t.Fatalf("open after chmod %04o: created=%v err=%v", mode, created, err)
+			}
+			if second.ID != first.ID || second.PublicKey != first.PublicKey {
+				t.Fatalf("identity changed from %s to %s", first.ID, second.ID)
+			}
+			info, err := os.Stat(path)
+			if err != nil || info.Mode().Perm() != 0o600 {
+				t.Fatalf("key mode after repair = %04o (err %v), want 0600", info.Mode().Perm(), err)
+			}
+		})
 	}
 }
 

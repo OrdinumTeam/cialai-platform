@@ -7,14 +7,19 @@
 // código e o QR troca dentro dela a cada rotação. Cada código novo nasce com
 // o prazo que sobra da janela, então a validade restante só diminui; no fim
 // o diálogo avisa que expirou e oferece uma janela nova.
+//
+// Quando a rede não vai subir, o lugar do QR mostra o motivo real, a pasta do
+// `app.log` e o caminho para o diagnóstico avançado, em vez de ficar em
+// "Preparando a conexão…" para sempre.
 
 import React, { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
-import { Check, Info, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react';
+import { Activity, Check, Info, RefreshCw, ShieldCheck, Smartphone } from 'lucide-react';
 import { AppModal } from '../components/ui.jsx';
+import { invoke, isTauri } from '../lib/native.js';
 import { useTunnel, tunnelErrorMessage } from './TunnelContext.jsx';
 import { DirectValue, ReserveValue } from './AccessPanel.jsx';
-import { PAIR_ROTATION_SECONDS, PAIR_TTL_SECONDS, directReady, expiryMillis, formatPairTime, pairClock, reserveStatus } from './tunnel-model.js';
+import { PAIR_ROTATION_SECONDS, PAIR_TTL_SECONDS, directReady, expiryMillis, formatPairTime, networkFailed, networkFailureReason, pairClock, reserveStatus } from './tunnel-model.js';
 import { translate } from './i18n.js';
 
 const rotationOf = (pair) => Math.max(1, Number(pair?.rotateAfterSeconds) || PAIR_ROTATION_SECONDS);
@@ -31,7 +36,19 @@ export function nextTtl(deadlineMs, now = Date.now()) {
   return remaining > 0 ? Math.min(PAIR_TTL_SECONDS, remaining) : 0;
 }
 
-export default function PairingDialog({ open, onClose, onDevices }) {
+// Pasta de registros do app, onde fica o `app.log`; vazia fora do desktop.
+export function useLogDirectory(wanted) {
+  const [directory, setDirectory] = useState('');
+  useEffect(() => {
+    if (!wanted || !isTauri()) return undefined;
+    let active = true;
+    invoke('app_paths').then((paths) => { if (active && typeof paths?.logs === 'string') setDirectory(paths.logs); }).catch(() => {});
+    return () => { active = false; };
+  }, [wanted]);
+  return directory;
+}
+
+export default function PairingDialog({ open, onClose, onDevices, onDiagnostics }) {
   const tunnel = useTunnel();
   const canvasRef = useRef(null);
   const activePairRef = useRef(null);
@@ -43,6 +60,17 @@ export default function PairingDialog({ open, onClose, onDevices }) {
   const [state, setState] = useState('idle');
   const [error, setError] = useState('');
   const ready = directReady(tunnel.snapshot);
+  const networkDown = networkFailed(tunnel.snapshot);
+  const reason = networkDown ? networkFailureReason(tunnel.snapshot, tunnel.lastError) : '';
+  const logDirectory = useLogDirectory(open && networkDown);
+
+  // Diagnóstico avançado em Dispositivos, pelo mesmo evento que as
+  // Preferências usam; o diálogo fecha antes para não cobrir a tela.
+  const openDiagnostics = () => {
+    onClose();
+    if (onDiagnostics) onDiagnostics();
+    else window.dispatchEvent(new CustomEvent('cialai:network-diagnostics'));
+  };
 
   useEffect(() => {
     if (!pair?.payload || !canvasRef.current) return;
@@ -154,6 +182,9 @@ export default function PairingDialog({ open, onClose, onDevices }) {
   const tor = tunnel.snapshot.tor || tunnel.snapshot.net?.tor || pair?.reserve || null;
   const reserveReady = reserveStatus(tor).state === 'ready';
   const expired = state === 'expired';
+  // Sem QR válido: a janela acabou ou a rede não vai subir.
+  const blocked = expired || networkDown;
+  const placeholder = networkDown ? translate('desktop.pair.networkFailed') : expired ? translate('desktop.pair.expired') : ready ? translate('desktop.pair.generating') : translate('desktop.pair.waitingNetwork');
 
   const content = completed ? <div className="mac-pair__success"><span><Check aria-hidden="true" /></span><p className="mac-pair__eyebrow">{translate('desktop.pair.completed')}</p><h3>{translate('desktop.pair.linked', { name: completed.name })}</h3><p>{translate('desktop.pair.completedDescription')}</p><button type="button" className="btn btn-primary" onClick={() => { onClose(); onDevices?.(); }}>{translate('desktop.pair.openDevices')}</button></div>
     : <div className="mac-pair">
@@ -169,15 +200,20 @@ export default function PairingDialog({ open, onClose, onDevices }) {
         {reserveReady ? null : <p className="mac-pair__notice"><Info aria-hidden="true" /><span>{translate('desktop.pair.reserveNotice')}</span></p>}
       </div>
       <div className="mac-pair__visual">
-        <div className={`mac-pair__qr${state === 'loading' ? ' is-loading' : ''}${expired ? ' is-expired' : ''}`} style={{ '--pair-progress': `${Math.max(0, Math.min(1, clock.rotationSeconds / rotationOf(pair))) * 360}deg` }}>
-          {pair?.payload && !expired ? <canvas ref={canvasRef} width="280" height="280" aria-label={translate('desktop.pair.qrLabel')} /> : <div className="mac-pair__qr-placeholder" role="status">{expired ? translate('desktop.pair.expired') : ready ? translate('desktop.pair.generating') : translate('desktop.pair.waitingNetwork')}</div>}
+        <div className={`mac-pair__qr${state === 'loading' ? ' is-loading' : ''}${blocked ? ' is-expired' : ''}`} style={{ '--pair-progress': `${Math.max(0, Math.min(1, clock.rotationSeconds / rotationOf(pair))) * 360}deg` }}>
+          {pair?.payload && !blocked ? <canvas ref={canvasRef} width="280" height="280" aria-label={translate('desktop.pair.qrLabel')} /> : <div className="mac-pair__qr-placeholder" role="status">{placeholder}</div>}
         </div>
-        {expired ? null : <div className="mac-pair__timers"><div><span>{translate('desktop.pair.newCodeIn')}</span><strong>{formatPairTime(Math.min(clock.rotationSeconds, clock.expirySeconds))}</strong></div><div><span>{translate('desktop.pair.remaining')}</span><strong>{formatPairTime(clock.expirySeconds)}</strong></div></div>}
-        {expired ? null : <p className="mac-pair__timers-hint">{translate('desktop.pair.timersHint', { seconds: rotationOf(pair), minutes: Math.round(PAIR_TTL_SECONDS / 60) })}</p>}
+        {blocked ? null : <div className="mac-pair__timers"><div><span>{translate('desktop.pair.newCodeIn')}</span><strong>{formatPairTime(Math.min(clock.rotationSeconds, clock.expirySeconds))}</strong></div><div><span>{translate('desktop.pair.remaining')}</span><strong>{formatPairTime(clock.expirySeconds)}</strong></div></div>}
+        {blocked ? null : <p className="mac-pair__timers-hint">{translate('desktop.pair.timersHint', { seconds: rotationOf(pair), minutes: Math.round(PAIR_TTL_SECONDS / 60) })}</p>}
+        {networkDown ? <div className="mac-pair__problem">
+          {reason ? <p className="mac-pair__error" role="alert">{reason}</p> : null}
+          <p className="mac-pair__timers-hint">{logDirectory ? translate('desktop.pair.networkFailedLog', { path: logDirectory }) : translate('desktop.pair.networkFailedLogUnknown')}</p>
+          <button type="button" className="btn btn-secondary" onClick={openDiagnostics}><Activity aria-hidden="true" />{translate('desktop.access.advanced')}</button>
+        </div> : null}
         {approval ? <div className="mac-pair__approval"><div><ShieldCheck aria-hidden="true" /><span><strong>{approval.device?.name || translate('desktop.pair.newPhone')}</strong><small>{translate('desktop.pair.confirmCode')}</small></span></div><output aria-label={translate('desktop.pair.approvalCode')}>{approval.code}</output><div className="mac-pair__approval-actions"><button type="button" className="btn btn-quiet" onClick={() => decide(false)}>{translate('desktop.pair.deny')}</button><button type="button" className="btn btn-primary" onClick={() => decide(true)}>{translate('desktop.pair.authorize')}</button></div></div> : null}
         {failed ? <p className="mac-pair__error" role="alert">{translate('desktop.pair.failed')}</p> : null}
-        {error ? <p className="mac-pair__error" role="alert">{error}</p> : null}
-        {(state === 'error' || failed || expired) ? <button type="button" className={`btn ${expired ? 'btn-primary' : 'btn-secondary'}`} onClick={retry}><RefreshCw aria-hidden="true" />{translate('desktop.pair.generateAnother')}</button> : null}
+        {error && !networkDown ? <p className="mac-pair__error" role="alert">{error}</p> : null}
+        {!networkDown && (state === 'error' || failed || expired) ? <button type="button" className={`btn ${expired ? 'btn-primary' : 'btn-secondary'}`} onClick={retry}><RefreshCw aria-hidden="true" />{translate('desktop.pair.generateAnother')}</button> : null}
       </div>
     </div>;
 

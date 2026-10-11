@@ -212,6 +212,21 @@ export function directReady(snapshot = initialTunnelSnapshot()) {
   return ['ready', 'degraded'].includes(snapshot.net?.state) && snapshot.net?.direct?.state === 'listening';
 }
 
+// A rede não vai subir sozinha: `net.start` falhou na interface, o supervisor
+// esgotou os reinícios ou o sidecar guardou um erro de partida. O diálogo de
+// pareamento troca o "Preparando a conexão…" pelo motivo nesses casos.
+export function networkFailed(snapshot = initialTunnelSnapshot()) {
+  return snapshot.startup === 'failed' || snapshot.supervisor === 'failed' || snapshot.net?.state === 'failed';
+}
+
+// Motivo que a pessoa lê: o erro que o sidecar guardou no estado da rede, senão
+// o da última chamada que a interface fez. Vazio quando nenhum dos dois existe.
+export function networkFailureReason(snapshot = initialTunnelSnapshot(), lastError = '') {
+  const message = snapshot.net?.error?.message;
+  if (typeof message === 'string' && message.trim()) return message.trim();
+  return typeof lastError === 'string' ? lastError.trim() : '';
+}
+
 // Sessões por transporte. `devices.list` informa `transports`; os eventos
 // `session.opened` e `session.closed` somam e subtraem daí em diante.
 export function normalizeDevice(device = {}) {

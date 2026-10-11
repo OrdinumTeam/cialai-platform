@@ -651,6 +651,10 @@
 .mac-pair__approval output{display:block;margin:10px 0;text-align:center;color:var(--mac-label);font:700 28px/1.1 var(--mac-font-mono);letter-spacing:.2em}
 .mac-pair__approval-actions{display:flex!important;justify-content:flex-end;gap:6px!important}
 .mac-pair__error{width:292px;margin:10px 0 0;color:var(--mac-bad);font-size:11px;line-height:1.4;text-align:center}
+/* Rede que nao vai subir: motivo, pasta do log e o atalho do diagnostico,
+   empilhados no lugar dos cronometros. */
+.mac-pair__problem{display:flex;flex-direction:column;align-items:center}
+.mac-pair__problem .btn{margin-top:12px}
 .mac-pair__empty,.mac-pair__success{display:flex;min-height:360px;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .mac-pair__empty>span,.mac-pair__success>span{display:grid;place-items:center;width:48px;height:48px;margin-bottom:16px;border-radius:50%;background:var(--mac-accent-soft);color:var(--mac-accent)}
 .mac-pair__success>span{background:var(--mac-ok-bg);color:var(--mac-ok)}
