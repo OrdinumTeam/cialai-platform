@@ -49,10 +49,14 @@ const bundle = await build({
 });
 
 // Amostra publicada pelo hook de linha de estado do Claude Code, com o
-// esforco presente como o Rust o publica hoje.
+// esforco presente como o Rust o publica hoje. A lista `sessions[]` vem como
+// o hook a grava, a mais nova primeiro: a conversa desta sessao e a segunda,
+// e a primeira e outra conversa na mesma pasta, que o card nao pode mostrar.
 const CWD = '/fixture/projeto';
 const NOW = Date.now();
-function sample({ status = 'running', agentTurn = null, outputAgeMs = null, cpuPercent = 12.5, sampleAt = NOW - 300, evidenceSince = NOW - 60_000 } = {}) {
+const OWN = { sessionId: 'demo', cwd: CWD, model: 'Fable 5.1', effort: 'max', contextUsedPercent: 42, costUsd: 1.83 };
+const OTHER = { sessionId: 'other', cwd: CWD, model: 'Opus 5.5', contextUsedPercent: 82, costUsd: 1005 };
+function sample({ status = 'running', agentTurn = null, outputAgeMs = null, cpuPercent = 12.5, sampleAt = NOW - 300, evidenceSince = NOW - 60_000, agentSessionId = 'demo', sessions = [OTHER, OWN] } = {}) {
   return {
     id: 'fixture', name: 'projeto', status, cwd: CWD, pinned: false, color: null, subtitle: null,
     lastOutputAt: 0, jobStartedAt: null, attention: null,
@@ -61,10 +65,11 @@ function sample({ status = 'running', agentTurn = null, outputAgeMs = null, cpuP
       available: true, cpu: cpuPercent, memory: 268435456, agent: 'Claude Code',
       profile: 'claude', profileName: 'claude', configDir: '/fixture/.claude',
       shellCwd: CWD, foreground: { pid: 4242, agent: 'Claude Code', command: 'claude', stopped: false, cwd: CWD, profile: 'claude' },
+      agentSessionId,
       usage: {
         agent: 'Claude Code', plan: 'Max', profile: 'claude', model: 'Fable 5.1', updatedAtMs: Date.now(),
         windows: [{ id: 'session', label: 'Sessão', usedPercent: 37, resetsAtMs: null }],
-        sessions: [{ sessionId: 'demo', cwd: CWD, model: 'Fable 5.1', effort: 'max', contextUsedPercent: 42, costUsd: 1.83 }],
+        sessions,
       },
     },
   };
@@ -96,8 +101,35 @@ test('o card mostra modelo, uso do plano e contexto no computador e nao mostra e
   assert.match(html, /terminais-card__plan[^>]*>\s*37\s*%/u, 'a porcentagem da janela do plano continua no card');
   assert.match(html, /Contexto 42\s*%/u, 'a tag de contexto continua no card');
   assert.match(html, /US\$\s*1,83/u, 'o custo estimado continua no card');
+  // A entrada mais nova da pasta e de outra conversa: o id decide, nao a pasta.
+  assert.doesNotMatch(html, /Opus 5\.5|Contexto 82\s*%|1\.005/u, 'a conversa vizinha na mesma pasta nao entra no card');
   assert.doesNotMatch(html, EFFORT_WORDS, 'nenhum rotulo de esforco pode sobrar no card');
   assert.doesNotMatch(html, />max</, 'o nivel cru de esforco nao pode vazar como texto');
+});
+
+/* ── uso casado pelo id da conversa ────────────────────────────────── */
+
+test('id conhecido que o hook ainda nao publicou deixa o card sem modelo, contexto e custo', () => {
+  // A conversa existe, mas o hook ainda nao redesenhou: nada e emprestado da
+  // outra conversa da pasta nem do modelo do perfil.
+  const html = render({ session: sample({ agentSessionId: 'ainda-nao-publicada' }) });
+  assert.doesNotMatch(html, /terminais-card__model/, 'sem a entrada propria nao ha modelo');
+  assert.doesNotMatch(html, /Contexto/, 'sem a entrada propria nao ha contexto');
+  assert.doesNotMatch(html, /US\$/, 'sem a entrada propria nao ha custo');
+  assert.match(html, /terminais-card__running/, 'a linha do que esta rodando continua');
+  assert.match(html, /terminais-card__plan[^>]*>\s*37\s*%/u, 'o plano e da conta e continua');
+});
+
+test('sem id a pasta so decide quando uma unica conversa roda nela', () => {
+  const ambiguous = render({ session: sample({ agentSessionId: null, sessions: [OTHER, OWN] }) });
+  assert.doesNotMatch(ambiguous, /terminais-card__model/, 'duas conversas na pasta: nenhuma e escolhida');
+  assert.doesNotMatch(ambiguous, /Contexto|US\$/, 'nenhum chip de conversa com a pasta ambigua');
+  assert.match(ambiguous, /terminais-card__running/);
+
+  const single = render({ session: sample({ agentSessionId: null, sessions: [OWN] }) });
+  assert.match(single, /terminais-card__model[^>]*>Fable 5\.1</, 'uma conversa so na pasta e a desta sessao');
+  assert.match(single, /Contexto 42\s*%/u);
+  assert.match(single, /US\$\s*1,83/u);
 });
 
 test('o mesmo card no modo touch tambem nao mostra esforco', () => {

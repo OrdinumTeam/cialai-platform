@@ -218,6 +218,12 @@ pub struct SessionMetrics {
     /// Quando existe, decide sozinho o estado do card.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub agent_turn: Option<AgentTurn>,
+    /// Id da conversa do agente, o mesmo `sessionId` que o hook da linha de
+    /// estado publica em `sessions[]`. E por ele que o card acha o modelo, o
+    /// contexto e o custo desta sessao, e nao os de outra conversa na mesma
+    /// pasta. So o id vai no fio, nunca o caminho do arquivo que o provou.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_session_id: Option<String>,
     /// Milissegundos desde a ultima saida do PTY, pelo relogio do computador.
     /// `None` quando a sessao ainda nao produziu nada.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1484,6 +1490,7 @@ impl TerminalManager {
                     agent_profile_name: None,
                     shell_cwd: None,
                     agent_turn: None,
+                    agent_session_id: None,
                     output_age_ms,
                 });
                 continue;
@@ -1545,12 +1552,13 @@ impl TerminalManager {
                 codex_homes.extend(found.config_dir.clone());
             }
             // O estado do turno vem do arquivo do proprio agente, nunca de
-            // silencio ou de CPU. Sem agente na arvore, nao ha o que ler.
-            let agent_turn = agent
+            // silencio ou de CPU. Sem agente na arvore, nao ha o que ler. A
+            // mesma deteccao diz qual e a conversa, e o id vai junto.
+            let detected = agent
                 .is_some()
                 .then(|| resume::detect(pid, &tree, &mut commands, &home))
-                .flatten()
-                .and_then(|found| turn_of(&found.evidence));
+                .flatten();
+            let (agent_turn, agent_session_id) = agent_fields(detected);
 
             result.push(SessionMetrics {
                 id,
@@ -1571,6 +1579,7 @@ impl TerminalManager {
                     .and_then(|profile| profile.name.clone()),
                 shell_cwd: source.cwd(pid),
                 agent_turn,
+                agent_session_id,
                 output_age_ms,
             });
         }
@@ -1749,6 +1758,16 @@ fn turn_of(evidence: &AgentEvidence) -> Option<AgentTurn> {
         AgentEvidence::ClaudeRecord(path) => agent_state::claude_turn(path),
         AgentEvidence::CodexRollout(path) => agent_state::codex_turn(path),
     }
+}
+
+/// O que `pty_metrics` publica da conversa detectada: o turno, lido da
+/// evidencia, e o id da conversa. O id sai mesmo quando a evidencia nao diz
+/// nada que se entenda, porque identificar a conversa nao depende do turno.
+fn agent_fields(detected: Option<resume::Detected>) -> (Option<AgentTurn>, Option<String>) {
+    let Some(found) = detected else {
+        return (None, None);
+    };
+    (turn_of(&found.evidence), Some(found.session.session_id))
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -2707,6 +2726,55 @@ mod tests {
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// A conversa detectada rende os dois campos de `pty_metrics`: o turno,
+    /// lido da evidencia, e o id que o hook da linha de estado tambem publica.
+    #[test]
+    fn the_detected_conversation_yields_the_turn_and_the_id_the_hook_publishes() {
+        let dir = scratch("campos-do-agente");
+        let started = 1_789_000_000_000u64;
+        let session_id = "8c4f5f6e-1c2d-4e3f-9a0b-1c2d3e4f5a6b";
+        let busy = claude_record_at(
+            &dir,
+            21,
+            serde_json::json!({"pid":21,"cwd":"/p","status":"busy","startedAt":started,"statusUpdatedAt":started + 500}),
+        );
+        let detect = |evidence: PathBuf| {
+            Some(resume::Detected {
+                session: resume::AgentSession {
+                    agent: resume::CLAUDE.to_string(),
+                    session_id: session_id.to_string(),
+                    cwd: Some("/p".to_string()),
+                    config_dir: None,
+                    profile_name: None,
+                    args: Vec::new(),
+                },
+                evidence: AgentEvidence::ClaudeRecord(evidence),
+            })
+        };
+
+        let (turn, id) = agent_fields(detect(busy));
+        assert_eq!(
+            turn.map(|turn| turn.state),
+            Some(agent_state::TurnState::Busy)
+        );
+        assert_eq!(id.as_deref(), Some(session_id));
+
+        // Registro que nao diz o turno continua identificando a conversa.
+        let mute = claude_record_at(
+            &dir,
+            22,
+            serde_json::json!({"pid":22,"cwd":"/p","entrypoint":"claude-desktop","startedAt":started}),
+        );
+        let (turn, id) = agent_fields(detect(mute));
+        assert!(turn.is_none());
+        assert_eq!(id.as_deref(), Some(session_id));
+
+        // Sem conversa detectada, nenhum dos dois.
+        assert_eq!(agent_fields(None), (None, None));
+
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
     #[test]
     fn metrics_carry_the_age_of_the_last_output_and_serialize_the_new_fields() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
@@ -2751,14 +2819,20 @@ mod tests {
             .expect("metrica da sessao");
         let age = sample.output_age_ms.expect("idade da ultima saida");
         assert!(age < 20_000, "a saida acabou de chegar, veio {age} ms");
-        // Um shell parado no prompt nao tem agente e, portanto, nao tem turno.
+        // Um shell parado no prompt nao tem agente e, portanto, nao tem turno
+        // nem conversa.
         assert!(sample.agent_turn.is_none());
+        assert!(sample.agent_session_id.is_none());
 
         let json = serde_json::to_value(&sample).unwrap();
         assert!(json.get("outputAgeMs").is_some(), "camelCase no protocolo");
         assert!(
             json.get("agentTurn").is_none(),
             "campo ausente nao vai no fio"
+        );
+        assert!(
+            json.get("agentSessionId").is_none(),
+            "sem agente, o id da conversa tambem fica fora do fio"
         );
 
         manager.kill(info.id).ok();

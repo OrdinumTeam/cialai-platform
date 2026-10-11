@@ -445,24 +445,85 @@ test('um caminho do Windows entra uma vez em recentes, na raiz e no uso do plano
   assert.equal(session.cwd, portable, 'a sessao guarda a forma portatil');
   assert.equal(session.explorer.root, portable, 'a raiz do explorador nasce igual ao caminho da sessao');
 
-  // O uso do plano vem publicado com o caminho na forma do sistema.
+  // O uso do plano vem publicado com o caminho na forma do sistema, e o Rust
+  // manda o id da conversa como o arquivo do agente o grava.
+  const conversation = '5B1E9C7A-3D2F-4A8B-9C0D-1E2F3A4B5C6D';
   s.fixture.metrics = [{id:session.ptyId, tag:session.id, pid:4242, available:true, cpuPercent:1, memoryBytes:1024, processes:2,
     foreground:{pid:99, name:'claude', command:'claude', agent:'Claude Code', stopped:false, cwd:windowsPath, profile:'claude'},
     agent:'Claude Code', agentProfile:'claude', agentConfigDir:'C:\\Users\\ana\\.claude', agentProfileName:null,
-    shellCwd:windowsPath}];
+    shellCwd:windowsPath, agentSessionId:conversation}];
   s.runtime.__applyMetricsForTest
     ? s.runtime.__applyMetricsForTest(s.fixture.metrics)
     : await s.advance(3000);
   await settle();
 
   assert.equal(session.activity?.shellCwd, portable, 'a pasta do shell chega portatil ao card');
+  assert.equal(session.activity?.agentSessionId, conversation, 'o id da conversa chega ao card como o Rust o mandou');
   assert.equal(session.explorer.root, portable, 'a raiz do explorador nao troca a cada amostra');
+  const windows = [{id:'session',label:'Sessão',usedPercent:10}];
+  // O hook grava o id em minusculas e a pasta com barra invertida; o id casa
+  // sem olhar a caixa nem a barra.
+  const byId = s.runtime.sessionUsage({...session.activity, usage:{windows,
+    sessions:[{sessionId:conversation.toLowerCase(), cwd:windowsPath, model:'Fable 5.1', contextUsedPercent:20, costUsd:1}]}});
+  assert.equal(byId.matched, true, 'a conversa do agente casa pelo id, mesmo com as barras diferentes');
+  assert.equal(byId.model, 'Fable 5.1');
+  // Sem id, como num Rust antigo, a pasta continua casando nas duas formas.
   assert.equal(
-    s.runtime.sessionUsage({...session.activity, usage:{windows:[{id:'session',label:'Sessão',usedPercent:10}],
+    s.runtime.sessionUsage({...session.activity, agentSessionId:null, usage:{windows,
       sessions:[{cwd:portable, model:'Fable 5.1', contextUsedPercent:20, costUsd:1}]}}).matched,
     true,
-    'a conversa do agente casa mesmo com as duas formas do mesmo caminho',
+    'sem id, a conversa do agente casa pela pasta mesmo com as duas formas do mesmo caminho',
   );
+});
+
+/* ── uso por conversa, casado pelo id da sessao do agente ──────────── */
+
+test('duas sessoes na mesma pasta mostram cada uma o uso da propria conversa', async () => {
+  const s = scenario({desktop:true, alive:[]});
+  await s.runtime.hydrate();
+  const firstId = s.runtime.openSession('/fixture/projeto');
+  await settle();
+  const secondId = s.runtime.openSession('/fixture/projeto');
+  await settle();
+  const first = s.runtime.getSession(firstId);
+  const second = s.runtime.getSession(secondId);
+
+  const metric = (session, agentSessionId) => ({id:session.ptyId, tag:session.id, pid:4000+session.ptyId, available:true, cpuPercent:1, memoryBytes:1024, processes:2,
+    foreground:{pid:5000+session.ptyId, name:'claude', command:'claude', agent:'Claude Code', stopped:false, cwd:'/fixture/projeto', profile:'claude'},
+    agent:'Claude Code', agentProfile:'claude', agentConfigDir:'/fixture/.claude', agentProfileName:null,
+    shellCwd:'/fixture/projeto', agentSessionId});
+  s.fixture.metrics = [metric(first, 'aaaa-1111'), metric(second, 'bbbb-2222')];
+  await s.advance(3000);
+  await settle();
+  assert.equal(first.activity?.agentSessionId, 'aaaa-1111');
+  assert.equal(second.activity?.agentSessionId, 'bbbb-2222');
+
+  // O hook publica a mais nova primeiro; antes, as duas sessoes mostravam
+  // essa entrada. Agora cada uma acha a sua pelo id.
+  const usage = {windows:[{id:'session',label:'Sessão',usedPercent:10}], model:'Fable 5.1', sessions:[
+    {sessionId:'bbbb-2222', cwd:'/fixture/projeto', model:'Opus 5.5', contextUsedPercent:82, costUsd:1005},
+    {sessionId:'aaaa-1111', cwd:'/fixture/projeto', model:'Fable 5.1', contextUsedPercent:42, costUsd:1.83},
+  ]};
+  // O runtime vive noutro realm do `vm`: a copia rasa traz o objeto para o
+  // prototipo deste lado antes da comparacao estrita.
+  const plain = (value) => ({...value});
+  const ofFirst = plain(s.runtime.sessionUsage({...first.activity, usage}));
+  const ofSecond = plain(s.runtime.sessionUsage({...second.activity, usage}));
+  assert.deepEqual(ofFirst, {model:'Fable 5.1', contextUsedPercent:42, costUsd:1.83, matched:true});
+  assert.deepEqual(ofSecond, {model:'Opus 5.5', contextUsedPercent:82, costUsd:1005, matched:true});
+
+  // Id conhecido que o hook ainda nao publicou: sem casamento, e sem cair na
+  // pasta nem no modelo do perfil, porque as entradas da pasta sao de outras
+  // conversas.
+  const unknown = plain(s.runtime.sessionUsage({...first.activity, agentSessionId:'cccc-3333', usage}));
+  assert.deepEqual(unknown, {model:null, contextUsedPercent:null, costUsd:null, matched:false});
+
+  // Sem id, a pasta com duas conversas nao escolhe nenhuma; com uma so, e ela.
+  const ambiguous = s.runtime.sessionUsage({...first.activity, agentSessionId:null, usage});
+  assert.equal(ambiguous.matched, false, 'duas conversas na pasta e nenhum id: nenhuma e desta sessao');
+  assert.equal(ambiguous.model, null);
+  const single = plain(s.runtime.sessionUsage({...first.activity, agentSessionId:null, usage:{...usage, sessions:usage.sessions.slice(0, 1)}}));
+  assert.deepEqual(single, {model:'Opus 5.5', contextUsedPercent:82, costUsd:1005, matched:true});
 });
 
 /* ── apresentacao com o Rust como fonte de verdade, MOB-03.2 ───────── */

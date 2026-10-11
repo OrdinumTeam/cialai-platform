@@ -57,6 +57,10 @@ class StatuslineTest(unittest.TestCase):
             record = json.loads((pathlib.Path(support) / "ai-usage/claude/claude.json").read_text(encoding="utf-8"))
             self.assertEqual(record["format"], 3)
             session = record["sessions"][0]
+            # O id publicado e o `session_id` do payload, sem retoque: e por
+            # ele que o estudio casa a entrada com o terminal que roda a
+            # conversa, lendo o mesmo id do arquivo de sessao do Claude Code.
+            self.assertEqual(session["sessionId"], "s9")
             self.assertEqual(session["effort"], "max")
             self.assertEqual(session["contextUsedPercent"], 42.4)
             self.assertEqual(session["contextWindowSize"], 200000)

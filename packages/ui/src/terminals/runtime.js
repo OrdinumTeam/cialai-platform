@@ -1268,6 +1268,10 @@ function applyMetrics(list) {
       configDir,
       shellCwd: metrics.shellCwd ? portablePath(metrics.shellCwd) : null,
       usage: usageFor(agent, profile),
+      // Id da conversa do agente, lido pelo Rust do arquivo que o proprio
+      // agente grava: e por ele que o card acha o uso desta conversa, e nao
+      // o de outra na mesma pasta. Nulo sem agente ou num Rust antigo.
+      agentSessionId: metrics.agentSessionId || null,
     };
     const turnBefore = session.agentTurn;
     session.activity = next;
@@ -1302,6 +1306,7 @@ function applyMetrics(list) {
       || before.profile !== next.profile
       || before.usage !== next.usage
       || before.shellCwd !== next.shellCwd
+      || before.agentSessionId !== next.agentSessionId
       || !sameForeground(before.foreground, next.foreground)
       || turnBefore?.state !== session.agentTurn?.state
       || turnBefore?.waitingFor !== session.agentTurn?.waitingFor
@@ -1373,26 +1378,43 @@ export function sessionPlan(activity) {
   };
 }
 
-// Sessao do agente que roda nesta pasta: a sessao do perfil cuja pasta bate
-// com a do processo, senao a mais recente do perfil. Traz o modelo e, quando
-// o hook publica, quanto da janela de contexto ja foi usado e o custo
-// estimado da sessao.
+// Uso da conversa do agente que roda nesta sessao. O hook publica uma entrada
+// por conversa em `sessions[]`, com o mesmo `sessionId` que o Rust le do
+// arquivo do proprio agente e manda em `pty_metrics`. Com o id, a entrada e a
+// desta conversa e de mais nenhuma; um id conhecido que ainda nao esta na
+// lista e sem casamento, porque outra entrada na mesma pasta e outra
+// conversa. Sem id, como no Codex, no `claude -p` ou num Rust antigo, vale a
+// pasta, e so quando uma unica entrada roda nela. Traz o modelo e, quando o
+// hook publica, quanto da janela de contexto ja foi usado e o custo estimado
+// da conversa. O modelo do perfil nao e emprestado: ele e de outra conversa.
 export function sessionUsage(activity) {
   const usage = activity?.usage;
   if (!usage) return null;
-  const cwd = activity.foreground?.cwd || activity.shellCwd || null;
   const sessions = Array.isArray(usage.sessions) ? usage.sessions : [];
-  // Os dois lados passam pela forma portatil: o hook publica o caminho como o
-  // sistema o escreve, e no Windows isso e barra invertida.
-  const target = cwd ? portablePath(cwd) : null;
-  const match = (target && sessions.find((session) => portablePath(session.cwd) === target)) || null;
+  const match = matchingSession(activity, sessions);
   const number = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
   return {
-    model: match?.model || usage.model || null,
+    model: match?.model || null,
     contextUsedPercent: number(match?.contextUsedPercent),
     costUsd: number(match?.costUsd),
     matched: Boolean(match),
   };
+}
+
+function matchingSession(activity, sessions) {
+  const id = typeof activity.agentSessionId === 'string' ? activity.agentSessionId.trim().toLowerCase() : '';
+  if (id) {
+    // O hook grava o id como o agente o entrega; a comparacao ignora caixa
+    // para um UUID em maiusculas de um lado nao perder a conversa do outro.
+    return sessions.find((session) => typeof session.sessionId === 'string' && session.sessionId.toLowerCase() === id) || null;
+  }
+  const cwd = activity.foreground?.cwd || activity.shellCwd || null;
+  if (!cwd) return null;
+  // Os dois lados passam pela forma portatil: o hook publica o caminho como o
+  // sistema o escreve, e no Windows isso e barra invertida.
+  const target = portablePath(cwd);
+  const inFolder = sessions.filter((session) => session.cwd && portablePath(session.cwd) === target);
+  return inFolder.length === 1 ? inFolder[0] : null;
 }
 
 export function sessionModel(activity) {
@@ -1401,7 +1423,7 @@ export function sessionModel(activity) {
 
 function usageSignature(usage) {
   if (!usage) return '';
-  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.cwd}:${session.model}:${session.contextUsedPercent ?? ''}:${session.costUsd ?? ''}`).join(',') : '';
+  const sessions = Array.isArray(usage.sessions) ? usage.sessions.map((session) => `${session.sessionId ?? ''}@${session.cwd}:${session.model}:${session.contextUsedPercent ?? ''}:${session.costUsd ?? ''}`).join(',') : '';
   return `${usage.windows.map((window) => `${window.id}:${window.usedPercent}`).join('|')}#${usage.model || ''}#${sessions}`;
 }
 
@@ -2527,6 +2549,9 @@ function seedDemo() {
     foreground: { pid: 4242, name: 'node', command: 'node', agent: 'Claude Code', stopped: false, cwd: `${home}/cialai-platform`, profile: 'claude-main', profileName: translate('terminal.demo.profileMain'), configDir: '/Users/exemplo/.claude-main' },
     agent: 'Claude Code', profile: 'claude-main', profileName: translate('terminal.demo.profileMain'), configDir: '/Users/exemplo/.claude-main',
     usage: usageFor('Claude Code', 'claude-main'),
+    // O mesmo id da entrada de exemplo em `sessions[]`: e por ele que o card
+    // casa modelo, contexto e custo.
+    agentSessionId: 'demo',
   };
   first.lastOutputAt = Date.now();
   // O agente esta no meio de um turno: e o unico card que anima.

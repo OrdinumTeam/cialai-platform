@@ -62,14 +62,15 @@ Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há
 
 ## Estado de atividade em `pty_metrics`
 
-`SessionMetrics` leva dois campos além das medições de processo, e os dois são opcionais.
+`SessionMetrics` leva três campos além das medições de processo, e os três são opcionais.
 
 | Campo | Conteúdo |
 | --- | --- |
 | `agentTurn` | `state` com `busy`, `waiting`, `done` ou `idle`, mais `sinceMs` e `waitingFor`. Vem do arquivo que o próprio agente grava: `<perfil>/sessions/<pid>.json` no Claude Code e o rollout da conversa no Codex, achados por `workspace::resume::detect` e lidos por `workspace::agent_state`. Ausente quando não há agente na árvore ou quando o arquivo não diz nada que se entenda |
+| `agentSessionId` | Id da conversa do agente, só o UUID, sem caminho. Sai da mesma detecção de `workspace::resume::detect` e é o mesmo `sessionId` que o hook da linha de estado publica em `sessions[]`: é por ele que o card casa modelo, contexto e custo com a própria conversa, e não com outra na mesma pasta. Ausente quando não há agente na árvore ou quando a conversa não foi encontrada |
 | `outputAgeMs` | Milissegundos desde a última saída do PTY, medidos no relógio do computador. Ausente enquanto a sessão não produziu nada |
 
-Os dois existem para que todo cliente concorde sobre o mesmo estado. O relógio local de cada cliente só refina `outputAgeMs` de uma sessão anexada e fora de replay. Nenhum caminho de credencial e nenhum conteúdo de arquivo de sessão sai nesses campos.
+Os três existem para que todo cliente concorde sobre o mesmo estado e sobre qual conversa é a de cada sessão. O relógio local de cada cliente só refina `outputAgeMs` de uma sessão anexada e fora de replay. Nenhum caminho de credencial e nenhum conteúdo de arquivo de sessão sai nesses campos.
 
 ## Mapa dos comandos
 

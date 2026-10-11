@@ -160,7 +160,9 @@ function SessionCard({
   // rodando. A janela mais curta e a mostrada; as outras ficam na dica.
   // O plano da conta vem da mesma leitura da tela de contas, entao Claude
   // Code e Codex mostram o mesmo tipo de numero. O arquivo do proprio agente
-  // continua sendo a fonte de modelo, contexto e custo.
+  // continua sendo a fonte de modelo, contexto e custo, e a entrada e a da
+  // conversa desta sessao, casada pelo id que o Rust le, nao pela pasta: dois
+  // terminais na mesma pasta mostram cada um o seu.
   const plan = activity?.agent ? sessionPlan(activity) : null;
   const planWindow = plan?.windows?.[0] || null;
   const usage = activity?.usage?.windows?.length ? activity.usage : null;
