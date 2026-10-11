@@ -63,7 +63,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const { colors } = useTokens();
   return (
     <View style={styles.section}>
-      <Text accessibilityRole="header" style={[typography.headline, { color: colors.text }]}>{title}</Text>
+      <Text accessibilityRole="header" style={[typography.callout, styles.sectionTitle, { color: colors.text }]}>{title}</Text>
       {children}
     </View>
   );
@@ -135,7 +135,7 @@ export function Settings({
         <Section title={t('mobile.settings.biometrics')}>
           <SegmentedControl onChange={policy => onBiometricPolicy?.(policy)} value={biometricPolicy}
             options={BIOMETRIC_POLICIES.map(policy => ({ value: policy, label: t(`mobile.settings.biometrics.${policy}`) }))} />
-          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t(`mobile.settings.biometricsHint.${biometricPolicy}`)}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>{t(`mobile.settings.biometricsHint.${biometricPolicy}`)}</Text>
         </Section>
 
         <Section title={t('mobile.settings.notifications')}>
@@ -152,7 +152,7 @@ export function Settings({
                 variant="neutral" />
             </Notice>
           ) : null}
-          <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.settings.notifications.hint')}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>{t('mobile.settings.notifications.hint')}</Text>
         </Section>
 
         <Section title={t('mobile.settings.diagnostics.section')}>
@@ -227,17 +227,20 @@ export function Settings({
   );
 }
 
+// Seções compactas: título menor e menos ar entre elas, para a tela caber
+// com menos rolagem sem encolher os alvos de toque.
 const styles = StyleSheet.create({
-  content: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.xl },
-  section: { gap: space.sm },
+  content: { paddingHorizontal: space.lg, paddingBottom: space.xxl, gap: space.lg },
+  section: { gap: space.xs },
+  sectionTitle: { fontWeight: '600' },
   group: { gap: space.xs, paddingVertical: space.xs },
   groupLabel: { fontWeight: '600' },
   divider: { height: StyleSheet.hairlineWidth },
   flex: { flex: 1, minWidth: 0 },
   links: { marginTop: space.xs },
-  linkRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: space.sm },
-  about: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xs },
-  infoRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
+  linkRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  about: { flexDirection: 'row', alignItems: 'center', gap: space.sm, paddingVertical: space.xxs },
+  infoRow: { flexDirection: 'row', alignItems: 'baseline', gap: space.md, paddingVertical: space.xs, borderTopWidth: StyleSheet.hairlineWidth },
   infoValue: { flexShrink: 1, textAlign: 'right', fontWeight: '600' },
   stacked: { gap: space.xs, paddingVertical: space.sm, borderTopWidth: StyleSheet.hairlineWidth },
   network: { gap: 2 },

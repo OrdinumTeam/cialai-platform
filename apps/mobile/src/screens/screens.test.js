@@ -11,7 +11,7 @@ import { Settings } from './Settings';
 import { Shell } from './Shell';
 import { getLocale, setLocale } from '../i18n';
 import { clearDiagnostics, logApp } from '../state/diagnostics';
-import { recordSnapshot, resetDashboardForTests, toggleFavorite } from '../dashboard/store';
+import { chooseAccount, recordSnapshot, resetDashboardForTests, toggleFavorite } from '../dashboard/store';
 
 const mockListeners = new Set();
 const mockPair = jest.fn();
@@ -336,22 +336,21 @@ async function renderHome(props = {}, { dashboard = snapshot(), favorites = [] }
   return { tree, handlers };
 }
 
-test('Home keeps two half-width usage cards and scrolls sideways when an agent has more profiles', async () => {
+test('Home keeps one half-width usage card per agent with the account in use, without sideways scrolling', async () => {
   jest.useFakeTimers({ now: NOW });
-  const single = await renderHome();
-  expect(single.tree.root.findAll(node => node.props.testID === 'agent-usage-scroll')).toHaveLength(0);
-  await act(async () => single.tree.unmount());
   const base = snapshot();
   const work = { ...base.accounts[0], id: 'codex-work', label: 'Trabalho', active: false };
   const { tree } = await renderHome({}, { dashboard: snapshot({ accounts: [...base.accounts, work] }) });
-  const scroll = tree.root.findAll(node => node.props.testID === 'agent-usage-scroll' && node.props.horizontal);
-  expect(scroll).not.toHaveLength(0);
+  // A conta escolhida na folha não vence a conta em uso no computador.
+  await act(async () => { chooseAccount(desktopId, 'codex', 'codex-work'); });
+  expect(tree.root.findAll(node => node.props.testID === 'agent-usage-scroll')).toHaveLength(0);
   // O card e o Pressable dentro dele carregam o mesmo rótulo, um logo depois do outro.
   const cards = tree.root.findAll(node => typeof node.props.accessibilityHint === 'string' && node.props.accessibilityHint.startsWith('Ver uso do') && typeof node.props.onPress === 'function')
     .filter((card, index, all) => index === 0 || all[index - 1].props.accessibilityLabel !== card.props.accessibilityLabel);
-  expect(cards.map(card => card.props.accessibilityLabel.split(',').slice(0, 2).join(','))).toEqual(['Codex, Codex', 'Codex, Trabalho', 'Claude Code, Entre na conta no computador']);
-  // Tocar no card do segundo perfil abre os detalhes dele.
-  await act(async () => { cards[1].props.onPress(); });
+  expect(cards.map(card => card.props.accessibilityLabel.split(',').slice(0, 2).join(','))).toEqual(['Codex, Codex', 'Claude Code, Entre na conta no computador']);
+  expect(text(tree)).not.toContain('Trabalho');
+  // Tocar no card abre a folha, onde o outro perfil aparece para ser escolhido.
+  await act(async () => { cards[0].props.onPress(); });
   expect(text(tree)).toContain('Trabalho');
   await act(async () => tree.unmount());
   jest.useRealTimers();
@@ -362,10 +361,12 @@ test('Home shows the logo, real agent usage and the connected computer first, wi
   const { tree, handlers } = await renderHome({ keptDesktopId: desktopId });
   const rendered = text(tree);
   for (const expected of ['Codex', 'Plus', 'Limite de 5 horas', '19%', 'Renova em 2 h 10 min',
-    'Limite semanal', '62%', 'Renova em 3 d', 'Claude Code', 'Entre na conta no computador', 'Atualizado há 5 min',
+    'Claude Code', 'Entre na conta no computador', 'Atualizado há 5 min',
     'Computadores', 'Mac de Foco', 'Conectado', 'Direta', 'Uma sessão aberta', 'Abrir terminal', 'Desconectar', 'Seus projetos', 'Ações rápidas']) {
     expect(rendered).toContain(expected);
   }
+  // O card mostra só a janela principal; a semanal fica na folha e na aba Agentes.
+  expect(rendered).not.toMatch(/Limite semanal|62%|Renova em 3 d/);
   expect(rendered).not.toMatch(forbiddenOnMainScreens);
   expect(rendered).not.toMatch(forbiddenPunctuation);
   // O cabeçalho é o logo do site, sem saudação.
@@ -376,7 +377,7 @@ test('Home shows the logo, real agent usage and the connected computer first, wi
   expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Conexão direta')).not.toHaveLength(0);
   // O leitor de tela ouve o uso, não só a ação do card.
   const usageCard = tree.root.findAll(node => node.props.accessibilityHint === 'Ver uso do Codex')[0];
-  expect(usageCard.props.accessibilityLabel).toBe('Codex, Plus, Limite de 5 horas 19%, Limite semanal 62%');
+  expect(usageCard.props.accessibilityLabel).toBe('Codex, Plus, Limite de 5 horas 19%');
   expect(tree.root.findAll(node => node.props.accessibilityHint === 'Ver uso do Claude Code')[0].props.accessibilityLabel)
     .toBe('Claude Code, Entre na conta no computador');
   await tap(tree, 'Abrir terminal em Mac de Foco');
@@ -435,21 +436,27 @@ async function renderAgents(props = {}, { dashboard = snapshot(), loaded = true 
   return { tree, handlers };
 }
 
-test('Agents shows each agent account with plan, default badge, usage and the switch note', async () => {
+test('Agents lists each account in a flat list with plan, the in-use badge, usage and the switch note', async () => {
   jest.useFakeTimers({ now: NOW });
   const { tree, handlers } = await renderAgents();
   const rendered = text(tree);
-  for (const expected of ['Agentes', 'Codex', 'Plus', 'Padrão', 'Limite de 5 horas', '19%', 'Renova em 2 h 10 min',
+  for (const expected of ['Agentes', 'Codex', 'Plus', 'Em uso', 'Limite de 5 horas', '19%', 'Renova em 2 h 10 min',
     'Limite semanal', '62%', 'Claude Code', 'Pessoal', 'Entre na conta no computador', 'A troca vale para novas sessões',
     'Uma tarefa em execução continua na conta em que começou.', 'Leitura de Mac de Foco, atualizada há 5 min']) {
     expect(rendered).toContain(expected);
   }
   expect(rendered).not.toMatch(forbiddenOnMainScreens);
   expect(rendered).not.toMatch(forbiddenPunctuation);
+  // Sem selo Padrão, sem botão Trocar e sem contagem por agente: a lista é plana.
+  expect(rendered).not.toMatch(/Padrão|Trocar conta|\d+ contas/);
   // A conta sem leitura não ganha número inventado: só as duas janelas do Codex têm percentual.
   expect(rendered.match(/\d+%/g)).toEqual(['19%', '62%']);
   expect(rendered).not.toMatch(/Contas|Detalhes de uso/);
-  await tap(tree, 'Trocar a conta do Codex, atual Codex');
+  // Tocar na linha abre a folha com a hora da renovação e o caminho para o terminal.
+  await tap(tree, 'Detalhes de Codex no Codex');
+  expect(text(tree)).toContain('Renovação');
+  expect(text(tree)).toContain('Gerenciar no terminal');
+  await act(async () => { pressable(tree, 'Gerenciar no terminal').props.onPress(); });
   expect(handlers.onIntent).toHaveBeenLastCalledWith(store.desktops[0], { kind: 'profiles' });
   await tap(tree, 'Detalhes de Pessoal no Claude Code');
   expect(text(tree)).toContain('Gerenciar no terminal');
@@ -457,7 +464,7 @@ test('Agents shows each agent account with plan, default badge, usage and the sw
   jest.useRealTimers();
 });
 
-test('Agents marks the active account among many, flags limits near the end and shows every window of the account', async () => {
+test('Agents puts the accounts in use first, flags limits near the end and keeps every window in the details', async () => {
   jest.useFakeTimers({ now: NOW });
   const long = 'Conta compartilhada da equipe de produto com um nome realmente comprido para caber';
   const base = snapshot();
@@ -474,19 +481,23 @@ test('Agents marks the active account among many, flags limits near the end and 
   ];
   const { tree } = await renderAgents({}, { dashboard: { ...base, accounts } });
   const rendered = text(tree);
-  expect(rendered).toContain('3 contas');
-  expect(rendered).toContain('2 contas');
+  expect(rendered).not.toMatch(/\d+ contas/);
   expect(rendered).toContain('Esgotado');
   expect(rendered).toContain('Perto do limite');
   expect(rendered).toContain(long);
-  for (const label of ['Sessão', 'Opus semanal', 'Todos os modelos']) expect(rendered).toContain(label);
-  // A conta ativa vem primeiro, com o selo de padrão.
-  const order = ['Trocar a conta do Codex, atual Codex', 'Trocar a conta do Codex, atual Trabalho', `Trocar a conta do Codex, atual ${long}`];
-  const switches = tree.root.findAll(node => typeof node.props.onPress === 'function' && order.includes(node.props.accessibilityLabel))
+  // A linha mostra a janela principal e a semanal; as outras ficam na folha.
+  for (const label of ['Sessão', 'Todos os modelos']) expect(rendered).toContain(label);
+  expect(rendered).not.toContain('Opus semanal');
+  // As contas em uso vêm primeiro, com o selo; o resto segue a ordem do computador, sem agrupar por agente.
+  const order = ['Detalhes de Codex no Codex', 'Detalhes de Pessoal no Claude Code', 'Detalhes de Trabalho no Codex',
+    `Detalhes de ${long} no Codex`, 'Detalhes de Max no Claude Code'];
+  const rows = tree.root.findAll(node => typeof node.props.onPress === 'function' && order.includes(node.props.accessibilityLabel))
     .map(node => node.props.accessibilityLabel);
-  expect([...new Set(switches)]).toEqual(order);
-  expect(rendered.match(/Padrão/g)).toHaveLength(2);
-  // A engrenagem abre a folha com todas as janelas da conta e a hora da renovação.
+  expect([...new Set(rows)]).toEqual(order);
+  expect(rendered.match(/Em uso/g)).toHaveLength(2);
+  // A linha abre a folha com todas as janelas da conta e a hora da renovação.
+  await tap(tree, 'Detalhes de Max no Claude Code');
+  expect(text(tree)).toContain('Opus semanal');
   await tap(tree, 'Detalhes de Trabalho no Codex');
   expect(text(tree)).toContain('Renova em 40 min');
   expect(text(tree)).toContain('Renovação');
@@ -936,6 +947,34 @@ test('Shell shows the reconnecting banner above the page and keeps the same sour
   expect(text(tree)).not.toMatch(/Reconectando/);
   await act(async () => tree.unmount());
   jest.useRealTimers();
+});
+
+test('Shell esconde a barra enquanto a página mostra uma sessão', async () => {
+  let tree;
+  await act(async () => { tree = create(<Shell {...shellProps({ reconnecting: true })} />); });
+  const webView = () => tree.root.findAll(node => node.props.source?.uri)[0];
+  const post = async (pane, url = 'http://127.0.0.1:47400/') => {
+    await act(async () => { await webView().props.onMessage({ nativeEvent: { url, data: JSON.stringify({ type: 'view', pane }) } }); });
+  };
+  const selector = () => labelled(tree, 'Trocar de computador, atual Studio');
+  expect(selector()).toBeDefined();
+  // Dentro da sessão só fica o cabeçalho da página; a faixa de reconexão continua.
+  await post('terminal');
+  expect(selector()).toBeUndefined();
+  expect(labelled(tree, 'Ir para o início')).toBeUndefined();
+  expect(text(tree)).toMatch(/Reconectando/);
+  expect(webView().props.source.uri).toBe('http://127.0.0.1:47400/?k=test');
+  await post('list');
+  expect(selector()).toBeDefined();
+  await post('files');
+  expect(selector()).toBeUndefined();
+  // Uma página nova começa na lista.
+  await act(async () => { webView().props.onLoadStart(); });
+  expect(selector()).toBeDefined();
+  // Mensagem de outra origem não mexe na barra.
+  await post('terminal', 'https://evil.example/');
+  expect(selector()).toBeDefined();
+  await act(async () => tree.unmount());
 });
 
 test('Shell needs two strikes from probes or load errors before reporting the loss, and reports recovery', async () => {

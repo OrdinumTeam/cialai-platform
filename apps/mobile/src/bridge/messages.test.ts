@@ -74,6 +74,15 @@ describe('page bridge messages', () => {
     expect(pageMessageScript({ type: 'navigate-back' })).toContain('navigate-back');
   });
 
+  test('accepts only the exact view message with a pane the shell knows', () => {
+    expect(parsePageMessage('{"type":"view","pane":"terminal"}')).toEqual({ type: 'view', pane: 'terminal' });
+    expect(parsePageMessage('{"type":"view","pane":"list"}')).toEqual({ type: 'view', pane: 'list' });
+    expect(parsePageMessage('{"type":"view","pane":"files"}')).toEqual({ type: 'view', pane: 'files' });
+    expect(parsePageMessage('{"type":"view","pane":"preview"}')).toBeNull();
+    expect(parsePageMessage('{"type":"view","pane":"terminal","url":"https://evil.example"}')).toBeNull();
+    expect(parsePageMessage('{"type":"view"}')).toBeNull();
+  });
+
   test('accepts a picked project folder only with a path inside the limit', () => {
     expect(parsePageMessage('{"type":"project-picked","path":"/p/alfa","name":"alfa"}')).toEqual({ type: 'project-picked', path: '/p/alfa', name: 'alfa' });
     expect(parsePageMessage('{"type":"project-picked","path":"","name":"alfa"}')).toBeNull();

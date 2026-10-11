@@ -57,6 +57,7 @@ import { Home, type IntentRequest, type StoreState } from './src/screens/Home';
 import { Offline } from './src/screens/Offline';
 import { Pair } from './src/screens/Pair';
 import { Projects } from './src/screens/Projects';
+import { normalizeProjectsView, PROJECTS_VIEW_STORAGE_KEY, type ProjectsView } from './src/screens/projects/view';
 import { Settings } from './src/screens/Settings';
 import { Shell, type ShellDesktop } from './src/screens/Shell';
 import { openConnection, outcomeForCode, type ConnectionOutcome, type ConnectionPorts } from './src/state/connection';
@@ -129,6 +130,7 @@ function AppContent() {
   const [notificationAccess, setNotificationAccess] = useState<NotificationPermission>('undetermined');
   const notificationPrefsRef = useRef(notificationPrefs);
   const [themeMode, setThemeMode] = useState<ThemeMode>('system');
+  const [projectsView, setProjectsView] = useState<ProjectsView>('grid');
   // Pedido do Início para a próxima abertura do terminal; some ao sair dele.
   const [shellIntent, setShellIntent] = useState<ShellIntent | null>(null);
   const [biometricPolicy, setBiometricPolicy] = useState<BiometricPolicy>('always');
@@ -463,6 +465,12 @@ function AppContent() {
         // Sem a escolha guardada, a aparência segue o sistema.
       }
       try {
+        const storedView = await SecureStore.getItemAsync(PROJECTS_VIEW_STORAGE_KEY);
+        if (!cancelled && storedView) setProjectsView(normalizeProjectsView(storedView));
+      } catch {
+        // Sem a escolha guardada, Projetos abre em grade.
+      }
+      try {
         const storedPolicy = await SecureStore.getItemAsync(BIOMETRIC_STORAGE_KEY);
         if (!cancelled && storedPolicy) {
           const policy = normalizeBiometricPolicy(storedPolicy);
@@ -788,6 +796,11 @@ function AppContent() {
     setThemeMode(next);
     SecureStore.setItemAsync(THEME_STORAGE_KEY, next).catch(() => undefined);
   }, []);
+  const changeProjectsView = useCallback((view: ProjectsView) => {
+    const next = normalizeProjectsView(view);
+    setProjectsView(next);
+    SecureStore.setItemAsync(PROJECTS_VIEW_STORAGE_KEY, next).catch(() => undefined);
+  }, []);
   const changeLogLevel = useCallback((level: LogLevel) => {
     const next = normalizeLogLevel(level);
     setLogLevel(next);
@@ -865,7 +878,7 @@ function AppContent() {
     content = desktopList;
   } else if (screen.kind === 'projects') {
     content = <Projects desktops={store.desktops} onBack={() => dispatch({ type: 'show-home' })}
-      onIntent={openWithIntent} onTerminal={openTerminal} />;
+      onIntent={openWithIntent} onTerminal={openTerminal} onView={changeProjectsView} view={projectsView} />;
   } else if (screen.kind === 'agents') {
     content = <Agents describe={describe} onBack={() => dispatch({ type: 'show-home' })} onIntent={openWithIntent}
       onPair={() => dispatch({ type: 'needs-pairing' })} store={store} />;

@@ -8,7 +8,7 @@ import type { WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
 import type { Transport } from 'cialai-tunnel';
 
 import type { BiometricSession } from '../auth/biometrics';
-import { pageMessageScript, parsePageMessage, shellMessageScript, type DashboardMessage, type ShellIntent, type ShellMessage } from '../bridge/messages';
+import { pageMessageScript, parsePageMessage, shellMessageScript, type DashboardMessage, type ShellIntent, type ShellMessage, type ViewPane } from '../bridge/messages';
 import { shareDownload } from '../bridge/share-download';
 import { controlOriginWhitelist, isSafeExternalUrl, isSameControlOrigin } from '../config/url';
 import { localizeSensitiveReason, useI18n } from '../i18n';
@@ -59,6 +59,9 @@ export function Shell({
   // Cobre o WebView até a página carregar: sem isso o Android mostra a tela
   // branca enquanto o HTML e o script chegam pelo túnel.
   const [pageReady, setPageReady] = useState(false);
+  // Painel que a página mostra. A barra nativa só aparece na lista de sessões;
+  // dentro de uma sessão o cabeçalho da página, com o voltar, é o único.
+  const [pane, setPane] = useState<ViewPane>('list');
   const [cover] = useState(() => new Animated.Value(1));
   const themeMode = useThemeMode();
   const transportColor = useTransportColor();
@@ -191,6 +194,10 @@ export function Shell({
       onProjectPicked?.(message.path);
       return;
     }
+    if (message.type === 'view') {
+      setPane(message.pane);
+      return;
+    }
     if (downloadBusy.current) {
       Alert.alert(t('mobile.alert.downloadBusy.title'), t('mobile.alert.downloadBusy.detail'));
       return;
@@ -214,23 +221,25 @@ export function Shell({
   return (
     <View style={[styles.root, { backgroundColor: colors.surface }]}>
       <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: colors.surface }}>
-        <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
-          <IconButton accessibilityLabel={t('mobile.home.open')} icon="chevron-left" onPress={onHome} variant="header" />
-          <Pressable accessibilityLabel={t('mobile.shell.switchDesktop', { name: desktopName })} accessibilityRole="button"
-            onPress={() => setPicker(true)}
-            style={({ pressed }) => [styles.selector, { backgroundColor: pressed ? colors.surfacePressed : colors.surfaceMuted }]}>
-            <Icon color={colors.textSecondary} name="laptop" size={18} />
-            <View style={[styles.connectedDot, { backgroundColor: reconnecting ? colors.warning : transportColor(transport) }]} />
-            <Text numberOfLines={1} style={[typography.headline, styles.toolbarTitle, { color: colors.text }]}>{desktopName}</Text>
-            <View style={[styles.transportBadge, { backgroundColor: colors.surface }]}>
-              <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
-                numberOfLines={1} style={[typography.caption, styles.transportText, { color: colors.textSecondary }]}>
-                {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
-              </Text>
-            </View>
-            <Icon color={colors.textSecondary} name="chevron-down" size={18} />
-          </Pressable>
-        </View>
+        {pane === 'list' ? (
+          <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
+            <IconButton accessibilityLabel={t('mobile.home.open')} icon="chevron-left" onPress={onHome} variant="header" />
+            <Pressable accessibilityLabel={t('mobile.shell.switchDesktop', { name: desktopName })} accessibilityRole="button"
+              onPress={() => setPicker(true)}
+              style={({ pressed }) => [styles.selector, { backgroundColor: pressed ? colors.surfacePressed : colors.surfaceMuted }]}>
+              <Icon color={colors.textSecondary} name="laptop" size={18} />
+              <View style={[styles.connectedDot, { backgroundColor: reconnecting ? colors.warning : transportColor(transport) }]} />
+              <Text numberOfLines={1} style={[typography.headline, styles.toolbarTitle, { color: colors.text }]}>{desktopName}</Text>
+              <View style={[styles.transportBadge, { backgroundColor: colors.surface }]}>
+                <Text accessibilityLabel={t(transport ? TRANSPORT_DESCRIPTION_KEYS[transport] : 'mobile.transport.searching')}
+                  numberOfLines={1} style={[typography.caption, styles.transportText, { color: colors.textSecondary }]}>
+                  {t(transport ? TRANSPORT_KEYS[transport] : 'mobile.transport.searching')}
+                </Text>
+              </View>
+              <Icon color={colors.textSecondary} name="chevron-down" size={18} />
+            </Pressable>
+          </View>
+        ) : null}
         {reconnecting ? (
           <View accessibilityLiveRegion="polite" style={[styles.banner, { backgroundColor: colors.warningSoft, borderBottomColor: colors.border }]}>
             <ActivityIndicator color={colors.warning} size="small" />
@@ -251,9 +260,10 @@ export function Shell({
           injectedJavaScriptBeforeContentLoaded={bootstrapScript}
           javaScriptEnabled
           keyboardDisplayRequiresUserAction={false}
-          onContentProcessDidTerminate={() => webView.current?.reload()}
+          // Uma página nova sempre começa na lista; a barra volta até ela dizer o contrário.
+          onContentProcessDidTerminate={() => { setPane('list'); webView.current?.reload(); }}
           onError={handleError}
-          onLoadStart={() => setPageReady(false)}
+          onLoadStart={() => { setPageReady(false); setPane('list'); }}
           onLoadEnd={() => setPageReady(true)}
           onLoad={() => {
             loaded.current = true;

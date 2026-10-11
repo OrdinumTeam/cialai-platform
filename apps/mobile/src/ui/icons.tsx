@@ -24,6 +24,7 @@ import House from 'lucide-react-native/icons/house';
 import Info from 'lucide-react-native/icons/info';
 import Keyboard from 'lucide-react-native/icons/keyboard';
 import Laptop from 'lucide-react-native/icons/laptop';
+import LayoutGrid from 'lucide-react-native/icons/layout-grid';
 import List from 'lucide-react-native/icons/list';
 import MemoryStick from 'lucide-react-native/icons/memory-stick';
 import Monitor from 'lucide-react-native/icons/monitor';
@@ -79,6 +80,7 @@ export const ICONS = {
   info: Info,
   keyboard: Keyboard,
   laptop: Laptop,
+  'layout-grid': LayoutGrid,
   list: List,
   memory: MemoryStick,
   monitor: Monitor,

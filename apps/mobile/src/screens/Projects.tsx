@@ -6,23 +6,29 @@ import { loadDashboard, moveFavorite, removeFavorite, toggleFavorite, useDashboa
 import type { DesktopEntry } from '../desktops/store';
 import { useI18n } from '../i18n';
 import { useTokens } from '../theme';
-import { AppHeader, BottomSheet, ChoiceRow, EmptyState, Icon, Screen, SearchInput, SectionHeader, SegmentedControl, space, typography } from '../ui';
+import { AppHeader, BottomSheet, ChoiceRow, EmptyState, Icon, Screen, SearchInput, SectionHeader, SegmentedControl, space, typography,
+  type HeaderAction } from '../ui';
 import type { IntentRequest } from './Home';
-import { ProjectFolderCard, ProjectSheet } from './home/Projects';
+import { ProjectFolderCard, ProjectListRow, ProjectSheet } from './home/Projects';
+import type { ProjectsView } from './projects/view';
 
 type Props = {
   desktops: readonly DesktopEntry[];
   onBack: () => void;
   onTerminal: () => void;
   onIntent: (desktop: DesktopEntry, intent: IntentRequest) => void;
+  // Cards em grade, o padrão, ou lista; a troca é guardada pelo App.
+  view?: ProjectsView;
+  onView?: (view: ProjectsView) => void;
 };
 
 const ALL = 'all';
 
 // Aba de projetos: atalhos das pastas de cada computador, a partir do último
 // retrato que a página mandou. Favoritos na ordem do usuário, depois as pastas
-// recentes e o restante. Remover um atalho só mexe neste celular.
-export function Projects({ desktops, onBack, onTerminal, onIntent }: Props) {
+// recentes e o restante, em grade ou em lista. Remover um atalho só mexe neste
+// celular.
+export function Projects({ desktops, onBack, onTerminal, onIntent, view = 'grid', onView }: Props) {
   const { colors } = useTokens();
   const { t } = useI18n();
   const dashboard = useDashboard();
@@ -45,15 +51,35 @@ export function Projects({ desktops, onBack, onTerminal, onIntent }: Props) {
     else setChoosingDesktop(true);
   };
 
-  const grid = (desktop: DesktopEntry, items: readonly ProjectEntry[]) => {
+  // A ação do cabeçalho mostra a vista para a qual se troca.
+  const actions: HeaderAction[] = [];
+  if (known.length && onView) {
+    actions.push(view === 'grid'
+      ? { icon: 'list', accessibilityLabel: t('mobile.projects.viewList'), onPress: () => onView('list') }
+      : { icon: 'layout-grid', accessibilityLabel: t('mobile.projects.viewGrid'), onPress: () => onView('grid') });
+  }
+  if (desktops.length) actions.push({ icon: 'plus', accessibilityLabel: t('mobile.projects.add'), onPress: addProject });
+
+  const items = (desktop: DesktopEntry, list: readonly ProjectEntry[]) => {
     const snapshot = dashboard.desktops[desktop.id]?.snapshot ?? null;
+    const open = (item: ProjectEntry) => setSelected({ project: item, desktop });
+    if (view === 'list') {
+      return (
+        <View style={styles.list}>
+          {list.map(project => (
+            <ProjectListRow computerName={desktop.name} key={project.path} onOpen={open} project={project}
+              sessionCount={sessionsIn(snapshot, project.path).length} />
+          ))}
+        </View>
+      );
+    }
     const rows: ProjectEntry[][] = [];
-    for (let index = 0; index < items.length; index += 2) rows.push(items.slice(index, index + 2));
+    for (let index = 0; index < list.length; index += 2) rows.push(list.slice(index, index + 2));
     return rows.map(row => (
       <View key={row[0]!.path} style={styles.row}>
         {row.map(project => (
-          <ProjectFolderCard computerName={desktop.name} key={project.path} onOpen={item => setSelected({ project: item, desktop })}
-            project={project} sessionCount={sessionsIn(snapshot, project.path).length} />
+          <ProjectFolderCard computerName={desktop.name} key={project.path} onOpen={open} project={project}
+            sessionCount={sessionsIn(snapshot, project.path).length} />
         ))}
         {row.length === 1 ? <View style={styles.spacer} /> : null}
       </View>
@@ -72,9 +98,9 @@ export function Projects({ desktops, onBack, onTerminal, onIntent }: Props) {
           : empty ? <Text style={[typography.callout, { color: colors.textSecondary }]}>
             {t(query.trim() ? 'mobile.projects.noMatch' : 'mobile.home.projects.none')}</Text>
             : <>
-              {sections.favorites.length ? <><SectionHeader title={t('mobile.projects.favorites')} />{grid(desktop, sections.favorites)}</> : null}
-              {sections.recent.length ? <><SectionHeader title={t('mobile.projects.recent')} />{grid(desktop, sections.recent)}</> : null}
-              {sections.all.length ? <><SectionHeader title={t('mobile.projects.all')} />{grid(desktop, sections.all)}</> : null}
+              {sections.favorites.length ? <><SectionHeader title={t('mobile.projects.favorites')} />{items(desktop, sections.favorites)}</> : null}
+              {sections.recent.length ? <><SectionHeader title={t('mobile.projects.recent')} />{items(desktop, sections.recent)}</> : null}
+              {sections.all.length ? <><SectionHeader title={t('mobile.projects.all')} />{items(desktop, sections.all)}</> : null}
             </>}
       </View>
     );
@@ -82,8 +108,7 @@ export function Projects({ desktops, onBack, onTerminal, onIntent }: Props) {
 
   return (
     <Screen>
-      <AppHeader actions={desktops.length ? [{ icon: 'plus', accessibilityLabel: t('mobile.projects.add'), onPress: addProject }] : []}
-        backLabel={t('mobile.home.open')} onBack={onBack} title={t('mobile.projects.title')} />
+      <AppHeader actions={actions} backLabel={t('mobile.home.open')} onBack={onBack} title={t('mobile.projects.title')} />
       {!known.length ? (
         <ScrollView contentContainerStyle={styles.empty}>
           <EmptyState action={{ label: t('mobile.home.openTerminal'), onPress: onTerminal, icon: 'terminal' }}
@@ -126,6 +151,6 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: space.lg, paddingBottom: space.xl, gap: space.sm },
   group: { gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm },
-  spacer: { flex: 1 },
-  flex: { flex: 1, minWidth: 0 }
+  list: { gap: space.xs },
+  spacer: { flex: 1 }
 });

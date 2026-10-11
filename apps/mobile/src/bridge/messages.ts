@@ -31,7 +31,11 @@ export type DashboardMessage = {
 };
 // Pasta escolhida no navegador da página para virar atalho em Projetos.
 export type ProjectPickedMessage = { type: 'project-picked'; path: string; name: string };
-export type PageMessage = AuthRequest | DownloadRequest | OpenExternalRequest | NavigateBackMessage | DashboardMessage | ProjectPickedMessage;
+// Painel que a página está mostrando; a casca esconde a barra fora da lista
+// para a sessão ter um cabeçalho só. A prévia conta como arquivos na página.
+export type ViewPane = 'list' | 'terminal' | 'files';
+export type ViewMessage = { type: 'view'; pane: ViewPane };
+export type PageMessage = AuthRequest | DownloadRequest | OpenExternalRequest | NavigateBackMessage | DashboardMessage | ProjectPickedMessage | ViewMessage;
 export type ShellMessage = {
   type: 'shell';
   platform: 'ios' | 'android';
@@ -55,6 +59,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const DASHBOARD_LIMITS = { accounts: 20, windows: 8, projects: 400, sessions: 100, recent: 10, text: 512 } as const;
 const READING_STATES: readonly ReadingState[] = ['ok', 'stale', 'needsLogin', 'error', 'unmetered', 'unavailable', 'reading'];
+const VIEW_PANES: readonly ViewPane[] = ['list', 'terminal', 'files'];
 
 const text = (value: unknown, required = false): string | null => {
   if (typeof value !== 'string' || value.length > DASHBOARD_LIMITS.text) return null;
@@ -174,6 +179,10 @@ export function parsePageMessage(raw: string, allowDevelopmentLoopback = false):
     const path = text(value.path, true);
     const name = text(value.name);
     return path === null || name === null ? null : { type: 'project-picked', path, name };
+  }
+  // Só o painel, sem campo a mais: a mensagem muda o que a casca mostra.
+  if (value.type === 'view' && Object.keys(value).length === 2 && VIEW_PANES.includes(value.pane as ViewPane)) {
+    return { type: 'view', pane: value.pane as ViewPane };
   }
   return null;
 }

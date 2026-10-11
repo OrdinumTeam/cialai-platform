@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from '@jest/globals';
 import type { AgentAccount, DashboardMessage } from '../bridge/messages';
 import { formatAge, formatDuration, formatReset, formatResetAt } from '../desktops/format';
 import { getLocale, setLocale, t } from '../i18n';
-import { accountLevel, accountWindows, agentAccounts, agentSummary, orderDesktops, orderProjects, projectSections, projectTint, sessionsIn, shortPath, usageLevel } from './model';
+import { accountLevel, accountWindows, agentAccounts, agentSummary, homeAccountId, orderDesktops, orderedAccounts, orderProjects, projectSections, projectTint, sessionsIn, shortPath, usageLevel } from './model';
 import { addFavorite, dashboardFor, forgetDashboard, loadDashboard, moveFavorite, parseDashboardFile, recordSnapshot, removeFavorite, resetDashboardForTests, toggleFavorite } from './store';
 
 const window = (id: string, usedFraction: number, flags: { headline?: boolean; weekly?: boolean } = {}) =>
@@ -51,6 +51,24 @@ describe('agent accounts tab', () => {
     const list = agentAccounts(snapshot([account({ id: 'a' }), account({ id: 'b', active: true }), account({ id: 'c', agent: 'claude' })]), 'codex');
     expect(list.map(item => item.id)).toEqual(['b', 'a']);
     expect(agentAccounts(null, 'claude')).toEqual([]);
+  });
+
+  test('the flat list puts the accounts in use first and keeps the computer order for the rest, across agents', () => {
+    const list = orderedAccounts(snapshot([
+      account({ id: 'a' }), account({ id: 'b', agent: 'claude', active: true }), account({ id: 'c', active: true }), account({ id: 'd', agent: 'claude' })
+    ]));
+    expect(list.map(item => item.id)).toEqual(['b', 'c', 'a', 'd']);
+    expect(orderedAccounts(null)).toEqual([]);
+  });
+
+  test('the Home card shows the account in use, else the chosen one while it exists, else the first', () => {
+    const accounts = [account({ id: 'a' }), account({ id: 'b' }), account({ id: 'c', active: true })];
+    expect(homeAccountId(snapshot(accounts), 'codex', 'b')).toBe('c');
+    expect(homeAccountId(snapshot(accounts.slice(0, 2)), 'codex', 'b')).toBe('b');
+    expect(homeAccountId(snapshot(accounts.slice(0, 2)), 'codex', 'gone')).toBe('a');
+    expect(homeAccountId(snapshot(accounts.slice(0, 2)), 'codex')).toBe('a');
+    expect(homeAccountId(snapshot(accounts), 'claude', 'a')).toBeUndefined();
+    expect(homeAccountId(null, 'codex')).toBeUndefined();
   });
 
   test('Codex shows the five hour and weekly windows apart, Claude Code every window it read', () => {

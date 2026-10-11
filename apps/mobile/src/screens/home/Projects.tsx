@@ -19,6 +19,14 @@ type CardProps = {
   sessionCount?: number;
 };
 
+type Translate = ReturnType<typeof useI18n>['t'];
+
+// Legenda com só o que existe: computador e sessões abertas, separados por ponto.
+function projectDetails(t: Translate, computerName: string | undefined, sessionCount: number): string {
+  return [computerName, sessionCount ? t(sessionCount === 1 ? 'mobile.projects.sessions.one' : 'mobile.projects.sessions.many', { count: sessionCount }) : '']
+    .filter(Boolean).join(' · ');
+}
+
 // Cartão de pasta das referências: capa com a pasta e as folhas num tom
 // próprio do projeto, nome embaixo, estrela de favorito, botão rosa e menu.
 // Embaixo do nome vão só dados reais: caminho curto, computador e sessões.
@@ -26,8 +34,7 @@ export function ProjectFolderCard({ project, onOpen, computerName, sessionCount 
   const { colors, scheme, shadow } = useTokens();
   const { t } = useI18n();
   const tint = projectTint(project.name);
-  const details = [computerName, sessionCount ? t(sessionCount === 1 ? 'mobile.projects.sessions.one' : 'mobile.projects.sessions.many', { count: sessionCount }) : '']
-    .filter(Boolean).join(' · ');
+  const details = projectDetails(t, computerName, sessionCount);
   return (
     <View style={[styles.card, shadow.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Pressable accessibilityLabel={t('mobile.home.projects.open', { name: project.name })} accessibilityRole="button"
@@ -52,6 +59,37 @@ export function ProjectFolderCard({ project, onOpen, computerName, sessionCount 
           onPress={() => onOpen(project)} tint={colors.textSecondary} />
       </View>
     </View>
+  );
+}
+
+// Linha da lista de Projetos: a mesma pasta do cartão num quadrado pequeno com
+// a estrela de favorito, nome, caminho curto, computador e sessões, chevron e
+// o mesmo menu do cartão. A linha inteira abre a folha do projeto.
+export function ProjectListRow({ project, onOpen, computerName, sessionCount = 0 }: CardProps) {
+  const { colors, scheme } = useTokens();
+  const { t } = useI18n();
+  const tint = projectTint(project.name);
+  const details = projectDetails(t, computerName, sessionCount);
+  return (
+    <Pressable accessibilityLabel={t('mobile.home.projects.open', { name: project.name })} accessibilityRole="button" onPress={() => onOpen(project)}
+      style={({ pressed }) => [styles.row, { backgroundColor: pressed ? colors.surfacePressed : colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.rowCover, { backgroundColor: tintCover(scheme, tint) }]}>
+        <FolderIllustration tint={tint} width={30} />
+        {project.favorite ? (
+          <View accessibilityLabel={t('mobile.home.projects.favoritesTitle')} accessible style={[styles.rowStar, { backgroundColor: colors.surface }]}>
+            <Icon color={colors.warning} filled name="star" size={10} />
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.flex}>
+        <Text numberOfLines={1} style={[typography.headline, { color: colors.text }]}>{project.name}</Text>
+        <Text numberOfLines={1} style={[typography.caption, { color: colors.textSecondary }]}>{shortPath(project.path)}</Text>
+        {details ? <Text numberOfLines={1} style={[typography.caption, { color: colors.textSecondary }]}>{details}</Text> : null}
+      </View>
+      <Icon color={colors.textTertiary} name="chevron-right" size={18} />
+      <IconButton accessibilityLabel={t('mobile.desktops.optionsFor', { name: project.name })} icon="ellipsis-vertical"
+        onPress={() => onOpen(project)} tint={colors.textSecondary} />
+    </Pressable>
   );
 }
 
@@ -169,6 +207,10 @@ const styles = StyleSheet.create({
   go: { position: 'absolute', right: space.xs, bottom: space.xs, width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
   foot: { flexDirection: 'row', alignItems: 'center', paddingLeft: space.xxs, minHeight: 44 },
   flex: { flex: 1, minWidth: 0 },
+  row: { minHeight: 60, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.md,
+    paddingLeft: space.xs, paddingRight: space.xxs, paddingVertical: space.xs },
+  rowCover: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
+  rowStar: { position: 'absolute', top: -4, left: -4, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   add: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', minHeight: 164, padding: space.sm },
   addIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   center: { textAlign: 'center' },

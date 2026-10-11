@@ -23,7 +23,8 @@ type CardProps = {
   onOpen: (agent: AgentId, accountId?: string) => void;
 };
 
-// Card de meia largura do Início: marca, nome, plano e as janelas de uso.
+// Card de meia largura do Início: marca, nome, plano e só a janela principal
+// da conta, em formato compacto; as outras janelas ficam na folha de detalhes.
 export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onOpen }: CardProps) {
   const { colors } = useTokens();
   const { t } = useI18n();
@@ -39,10 +40,11 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
   }
   const summary = agentSummary(snapshot, agent, chosenId);
   const accountLabel = summary.accounts.length > 1 ? summary.account?.label : null;
+  const headline = summary.readable ? summary.rows.find(window => window.headline) ?? summary.rows[0] : undefined;
   return (
     <Card accessibilityHint={t('mobile.home.agent.details', { agent: name })} onPress={() => onOpen(agent, chosenId)} style={styles.card}
       accessibilityLabel={[name, accountLabel, summary.account?.plan,
-        ...(summary.readable ? summary.rows.map(window => `${window.label} ${percentOf(window.usedFraction)}%`) : [t(stateKey(summary, !!snapshot))])]
+        headline ? `${headline.label} ${percentOf(headline.usedFraction)}%` : t(stateKey(summary, !!snapshot))]
         .filter(Boolean).join(', ')}>
       <View style={styles.head}>
         <AgentGlyph agent={agent} size={34} />
@@ -57,11 +59,7 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
         </View>
       </View>
       {summary.account?.plan ? <View style={styles.plan}><StatusBadge label={summary.account.plan} tone="primary" variant="pill" /></View> : null}
-      {summary.readable ? (
-        summary.rows.map(window => <WindowRow key={window.id} now={now} variant={summary.rows.length > 1 ? 'compact' : 'regular'} window={window} />)
-      ) : (
-        <ReadingState label={t(stateKey(summary, !!snapshot))} />
-      )}
+      {headline ? <WindowRow now={now} variant="compact" window={headline} /> : <ReadingState label={t(stateKey(summary, !!snapshot))} />}
       {summary.account?.state === 'stale' ? <StatusBadge label={t('mobile.home.usage.stale')} tone="warning" /> : null}
     </Card>
   );

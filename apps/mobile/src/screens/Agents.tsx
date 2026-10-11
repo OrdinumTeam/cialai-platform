@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AgentId } from '../bridge/messages';
-import { agentAccounts, orderDesktops } from '../dashboard/model';
+import { orderDesktops, orderedAccounts } from '../dashboard/model';
 import { chooseAccount, loadDashboard, useDashboard } from '../dashboard/store';
 import { useNow } from '../dashboard/useNow';
 import { formatAge } from '../desktops/format';
@@ -12,7 +12,7 @@ import type { DesktopConnection } from '../state/machine';
 import { useTokens } from '../theme';
 import { AgentGlyph } from '../ui/AgentGlyph';
 import { AppHeader, Card, EmptyState, Notice, Screen, SecondaryButton, SegmentedControl, space, typography } from '../ui';
-import { AccountCard, AccountCardSkeleton } from './agents/AccountCard';
+import { AccountRow, AccountRowSkeleton } from './agents/AccountRow';
 import { AGENT_NAME_KEYS, AGENTS } from './agents/usage';
 import type { IntentRequest } from './Home';
 import { AgentUsageSheet } from './home/AgentUsage';
@@ -25,10 +25,13 @@ type Props = {
   onIntent: (desktop: DesktopEntry, intent: IntentRequest) => void;
 };
 
-// Aba de agentes: as contas do Codex e do Claude Code de um computador, com o
-// uso de cada uma, a partir do último retrato que a página mandou. A troca de
-// conta acontece no computador, pela folha de contas da página; aqui nada é
-// trocado por conta própria e nenhum número é inventado.
+// Aba de agentes: todas as contas do Codex e do Claude Code de um computador
+// numa lista plana, como a Barra de IA do desktop, com as em uso primeiro e o
+// uso de cada uma, a partir do último retrato que a página mandou. Tocar numa
+// linha abre os detalhes; um agente sem conta ganha um card com Adicionar
+// conta. A troca e a criação de conta acontecem no computador, pela folha de
+// contas da página; aqui nada é trocado por conta própria e nenhum número é
+// inventado.
 export function Agents({ store, describe, onBack, onPair, onIntent }: Props) {
   const { colors } = useTokens();
   const { locale, t } = useI18n();
@@ -48,39 +51,31 @@ export function Agents({ store, describe, onBack, onPair, onIntent }: Props) {
     body = <EmptyState action={{ label: t('mobile.home.quick.pair'), onPress: onPair, icon: 'qr-code' }}
       detail={t('mobile.agents.emptyDetail')} icon="bot" title={t('mobile.agents.emptyTitle')} />;
   } else if (!dashboard.loaded) {
-    body = <View style={styles.list}><AccountCardSkeleton /><AccountCardSkeleton /></View>;
+    body = <View style={styles.list}><AccountRowSkeleton /><AccountRowSkeleton /></View>;
   } else if (!snapshot) {
     body = <EmptyState action={{ label: t('mobile.agents.read'), onPress: profiles, icon: 'terminal' }}
       detail={t('mobile.agents.noSnapshotDetail', { computer: desktop.name })} icon="bot" title={t('mobile.agents.noSnapshotTitle')} />;
   } else {
+    const missing = AGENTS.filter(agent => !snapshot.accounts.some(account => account.agent === agent));
     body = (
       <>
-        {AGENTS.map(agent => {
-          const accounts = agentAccounts(snapshot, agent);
-          const name = t(AGENT_NAME_KEYS[agent]);
-          return (
-            <View key={agent} style={styles.section}>
-              <View style={styles.sectionHead}>
-                <Text accessibilityRole="header" numberOfLines={1} style={[typography.headline, styles.flex, { color: colors.text }]}>{name}</Text>
-                {accounts.length > 1 ? (
-                  <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.agents.count', { count: accounts.length })}</Text>
-                ) : null}
+        <View style={styles.list}>
+          {orderedAccounts(snapshot).map(account => (
+            <AccountRow account={account} key={account.id} now={now} onPress={() => setSheet({ agent: account.agent, accountId: account.id })} />
+          ))}
+          {missing.map(agent => (
+            <Card key={agent} style={styles.emptyAgent}>
+              <View style={styles.emptyHead}>
+                <AgentGlyph agent={agent} size={36} />
+                <View style={styles.flex}>
+                  <Text numberOfLines={1} style={[typography.headline, { color: colors.text }]}>{t(AGENT_NAME_KEYS[agent])}</Text>
+                  <Text style={[typography.footnote, { color: colors.textSecondary }]}>{t('mobile.home.usage.noAccount')}</Text>
+                </View>
               </View>
-              {!accounts.length ? (
-                <Card style={styles.emptyAgent}>
-                  <View style={styles.emptyHead}>
-                    <AgentGlyph agent={agent} size={40} />
-                    <Text style={[typography.callout, styles.flex, { color: colors.textSecondary }]}>{t('mobile.home.usage.noAccount')}</Text>
-                  </View>
-                  <SecondaryButton icon="plus" label={t('mobile.agents.add')} onPress={profiles} variant="soft" />
-                </Card>
-              ) : accounts.map(account => (
-                <AccountCard account={account} key={account.id} now={now}
-                  onSettings={() => setSheet({ agent, accountId: account.id })} onSwitch={profiles} />
-              ))}
-            </View>
-          );
-        })}
+              <SecondaryButton icon="plus" label={t('mobile.agents.add')} onPress={profiles} variant="soft" />
+            </Card>
+          ))}
+        </View>
         <Notice detail={t('mobile.agents.switchNote.detail')} icon="refresh" title={t('mobile.agents.switchNote.title')} />
         <Text style={[typography.caption, styles.updated, { color: colors.textTertiary }]}>
           {t('mobile.agents.snapshot', { computer: desktop.name, age: formatAge(snapshot.at, now, locale, t) })}
@@ -113,11 +108,9 @@ export function Agents({ store, describe, onBack, onPair, onIntent }: Props) {
 
 const styles = StyleSheet.create({
   content: { flexGrow: 1, paddingHorizontal: space.lg, paddingBottom: space.xl, gap: space.md },
-  list: { gap: space.sm },
-  section: { gap: space.sm },
-  sectionHead: { flexDirection: 'row', alignItems: 'center', gap: space.xs, marginTop: space.xxs },
+  list: { gap: space.xs },
   flex: { flex: 1, minWidth: 0 },
-  emptyAgent: { gap: space.sm },
+  emptyAgent: { gap: space.sm, padding: space.sm },
   emptyHead: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
   updated: { textAlign: 'center' }
 });

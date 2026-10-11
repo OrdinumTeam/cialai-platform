@@ -176,6 +176,40 @@ test('Projects filters by computer and asks which one receives a new shortcut', 
   await act(async () => tree.unmount());
 });
 
+test('Projetos alterna para lista e mantém as ações', async () => {
+  const desktop = { id: 'd_AAAAAAAAAAAAAAAAAAAAAA', name: 'Mac de Foco' };
+  const files = new Map();
+  resetDashboardForTests({ read: async name => files.get(name) ?? null, write: async (name, value) => { files.set(name, value); }, remove: async () => {} }, true);
+  recordSnapshot(desktop.id, { type: 'dashboard', at: 1, accounts: [], recent: [], projects: [
+    { name: 'alfa', path: '/p/alfa', root: '~/p' }, { name: 'beta', path: '/p/beta', root: '~/p' }],
+  sessions: [{ id: 's1', name: 'alfa', cwd: '/p/alfa', status: 'running', agent: null }] });
+  toggleFavorite(desktop.id, '/p/beta');
+  const onView = jest.fn();
+  const screen = view => <SafeAreaProvider initialMetrics={metrics}>
+    <Projects desktops={[desktop]} onBack={jest.fn()} onIntent={jest.fn()} onTerminal={jest.fn()} onView={onView} view={view} />
+  </SafeAreaProvider>;
+  const tree = await render(screen('list'));
+  const names = tree.root.findAll(node => typeof node.props.accessibilityLabel === 'string' && node.props.accessibilityLabel.startsWith('Abrir ') &&
+    typeof node.props.onPress === 'function').map(node => node.props.accessibilityLabel);
+  expect(names).toEqual(['Abrir beta', 'Abrir alfa']);
+  expect(text(tree)).toContain('1 sessão aberta');
+  expect(text(tree)).toContain('Mac de Foco');
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  // A estrela de favorito e o menu continuam na linha.
+  expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Projetos favoritos')).not.toHaveLength(0);
+  await act(async () => { labelled(tree, 'Opções de alfa').props.onPress(); });
+  expect(text(tree)).toContain('Continuar alfa');
+  // A ação do cabeçalho mostra a vista para a qual se troca.
+  expect(labelled(tree, 'Ver em lista')).toBeUndefined();
+  await act(async () => { labelled(tree, 'Ver em grade').props.onPress(); });
+  expect(onView).toHaveBeenCalledWith('grid');
+  await act(async () => tree.update(screen('grid')));
+  expect(labelled(tree, 'Ver em grade')).toBeUndefined();
+  await act(async () => { labelled(tree, 'Ver em lista').props.onPress(); });
+  expect(onView).toHaveBeenLastCalledWith('list');
+  await act(async () => tree.unmount());
+});
+
 test('AppHeader names the back button and each action', async () => {
   const onBack = jest.fn();
   const onAdd = jest.fn();

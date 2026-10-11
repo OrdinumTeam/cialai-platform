@@ -47,6 +47,21 @@ export function agentAccounts(snapshot: DashboardMessage | null, agent: AgentId)
   return [...accounts.filter(account => account.active), ...accounts.filter(account => !account.active)];
 }
 
+// Lista plana da aba Agentes: as contas em uso primeiro, o resto na ordem em
+// que o computador as devolveu, sem agrupar por agente.
+export function orderedAccounts(snapshot: DashboardMessage | null): AgentAccount[] {
+  const accounts = snapshot?.accounts ?? [];
+  return [...accounts.filter(account => account.active), ...accounts.filter(account => !account.active)];
+}
+
+// Conta do card do Início: a em uso no computador; sem ela, a escolhida na
+// folha, se ainda existir; sem as duas, a primeira. Indefinida sem conta.
+export function homeAccountId(snapshot: DashboardMessage | null, agent: AgentId, chosenId?: string): string | undefined {
+  const accounts = (snapshot?.accounts ?? []).filter(account => account.agent === agent);
+  const account = accounts.find(item => item.active) ?? accounts.find(item => item.id === chosenId) ?? accounts[0];
+  return account?.id;
+}
+
 // Janelas do card de uma conta. No Codex, a de cinco horas e a semanal em
 // linhas separadas, cada uma só se veio; sem as duas marcadas, as que vieram.
 // No Claude Code, todas as que a leitura trouxe, a principal primeiro.

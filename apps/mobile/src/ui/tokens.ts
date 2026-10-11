@@ -125,6 +125,3 @@ export const projectTints = {
     ink: '#55555C'
   }
 } as const;
-
-// Cor da marca de cada agente no card de uso.
-export const agentColors = { claude: '#D97757' } as const;

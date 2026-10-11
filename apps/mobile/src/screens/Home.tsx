@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import type { AgentId, ShellIntent } from '../bridge/messages';
 import { COMMUNITIES, isCommunityUrl } from '../config/community';
-import { agentAccounts, orderDesktops, orderProjects } from '../dashboard/model';
+import { homeAccountId, orderDesktops, orderProjects } from '../dashboard/model';
 import { chooseAccount, loadDashboard, toggleFavorite, useDashboard } from '../dashboard/store';
 import { useNow } from '../dashboard/useNow';
 import { formatAge } from '../desktops/format';
@@ -74,7 +74,6 @@ export function Home({ store, storeState, onRetryStore, notice, describe, keptDe
   const now = useNow();
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [agentSheet, setAgentSheet] = useState<{ agent: AgentId; accountId?: string } | null>(null);
-  const { width: windowWidth } = useWindowDimensions();
   const [menuFor, setMenuFor] = useState<DesktopEntry | null>(null);
   const [projectSheet, setProjectSheet] = useState<ProjectItem | null>(null);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
@@ -88,16 +87,9 @@ export function Home({ store, storeState, onRetryStore, notice, describe, keptDe
   const projects = orderProjects(snapshot?.projects ?? [], favorites);
   const favoriteProjects = projects.filter(project => project.favorite);
   const loading = !dashboard.loaded;
-  // Um card por perfil de cada agente, o escolhido primeiro. Com mais de dois,
-  // os cards rolam de lado e mantêm a meia largura de sempre.
-  const usageCards = AGENTS.flatMap(agent => {
-    const accounts = loading ? [] : agentAccounts(snapshot, agent);
-    if (accounts.length < 2) return [{ agent, chosenId: entry?.accounts[agent] }];
-    const chosen = accounts.find(account => account.id === entry?.accounts[agent]);
-    return [...(chosen ? [chosen] : []), ...accounts.filter(account => account !== chosen)].map(account => ({ agent, chosenId: account.id }));
-  });
-  const usageWidth = (windowWidth - space.lg * 2 - space.sm) / 2;
-  const usageScrolls = usageCards.length > 2;
+  // Um card por agente, com a conta em uso no computador; as outras ficam na
+  // folha de detalhes e na aba Agentes.
+  const usageCards = AGENTS.map(agent => ({ agent, chosenId: homeAccountId(snapshot, agent, entry?.accounts[agent]) }));
   const intent = (request: IntentRequest) => { if (focused) onIntent(focused, request); };
 
   // Abre no navegador do sistema. O endereço é conferido antes: um valor
@@ -145,24 +137,12 @@ export function Home({ store, storeState, onRetryStore, notice, describe, keptDe
             <FirstComputer onPair={onPair} />
           </View>
         ) : <>
-          {usageScrolls ? (
-            <ScrollView contentContainerStyle={[styles.agents, styles.agentsTrack]} decelerationRate="fast" horizontal showsHorizontalScrollIndicator={false}
-              snapToAlignment="start" snapToInterval={usageWidth + space.sm} style={styles.agentsScroll} testID="agent-usage-scroll">
-              {usageCards.map(card => (
-                <View key={`${card.agent}:${card.chosenId}`} style={{ width: usageWidth }}>
-                  <AgentUsageSummary agent={card.agent} chosenId={card.chosenId} loading={loading} now={now}
-                    onOpen={(agent, accountId) => setAgentSheet({ agent, accountId })} snapshot={snapshot} />
-                </View>
-              ))}
-            </ScrollView>
-          ) : (
-            <View style={styles.agents}>
-              {usageCards.map(card => (
-                <AgentUsageSummary agent={card.agent} chosenId={card.chosenId} key={card.agent} loading={loading} now={now}
-                  onOpen={(agent, accountId) => setAgentSheet({ agent, accountId })} snapshot={snapshot} />
-              ))}
-            </View>
-          )}
+          <View style={styles.agents}>
+            {usageCards.map(card => (
+              <AgentUsageSummary agent={card.agent} chosenId={card.chosenId} key={card.agent} loading={loading} now={now}
+                onOpen={(agent, accountId) => setAgentSheet({ agent, accountId })} snapshot={snapshot} />
+            ))}
+          </View>
           {snapshot ? (
             <Text style={[typography.caption, styles.updated, { color: colors.textTertiary }]}>
               {t('mobile.home.agent.updated', { age: formatAge(snapshot.at, now, locale, t) })}
@@ -238,9 +218,6 @@ const styles = StyleSheet.create({
   brand: { minHeight: 56, flexDirection: 'row', alignItems: 'center', paddingHorizontal: space.lg },
   lockup: { width: LOCKUP_WIDTH, height: LOCKUP_HEIGHT },
   agents: { flexDirection: 'row', gap: space.sm, alignItems: 'stretch' },
-  // A rolagem vai até a borda da tela; o conteúdo começa alinhado ao resto.
-  agentsScroll: { marginHorizontal: -space.lg, flexGrow: 0 },
-  agentsTrack: { paddingHorizontal: space.lg },
   updated: { textAlign: 'right', marginTop: -4 },
   grid: { flexDirection: 'row', gap: space.sm },
   spacer: { flex: 1 },
