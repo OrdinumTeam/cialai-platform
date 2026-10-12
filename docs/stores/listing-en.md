@@ -66,16 +66,16 @@ Read the privacy policy and project documentation to learn which public networks
 
 ### Short text for Google Play
 
-Applied to Google Play production with 0.2.9, versionCode 26, on 23/09/2026. It covers what reached the phone since 0.2.4, the previous store version.
+Prepared for Google Play production with 0.2.12, on 12/10/2026. It covers what reached the phone since 0.2.9, the previous store version.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• A text box to write long instructions with your phone keyboard, with autocorrect and dictation.
-• Session menu on long press, with rename, color, pin, move, change folder, restart and close.
-• Folder picker that reaches each project root and the rest of the disk.
-• Agent accounts with plan and usage, and account switching right in the app.
-• Community buttons for Discord and WhatsApp on the home screen.
+• A native Home with agent usage, your computers, favourite projects and quick actions.
+• Projects tab, as a grid or a list, and Agents tab with every account in one list.
+• Device keyboard button in the terminal bar and one header in the session.
+• Notices for a finished session and for a usage limit close to its end.
+• Accounts, projects and sessions no longer vanish when switching tabs.
 ```
 <!-- PLAY_RELEASE_END -->
 

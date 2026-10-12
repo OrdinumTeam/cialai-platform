@@ -73,6 +73,25 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.12 preview
+
+Preview dated 2026-10-12. Every terminal card shows the Claude Code reading of its own conversation, the sessions column fits narrow windows and agent accounts are one flat list. The phone keeps the accounts, projects and sessions a computer sent, shows one card per agent, lists every account in the Agents tab, shows Projects as a list and keeps one header in the session. The Linux pairing dialog says why the network did not start, and the iPhone app adopts the UIScene lifecycle, so a build made with Xcode 27 opens again. It is also the version that carries the phone Home, the Projects and Agents tabs, the local notices and the device keyboard button to the App Store and Google Play, which stayed on 0.2.9.
+
+### Added
+
+* Projects on the phone can be shown as a grid or as a list, from a button in the header. The grid is the default and the choice stays on the device
+* A Linux check of the tunnel, `tools/check/linux-tunnel.mjs`, that runs the sidecar in an Ubuntu 22.04 container and fails unless `net.start` opens the direct listener and `pair.begin` answers with a payload
+
+### Fixed
+
+* Session cards no longer share one Claude Code reading across terminals in the same folder. The desktop sends the conversation id of each terminal and the card matches the entry by that id
+* The sessions column and the work area header fit narrow windows. Below 230 px the agent row wraps and the chips truncate with an ellipsis, and in the header the name shrinks first and the path gives way last
+* Agent accounts are one flat list on the computer and on the phone, with the agent glyph in the text colour on every row and a new profile button per agent
+* The phone no longer loses the accounts, the projects and the open sessions of a computer. The snapshot only goes out while the bridge is connected, a fresh one follows each reconnection and a failed accounts reading keeps the last good list
+* The phone Home shows one card per agent with the account in use, the Agents tab lists every account of both agents, the session screen has one header, and the new session flow and Settings are more compact
+* The pairing dialog says why the network is not ready, with the `app.log` location and a button to the diagnostics, instead of waiting forever. An identity or onion key with open permission bits is repaired to 0600 instead of killing the tunnel
+* The iOS app adopts the UIScene lifecycle required by the iOS 27 SDK, so a build made with Xcode 27 no longer stops at launch
+
 ## 0.2.11 preview
 
 Preview dated 2026-10-11. The phone gets a native Home, Projects and Agents tabs, local notices and a terminal bar with the device keyboard button, and the Windows fixes that only reached the site as the 0.2.10 installer go out to every system through the updater. The number skips 0.2.10 because that installer already carries it, and the updater only offers a higher version.

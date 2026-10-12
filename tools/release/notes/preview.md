@@ -6,12 +6,19 @@ An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect ro
 
 ### What is new
 
-* **A native phone Home, with Projects and Agents tabs.** The app opens on the Codex and Claude Code usage, your computers, your favourite projects and quick actions. With more than one profile per agent the usage cards scroll sideways.
+* **A native phone Home, with Projects and Agents tabs.** The app opens on one usage card per agent with the account in use, your computers, your favourite projects and quick actions. Agents lists every account of both agents, the one in use first, and Projects shows the folders as a grid or as a list, with the choice kept on the device.
 * **A device keyboard button in the phone terminal bar.** It opens and closes the keyboard without touching the terminal. Esc, Tab and Paste stay in the bar, and the special keys moved to an expand button.
+* **One header in the phone session.** The shell hides its computer bar while a terminal or the files are open. The new session flow and Settings are more compact.
 * **No more blank page while the terminal loads.** The phone shows a loading screen until the computer page answers, and the page says Opening the terminal until the session is ready.
 * **Local notices** for a finished session and for a usage limit close to its end, switched on one by one in the phone Settings.
+* **The phone keeps what the computer sent.** The snapshot with accounts, projects and sessions only goes out while the bridge is connected and follows each reconnection. Without a paired computer the tabs that depend on one are locked.
+* **Each terminal card shows its own conversation.** The Claude Code model, context and cost are matched by the conversation id of each terminal, so terminals in the same folder no longer show the same reading.
+* **The sessions column fits narrow windows.** Below 230 px the agent row wraps and the chips truncate with an ellipsis. In the header the session name shrinks first and the path gives way last.
+* **Agent accounts in one list,** on the computer and on the phone, with the agent glyph on every row and a new profile button per agent.
 * **The keyboard works on Windows.** The window kept asking the WebView2 for focus on every focus event, which the WebView2 itself raises on Windows, so no key ever landed. The terminal also gets its colours and font back, `claude` and `codex` are found right after installing, and clicking back into the terminal no longer leaves `[I` on the command line.
-* **The terminal bar and the loading screen are served by the computer,** so the phone shows them once the desktop app is updated.
+* **The Linux pairing dialog says what stopped.** Instead of Preparing the connection forever, it shows the real error, where the `app.log` is and a diagnostics button. An identity key with open permission bits is repaired instead of killing the tunnel.
+* **The iPhone app opens again.** It adopts the UIScene lifecycle required by the iOS 27 SDK.
+* **The terminal bar, the loading screen, the snapshot fix and the accounts list are served by the computer,** so the phone shows them once the desktop app is updated.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

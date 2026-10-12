@@ -70,16 +70,16 @@ Consulte a política de privacidade e a documentação do projeto para saber qua
 
 ### Texto curto para Google Play
 
-Aplicado na produção do Google Play com a 0.2.9, versionCode 26, em 23/09/2026. Cobre o que chegou ao celular desde a 0.2.4, a versão anterior da loja.
+Preparado para a produção do Google Play com a 0.2.12, em 12/10/2026. Cobre o que chegou ao celular desde a 0.2.9, a versão anterior da loja.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Caixa de texto para escrever a instrução longa com o teclado do aparelho, com correção automática e ditado.
-• Menu de sessão por toque longo, com renomear, cor, fixar, mover, trocar de pasta, reiniciar e fechar.
-• Seletor de pastas que alcança a raiz de cada projeto e o resto do disco.
-• Contas dos agentes com plano e uso, e troca de conta pela própria interface.
-• Botões da comunidade no Discord e no WhatsApp na tela inicial.
+• Início nativo com o uso dos agentes, os computadores, os projetos favoritos e as ações rápidas.
+• Abas Projetos, em grade ou em lista, e Agentes, com todas as contas numa lista só.
+• Botão do teclado do aparelho na barra do terminal e um cabeçalho só na sessão.
+• Avisos de sessão finalizada e de limite de uso perto do fim.
+• Contas, projetos e sessões que não somem mais ao trocar de aba.
 ```
 <!-- PLAY_RELEASE_END -->
 
@@ -102,7 +102,7 @@ O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser c
 
 O que a App Store mostra em Novidades desta versão. A loja tem uma fonte só, e
 é esta: `tools/release/asc_submit.py` lê este bloco e grava o texto na versão
-antes de enviar à revisão. A última versão publicada na loja é a 0.2.2, então o
+antes de enviar à revisão. A última versão publicada na loja é a 0.2.9, então o
 texto cobre tudo que chegou ao iPhone desde ela, e não só o da entrega do dia.
 
 O ícone não entra na lista. Ele foi reenquadrado mais de uma vez entre a 0.2.2 e a
@@ -112,19 +112,17 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização traz ao iPhone tudo que chegou desde a primeira versão.
+Esta atualização traz ao iPhone tudo que chegou desde a 0.2.9.
 
-• Tela inicial como ponto de partida, com cartões de computador, parear, terminal e ajustes. O cartão continuar chega ao terminal num toque.
-• Caixa de texto flutuante no terminal. Escreva a instrução longa com o teclado do aparelho, com seleção, área de transferência, correção automática e ditado. Inserir escreve o texto e para. Enviar escreve e só então manda a linha.
-• Menu de sessão com renomear, subtítulo, cor, fixar, mover, nova sessão na pasta, trocar de pasta, copiar caminho, reiniciar e fechar, por toque longo ou pelos três pontos.
-• Seletor de pastas que alcança a raiz de cada projeto e o resto do disco, dentro dos limites que o computador define.
-• Contas dos agentes em cartões, com nome, plano e uso, e a troca de conta pela própria interface.
-• Terminal sem piscar, com a fileira de teclas inteira visível e rolagem só enquanto o teclado está aberto.
-• Teclado acompanhando a área visível o tempo todo, ao concluir, ao voltar do segundo plano e ao girar o aparelho.
-• Acentos e ç saindo uma vez só.
-• Conexão mais firme em rede móvel lenta, sem derrubar uma sessão que estava funcionando ao voltar do segundo plano.
-• Pareamento que mostra o tempo decorrido, explica a espera da reserva e pode ser cancelado.
-• Botões da comunidade no fim da tela inicial, para o Discord e o WhatsApp.
+• Início nativo como ponto de partida, com um cartão por agente mostrando o limite da conta em uso, os computadores, os projetos favoritos e as ações rápidas. O cartão continuar chega ao terminal num toque.
+• Aba Projetos com as pastas que têm sessões, em grade ou em lista, com a escolha guardada no aparelho.
+• Aba Agentes com todas as contas do Claude Code e do Codex numa lista só, a em uso primeiro, cada uma com plano e uso.
+• Botão do teclado do aparelho na barra do terminal. Ele abre e fecha o teclado sem tocar no terminal. Esc, Tab e Colar continuam na barra, e as teclas especiais passaram para um botão de expandir.
+• Um cabeçalho só na tela da sessão, e Nova sessão e Ajustes mais compactos.
+• Tela de carregamento no lugar da página branca até o computador responder.
+• Avisos locais de sessão finalizada e de limite de uso perto do fim, ligados um a um nos Ajustes.
+• Contas, projetos e sessões abertas que não somem mais ao trocar de aba.
+• Sem computador vinculado, as abas que dependem dele ficam travadas, e a tela sem conexão junta tudo num cartão.
 ```
 <!-- ASC_WHATS_NEW_END -->
 
