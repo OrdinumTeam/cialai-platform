@@ -66,7 +66,7 @@ Read the privacy policy and project documentation to learn which public networks
 
 ### Short text for Google Play
 
-Prepared for Google Play production with 0.2.12, on 12/10/2026. It covers what reached the phone since 0.2.9, the previous store version.
+Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It covers what reached the phone since 0.2.9, the previous store version.
 
 <!-- PLAY_RELEASE_START -->
 ```text

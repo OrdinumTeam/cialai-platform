@@ -70,7 +70,7 @@ Consulte a política de privacidade e a documentação do projeto para saber qua
 
 ### Texto curto para Google Play
 
-Preparado para a produção do Google Play com a 0.2.12, em 12/10/2026. Cobre o que chegou ao celular desde a 0.2.9, a versão anterior da loja.
+Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/2026. Cobre o que chegou ao celular desde a 0.2.9, a versão anterior da loja.
 
 <!-- PLAY_RELEASE_START -->
 ```text
