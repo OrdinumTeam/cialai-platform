@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-// Botão de menu da toolbar no Linux e no Windows, com as ações da menubar do
-// macOS. Os atalhos continuam no DOM por `installDomShortcuts`.
+// Toolbar menu on all desktop platforms, sharing the macOS menubar actions.
+// Shortcuts remain in the DOM through `installDomShortcuts`.
 
 import React, { useCallback, useRef, useState } from 'react';
 import { Menu as MenuIcon } from 'lucide-react';

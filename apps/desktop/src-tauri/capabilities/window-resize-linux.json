@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "window-resize-linux",
+  "description": "Resize dragging from the edges of the frameless Linux main window",
+  "windows": ["main"],
+  "platforms": ["linux"],
+  "permissions": ["core:window:allow-start-resize-dragging"]
+}

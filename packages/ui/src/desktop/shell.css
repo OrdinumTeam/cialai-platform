@@ -316,7 +316,6 @@
 /* sidebar */
 .mac-sidebar{position:relative;display:flex;flex-direction:column;flex:0 0 232px;width:232px;background:var(--mac-sidebar-bg);transition:margin-left var(--mac-normal) var(--mac-ease);user-select:none;-webkit-user-select:none}
 .mac-sidebar.is-hidden{margin-left:-232px;visibility:hidden}
-[data-platform="macos"] .mac-sidebar__drag{flex:0 0 52px;height:52px}
 .mac-sidebar__brand{display:flex;align-items:center;gap:9px;padding:0 18px 14px}
 /* A marca da interface e a versao preta do simbolo, entao ela ja le sobre
    fundo claro. O branco entra so onde o fundo e escuro: a casca padrao tem a
@@ -412,17 +411,13 @@
    IA, que empurra o conteudo como a sidebar faz */
 .mac-body{display:flex;flex:1;min-height:0;min-width:0}
 
-.mac-toolbar{position:absolute;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 16px 0 10px;background:var(--mac-toolbar-bg);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--mac-separator);user-select:none;-webkit-user-select:none;transition:background-color var(--mac-normal) var(--mac-ease)}
-[data-platform="macos"] .mac-toolbar.is-sidebar-hidden{padding-left:82px}
-/* Em tela cheia o macOS esconde os semaforos: a reserva da esquerda some e
-   o botao da barra lateral encosta na borda, como as acoes da direita. */
-[data-fullscreen="true"] .mac-toolbar.is-sidebar-hidden{padding-left:10px}
-.mac-toolbar__leading{display:flex;align-items:center;gap:8px;min-width:0}
+.mac-toolbar{container:desktop-toolbar / inline-size;position:absolute;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;justify-content:space-between;gap:12px;height:52px;padding:0 16px 0 10px;background:var(--mac-toolbar-bg);-webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);border-bottom:1px solid var(--mac-separator);user-select:none;-webkit-user-select:none;transition:background-color var(--mac-normal) var(--mac-ease)}
+.mac-toolbar__leading{flex:1;display:flex;align-items:center;gap:8px;min-width:0}
 .mac-toolbar__titles{display:flex;align-items:baseline;gap:8px;min-width:0;line-height:1.2;animation:macFade var(--mac-normal) var(--mac-ease) both}
 .mac-toolbar__title{margin:0;font-size:15px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mac-toolbar__subtitle{font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mac-toolbar__subtitle:empty{display:none}
-.mac-toolbar__trailing{display:flex;align-items:center;gap:2px}
+.mac-toolbar__trailing{flex:none;height:100%;display:flex;align-items:center;gap:2px}
 .mac-toolbar__slot{display:flex;align-items:center;gap:4px}
 .mac-toolbar__slot:empty{display:none}
 .mac-tunnel-status{display:flex;align-items:center;gap:6px;height:26px;margin-right:4px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:11px;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}

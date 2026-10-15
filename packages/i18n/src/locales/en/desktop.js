@@ -461,6 +461,8 @@ export default Object.freeze({
   'desktop.view.devices.sub': 'Phones and access',
   'desktop.window.close': 'Close',
   'desktop.window.controls': 'Window controls',
+  'desktop.window.enterFullscreen': 'Enter full screen',
+  'desktop.window.exitFullscreen': 'Exit full screen',
   'desktop.window.maximize': 'Maximize',
   'desktop.window.minimize': 'Minimize',
   'desktop.window.restore': 'Restore',

@@ -125,6 +125,10 @@ pub fn decorate(window: &WebviewWindow, backdrop: &str) {
         eprintln!(
             "[window] o frontend nao sinalizou a abertura em {SHOW_FALLBACK:?}; resgatando a janela {plan:?}"
         );
+        // macOS retains decorations but hides native buttons for the toolbar.
+        // Restore them when React fails to mount.
+        #[cfg(target_os = "macos")]
+        on_main_thread(&handle, backend::restore_controls);
         if plan.system_frame {
             // Ultimo recurso: sem a barra que o React desenha, a moldura do
             // sistema e a unica forma de mover e fechar a janela.
@@ -137,6 +141,13 @@ pub fn decorate(window: &WebviewWindow, backdrop: &str) {
             grow(&handle);
         }
     });
+}
+
+/// AppKit can recreate traffic lights after fullscreen or scale transitions.
+#[cfg(target_os = "macos")]
+pub fn refresh_controls(window: &WebviewWindow) {
+    let handle = window.clone();
+    let _ = window.run_on_main_thread(move || backend::refresh_controls(&handle));
 }
 
 /// Troca o material de fundo com a janela aberta, quando a preferencia muda.

@@ -289,6 +289,15 @@ pub fn run() {
                 let keyboard_owner = main_window.clone();
                 let exit_handle = app.handle().clone();
                 main_window.on_window_event(move |event| {
+                    #[cfg(target_os = "macos")]
+                    if matches!(
+                        event,
+                        tauri::WindowEvent::Focused(true)
+                            | tauri::WindowEvent::Resized(_)
+                            | tauri::WindowEvent::ScaleFactorChanged { .. }
+                    ) {
+                        window::refresh_controls(&keyboard_owner);
+                    }
                     // No Windows o Tauri sintetiza `Focused(true)` a partir do
                     // GotFocus do proprio WebView2, e pedir foco de novo em
                     // resposta a ele faz o foco oscilar entre o HWND hospedeiro
