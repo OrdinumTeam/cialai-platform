@@ -9,9 +9,8 @@ const json = (path) => JSON.parse(read(path));
 const tauri = 'apps/desktop/src-tauri';
 const ui = 'packages/ui/src';
 
-// Configuração por sistema: o macOS continua com a barra sobreposta; Windows
-// nasce sem moldura, com sombra e o ameixa da marca; Linux usa as decorações
-// do gerenciador de janelas e fundo opaco.
+// Configuração por sistema: macOS mantém Overlay sem controles duplicados;
+// Windows e Linux nascem sem barra nativa, com controles na toolbar.
 const mac = json(`${tauri}/tauri.macos.conf.json`).app.windows[0];
 assert.equal(mac.titleBarStyle, 'Overlay');
 assert.equal(mac.hiddenTitle, true);
@@ -23,7 +22,7 @@ assert.equal(windows.transparent, true);
 assert.match(windows.backgroundColor, /^#[0-9A-Fa-f]{6}$/);
 assert.equal(windows.windowEffects, undefined, 'Mica vem do Rust, não de windowEffects');
 const linux = json(`${tauri}/tauri.linux.conf.json`).app.windows[0];
-assert.equal(linux.decorations, true);
+assert.equal(linux.decorations, false);
 assert.equal(linux.transparent, false);
 assert.equal(linux.backgroundColor, windows.backgroundColor);
 
@@ -84,6 +83,10 @@ for (const contract of [/WAYLAND_DISPLAY/, /GDK_BACKEND/, /set_position/, /set_s
 const macBackend = read(`${tauri}/src/window/macos.rs`);
 assert.match(macBackend, /setFrame_display/);
 assert.match(macBackend, /NSVisualEffectMaterial::Sidebar/);
+assert.match(macBackend, /standardWindowButton/);
+assert.match(macBackend, /setHidden\(hidden\)/);
+assert.match(macBackend, /SYSTEM_CONTROLS_RESTORED/);
+assert.match(rescue, /backend::restore_controls/);
 assert.match(read(`${tauri}/src/lib.rs`), /window::decorate\(&main_window, &backdrop\)/);
 const cargo = read(`${tauri}/Cargo.toml`);
 assert.match(cargo, /\[target\.'cfg\(any\(target_os = "macos", target_os = "windows"\)\)'\.dependencies\]\s*window-vibrancy = "0\.8"/);
@@ -91,16 +94,24 @@ for (const feature of ['Win32_UI_WindowsAndMessaging', 'Wdk_System_SystemService
   assert.ok(cargo.includes(`"${feature}"`), `feature do windows-sys ausente: ${feature}`);
 }
 
-// Controles próprios só no Windows, com a menor permissão necessária.
+// Permissões por sistema e restritas à janela principal.
 const controls = json(`${tauri}/capabilities/window-controls.json`);
-assert.deepEqual(controls.platforms, ['windows']);
+assert.deepEqual(controls.platforms, ['linux', 'windows']);
 assert.deepEqual(controls.windows, ['main']);
 assert.deepEqual([...controls.permissions].sort(), ['core:window:allow-minimize', 'core:window:allow-toggle-maximize']);
+const macControls = json(`${tauri}/capabilities/window-controls-macos.json`);
+assert.deepEqual(macControls.platforms, ['macOS']);
+assert.deepEqual(macControls.windows, ['main']);
+assert.deepEqual(macControls.permissions, ['core:window:allow-minimize', 'core:window:allow-set-fullscreen']);
+const linuxResize = json(`${tauri}/capabilities/window-resize-linux.json`);
+assert.deepEqual(linuxResize.platforms, ['linux']);
+assert.deepEqual(linuxResize.windows, ['main']);
+assert.deepEqual(linuxResize.permissions, ['core:window:allow-start-resize-dragging']);
 
 const { windowChrome, appMenuItems, WINDOW_CONTROL_LABELS } = await import(pathToFileURL(`${root}${ui}/desktop/window-chrome.js`).href);
-assert.deepEqual(windowChrome('macos'), { nativeMenu: true, menuButton: false, windowControls: false, trafficLights: true, escapeGuard: true });
+assert.deepEqual(windowChrome('macos'), { nativeMenu: true, menuButton: true, windowControls: true, trafficLights: true, escapeGuard: true });
 assert.deepEqual(windowChrome('windows'), { nativeMenu: false, menuButton: true, windowControls: true, trafficLights: false, escapeGuard: false });
-assert.deepEqual(windowChrome('linux'), { nativeMenu: false, menuButton: true, windowControls: false, trafficLights: false, escapeGuard: false });
+assert.deepEqual(windowChrome('linux'), { nativeMenu: false, menuButton: true, windowControls: true, trafficLights: false, escapeGuard: false });
 assert.deepEqual(WINDOW_CONTROL_LABELS, { minimize: 'Minimizar', maximize: 'Maximizar', restore: 'Restaurar', close: 'Fechar' });
 
 const calls = [];
@@ -122,11 +133,11 @@ for (const item of runnable) {
   assert.doesNotMatch(item.label, /[()–—]| - /, `texto do menu com separador proibido: ${item.label}`);
 }
 
-// Interface: controles por getCurrentWindow, menu no DOM fora do macOS e
+// Interface: controles por getCurrentWindow, menu no DOM em todo sistema e
 // guarda do Escape só no macOS.
 const native = read(`${ui}/lib/native.js`);
 assert.match(native, /export const windowControls = \{/);
-for (const method of ['minimize', 'toggleMaximize', 'close', 'isMaximized', 'onMaximizedChange']) {
+for (const method of ['minimize', 'toggleMaximize', 'toggleFullscreen', 'startResizeDragging', 'close', 'isMaximized', 'onMaximizedChange']) {
   assert.match(native, new RegExp(`async ${method}\\(`), `windowControls sem ${method}`);
 }
 const toolbar = read(`${ui}/desktop/Toolbar.jsx`);
@@ -137,15 +148,21 @@ assert.match(windowControlsSource, /windowControls\.minimize/);
 assert.match(windowControlsSource, /windowControls\.toggleMaximize/);
 assert.match(windowControlsSource, /windowControls\.close/);
 assert.match(windowControlsSource, /onMaximizedChange/);
+assert.match(windowControlsSource, /watchFullscreen/);
+assert.match(windowControlsSource, /windowControls\.toggleFullscreen/);
+const resizeHandles = read(`${ui}/desktop/WindowResizeHandles.jsx`);
+assert.match(resizeHandles, /platform\(\)\.os === 'linux'/);
+assert.match(resizeHandles, /if \(!linux \|\| maximized \|\| fullscreen\) return null/);
+assert.match(resizeHandles, /windowControls\.startResizeDragging/);
 const app = read(`${ui}/desktop/DesktopApp.jsx`);
 assert.match(app, /windowChrome\(platform\(\)\.os\)\.escapeGuard/);
 assert.match(read(`${ui}/desktop/menu.js`), /dataset\.platform !== 'macos'/);
 const css = read(`${ui}/desktop/shell.css`);
-assert.match(css, /\[data-platform="macos"\] \.mac-sidebar__drag\{flex:0 0 52px;height:52px\}/);
-assert.match(css, /\[data-platform="macos"\] \.mac-toolbar\.is-sidebar-hidden\{padding-left:82px\}/);
+assert.doesNotMatch(css, /\.mac-sidebar__drag\{flex:0 0 52px/);
+assert.doesNotMatch(css, /\.mac-toolbar\.is-sidebar-hidden\{padding-left:82px/);
 const platformCss = read(`${ui}/desktop/platform.css`);
 assert.match(platformCss, /\.mac-window-controls/);
 assert.match(platformCss, /\[data-platform="windows"\]/);
 assert.match(read(`${ui}/desktop/desktop.css`), /@import '\.\/platform\.css';/);
 
-console.log('PASS desktop window: per-system configs, native backends, Windows controls, DOM menu and macOS-only Escape guard');
+console.log('PASS desktop window: shared toolbar controls, native recovery, Linux resizing, macOS fullscreen and per-system permissions');

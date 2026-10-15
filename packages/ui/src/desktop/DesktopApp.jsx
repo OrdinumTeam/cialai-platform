@@ -22,6 +22,7 @@ import { installShellBridge } from './shell-bridge.js';
 import Splash from './Splash.jsx';
 import { buildMacTheme } from './theme.macos.js';
 import Toolbar from './Toolbar.jsx';
+import WindowResizeHandles from './WindowResizeHandles.jsx';
 import { TunnelProvider, useTunnel } from './TunnelContext.jsx';
 import { useI18n } from './i18n.js';
 import { DESKTOP_VIEW_COMPONENTS, desktopViews, getDesktopView, useDesktopViewRoute } from './views.js';
@@ -228,6 +229,7 @@ function DesktopShell() {
         <CssBaseline enableColorScheme />
         <ToastProvider>
           <div className={`mac-window${sidebarHidden ? ' mac-window--sidebar-hidden' : ''}${boot === 'ready' ? ' is-booted' : ''}${boot === 'splash' ? ' is-booting' : ''}`}>
+            <WindowResizeHandles />
             <Sidebar views={views} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
               <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={views} />

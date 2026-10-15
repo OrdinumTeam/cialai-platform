@@ -32,19 +32,27 @@ estável do site.
 
 | Tema | macOS | Linux | Windows |
 | --- | --- | --- | --- |
-| Moldura | Barra sobreposta, título oculto e semáforos nativos | Decorações do gerenciador de janelas | Moldura própria, sombra e controles na toolbar |
+| Moldura | Barra sobreposta, título oculto e botões nativos ocultos; controles coloridos na toolbar | Sem barra de título nativa; controles e bordas de redimensionamento próprios | Moldura própria, sombra e controles na toolbar |
 | Efeito | Vibrancy na barra lateral | Fundo opaco, sem efeito nativo | Mica a partir do build 22621, com falha não fatal |
 | Abertura | Animação nativa do quadro | X11 anima posição e tamanho. Wayland abre direto no tamanho final | `SetWindowPos` atualiza o quadro em pixels físicos |
-| Menu | Menu nativo, inclusive Editar para o WKWebView | Botão na toolbar com ações no DOM | Botão na toolbar com ações no DOM |
+| Menu | Menu nativo, inclusive Editar para o WKWebView, e botão na toolbar | Botão na toolbar com ações no DOM | Botão na toolbar com ações no DOM |
 | Idioma | Menu de início localizado pelo Rust e menubar da interface refeita ao trocar de idioma | Menu da toolbar no idioma da interface | Menu da toolbar no idioma da interface |
 | Tela cheia | Escape tem guarda contra saída acidental | Escape segue o comportamento da página | Escape segue o comportamento da página |
 | Texto | San Francisco e SF Mono quando disponíveis | Fonte do sistema e família Linux | Segoe UI e Cascadia quando disponíveis |
 
+Atualização de 06/10/2026: busca, menu da aplicação e controles de janela ocupam
+a mesma toolbar de 52 px nos três sistemas. No macOS, vermelho fecha, amarelo
+minimiza e verde alterna tela cheia; no Linux e Windows, os controles minimizam,
+maximizam ou restauram e fecham. Até 800 px de largura disponível, a busca vira
+um ícone e o subtítulo e o texto de conexão ficam ocultos. A recuperação da
+janela restaura os controles nativos se a interface não carregar. Verificação
+e limites desta mudança estão em [barra-da-janela](../evidence/barra-da-janela/README.md).
+
 Nos três sistemas, a confirmação de saída e as mensagens do núcleo usam o idioma escolhido na interface, gravado pelo comando `app_set_locale`. O app não tem ícone de bandeja.
 
 No Wayland, o compositor controla a posição. Restaurar posição e centralizar o
-splash podem não produzir efeito. O app não simula controles próprios nesse
-ambiente.
+splash podem não produzir efeito. Os controles da toolbar e as bordas de
+redimensionamento usam as operações do compositor, sem simular posicionamento.
 
 O terminal usa JetBrains Mono empacotada somente como último recurso no Linux.
 A licença OFL acompanha a fonte no pacote. macOS e Windows priorizam as fontes

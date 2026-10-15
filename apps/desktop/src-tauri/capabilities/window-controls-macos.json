@@ -1,0 +1,11 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "window-controls-macos",
+  "description": "Minimize and native fullscreen for the macOS main window toolbar",
+  "windows": ["main"],
+  "platforms": ["macOS"],
+  "permissions": [
+    "core:window:allow-minimize",
+    "core:window:allow-set-fullscreen"
+  ]
+}

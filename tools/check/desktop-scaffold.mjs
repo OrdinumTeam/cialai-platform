@@ -23,7 +23,7 @@ assert.deepEqual(Object.keys(common.app.security.csp).sort(), [
 const platforms = {
   macos: { transparent: true, decorations: undefined, targets: ['app', 'dmg'] },
   windows: { transparent: true, decorations: false, targets: ['nsis', 'msi'] },
-  linux: { transparent: false, decorations: true, targets: ['appimage', 'deb', 'rpm'] },
+  linux: { transparent: false, decorations: false, targets: ['appimage', 'deb', 'rpm'] },
 };
 for (const [name, expected] of Object.entries(platforms)) {
   const config = json(`${desktop}/src-tauri/tauri.${name}.conf.json`);

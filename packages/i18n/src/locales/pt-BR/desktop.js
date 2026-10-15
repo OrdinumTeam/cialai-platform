@@ -461,6 +461,8 @@ export default Object.freeze({
   'desktop.view.devices.sub': 'Celulares e acesso',
   'desktop.window.close': 'Fechar',
   'desktop.window.controls': 'Controles da janela',
+  'desktop.window.enterFullscreen': 'Entrar em tela cheia',
+  'desktop.window.exitFullscreen': 'Sair da tela cheia',
   'desktop.window.maximize': 'Maximizar',
   'desktop.window.minimize': 'Minimizar',
   'desktop.window.restore': 'Restaurar',

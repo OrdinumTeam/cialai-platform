@@ -22,9 +22,7 @@ assert.deepEqual(bare, [
   '[data-platform="macos"] body',
   // Suavização de fonte.
   '[data-platform="macos"] body',
-  '[data-platform="macos"] .mac-sidebar__drag',
-  '[data-platform="macos"] .mac-toolbar.is-sidebar-hidden',
-], 'somente fundo transparente, semáforos e suavização de fonte ficam restritos ao macOS');
+], 'somente fundo transparente e suavização de fonte ficam restritos ao macOS');
 // O fundo da casca é opaco em todo sistema e só o macOS o torna transparente,
 // para o vibrancy aparecer. No Windows a janela nasce transparente e sem
 // moldura, então uma página que ainda não pintou deixaria um retângulo vazado.
