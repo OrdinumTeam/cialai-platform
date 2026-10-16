@@ -9,6 +9,16 @@ on:
         description: Full commit SHA or branch to build
         required: true
         type: string
+      target:
+        description: Platform to build, or all platforms
+        required: false
+        type: choice
+        default: all
+        options:
+          - all
+          - aarch64-apple-darwin
+          - x86_64-apple-darwin
+          - x86_64-pc-windows-msvc
 
 permissions:
   contents: read
@@ -20,13 +30,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: macos-14
-            target: aarch64-apple-darwin
-          - os: macos-14
-            target: x86_64-apple-darwin
-          - os: windows-2022
-            target: x86_64-pc-windows-msvc
+        include: >-
+          ${{ fromJSON(
+            inputs.target == 'aarch64-apple-darwin' && '[{"os":"macos-14","target":"aarch64-apple-darwin"}]' ||
+            inputs.target == 'x86_64-apple-darwin' && '[{"os":"macos-14","target":"x86_64-apple-darwin"}]' ||
+            inputs.target == 'x86_64-pc-windows-msvc' && '[{"os":"windows-2022","target":"x86_64-pc-windows-msvc"}]' ||
+            '[{"os":"macos-14","target":"aarch64-apple-darwin"},{"os":"macos-14","target":"x86_64-apple-darwin"},{"os":"windows-2022","target":"x86_64-pc-windows-msvc"}]'
+          ) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     steps:
@@ -57,6 +67,9 @@ jobs:
       - name: Clipboard and shortcut regressions
         shell: bash
         run: node --test packages/ui/scripts/tests/clipboard-system.test.cjs packages/ui/scripts/tests/terminal-clipboard*.test.cjs packages/ui/scripts/tests/keys.test.cjs packages/ui/scripts/tests/windows-paths.test.cjs
+      - name: Prepare native test sidecar when cross-compiling Intel on Apple Silicon
+        if: runner.os == 'macOS' && runner.arch == 'ARM64' && matrix.target == 'x86_64-apple-darwin'
+        run: node tools/build-tunnel.mjs --target aarch64-apple-darwin
       - name: Session restoration regressions
         shell: bash
         run: |
