@@ -500,10 +500,19 @@ struct Session {
     local_size: Option<(u16, u16)>,
     // Saved conversation stays durable until its agent is observed again.
     resume_record: Option<resume::AgentSession>,
+    // Proven association belongs to this CLI process generation, not its cwd.
+    observed_agent: Option<ObservedAgent>,
     resume_attempts: u8,
     resume_output: String,
     resume_at: Option<Instant>,
     user_input: bool,
+}
+
+#[derive(Clone)]
+struct ObservedAgent {
+    pid: u32,
+    start_sec: u64,
+    record: resume::AgentSession,
 }
 
 type KillTarget = (
@@ -775,6 +784,7 @@ impl TerminalManager {
         let commands = self.commands.clone();
         let home = self.home.clone();
         let source = self.procs.clone();
+        let closing = self.closing.clone();
         let _ = thread::Builder::new()
             .name("terminais-estado".into())
             .spawn(move || {
@@ -783,7 +793,7 @@ impl TerminalManager {
                     let Some(inner) = weak.upgrade() else {
                         break;
                     };
-                    snapshot(&inner, &store, &commands, &home, source.as_ref());
+                    snapshot(&inner, &store, &commands, &home, source.as_ref(), &closing);
                 }
             });
         self
@@ -1039,6 +1049,7 @@ impl TerminalManager {
                 view_deadline: None,
                 local_size: (key == SubscriberKey::Webview).then_some((cols, rows)),
                 resume_record: resume_record.clone(),
+                observed_agent: None,
                 resume_attempts: 0,
                 resume_output: String::new(),
                 resume_at: None,
@@ -1920,7 +1931,13 @@ fn snapshot(
     commands: &Mutex<CommandCache>,
     home: &Path,
     source: &dyn ProcSource,
+    closing: &AtomicBool,
 ) {
+    // Shutdown kills the CLIs. Their disappearance must not replace the last
+    // proven conversation with an empty record while the app is closing.
+    if closing.load(Ordering::SeqCst) {
+        return;
+    }
     let targets = lock(inner)
         .sessions
         .values()
@@ -1937,6 +1954,7 @@ fn snapshot(
                 rows,
                 session.info.pid,
                 session.resume_record.clone(),
+                session.observed_agent.clone(),
             )
         })
         .collect::<Vec<_>>();
@@ -1944,32 +1962,58 @@ fn snapshot(
         return;
     }
     source.refresh();
-    for (id, tag, cwd, cols, rows, pid, retained) in targets {
+    for (id, tag, cwd, cols, rows, pid, retained, observed) in targets {
         let agent = pid.and_then(|pid| {
             let mut tree = vec![pid];
             tree.extend(source.descendants(pid));
-            resume::detect_from(source, pid, &tree, &mut lock(commands), home)
-                .map(|found| found.session)
+            resume::detect_process_from(source, pid, &tree, &mut lock(commands), home)
+                .map(|(pid, start_sec, found)| ObservedAgent {
+                    pid,
+                    start_sec,
+                    record: found.session,
+                })
+                .or_else(|| {
+                    observed.filter(|known| {
+                        tree.contains(&known.pid)
+                            && source
+                                .info(known.pid)
+                                .is_some_and(|info| info.start_sec == known.start_sec)
+                    })
+                })
         });
         // A failed CLI start must not erase the conversation while the new
         // shell is idle. Only successful detection replaces the saved record.
         store.write_meta(
-            &SavedMeta::sample(&tag, &cwd, cols, rows, agent.clone().or(retained)),
+            &SavedMeta::sample(
+                &tag,
+                &cwd,
+                cols,
+                rows,
+                agent
+                    .as_ref()
+                    .map(|found| found.record.clone())
+                    .or(retained),
+            ),
             || {
-                lock(inner)
-                    .sessions
-                    .get(&id)
-                    .is_some_and(|session| session.info.pid == pid)
+                !closing.load(Ordering::SeqCst)
+                    && lock(inner)
+                        .sessions
+                        .get(&id)
+                        .is_some_and(|session| session.info.pid == pid)
             },
         );
-        if agent.is_some() {
-            if let Some(session) = lock(inner).sessions.get_mut(&id) {
+        if closing.load(Ordering::SeqCst) {
+            return;
+        }
+        if let Some(session) = lock(inner).sessions.get_mut(&id) {
+            if session.info.pid == pid {
                 // Opening a rollout does not prove a daemon handshake
                 // succeeded. Keep the retry target until user interaction;
                 // a transient launch may already have exited by this sample.
-                if session.info.pid == pid && (session.resume_attempts == 0 || session.user_input) {
+                if agent.is_some() && (session.resume_attempts == 0 || session.user_input) {
                     session.resume_record = None;
                 }
+                session.observed_agent = agent;
             }
         }
     }
@@ -2618,6 +2662,7 @@ echo 'recovered-fixture'
             &manager.commands,
             &dir,
             &source,
+            &manager.closing,
         );
         assert_eq!(
             manager
@@ -4105,6 +4150,205 @@ echo 'recovered-fixture'
         assert_eq!(exit["code"], 3);
         assert!(manager.list().is_empty());
         assert!(manager.write(info.id, b"x").is_err());
+    }
+
+    #[test]
+    fn three_cards_keep_proven_conversations_through_snapshot_and_restart() {
+        for agent in [resume::CODEX, resume::CLAUDE] {
+            let root = tempfile::tempdir().unwrap();
+            let home = root.path().canonicalize().unwrap();
+            let config = home.join(if agent == resume::CODEX {
+                ".codex"
+            } else {
+                ".claude"
+            });
+            std::fs::create_dir_all(config.join("sessions")).unwrap();
+            let source = Arc::new(procs::FakeProcs::default());
+            let manager = TerminalManager::with_environment(
+                Arc::new(|_| {}),
+                Arc::new(|_| {}),
+                PrefsState::new(Preferences::default()),
+                home.clone(),
+                source.clone(),
+            );
+            struct Cleanup(TerminalManager);
+            impl Drop for Cleanup {
+                fn drop(&mut self) {
+                    self.0.kill_all_blocking();
+                }
+            }
+            let cleanup = Cleanup(manager.clone());
+            // An independent store keeps periodic background snapshots out of
+            // this fixture; every sample below uses the real snapshot path.
+            let store = JournalStore::new(home.join("journal"));
+            let ids = [
+                "12345678-1234-4234-8234-123456789abc",
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                "11111111-2222-3333-4444-555555555555",
+            ];
+            let shell = pty::TestShell::isolated();
+            let mut cards = Vec::new();
+            for (i, uuid) in ids.iter().enumerate() {
+                let tag = format!("same_cwd_{i}");
+                let info = manager
+                    .spawn_for_with_spec(
+                        home.to_str().unwrap(),
+                        80,
+                        24,
+                        CursorPosition::default(),
+                        &tag,
+                        SubscriberKey::Webview,
+                        Channel::new(|_| Ok(())),
+                        shell.spec(),
+                        &manager.prefs.get(),
+                    )
+                    .unwrap();
+                let shell_pid = info.pid.unwrap();
+                let agent_pid = 900_000 + i as u32;
+                source.set_children(shell_pid, vec![agent_pid]);
+                source.set_info(procs::ProcInfo {
+                    pid: shell_pid,
+                    ..Default::default()
+                });
+                source.set_info(procs::ProcInfo {
+                    pid: agent_pid,
+                    ppid: shell_pid,
+                    start_sec: 100,
+                    ..Default::default()
+                });
+                source.set_cwd(agent_pid, home.to_string_lossy());
+                let program = if agent == resume::CODEX {
+                    "codex"
+                } else {
+                    "claude"
+                };
+                source.set_command(
+                    agent_pid,
+                    CommandLine {
+                        exe: program.into(),
+                        argv: vec![program.into()],
+                        env: Default::default(),
+                    },
+                );
+                let path = if agent == resume::CODEX {
+                    config.join(format!("sessions/rollout-2026-10-16-{uuid}.jsonl"))
+                } else {
+                    config.join(format!("sessions/{agent_pid}.json"))
+                };
+                let record = if agent == resume::CODEX {
+                    serde_json::json!({"type":"session_meta","payload":{"id":uuid,"cwd":home}})
+                } else {
+                    serde_json::json!({"pid":agent_pid,"sessionId":uuid,"cwd":home,"startedAt":100000,"kind":"interactive"})
+                };
+                std::fs::write(&path, record.to_string()).unwrap();
+                source.set_open_files(agent_pid, vec![path.to_string_lossy().into_owned()]);
+                cards.push((tag, shell_pid, agent_pid, path));
+            }
+            let sample = || {
+                snapshot(
+                    &manager.inner,
+                    &store,
+                    &manager.commands,
+                    &home,
+                    source.as_ref(),
+                    &manager.closing,
+                )
+            };
+            sample();
+            for (i, (tag, _, _, _)) in cards.iter().enumerate() {
+                assert_eq!(store.saved_agent(tag).unwrap().session_id, ids[i]);
+            }
+            // Losing process file access must not erase an association or
+            // replace it with another card's recent file in the same cwd.
+            for (_, _, pid, path) in &cards {
+                source.set_open_files(*pid, vec![]);
+                if agent == resume::CLAUDE {
+                    std::fs::remove_file(path).unwrap();
+                }
+            }
+            sample();
+            // Process teardown during app shutdown cannot erase the saved
+            // IDs, even if another sample runs before the shells are removed.
+            manager.closing.store(true, Ordering::SeqCst);
+            for (_, shell_pid, _, _) in &cards {
+                source.set_children(*shell_pid, vec![]);
+            }
+            sample();
+            drop(cleanup); // close all three shells, then reopen the store
+            let reopened = JournalStore::new(home.join("journal"));
+            for (i, (tag, _, _, _)) in cards.iter().enumerate() {
+                let plan = reopened
+                    .saved(tag, ShellFlavor::Posix)
+                    .unwrap()
+                    .resume
+                    .unwrap();
+                assert_eq!(
+                    plan.session_id, ids[i],
+                    "{agent} card {i} keeps its own UUID after restart"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn proven_conversation_is_not_inherited_by_a_reused_agent_pid() {
+        let root = tempfile::tempdir().unwrap();
+        let source = procs::FakeProcs::default();
+        let record = resume::AgentSession {
+            agent: resume::CODEX.into(),
+            session_id: "12345678-1234-4234-8234-123456789abc".into(),
+            cwd: None,
+            config_dir: None,
+            profile_name: None,
+            args: vec![],
+        };
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(manager.clone());
+        let shell = pty::TestShell::isolated();
+        let info = spawn_test_shell(
+            &manager,
+            &shell,
+            "pid_reuse",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        let pid = 900_100;
+        source.set_children(info.pid.unwrap(), vec![pid]);
+        source.set_info(procs::ProcInfo {
+            pid,
+            ppid: info.pid.unwrap(),
+            start_sec: 200,
+            ..Default::default()
+        });
+        manager
+            .lock()
+            .sessions
+            .get_mut(&info.id)
+            .unwrap()
+            .observed_agent = Some(ObservedAgent {
+            pid,
+            start_sec: 100,
+            record,
+        });
+        let store = JournalStore::new(root.path().join("journal"));
+        snapshot(
+            &manager.inner,
+            &store,
+            &manager.commands,
+            root.path(),
+            &source,
+            &manager.closing,
+        );
+        assert!(
+            store.saved_agent("pid_reuse").is_none(),
+            "a new process cannot inherit the previous conversation"
+        );
     }
 
     #[test]

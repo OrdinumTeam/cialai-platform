@@ -23,7 +23,6 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 
@@ -165,8 +164,20 @@ pub fn detect_from(
     commands: &mut CommandCache,
     home: &Path,
 ) -> Option<Detected> {
+    detect_process_from(source, shell, tree, commands, home).map(|(_, _, found)| found)
+}
+
+/// The process identity lets the journal retain a proven conversation through
+/// a temporary loss of file access, without transferring it to another CLI.
+pub(super) fn detect_process_from(
+    source: &dyn procs::ProcSource,
+    shell: u32,
+    tree: &[u32],
+    commands: &mut CommandCache,
+    home: &Path,
+) -> Option<(u32, u64, Detected)> {
     let mut parents = HashMap::new();
-    let mut best: Option<(usize, Detected)> = None;
+    let mut best: Option<(usize, u32, u64, Detected)> = None;
     let mut found = Vec::new();
     for &pid in tree {
         let Some(info) = source.info(pid) else {
@@ -188,11 +199,11 @@ pub fn detect_from(
         };
         let Some(session) = session else { continue };
         let depth = depth_below(pid, shell, &parents);
-        if best.as_ref().is_none_or(|(known, _)| depth < *known) {
-            best = Some((depth, session));
+        if best.as_ref().is_none_or(|(known, _, _, _)| depth < *known) {
+            best = Some((depth, pid, start_sec, session));
         }
     }
-    best.map(|(_, session)| session)
+    best.map(|(_, pid, started, session)| (pid, started, session))
 }
 
 /// Degraus entre o processo e o shell, pela cadeia de pais.
@@ -289,7 +300,7 @@ fn codex_session_from(
     source: &dyn procs::ProcSource,
     command: &CommandLine,
     pid: u32,
-    start_sec: u64,
+    _start_sec: u64,
     home: &Path,
 ) -> Option<Detected> {
     let profile = procs::agent_profile(command, CODEX, home)?;
@@ -316,9 +327,10 @@ fn codex_session_from(
         return None;
     }
     let (rollout, session_id) = opened.pop().or_else(|| {
-        cwd.as_deref()
-            .and_then(|cwd| find_codex_rollout(&sessions, cwd, start_sec, explicit_id))
-            .filter(|(_, id)| explicit_id.is_none_or(|expected| id.eq_ignore_ascii_case(expected)))
+        // A cwd and a recent mtime never prove ownership, even if there is
+        // just one candidate: every card in that cwd could claim it. Without
+        // a process-owned handle, only an explicit UUID can identify a log.
+        find_codex_rollout(&sessions, cwd.as_deref()?, explicit_id?)
     })?;
     Some(Detected {
         session: AgentSession {
@@ -346,24 +358,13 @@ struct CodexSessionMeta {
     cwd: String,
 }
 
-/// Reserva para Windows, onde enumerar handles abertos exigiria privilegios:
-/// aceita somente uma conversa inequivoca no cwd. Com duas candidatas a
-/// associacao nao pode ser adivinhada pela data de modificacao.
-#[cfg(test)]
-fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(PathBuf, String)> {
-    find_codex_rollout(sessions, cwd, start_sec, None)
-}
-
-fn find_codex_rollout(
-    sessions: &Path,
-    cwd: &str,
-    start_sec: u64,
-    explicit_id: Option<&str>,
-) -> Option<(PathBuf, String)> {
+/// Finds the exact UUID named by the CLI, including on Windows where open
+/// handles are unavailable. This search must never infer a UUID from cwd.
+fn find_codex_rollout(sessions: &Path, cwd: &str, explicit_id: &str) -> Option<(PathBuf, String)> {
     let expected_cwd = dunce::canonicalize(cwd).ok()?;
     let mut pending = vec![sessions.to_path_buf()];
     let mut inspected = 0usize;
-    let mut best: Option<(u64, PathBuf, String)> = None;
+    let mut best: Option<(PathBuf, String)> = None;
     while let Some(dir) = pending.pop() {
         let Ok(entries) = fs::read_dir(dir) else {
             continue;
@@ -391,21 +392,9 @@ fn find_codex_rollout(
             let Some(id) = rollout_session_id(path.to_string_lossy().as_ref()) else {
                 continue;
             };
-            if explicit_id.is_some_and(|expected| !id.eq_ignore_ascii_case(expected)) {
+            if !id.eq_ignore_ascii_case(explicit_id) {
                 continue;
             }
-            let Some(modified_sec) = meta
-                .modified()
-                .ok()
-                .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
-                .map(|elapsed| elapsed.as_secs())
-                // An explicit resume UUID is stronger evidence than mtime:
-                // the CLI may not append to an existing conversation until
-                // the next user turn. Keep the freshness rule for inference.
-                .filter(|modified| explicit_id.is_some() || *modified >= start_sec)
-            else {
-                continue;
-            };
             let Some(record) = first_codex_record(&path) else {
                 continue;
             };
@@ -423,10 +412,10 @@ fn find_codex_rollout(
             if best.is_some() {
                 return None;
             }
-            best = Some((modified_sec, path, id));
+            best = Some((path, id));
         }
     }
-    best.map(|(_, path, id)| (path, id))
+    best
 }
 
 fn first_codex_record(path: &Path) -> Option<CodexRecord> {
@@ -1172,7 +1161,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_fallback_matches_cwd_and_process_time() {
+    fn codex_exact_uuid_lookup_checks_cwd_and_metadata() {
         let home = scratch("codex-fallback");
         let project = home.join("projeto");
         let other = home.join("outro");
@@ -1193,26 +1182,129 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            newest_codex_rollout(
+            find_codex_rollout(
                 &home.join("sessions"),
                 project.to_string_lossy().as_ref(),
-                0
+                ID
             ),
             Some((rollout.clone(), ID.to_string()))
         );
         assert!(
-            newest_codex_rollout(&home.join("sessions"), other.to_string_lossy().as_ref(), 0)
+            find_codex_rollout(&home.join("sessions"), other.to_string_lossy().as_ref(), ID)
                 .is_none()
         );
         assert!(
-            newest_codex_rollout(
+            find_codex_rollout(
                 &home.join("sessions"),
                 project.to_string_lossy().as_ref(),
-                u64::MAX
+                "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
             )
             .is_none()
         );
         let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn codex_single_recent_rollout_is_not_proof_of_process_ownership() {
+        let home = tempfile::tempdir().unwrap();
+        let home = home.path().canonicalize().unwrap();
+        let sessions = home.join("sessions");
+        fs::create_dir_all(&sessions).unwrap();
+        fs::write(
+            sessions.join(format!("rollout-2026-10-16-{ID}.jsonl")),
+            serde_json::json!({"type":"session_meta","payload":{"id":ID,"cwd":home}}).to_string(),
+        )
+        .unwrap();
+        let source = procs::FakeProcs::default();
+        let command = CommandLine {
+            exe: "codex".into(),
+            argv: strings(&["codex"]),
+            env: [("CODEX_HOME".into(), home.to_string_lossy().into_owned())].into(),
+        };
+        for pid in [41, 42, 43] {
+            source.set_cwd(pid, home.to_string_lossy());
+            assert!(
+                codex_session_from(&source, &command, pid, 0, &home).is_none(),
+                "card {pid} cannot claim the only recent conversation merely by cwd"
+            );
+        }
+    }
+
+    #[test]
+    fn three_cards_in_one_directory_keep_their_own_codex_and_claude_ids() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        let ids = [
+            ID,
+            "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            "11111111-2222-3333-4444-555555555555",
+        ];
+        let source = procs::FakeProcs::default();
+        let store = super::super::journal::JournalStore::new(home.join("journal"));
+        for agent in [CODEX, CLAUDE] {
+            let config = home.join(if agent == CODEX { ".codex" } else { ".claude" });
+            fs::create_dir_all(config.join("sessions")).unwrap();
+            for (i, id) in ids.iter().enumerate() {
+                let pid = 100 + i as u32;
+                source.set_cwd(pid, home.to_string_lossy());
+                let mut command = CommandLine {
+                    exe: if agent == CODEX { "codex" } else { "claude" }.into(),
+                    argv: strings(&[if agent == CODEX { "codex" } else { "claude" }]),
+                    env: HashMap::new(),
+                };
+                if agent == CODEX {
+                    let path = config.join(format!("sessions/rollout-2026-10-16-{id}.jsonl"));
+                    fs::write(
+                        &path,
+                        serde_json::json!({"type":"session_meta","payload":{"id":id,"cwd":home}})
+                            .to_string(),
+                    )
+                    .unwrap();
+                    source.set_open_files(pid, vec![path.to_string_lossy().into_owned()]);
+                    command.argv.extend(strings(&["resume", id]));
+                } else {
+                    fs::write(config.join(format!("sessions/{pid}.json")),
+                        serde_json::json!({"pid":pid,"sessionId":id,"cwd":home,"kind":"interactive"}).to_string()).unwrap();
+                }
+                let found = if agent == CODEX {
+                    // No open handles is the Windows path; an explicit UUID
+                    // must still work even when the rollout predates the CLI.
+                    source.set_open_files(pid, vec![]);
+                    codex_session_from(&source, &command, pid, u64::MAX, &home)
+                } else {
+                    claude_session_from(&source, &command, pid, 0, &home)
+                }
+                .unwrap();
+                assert_eq!(&found.session.session_id, id);
+                store.write_meta(
+                    &super::super::journal::SavedMeta::sample(
+                        &format!(
+                            "card_{}_{}",
+                            if agent == CODEX { "codex" } else { "claude" },
+                            i
+                        ),
+                        home.to_str().unwrap(),
+                        80,
+                        24,
+                        Some(found.session),
+                    ),
+                    || true,
+                );
+            }
+        }
+        // Recreate the store, just as after closing and reopening the app.
+        let reopened = super::super::journal::JournalStore::new(home.join("journal"));
+        for agent in ["codex", "claude"] {
+            for (i, id) in ids.iter().enumerate() {
+                let plan = reopened
+                    .saved(&format!("card_{agent}_{i}"), ShellFlavor::Posix)
+                    .unwrap()
+                    .resume
+                    .unwrap();
+                assert_eq!(&plan.session_id, id);
+                assert!(plan.command.contains(id));
+            }
+        }
     }
 
     #[test]
@@ -1232,7 +1324,6 @@ mod tests {
             .unwrap();
             files.push(file.to_string_lossy().into_owned());
         }
-        assert!(newest_codex_rollout(&day, home.to_str().unwrap(), 0).is_none());
         let source = procs::FakeProcs::default();
         source.set_cwd(42, home.to_string_lossy());
         source.set_open_files(42, files);

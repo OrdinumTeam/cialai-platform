@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.2.15](0.2.15.md) | 16/10/2026 | Sem tag | Teste Linux pelo curl, entrega em andamento |
 | [0.2.14](0.2.14.md) | 16/10/2026 | Sem tag | Site, copiar e colar nos três desktops |
 | [0.2.13](0.2.13.md) | 16/10/2026 | `v0.2.13` | `OrdinumTeam/cialai-platform`, estabilidade desktop |
 | [0.2.12](0.2.12.md) | 12/10/2026 | `v0.2.12` | `OrdinumTeam/cialai-platform` |

@@ -73,6 +73,18 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.15 Linux curl test candidate
+
+### Fixed
+
+* Codex conversation ownership no longer falls back to a matching directory and recent modification time. Process-owned rollout files and explicit conversation identifiers remain supported
+* Proven card associations survive temporary loss of process file access, remain bound to the process generation, and are preserved during application shutdown
+
+### Verification
+
+* Local checks passed with 456 Rust tests, 383 UI tests and 39 runtime integration tests, including three Codex and Claude cards in the same directory. Native agent sessions remain unverified
+* Linux curl delivery is being prepared without a new tag, GitHub release or general website update. A Codex conversation without sufficient ownership evidence is not resumed automatically, and previously incorrect saved associations require manual selection
+
 ## 0.2.14 desktop website distribution
 
 ### Fixed

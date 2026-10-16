@@ -426,8 +426,8 @@ for (const prior of ['failed','sent']) test(`manual resume after a ${prior} atte
   assert.equal(s.fixture.calls.slice(before).some(call=>['pty_write','pty_spawn'].includes(call.cmd)),false,'retry uses the guarded backend on the existing shell');
 });
 
-for (const profileCount of [1,3]) test(`twenty saved conversations sharing ${profileCount === 1 ? 'one profile' : 'three profiles'} all start while earlier resumes are observed`, async () => {
-  const saved = Array.from({length:20},(_,i)=>({id:`shared-profile-${i}`,cwd:`/fixture/${i}`}));
+for (const profileCount of [1,3]) test(`twenty saved conversations in one cwd sharing ${profileCount === 1 ? 'one profile' : 'three profiles'} all start while earlier resumes are observed`, async () => {
+  const saved = Array.from({length:20},(_,i)=>({id:`shared-profile-${i}`,cwd:'/fixture/shared'}));
   const s = scenario({saved});
   s.fixture.saved = Object.fromEntries(saved.map((entry,i)=>[entry.id,{tag:entry.id,cwd:entry.cwd,historyBytes:0,
     resume:{agent:'Codex',sessionId:`ef374958-11c4-4e44-8fce-${String(i).padStart(12,'0')}`,command:'fixture',profileKey:`shared-profile-${i%profileCount}`}}]));
@@ -465,6 +465,31 @@ for (const profileCount of [1,3]) test(`twenty saved conversations sharing ${pro
   assert.equal(peak,profileCount===1 ? 1 : 2,'independent profiles use at most two slots while each profile serializes active calls');
   await Promise.all(running);
   assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_write'),false,'the UI never types a command');
+});
+
+for (const agent of ['Codex', 'Claude Code']) test(`three ${agent} cards in one cwd resume their own saved conversation`, async () => {
+  const saved = Array.from({length:3}, (_,i) => ({id:`same-cwd-${i}`,cwd:'/fixture/shared'}));
+  const s = scenario({saved});
+  const uuids = saved.map((_,i) => `ef374958-11c4-4e44-8fce-${String(i).padStart(12,'0')}`);
+  s.fixture.saved = Object.fromEntries(saved.map((entry,i) => [entry.id, {
+    tag:entry.id,cwd:entry.cwd,historyBytes:0,
+    resume:{agent,sessionId:uuids[i],command:'fixture',profileKey:`${agent}:default`},
+  }]));
+  await s.runtime.hydrate(); await settle();
+  const running = saved.map(entry => s.runtime.reopen(entry.id));
+  await settle();
+  const spawns = s.fixture.calls.filter(call => call.cmd === 'pty_spawn');
+  assert.equal(spawns.length,3);
+  for (const call of spawns) call.args.onOutput.onmessage(new Uint8Array([36,32]));
+  await s.advance(15000); await Promise.all(running);
+  const first = s.fixture.calls.filter(call => call.cmd === 'pty_resume_agent' && !call.args.retry);
+  assert.equal(first.length,3);
+  assert.equal(new Set(first.map(call => call.args.id)).size,3,'each card owns a different PTY');
+  for (const [i, entry] of saved.entries()) {
+    const call = first.find(call => call.args.tag === entry.id);
+    assert.equal(call?.args.sessionId,uuids[i],'same cwd cannot substitute another conversation');
+    assert.equal(call.args.id,s.runtime.getSession(entry.id).ptyId);
+  }
 });
 
 test('closing a resume queued behind the same profile prevents its backend call', async () => {
