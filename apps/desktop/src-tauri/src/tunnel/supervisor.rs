@@ -343,7 +343,11 @@ impl Supervisor {
                     self.inner.fail_start(&process);
                     self.inner
                         .fail_pending(Some(process.generation), problem.clone());
-                    if !self.inner.stopping.load(Ordering::SeqCst) {
+                    // A delayed failure from an older generation must not
+                    // announce another recovery after its replacement is ready.
+                    if !self.inner.stopping.load(Ordering::SeqCst)
+                        && self.inner.ready_process().is_err()
+                    {
                         self.inner.schedule_restart();
                     }
                 }
@@ -842,7 +846,10 @@ impl Inner {
         // Espera um início em andamento registrar o processo, para encerrá-lo
         // em vez de deixá-lo nascer depois do encerramento.
         let _gate = lock(&self.start_gate);
-        if let Some(process) = lock(&self.process).clone() {
+        // Release the process lock before waiting for the response: the
+        // reader needs it to validate the generation before delivering ACKs.
+        let process = lock(&self.process).clone();
+        if let Some(process) = process {
             // O sidecar fecha a borda e o `tor` antes de sair; o `tor` tem 3 s
             // depois de `SIGNAL SHUTDOWN`, dentro deste prazo.
             let _ = self.send_on(&process, "shutdown", json!({}), Duration::from_secs(3));
@@ -1704,6 +1711,100 @@ done
 
     #[cfg(unix)]
     #[test]
+    fn a_late_failed_call_keeps_the_recovered_generation_running() {
+        let root = cascade_root("late-failed-call");
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let recorded = events.clone();
+        let supervisor = recovery_supervisor_with_events(
+            &root,
+            Arc::new(move |_, value| lock(&recorded).push(value)),
+        );
+        fs::write(root.join("available"), "ready").unwrap();
+        fs::write(root.join("block-stdin"), "fixture").unwrap();
+        supervisor.inner.ensure_started().unwrap();
+        let old_process = supervisor.inner.ready_process().unwrap();
+        let caller = supervisor.clone();
+        let old_call = thread::spawn(move || caller.call("logs.tail", json!({"lines":10})));
+        assert!(
+            wait_until(Duration::from_secs(1), || {
+                lock(&supervisor.inner.pending)
+                    .values()
+                    .any(|(generation, _)| *generation == old_process.generation)
+            }),
+            "generation A never registered its pending call"
+        );
+
+        // Intercept the actual exit failure so A's caller receives it only
+        // after B has recovered, independent of thread scheduling.
+        let (exit_tx, exit_rx) = mpsc::sync_channel(1);
+        let delayed_tx = {
+            let mut pending = lock(&supervisor.inner.pending);
+            let (_, sender) = pending
+                .values_mut()
+                .find(|(generation, _)| *generation == old_process.generation)
+                .unwrap();
+            std::mem::replace(sender, exit_tx)
+        };
+        old_process.kill();
+        let old_failure = exit_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("generation A's exit did not fail its pending RPC");
+        assert!(
+            old_failure.is_err(),
+            "the intercepted call must have failed"
+        );
+        fs::remove_file(root.join("block-stdin")).unwrap();
+        let recovered = supervisor.call("net.status", json!({})).unwrap();
+        let recovered_process = supervisor.inner.ready_process().unwrap();
+        let recovery_finished = wait_until(Duration::from_secs(3), || {
+            !supervisor.inner.restart_active.load(Ordering::SeqCst)
+        });
+        let before_late_failure = lock(&events).len();
+
+        delayed_tx.send(old_failure).unwrap();
+        let old_result = old_call.join().unwrap();
+        let unnecessary_restart = supervisor.inner.restart_active.load(Ordering::SeqCst);
+        let follow_up = supervisor.call("net.status", json!({}));
+        let late_states = lock(&events)[before_late_failure..]
+            .iter()
+            .filter_map(|frame| frame.get("data")?.get("state")?.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        let last_state = lock(&events)
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get("data")?.get("state")?.as_str().map(str::to_owned));
+        let starts = fs::read_to_string(root.join("starts")).unwrap();
+        supervisor.shutdown_blocking();
+        recovered_process.kill();
+        fs::remove_dir_all(root).unwrap();
+
+        assert!(
+            recovery_finished,
+            "B's recovery did not settle before A resumed"
+        );
+        assert!(
+            old_result.is_err(),
+            "A must still receive its original failure"
+        );
+        assert_eq!(
+            follow_up.unwrap(),
+            recovered,
+            "A's late failure replaced or killed generation B"
+        );
+        assert_eq!(starts.lines().count(), 2, "an extra sidecar was started");
+        assert!(
+            !unnecessary_restart && !late_states.iter().any(|state| state == "restarting"),
+            "A's late failure scheduled another restart after B recovered: {late_states:?}"
+        );
+        assert_eq!(
+            last_state.as_deref(),
+            Some("running"),
+            "the tunnel must stay running after B recovered"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn an_unread_stdin_pipe_cannot_bypass_the_rpc_deadline() {
         let root = cascade_root("blocked-stdio");
         let supervisor = recovery_supervisor(&root);
@@ -1811,11 +1912,17 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
         );
         let result = supervisor.call("logs.tail", json!({"lines":10})).unwrap();
         assert_eq!(result, json!({"lines":[]}));
+        let shutdown_started = Instant::now();
         supervisor.shutdown_blocking();
+        let shutdown_elapsed = shutdown_started.elapsed();
         assert!(lock(&events).iter().any(|(channel, value)| {
             channel == "tunnel://state" && value["data"]["state"] == "running"
         }));
         fs::remove_dir_all(root).unwrap();
+        assert!(
+            shutdown_elapsed < Duration::from_secs(1),
+            "a responsive sidecar ACK must complete shutdown promptly: {shutdown_elapsed:?}"
+        );
     }
 
     /// Sidecar falso que confere a injeção dos campos da borda em `net.start`

@@ -25,6 +25,8 @@ logs="$(readlink -f "$logs")"
 work="$(mktemp -d)"
 failures=0
 groups=()
+fixture_homes=()
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/processes.sh"
 
 fail() {
   echo "FAIL: $*"
@@ -32,6 +34,8 @@ fail() {
 }
 
 cleanup() {
+  local fixture_home
+  for fixture_home in "${fixture_homes[@]}"; do smoke_signal_fixture KILL "$fixture_home"; done
   for group in "${groups[@]}"; do kill -KILL -- "-$group" 2>/dev/null || true; done
   rm -rf "$work" 2>/dev/null || true
 }
@@ -74,32 +78,26 @@ check_libraries() {
 }
 
 environ_of() {
-  tr '\0' '\n' <"/proc/$1/environ" 2>/dev/null || true
+  smoke_environ_of "$1"
 }
 
 # Primeiro processo vivo cujo executável fica dentro de $2 e cuja linha de comando contém $1.
 bundle_process() {
-  local pattern="$1" root="$2" pid exe
-  for pid in $(pgrep -f "$pattern" || true); do
-    exe="$(readlink "/proc/$pid/exe" 2>/dev/null || true)"
-    case "$exe" in "$root"/*) echo "$pid"; return 0 ;; esac
-  done
-  return 1
+  smoke_find_process "$1" "$2" "$3"
 }
 
-# Encerra app e sidecar pelo nome, e espera sumirem.
+# Encerra somente processos com HOME e marcador desta fixture.
 #
 # Encerrar por grupo de processo nao alcanca nenhum dos dois: o comando roda
 # sob `setsid`, que abre um grupo novo, e o app cria o sidecar com
 # `process_group(0)`, que abre outro. Sem isto a execucao seguinte encontrava o
 # processo da anterior e o relatorio culpava o produto por um defeito daqui.
 encerrar_sobras() {
-  local sinal tentativa
+  local fixture_home="$1" sinal tentativa
   for sinal in TERM KILL; do
-    pkill -"$sinal" -x cialai-desktop 2>/dev/null || true
-    pkill -"$sinal" -x cialai-tunnel 2>/dev/null || true
+    smoke_signal_fixture "$sinal" "$fixture_home"
     for tentativa in 1 2 3 4 5; do
-      if ! pgrep -x cialai-desktop >/dev/null 2>&1 && ! pgrep -x cialai-tunnel >/dev/null 2>&1; then
+      if [ -z "$(smoke_fixture_pids "$fixture_home")" ]; then
         return 0
       fi
       sleep 1
@@ -111,18 +109,19 @@ encerrar_sobras() {
 launch() {
   local name="$1" dir="$2"
   shift 2
-  local log="$logs/$name.log" home="$work/home-$name"
-  mkdir -p "$home"
+  local log="$logs/$name.log" fixture_home="$work/home-$name"
+  mkdir -p "$fixture_home"
+  fixture_homes+=("$fixture_home")
   # Nada da execucao anterior pode estar vivo, senao o pgrep abaixo encontra o
   # veterano e a verificacao mede a execucao errada.
-  encerrar_sobras
+  encerrar_sobras "$fixture_home"
   echo "== $name: $* a partir de $dir"
   (
     cd "$dir"
     # Um desktop sem as variáveis que o AppRun antigo exportava; HOME novo e sem XDG para o app abrir do zero.
     exec setsid env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH -u PERLLIB -u QT_PLUGIN_PATH \
       -u GIO_MODULE_DIR -u GIO_EXTRA_MODULES -u GTK_PATH -u APPDIR -u OWD \
-      -u XDG_DATA_HOME -u XDG_CONFIG_HOME -u XDG_CACHE_HOME HOME="$home" \
+      -u XDG_DATA_HOME -u XDG_CONFIG_HOME -u XDG_CACHE_HOME HOME="$fixture_home" CIALAI_APPIMAGE_SMOKE="$fixture_home" \
       xvfb-run -a -s '-screen 0 1280x800x24 -nolisten tcp' "$@"
   ) >"$log" 2>&1 &
   local group=$!
@@ -136,7 +135,7 @@ launch() {
     fail "$name: o app saiu depois de $((SECONDS - started)) s com status $status"
   else
     local main appdir display xauthority
-    main="$(pgrep -x cialai-desktop | head -n 1 || true)"
+    main="$(smoke_find_process cialai-desktop '' "$fixture_home" || true)"
     appdir=""
     [ -n "$main" ] && appdir="$(environ_of "$main" | sed -n 's/^APPDIR=//p')"
     if [ -z "$main" ]; then
@@ -156,7 +155,7 @@ launch() {
       if environ_of "$main" | grep '^PATH=' | grep -qF "$appdir"; then fail "$name: o PATH do app aponta para o bundle"; fi
       local helper pid
       for helper in WebKitWebProcess WebKitNetworkProcess; do
-        if pid="$(bundle_process "webkit2gtk-4.1/$helper" "$appdir")"; then
+        if pid="$(bundle_process "webkit2gtk-4.1/$helper" "$appdir" "$fixture_home")"; then
           if grep -qF "$appdir/usr/lib/libwebkit2gtk-4.1.so.0" "/proc/$pid/maps" 2>/dev/null; then
             echo "$name: $helper vivo, pid $pid, $(readlink "/proc/$pid/exe")"
           else
@@ -168,12 +167,12 @@ launch() {
       done
       # O sidecar do túnel nasce ao abrir e precisa vir da própria imagem, ao lado do executável real, e não da
       # pasta do arquivo .AppImage. O núcleo grava tunnel.log no diretório de estado do HOME isolado assim que sobe.
-      if pid="$(bundle_process cialai-tunnel "$appdir")"; then
+      if pid="$(bundle_process cialai-tunnel "$appdir" "$fixture_home")"; then
         echo "$name: cialai-tunnel vivo, pid $pid, $(readlink "/proc/$pid/exe")"
       else
         fail "$name: nenhum cialai-tunnel com executável dentro de $appdir depois de $seconds s"
       fi
-      local tunnel_log="$home/.local/share/br.com.ordinum.cialai/tunnel/tunnel.log"
+      local tunnel_log="$fixture_home/.local/share/br.com.ordinum.cialai/tunnel/tunnel.log"
       if [ -f "$tunnel_log" ]; then
         echo "$name: $tunnel_log criado com $(wc -l <"$tunnel_log") linhas"
         cp "$tunnel_log" "$logs/$name-tunnel.log" 2>/dev/null || true
@@ -197,7 +196,7 @@ launch() {
     wait "$group" 2>/dev/null || true
   fi
 
-  encerrar_sobras
+  encerrar_sobras "$fixture_home"
 
   local problems
   problems="$(grep -En 'Aborting|undefined symbol|symbol lookup error|error while loading shared libraries|Failed to load module: |Unable to spawn a new child process|core dumped|EGL_BAD_' "$log" || true)"

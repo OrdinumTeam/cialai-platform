@@ -95,6 +95,10 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:browser
 
+      - name: Isolamento dos processos do smoke AppImage
+        if: runner.os == 'Linux'
+        run: node --test tools/check/appimage-processes.test.mjs
+
       - name: Regressões de clipboard e descarte de terminais
         if: runner.os == 'Linux'
         run: node tools/browser/check-terminal-stability.mjs

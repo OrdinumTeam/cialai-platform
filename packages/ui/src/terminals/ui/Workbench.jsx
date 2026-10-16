@@ -311,7 +311,7 @@ export default function Workbench() {
       { id: 'dir', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, run: () => changeDirectory(session.id).catch((error) => notify(error.message, 'warning')) },
       { separator: true },
       { id: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw, run: () => restart(session.id) },
-      session.resumeState === 'failed' && session.saved?.resume
+      ['failed', 'sent'].includes(session.resumeState) && session.saved?.resume
         ? { id: 'resume', label: translate('terminal.restore.retry'), icon: RotateCcw, run: () => reopen(session.id) }
         : null,
       { id: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true, run: () => requestCloseSession(session) },

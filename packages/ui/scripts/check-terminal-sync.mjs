@@ -69,7 +69,8 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     throw new Error('Unexpected boundary call: '+cmd);
   } };
   const timer = (fn, ms, repeat=0) => { const id=++timerId; timers.set(id,{fn,at:clock+ms,repeat}); return id; };
-  const context = vm.createContext({ fixture, console, URLSearchParams, Uint8Array, ArrayBuffer,
+  class FixtureDate extends Date { static now() { return clock; } }
+  const context = vm.createContext({ fixture, console, URLSearchParams, Uint8Array, ArrayBuffer, Date: FixtureDate,
     setTimeout:(fn,ms=0)=>timer(fn,ms), clearTimeout:id=>timers.delete(id),
     setInterval:(fn,ms)=>timer(fn,ms,ms), clearInterval:id=>timers.delete(id),
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
@@ -89,7 +90,7 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     }
     clock=until;
   }
-  return { runtime: context.runtime, fixture, advance, storage };
+  return { runtime: context.runtime, fixture, advance, storage, now: () => clock, schedule: timer };
 }
 const mac = {id:1,pid:1001,tag:'mac-session',cwd:'/fixture/mac',cols:120,rows:32};
 const phone = {id:2,pid:1002,tag:'phone-session',cwd:'/fixture/phone',cols:80,rows:24};
@@ -283,10 +284,12 @@ test('desktop restores saved history and resumes the agent once the new shell is
   assert.equal(session.status, 'running');
   assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_write'), false, 'Nothing is typed before the shell prints its prompt');
   s.fixture.calls.find(call => call.cmd === 'pty_spawn').args.onOutput.onmessage(new Uint8Array([36, 32]));
-  await s.advance(1500); await reopening;
+  await s.advance(10000); await reopening;
   assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_write'), false, 'The backend validates and owns command execution');
   assert.equal(JSON.stringify(s.fixture.calls.filter(call => call.cmd === 'pty_resume_agent').map(call => call.args)), JSON.stringify([
     {id:session.ptyId,tag:'lost-session',sessionId:conversation},
+    {id:session.ptyId,tag:'lost-session',sessionId:conversation,retry:true},
+    {id:session.ptyId,tag:'lost-session',sessionId:conversation,retry:true},
     {id:session.ptyId,tag:'lost-session',sessionId:conversation,retry:true},
   ]));
 });
@@ -340,6 +343,153 @@ for (const recovers of [true, false]) test(`daemon draining before command deliv
   assert.equal(s.runtime.getSession('draining-session').saved.resume.sessionId,conversation);
   assert.equal(s.runtime.getSession('draining-session').resumeState,recovers ? 'sent':'failed');
   assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_write'),false);
+});
+
+function savedResumeScenario(tag) {
+  const conversation = 'ef374958-11c4-4e44-8fce-798df3af068e';
+  const s = scenario({saved:[{id:tag,cwd:'/fixture'}]});
+  s.fixture.saved = {[tag]:{tag,cwd:'/fixture',historyBytes:0,
+    resume:{agent:'Codex',sessionId:conversation,command:'fixture',profileKey:'codex-fixture'}}};
+  return {...s, tag, conversation};
+}
+
+async function reopenWithPrompt(s) {
+  await s.runtime.hydrate(); await settle();
+  const running = s.runtime.reopen(s.tag); await settle();
+  s.fixture.calls.find(call=>call.cmd==='pty_spawn').args.onOutput.onmessage(new Uint8Array([36,32]));
+  return {running};
+}
+
+for (const recovers of [true, false]) test(`resume observes a late transient after already_started and ${recovers ? 'recovers' : 'reports the backend refusal'}`, async () => {
+  const s = savedResumeScenario(`late-transient-${recovers}`);
+  const original = s.fixture.invoke.bind(s.fixture);
+  let firstSentAt, retrySentAt, deliveries = 0, earlyPolls = 0, waitingPolls = 0, latePolls = 0;
+  s.fixture.invoke = async (cmd,args) => {
+    if (cmd !== 'pty_resume_agent') return original(cmd,args);
+    s.fixture.calls.push({cmd,args});
+    assert.equal(args.sessionId,s.conversation,'every observation keeps the exact saved UUID');
+    if (firstSentAt === undefined) {
+      firstSentAt = s.now(); deliveries++;
+      return {status:'sent'};
+    }
+    assert.equal(args.retry,true,'the backend must authorize any retry');
+    if (s.now() - firstSentAt < 2400) { earlyPolls++; return {status:'already_started'}; }
+    if (s.now() - firstSentAt < 3600) {
+      waitingPolls++;
+      return {status:'waiting',compatibility:{daemonStatus:'draining'}};
+    }
+    latePolls++;
+    if (!recovers) throw new Error('fixture: shell is busy; refusing unsafe resend');
+    if (retrySentAt === undefined) { retrySentAt = s.now(); deliveries++; return {status:'sent'}; }
+    return {status:'already_started'};
+  };
+  const {running} = await reopenWithPrompt(s);
+  await s.advance(60000); await running;
+  assert.ok(earlyPolls > 0,'observe already_started while the CLI is still starting');
+  assert.ok(waitingPolls > 0,'keep observing long enough to catch draining after 2.4 seconds');
+  assert.ok(latePolls > 0,'ask the backend again after draining');
+  assert.equal(deliveries,recovers ? 2 : 1,'only the backend decides whether another command is safe');
+  assert.equal(s.runtime.getSession(s.tag).resumeState,recovers ? 'sent' : 'failed');
+  assert.equal(s.runtime.getSession(s.tag).saved.resume.sessionId,s.conversation);
+  const requests = s.fixture.calls.filter(call=>call.cmd==='pty_resume_agent').length;
+  assert.ok(requests <= 40,'observation and retries have a finite budget');
+  await s.advance(60000);
+  assert.equal(s.fixture.calls.filter(call=>call.cmd==='pty_resume_agent').length,requests,'observation eventually stops');
+  assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_write'),false,'the UI never types a resume command');
+});
+
+for (const prior of ['failed','sent']) test(`manual resume after a ${prior} attempt requests guarded retry with the same UUID`, async () => {
+  const s = savedResumeScenario(`manual-retry-${prior}`);
+  const original = s.fixture.invoke.bind(s.fixture);
+  let manual = false;
+  s.fixture.invoke = async (cmd,args) => {
+    if (cmd !== 'pty_resume_agent') return original(cmd,args);
+    s.fixture.calls.push({cmd,args});
+    if (!manual && prior === 'failed') throw new Error('fixture transient startup failure');
+    return {status:args.retry ? 'already_started' : 'sent'};
+  };
+  const {running} = await reopenWithPrompt(s);
+  await s.advance(60000); await running;
+  const session = s.runtime.getSession(s.tag);
+  assert.equal(session.resumeState,prior,'the original attempt has completed');
+  const ptyId = session.ptyId;
+  const before = s.fixture.calls.length;
+  manual = true;
+  const retrying = s.runtime.reopen(s.tag); await settle();
+  await s.advance(60000); await retrying;
+  const retries = s.fixture.calls.slice(before).filter(call=>call.cmd==='pty_resume_agent');
+  assert.ok(retries.length > 0,'the manual action reaches the backend');
+  assert.ok(retries.every(call=>call.args.retry === true),'a previous attempt requires retry:true from the first manual request');
+  assert.ok(retries.every(call=>call.args.sessionId === s.conversation),'manual retry preserves the exact UUID');
+  assert.ok(retries.every(call=>call.args.id === ptyId),'manual retry remains bound to the same live PTY');
+  assert.equal(session.saved.resume.sessionId,s.conversation);
+  assert.equal(s.fixture.calls.slice(before).some(call=>['pty_write','pty_spawn'].includes(call.cmd)),false,'retry uses the guarded backend on the existing shell');
+});
+
+for (const profileCount of [1,3]) test(`twenty saved conversations sharing ${profileCount === 1 ? 'one profile' : 'three profiles'} all start while earlier resumes are observed`, async () => {
+  const saved = Array.from({length:20},(_,i)=>({id:`shared-profile-${i}`,cwd:`/fixture/${i}`}));
+  const s = scenario({saved});
+  s.fixture.saved = Object.fromEntries(saved.map((entry,i)=>[entry.id,{tag:entry.id,cwd:entry.cwd,historyBytes:0,
+    resume:{agent:'Codex',sessionId:`ef374958-11c4-4e44-8fce-${String(i).padStart(12,'0')}`,command:'fixture',profileKey:`shared-profile-${i%profileCount}`}}]));
+  const original = s.fixture.invoke.bind(s.fixture);
+  let active = 0, peak = 0, completed = 0;
+  const profiles = new Map(), starts = new Map();
+  s.fixture.invoke = async (cmd,args) => {
+    if (cmd !== 'pty_resume_agent') return original(cmd,args);
+    s.fixture.calls.push({cmd,args});
+    const profile = s.fixture.saved[args.tag].resume.profileKey;
+    const inProfile = (profiles.get(profile) || 0) + 1;
+    profiles.set(profile,inProfile); peak = Math.max(peak,++active);
+    assert.ok(active <= 2,'at most two backend resume calls may be in flight');
+    assert.equal(inProfile,1,'one profile cannot have overlapping backend resume calls');
+    assert.equal(args.sessionId,s.fixture.saved[args.tag].resume.sessionId,'every call keeps its conversation UUID');
+    if (!args.retry) {
+      assert.equal(starts.has(args.tag),false,'each conversation starts only once');
+      starts.set(args.tag,s.now());
+    }
+    await new Promise(resolve=>s.schedule(resolve,50));
+    active--; profiles.set(profile,inProfile-1);
+    return {status:args.retry ? 'already_started' : 'sent'};
+  };
+  await s.runtime.hydrate(); await settle();
+  const running = saved.map(entry=>s.runtime.reopen(entry.id).then(()=>{completed++;}));
+  await settle();
+  for (const call of s.fixture.calls.filter(call=>call.cmd==='pty_spawn')) call.args.onOutput.onmessage(new Uint8Array([36,32]));
+  await s.advance(10000);
+  assert.equal(starts.size,20,'observation sleeps must not reserve the profile and starve later conversations');
+  assert.ok([...starts.values()].every(at=>at<=10000),'every first command is delivered within ten virtual seconds');
+  await s.advance(5000); await settle();
+  assert.equal(completed,20,'all observation jobs finish within fifteen virtual seconds');
+  assert.equal(active,0,'all fake IPC callbacks have completed');
+  assert.ok([...profiles.values()].every(value=>value===0),'all profile gates are released');
+  assert.equal(peak,profileCount===1 ? 1 : 2,'independent profiles use at most two slots while each profile serializes active calls');
+  await Promise.all(running);
+  assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_write'),false,'the UI never types a command');
+});
+
+test('closing a resume queued behind the same profile prevents its backend call', async () => {
+  const saved = ['first','closed'].map(id=>({id:`queued-${id}`,cwd:'/fixture'}));
+  const s = scenario({saved});
+  s.fixture.saved = Object.fromEntries(saved.map((entry,i)=>[entry.id,{tag:entry.id,cwd:entry.cwd,historyBytes:0,
+    resume:{agent:'Codex',sessionId:`ef374958-11c4-4e44-8fce-${String(i).padStart(12,'0')}`,command:'fixture',profileKey:'shared-profile'}}]));
+  const original = s.fixture.invoke.bind(s.fixture);
+  let active = 0;
+  s.fixture.invoke = async (cmd,args) => {
+    if (cmd !== 'pty_resume_agent') return original(cmd,args);
+    s.fixture.calls.push({cmd,args}); active++;
+    await new Promise(resolve=>s.schedule(resolve,300)); active--;
+    return {status:args.retry ? 'already_started' : 'sent'};
+  };
+  await s.runtime.hydrate(); await settle();
+  const running = saved.map(entry=>s.runtime.reopen(entry.id)); await settle();
+  for (const call of s.fixture.calls.filter(call=>call.cmd==='pty_spawn')) call.args.onOutput.onmessage(new Uint8Array([36,32]));
+  await s.advance(500);
+  assert.equal(active,1,'the first resume holds the profile gate');
+  assert.equal(await s.runtime.closeSession('queued-closed'),true);
+  await s.advance(15000); await Promise.all(running);
+  assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_resume_agent'&&call.args.tag==='queued-closed'),false,'a closed queued session never reaches the backend');
+  assert.equal(s.runtime.getSession('queued-closed'),null,'the closed session is not restored by a late callback');
+  assert.equal(active,0,'in-flight callbacks have completed');
 });
 
 test('the shell learns where the xterm cursor stands, below the history kept by a restart', async () => {

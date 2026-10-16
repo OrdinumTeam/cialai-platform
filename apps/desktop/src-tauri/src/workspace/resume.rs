@@ -293,7 +293,7 @@ fn codex_session_from(
     home: &Path,
 ) -> Option<Detected> {
     let profile = procs::agent_profile(command, CODEX, home)?;
-    let sessions = Path::new(&profile.config_dir).join("sessions");
+    let sessions = dunce::canonicalize(Path::new(&profile.config_dir).join("sessions")).ok()?;
     let cwd = source.cwd(pid);
     let explicit_id = command
         .argv
@@ -303,8 +303,9 @@ fn codex_session_from(
     let mut opened = source
         .open_files(pid)
         .into_iter()
-        .filter(|path| Path::new(path).starts_with(&sessions))
-        .filter_map(|path| rollout_session_id(&path).map(|id| (PathBuf::from(&path), id)))
+        .filter_map(|path| dunce::canonicalize(path).ok())
+        .filter(|path| path.starts_with(&sessions))
+        .filter_map(|path| rollout_session_id(path.to_str()?).map(|id| (path, id)))
         .filter(|(_, id)| explicit_id.is_none_or(|expected| id.eq_ignore_ascii_case(expected)))
         .collect::<Vec<_>>();
     opened.sort();
@@ -316,7 +317,7 @@ fn codex_session_from(
     }
     let (rollout, session_id) = opened.pop().or_else(|| {
         cwd.as_deref()
-            .and_then(|cwd| newest_codex_rollout(&sessions, cwd, start_sec))
+            .and_then(|cwd| find_codex_rollout(&sessions, cwd, start_sec, explicit_id))
             .filter(|(_, id)| explicit_id.is_none_or(|expected| id.eq_ignore_ascii_case(expected)))
     })?;
     Some(Detected {
@@ -348,7 +349,17 @@ struct CodexSessionMeta {
 /// Reserva para Windows, onde enumerar handles abertos exigiria privilegios:
 /// aceita somente uma conversa inequivoca no cwd. Com duas candidatas a
 /// associacao nao pode ser adivinhada pela data de modificacao.
+#[cfg(test)]
 fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(PathBuf, String)> {
+    find_codex_rollout(sessions, cwd, start_sec, None)
+}
+
+fn find_codex_rollout(
+    sessions: &Path,
+    cwd: &str,
+    start_sec: u64,
+    explicit_id: Option<&str>,
+) -> Option<(PathBuf, String)> {
     let expected_cwd = dunce::canonicalize(cwd).ok()?;
     let mut pending = vec![sessions.to_path_buf()];
     let mut inspected = 0usize;
@@ -380,12 +391,18 @@ fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(P
             let Some(id) = rollout_session_id(path.to_string_lossy().as_ref()) else {
                 continue;
             };
+            if explicit_id.is_some_and(|expected| !id.eq_ignore_ascii_case(expected)) {
+                continue;
+            }
             let Some(modified_sec) = meta
                 .modified()
                 .ok()
                 .and_then(|time| time.duration_since(UNIX_EPOCH).ok())
                 .map(|elapsed| elapsed.as_secs())
-                .filter(|modified| *modified >= start_sec)
+                // An explicit resume UUID is stronger evidence than mtime:
+                // the CLI may not append to an existing conversation until
+                // the next user turn. Keep the freshness rule for inference.
+                .filter(|modified| explicit_id.is_some() || *modified >= start_sec)
             else {
                 continue;
             };
@@ -1236,6 +1253,21 @@ mod tests {
                 .session_id,
             ID,
             "an explicit resume UUID disambiguates the process's open rollouts"
+        );
+        // Windows does not enumerate another process's open handles. The
+        // explicit UUID must still disambiguate two conversations in one cwd.
+        source.set_open_files(42, Vec::new());
+        assert_eq!(
+            codex_session_from(&source, &command, 42, 0, &home)
+                .map(|found| found.session.session_id),
+            Some(ID.to_string()),
+            "an explicit UUID must also disambiguate the file-search fallback"
+        );
+        assert_eq!(
+            codex_session_from(&source, &command, 42, u64::MAX, &home)
+                .map(|found| found.session.session_id),
+            Some(ID.to_string()),
+            "a resumed conversation may predate the current CLI process"
         );
         let _ = fs::remove_dir_all(home);
     }

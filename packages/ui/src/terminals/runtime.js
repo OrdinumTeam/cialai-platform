@@ -916,16 +916,22 @@ async function restoreDisconnected() {
   invoke('pty_prune', { keep: [...state.order] }).catch(() => {});
 }
 
-// Espera o prompt do shell novo e digita o comando que devolve a conversa.
-// Escreve direto no PTY, sem a concessao de largura, porque a sessao pode
-// estar fora da tela quando todas reabrem juntas. Se um programa ja tomou o
-// terminal, como algo aberto pelo .zshrc, nada e digitado.
+// Espera o shell novo e pede ao backend a retomada da conversa salva.
+// O backend confere o PTY e autoriza cada envio, inclusive novas tentativas.
 const resumeCoordinator = createResumeCoordinator({ concurrency: 2 });
-async function resumeAgent(session, plan) {
+const resumeOperations = new WeakMap();
+function resumeAgent(session, plan, { retry = false } = {}) {
   const ptyId = session.ptyId;
-  const same = () => state.sessions.get(session.id) === session && session.ptyId === ptyId && session.status === 'running';
+  const token = session.spawnToken;
+  const pending = resumeOperations.get(session);
+  if (pending?.ptyId === ptyId && pending.token === token) return pending.promise;
+  const operation = { ptyId, token };
+  const same = () => state.sessions.get(session.id) === session && session.ptyId === ptyId && session.spawnToken === token && session.status === 'running';
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  return resumeCoordinator.run(`${session.id}:${ptyId}`, plan.profileKey || plan.agent, async () => {
+  // Only backend calls occupy a slot; observing one startup must not delay
+  // other conversations sharing its profile during the backoff sleeps.
+  const request = (args) => resumeCoordinator.run(operation, plan.profileKey || plan.agent, () => invoke('pty_resume_agent', args), same);
+  const promise = (async () => {
     session.resumeState = 'waiting';
     const ready = await waitForPrompt(() => (same() ? session.receivedOffset : null), sleep);
     if (!same()) return;
@@ -935,8 +941,9 @@ async function resumeAgent(session, plan) {
       return;
     }
     try {
-      const args = { id: ptyId, tag: session.id, sessionId: plan.sessionId };
-      let result = await invoke('pty_resume_agent', args);
+      const args = { id: ptyId, tag: session.id, sessionId: plan.sessionId, ...(retry ? { retry: true } : {}) };
+      let result = await request(args);
+      if (!same()) return;
       let notified = false;
       const accept = () => {
         session.resumeState = result?.status === 'waiting' ? 'waiting' : 'sent';
@@ -949,18 +956,26 @@ async function resumeAgent(session, plan) {
       // Only the backend may retry, after recognizing a transient startup
       // failure and checking that the shell owns this PTY with no user input.
       for (const delay of [1000, 2000, 4000]) {
-        if (!['sent', 'waiting'].includes(result?.status)) break;
+        // A running CLI may report its startup failure after this response.
+        if (!['sent', 'waiting', 'already_started'].includes(result?.status)) break;
         await sleep(delay);
         if (!same()) return;
-        result = await invoke('pty_resume_agent', { ...args, retry: true });
+        result = await request({ ...args, retry: true });
+        if (!same()) return;
         accept();
       }
       if (result?.status === 'waiting') throw new Error(translate('terminal.restore.draining'));
     } catch (error) {
+      if (!same()) return;
       session.resumeState = 'failed';
       dispatch({ type: 'error', message: messageOf(error) });
     }
-  }, same);
+  })().finally(() => {
+    if (resumeOperations.get(session)?.promise === promise) resumeOperations.delete(session);
+  });
+  operation.promise = promise;
+  resumeOperations.set(session, operation);
+  return promise;
 }
 
 // GPU que desenha o WebGL do xterm, lida do proprio contexto do terminal e
@@ -1980,8 +1995,8 @@ export function focusSelected() {
 // rodava nela, a conversa volta pelo comando de retomada.
 export async function reopen(id) {
   const session = state.sessions.get(id);
-  if (session?.status === 'running' && session.resumeState === 'failed' && session.saved?.resume) {
-    return resumeAgent(session, session.saved.resume);
+  if (session?.status === 'running' && ['failed', 'sent'].includes(session.resumeState) && session.saved?.resume) {
+    return resumeAgent(session, session.saved.resume, { retry: true });
   }
   if (!session || session.status === 'running' || session.spawning || session.reopening) return;
   session.reopening = true;

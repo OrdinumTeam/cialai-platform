@@ -5,8 +5,8 @@ Estado em 16/10/2026. Esta auditoria distingue correção implementada, teste au
 ## Causas confirmadas
 
 1. A trava do túnel confundia existência numérica de PID com propriedade. Um processo diferente podia bloquear a inicialização depois da reutilização desse número.
-2. Uma recuperação em primeiro plano podia ser substituída pelo retry já agendado do supervisor. Respostas antigas também precisavam ser separadas por geração. A escrita em stdin cheio não estava coberta pelo prazo RPC.
-3. Abrir o shell novamente podia sobrescrever a conversa pendente no journal. Perfis padrão podiam herdar a conta ativa atual, e rollouts concorrentes podiam ser escolhidos por ordem de leitura. O cache global de probes bloqueava contas independentes.
+2. Uma recuperação em primeiro plano podia ser substituída pelo retry já agendado do supervisor. Respostas antigas também precisavam ser separadas por geração. A escrita em stdin cheio não estava coberta pelo prazo RPC. A revisão encontrou ainda um mutex mantido durante o ACK de encerramento e uma falha atrasada que anunciava reconexão depois de a geração seguinte já estar saudável.
+3. Abrir o shell novamente podia sobrescrever a conversa pendente no journal. Perfis padrão podiam herdar a conta ativa atual, e rollouts concorrentes podiam ser escolhidos por ordem de leitura. O cache global de probes bloqueava contas independentes. A observação da retomada terminava cedo quando o CLI ainda estava iniciando; uma falha transitória posterior não recebia nova consulta, e a ação manual não solicitava o retry guardado.
 4. O atalho de texto no Windows podia chegar ao agente como `Ctrl+V`, interpretado como pedido de imagem. Eventos de paste nativos e leituras assíncronas precisavam coordenar uma única entrega.
 5. O addon WebGL mantinha terminais por meio do timer do cursor depois do descarte. A árvore de processos também era reamostrada para consultas repetidas de consumidores concorrentes.
 
@@ -24,6 +24,12 @@ O erro `draining` de uma instalação externa do Codex não foi reproduzido naqu
 | Recursos | Amostra de processos compartilhada por até 250 ms, invalidada por mudanças. Blur antes de descartar o WebGL, remoção de timers de reattach e invalidação de viewport no fechamento |
 
 Não há atualização automática de CLIs, dependência de rede para retomar, reinício de daemon compartilhado nem aplicação global de `--no-daemon`.
+
+A observação da retomada permanece limitada a três consultas posteriores, com intervalos de 1, 2 e 4 segundos, inclusive após `already_started`. As esperas ficam fora das vagas do coordenador: somente chamadas ao backend disputam o limite global de duas e de uma por perfil. Uma operação por sessão e geração permanece deduplicada. Testes com relógio virtual cobrem vinte conversas no mesmo perfil ou em três perfis, entrega inicial em até dez segundos e conclusão em até quinze, sem chamadas pendentes; esses limites são da fixture, não latências reais de agentes externos. A tentativa manual continua disponível após o envio e pede autorização ao backend, sem escrever comandos diretamente.
+
+Quando o CLI conhecido já imprimiu uma falha transitória, mas ainda está desconectando em primeiro plano, o backend aguarda sem enviar outro comando. O reenvio depende de o shell voltar a ficar livre e quieto. Outro processo, digitação do usuário ou mudança de geração continua impedindo o envio.
+
+No Windows, os probes de versão e ajuda entram suspensos em um Job Object privado antes de executar. Ao concluir ou expirar, o job recolhe somente seus descendentes, antes da remoção do arquivo temporário; não usa o registro de sessões nem encerra daemons compartilhados. O prazo de coleta é de um segundo, seguido do fallback de encerramento vinculado ao fechamento do handle. A regressão usa wrapper `.cmd`, descendente e processo independente próprios; a compilação cruzada passou, e a execução nativa da candidata deve ser conferida na matriz remota.
 
 ## Medições comparáveis
 
@@ -45,6 +51,8 @@ Host de teste nativo macOS arm64, build debug. Cem consultas consecutivas de mé
 
 Os FDs incluem o descritor temporário da própria enumeração. Não há alegação de redução de RSS: o baseline anterior não mediu essa mesma grandeza. A variação de abertura também não é atribuída a uma otimização de spawn.
 
+Na fixture de sidecar responsivo, o teste de negociação, chamada e encerramento levou cerca de 3,01 s antes e 0,07 s depois de liberar o mutex antes de aguardar o ACK. O teste acrescentado exige encerramento abaixo de 1 s. Isso não mede o encerramento de Tor real; o prazo de desligamento dele continua separado.
+
 Chromium isolado com xterm real, oito ciclos de trinta sessões, GC forçado. Comparação entre o primeiro e o oitavo fechamento com zero sessões:
 
 | Indicador | Antes | Depois |
@@ -56,6 +64,8 @@ Chromium isolado com xterm real, oito ciclos de trinta sessões, GC forçado. Co
 O teste ampliado de quarenta ciclos, com verificações adicionais de clipboard, completou 1200 aberturas e fechamentos. Depois do primeiro fechamento, nós DOM e listeners permaneceram em 880 e 537 até o ciclo quarenta; nenhum terminal de coortes antigas permaneceu vivo. Heap final de 26356376 bytes, com as últimas cinco amostras entre 26327608 e 26389424. Isso não é prova de ausência global de vazamentos nem soak por horas.
 
 A repetição posterior de **100 ciclos e 3000 aberturas e fechamentos** passou: do primeiro ao último fechamento, 878 nós e 537 listeners; heap de 24846048 para 26761564 bytes, sem terminais de coortes antigas. O número absoluto difere entre execuções isoladas; a comparação útil é a evolução dentro de cada execução. Vinte rodadas nativas com cinco e dez agentes simulados também passaram; cada fechamento retornou a zero filhos, quatro FDs e três threads.
+
+Uma execução posterior manteve o mesmo processo Chromium durante mais de uma hora, com pausas de 18 segundos entre estados e os mesmos cem ciclos. Passou com 886 nós e 537 listeners estáveis entre o primeiro e o último fechamento; heap de 24853724 para 26756260 bytes, sem terminais de coortes antigas. Isso valida a fixture prolongada, não um soak integral do aplicativo Tauri ou das redes reais.
 
 Medição adicional de interação em Chromium, trinta amostras por cenário, com evento de teclado do navegador e xterm real. Não inclui hardware de entrada, PTY nativo, compositor do sistema nem apresentação física do frame. Os p50 de entrada ficaram abaixo da resolução de 0,1 ms do relógio; não devem ser interpretados como latência zero.
 
@@ -70,11 +80,15 @@ São valores atuais, sem baseline anterior equivalente e sem alegação de ganho
 
 ## Verificações adicionais
 
-* A suíte completa `npm test` passou localmente, incluindo 448 testes Rust, 373 testes principais de interface, 30 de integração do runtime, 22 de protocolo e 352 testes móveis. Os sete testes Rust ignorados não são tratados como aprovados; os benchmarks desta auditoria foram executados explicitamente.
+* A suíte completa `npm test` passou localmente, incluindo 449 testes Rust, 373 testes principais de interface, 37 de integração do runtime, 22 de protocolo e 352 testes móveis. A última regressão de opções globais elevou a biblioteca Rust a 452 aprovados; a biblioteca completa e o Clippy foram reexecutados depois dela. Os sete testes Rust ignorados não são tratados como aprovados; os benchmarks desta auditoria foram executados explicitamente.
 * `go test` e `go vet` do núcleo completo passaram; as quatro áreas diretamente afetadas também passaram com detector de corridas.
 * Os testes de `statedir` foram executados em Linux arm64 dentro de contêiner sem rede. Aquisição simultânea, saída abrupta, PID reutilizado, migração e preservação de dados passaram.
 * O sidecar Linux em Ubuntu 22.04 arm64, com estado temporário, negociou o protocolo, abriu conexão direta, anunciou por Avahi e respondeu a `pair.begin`. Tor estava desligado nesse teste.
-* A inspeção passiva de daemon Windows está implementada por AF_UNIX não bloqueante, com prazo absoluto compartilhado por conexão, handshake e I/O. Compilação e Clippy dos testes desse módulo para Windows passaram. Execução nativa continua dependendo da matriz remota; não é inferida da compilação.
+* A inspeção passiva de daemon Windows está implementada por AF_UNIX não bloqueante, com prazo absoluto compartilhado por conexão, handshake e I/O. Compilação, Clippy e teste nativo desse módulo passaram; a matriz da candidata completa ainda precisa ser aprovada, conforme o registro abaixo.
+
+A matriz remota `38846517242` aprovou as suítes completas em macOS e Linux. No Windows, a inspeção passiva do daemon também passou nativamente, mas um teste de associação de rollout reprovou. O defeito confirmado foi corrigido: caminhos abertos são canonicalizados antes da comparação, e a busca sem handles filtra o UUID explícito antes de decidir ambiguidade. Uma conversa explicitamente identificada pode ser anterior ao processo atual; a regra de recência continua valendo para inferência sem UUID. A nova candidata precisa repetir a matriz antes da tag.
+
+O smoke `38845556825` abriu o AppImage no Ubuntu e no Arch. A árvore extraída no Arch foi falsamente reprovada porque a seleção por nome encontrou o PID zumbi da execução anterior. O arnês passou a conferir executável vivo, HOME isolado e marcador da fixture, inclusive no encerramento, sem `pkill` global por nome. Uma regressão com processos falsos passou no macOS e em contêiner Linux; os smokes reais devem ser repetidos.
 
 ## Reproduzir
 

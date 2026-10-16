@@ -1116,13 +1116,9 @@ impl TerminalManager {
             let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
             (session.info.cwd.clone(), session.info.shell_flavor)
         };
-        let checked = resume::compatibility::validate(
-            &record,
-            &cwd,
-            flavor,
-            &self.home,
-            &platform::path_env(&self.prefs.get(), &self.home),
-        )?;
+        let search_path = platform::path_env(&self.prefs.get(), &self.home);
+        let checked =
+            resume::compatibility::validate(&record, &cwd, flavor, &self.home, &search_path)?;
         self.procs.refresh();
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1143,16 +1139,37 @@ impl TerminalManager {
             session.info.pid,
             self.procs.as_ref(),
         );
-        let shell_ready = session.info.pid.is_some()
+        let shell_owned = session.info.pid.is_some_and(|pid| {
+            resume_shell_identity(self.procs.as_ref(), pid, &session.info.shell)
+        });
+        let shell_ready = shell_owned
             && foreground == session.info.pid
-            && session.info.pid.is_some_and(|pid| {
-                resume_shell_identity(self.procs.as_ref(), pid, &session.info.shell)
-            })
             && session
                 .link
                 .last_output()
                 .is_some_and(|at| at.elapsed() >= Duration::from_millis(350));
         if !shell_ready {
+            // A known failed launch can still own the foreground while it
+            // disconnects. Wait without writing into it; an unrelated job
+            // must continue to fail the readiness gate.
+            if session.resume_attempts > 0
+                && shell_owned
+                && (foreground == session.info.pid
+                    || foreground.is_some_and(|pid| {
+                        resume_foreground_matches(
+                            self.procs.as_ref(),
+                            pid,
+                            session.info.pid,
+                            &record,
+                            &cwd,
+                            &search_path,
+                        )
+                    }))
+            {
+                return Ok(
+                    serde_json::json!({"status":"waiting", "retryAfterMs":1000, "compatibility":checked}),
+                );
+            }
             return Err("O shell ainda não está pronto ou outro programa ocupa o terminal. O histórico foi preservado; saia do programa antes de tentar novamente.".into());
         }
         if checked.daemon_status == "draining" {
@@ -1963,6 +1980,55 @@ fn transient_resume_failure(output: &str) -> bool {
         || output.contains("Background server is not available")
 }
 
+fn resume_foreground_matches(
+    source: &dyn ProcSource,
+    pid: u32,
+    shell_pid: Option<u32>,
+    record: &resume::AgentSession,
+    shell_cwd: &str,
+    search_path: &str,
+) -> bool {
+    if !source
+        .info(pid)
+        .is_some_and(|info| Some(info.ppid) == shell_pid)
+    {
+        return false;
+    }
+    let Some(command) = source.command_line(pid) else {
+        return false;
+    };
+    let (program, resume_flag) = match record.agent.as_str() {
+        resume::CODEX => ("codex", "resume"),
+        resume::CLAUDE => ("claude", "--resume"),
+        _ => return false,
+    };
+    let cwd = record.cwd.as_deref().unwrap_or(shell_cwd);
+    let same_path = |actual: &Path, expected: &Path| matches!((dunce::canonicalize(actual), dunce::canonicalize(expected)), (Ok(actual), Ok(expected)) if actual == expected);
+    let Ok(executable) = which::which_in(program, Some(search_path), cwd) else {
+        return false;
+    };
+    // Scripts may expose their interpreter in argv[0]. The saved options
+    // can precede the resume target or follow it, but must still match.
+    let launch_matches = command.argv.iter().take(2).enumerate().any(|(index, arg)| {
+        if !same_path(Path::new(arg), &executable) {
+            return false;
+        }
+        let args = &command.argv[index + 1..];
+        args.windows(2).enumerate().any(|(target, pair)| {
+            pair[0] == resume_flag
+                && pair[1].eq_ignore_ascii_case(&record.session_id)
+                && args[..target]
+                    .iter()
+                    .chain(&args[target + 2..])
+                    .eq(record.args.iter())
+        })
+    });
+    launch_matches
+        && source
+            .cwd(pid)
+            .is_some_and(|actual| same_path(Path::new(&actual), Path::new(cwd)))
+}
+
 fn resume_shell_identity(source: &dyn ProcSource, pid: u32, expected: &str) -> bool {
     let Some(actual) = source.exe_path(pid) else {
         return false;
@@ -2131,6 +2197,156 @@ fn validate_view_size(cols: u16, rows: u16) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    fn with_resume_foreground_fixture(
+        check: impl FnOnce(&procs::FakeProcs, &resume::AgentSession, &str, &str),
+    ) {
+        use std::os::unix::fs::PermissionsExt;
+        let mut nonce = [0; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "cialai-resume-foreground-{:032x}",
+            u128::from_le_bytes(nonce)
+        ));
+        std::fs::create_dir_all(root.join("bin")).unwrap();
+        struct Cleanup(PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        let _cleanup = Cleanup(root.clone());
+        let executable = root.join("bin/codex");
+        std::fs::write(&executable, "#!/bin/sh\nexit 99\n").unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let source = procs::FakeProcs::default();
+        let record = resume::AgentSession {
+            agent: resume::CODEX.into(),
+            session_id: "12345678-1234-4234-8234-123456789abc".into(),
+            cwd: Some(root.to_string_lossy().into_owned()),
+            config_dir: None,
+            profile_name: None,
+            args: vec!["--yolo".into()],
+        };
+        source.set_info(procs::ProcInfo {
+            pid: 84,
+            ppid: 42,
+            ..Default::default()
+        });
+        source.set_cwd(84, root.to_string_lossy());
+        source.set_exe_path(84, executable.to_string_lossy());
+        source.set_command(
+            84,
+            CommandLine {
+                exe: executable.to_string_lossy().into_owned(),
+                argv: vec![
+                    executable.to_string_lossy().into_owned(),
+                    "--yolo".into(),
+                    "resume".into(),
+                    record.session_id.clone(),
+                ],
+                ..Default::default()
+            },
+        );
+        check(
+            &source,
+            &record,
+            root.to_str().unwrap(),
+            root.join("bin").to_str().unwrap(),
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_foreground_matches_global_options_before_resume() {
+        with_resume_foreground_fixture(|source, record, cwd, search_path| {
+            assert!(
+                resume_foreground_matches(source, 84, Some(42), record, cwd, search_path),
+                "the saved --yolo option before resume still identifies the exact conversation"
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_foreground_matches_node_launcher_with_global_options() {
+        with_resume_foreground_fixture(|source, record, cwd, search_path| {
+            source.set_exe_path(84, "/usr/bin/node");
+            source.set_command(
+                84,
+                CommandLine {
+                    exe: "/usr/bin/node".into(),
+                    argv: vec![
+                        "/usr/bin/node".into(),
+                        format!("{search_path}/codex"),
+                        "--yolo".into(),
+                        "resume".into(),
+                        record.session_id.clone(),
+                    ],
+                    ..Default::default()
+                },
+            );
+            assert!(
+                resume_foreground_matches(source, 84, Some(42), record, cwd, search_path),
+                "the Node launcher preserves the validated CLI, options and exact UUID"
+            );
+        });
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_foreground_matches_rejects_another_uuid_parent_executable_or_directory() {
+        with_resume_foreground_fixture(|source, record, cwd, search_path| {
+            let matches = |record: &resume::AgentSession| {
+                resume_foreground_matches(source, 84, Some(42), record, cwd, search_path)
+            };
+            let mut other_record = record.clone();
+            other_record.session_id = "00000000-0000-4000-8000-000000000000".into();
+            assert!(
+                !matches(&other_record),
+                "another UUID cannot authorize waiting"
+            );
+            source.set_info(procs::ProcInfo {
+                pid: 84,
+                ppid: 99,
+                ..Default::default()
+            });
+            assert!(
+                !matches(record),
+                "another parent cannot own the shell's resume"
+            );
+            source.set_info(procs::ProcInfo {
+                pid: 84,
+                ppid: 42,
+                ..Default::default()
+            });
+            source.set_cwd(84, format!("{cwd}/elsewhere"));
+            assert!(
+                !matches(record),
+                "another directory cannot authorize waiting"
+            );
+            source.set_cwd(84, cwd);
+            source.set_exe_path(84, "/usr/bin/unrelated");
+            source.set_command(
+                84,
+                CommandLine {
+                    exe: "/usr/bin/unrelated".into(),
+                    argv: vec![
+                        "/usr/bin/unrelated".into(),
+                        "--yolo".into(),
+                        "resume".into(),
+                        record.session_id.clone(),
+                    ],
+                    ..Default::default()
+                },
+            );
+            assert!(
+                !matches(record),
+                "an unrelated executable cannot authorize waiting"
+            );
+        });
+    }
+
     #[test]
     fn resume_readiness_rejects_an_agent_that_exec_replaced_the_shell_pid() {
         let source = procs::FakeProcs::default();
@@ -2212,6 +2428,8 @@ printf '%s\n' "$*" >> "$CODEX_HOME/invocations"
 if [ ! -f "$CODEX_HOME/attempted" ]; then
   : > "$CODEX_HOME/attempted"
   echo 'Server is draining; retry after reconnecting (code -32600)'
+  /bin/sleep 0.7
+  while [ ! -f "$CODEX_HOME/release-first-attempt" ]; do /bin/sleep 0.02; done
   exit 1
 fi
 echo 'recovered-fixture'
@@ -2344,6 +2562,23 @@ echo 'recovered-fixture'
         assert!(transient_resume_failure(
             &manager.lock().sessions.get(&info.id).unwrap().resume_output
         ));
+        // A failed CLI may remain in the foreground while it disconnects.
+        // The gate makes this observation deterministic even on slow hosts;
+        // only this isolated fixture controls when its first CLI may exit.
+        assert_eq!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, true)
+                .expect("the original CLI is still disconnecting; retry must wait")["status"],
+            "waiting"
+        );
+        assert_eq!(
+            std::fs::read_to_string(config.join("invocations")).unwrap(),
+            format!("resume {uuid}\n"),
+            "waiting on the original foreground CLI must not enqueue another command"
+        );
+        std::fs::write(config.join("release-first-attempt"), "fixture release").unwrap();
+        thread::sleep(Duration::from_millis(400));
+        quiet();
         // A process existing briefly during a failed start is not evidence
         // that the agent connected successfully. A journal sample must not
         // erase the pending retry association.

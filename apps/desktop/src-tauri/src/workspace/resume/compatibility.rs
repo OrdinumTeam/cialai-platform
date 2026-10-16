@@ -310,9 +310,28 @@ fn run_probe(
     }
     platform::child_env::sanitize(&mut command);
     platform::configure_background_command(&mut command);
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        use windows_sys::Win32::System::Threading::{CREATE_NO_WINDOW, CREATE_SUSPENDED};
+        // Command drops the primary thread handle. Keep it suspended until the
+        // private job owns the wrapper, so a fast CLI cannot escape with children.
+        command.creation_flags(CREATE_NO_WINDOW | CREATE_SUSPENDED);
+    }
     let mut child = command.spawn().map_err(|_| {
         "Não foi possível executar o CLI para verificar a compatibilidade.".to_string()
     })?;
+    #[cfg(target_os = "windows")]
+    let probe_job = match WindowsProbeJob::attach(&child) {
+        Ok(job) => job,
+        Err(_) => {
+            // Attachment failed before the suspended child could run. Only its
+            // owned handle is used for cleanup, never a shared CLI/PID lookup.
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err("Não foi possível isolar a verificação do CLI.".into());
+        }
+    };
     let start = Instant::now();
     let status = loop {
         match child.try_wait() {
@@ -324,7 +343,10 @@ fn run_probe(
                 std::thread::sleep(Duration::from_millis(20))
             }
             _ => {
+                #[cfg(not(target_os = "windows"))]
                 platform::terminate_background_process(child.id(), true);
+                #[cfg(target_os = "windows")]
+                drop(probe_job);
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(
@@ -333,6 +355,8 @@ fn run_probe(
             }
         }
     };
+    #[cfg(target_os = "windows")]
+    drop(probe_job);
     if !status.success() {
         return Err(
             "O CLI recusou a verificação de compatibilidade. O histórico foi preservado.".into(),
@@ -343,6 +367,88 @@ fn run_probe(
         .and_then(|f| f.take(256 * 1024).read_to_string(&mut output))
         .map_err(|_| "A resposta de compatibilidade do CLI é inválida.".to_string())?;
     Ok(output)
+}
+
+#[cfg(target_os = "windows")]
+struct WindowsProbeJob(platform::win_job::JobHandle);
+
+#[cfg(target_os = "windows")]
+impl WindowsProbeJob {
+    fn attach(child: &std::process::Child) -> std::io::Result<Self> {
+        let job = Self(platform::win_job::assign_private(child)?);
+        resume_probe_thread(child.id())?;
+        Ok(job)
+    }
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for WindowsProbeJob {
+    fn drop(&mut self) {
+        // This guard is declared after Child and before output is consumed. It
+        // collects descendants on success, timeout and all later error paths,
+        // before the output handles and Scratch are dropped.
+        let _ = self.0.terminate_and_wait(Duration::from_secs(1));
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resume_probe_thread(pid: u32) -> std::io::Result<()> {
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
+    };
+    use windows_sys::Win32::System::Threading::{
+        GetProcessIdOfThread, OpenThread, ResumeThread, THREAD_QUERY_LIMITED_INFORMATION,
+        THREAD_SUSPEND_RESUME,
+    };
+
+    // CREATE_SUSPENDED starts with one primary thread, which has not executed
+    // user code. ToolHelp recovers its ID without undocumented Nt APIs.
+    let raw = unsafe { CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0) };
+    if raw == INVALID_HANDLE_VALUE {
+        return Err(std::io::Error::last_os_error());
+    }
+    // SAFETY: the successful snapshot is a newly owned kernel handle.
+    let snapshot = unsafe { OwnedHandle::from_raw_handle(raw) };
+    let mut entry = THREADENTRY32 {
+        dwSize: std::mem::size_of::<THREADENTRY32>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: the valid snapshot and correctly sized entry live through calls.
+    let mut found = unsafe { Thread32First(snapshot.as_raw_handle(), &mut entry) };
+    while found != 0 {
+        if entry.th32OwnerProcessID == pid {
+            let raw = unsafe {
+                OpenThread(
+                    THREAD_SUSPEND_RESUME | THREAD_QUERY_LIMITED_INFORMATION,
+                    0,
+                    entry.th32ThreadID,
+                )
+            };
+            if raw.is_null() {
+                return Err(std::io::Error::last_os_error());
+            }
+            // SAFETY: OpenThread returned a newly owned handle.
+            let thread = unsafe { OwnedHandle::from_raw_handle(raw) };
+            // Check the live handle too; a stale snapshot must never resume a
+            // different process's thread if a thread ID was recycled.
+            if unsafe { GetProcessIdOfThread(thread.as_raw_handle()) } != pid {
+                return Err(std::io::Error::other("probe thread identity changed"));
+            }
+            let previous = unsafe { ResumeThread(thread.as_raw_handle()) };
+            return match previous {
+                1 => Ok(()),
+                u32::MAX => Err(std::io::Error::last_os_error()),
+                _ => Err(std::io::Error::other("unexpected probe thread suspension")),
+            };
+        }
+        found = unsafe { Thread32Next(snapshot.as_raw_handle(), &mut entry) };
+    }
+    Err(std::io::Error::new(
+        std::io::ErrorKind::NotFound,
+        "suspended probe thread not found",
+    ))
 }
 
 fn validate_conversation(session: &AgentSession, config: &Path) -> Result<(), String> {
@@ -634,5 +740,273 @@ mod tests {
             String::from_utf8(result.stdout).unwrap(),
             format!("{}|unset", default.display())
         );
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod windows_tests {
+    use super::*;
+    use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle};
+    use std::process::Child;
+    use sysinfo::{Pid, ProcessesToUpdate, System};
+    use windows_sys::Win32::Foundation::{WAIT_OBJECT_0, WAIT_TIMEOUT};
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        TerminateProcess, WaitForSingleObject,
+    };
+
+    const ROOT_ENV: &str = "CIALAI_COMPAT_FIXTURE_ROOT";
+    const ROLE_ENV: &str = "CIALAI_COMPAT_FIXTURE_ROLE";
+    const WORKER_TEST: &str = "workspace::resume::compatibility::windows_tests::probe_timeout_collects_wrapper_and_descendant";
+    const CHILD_TEST: &str =
+        "workspace::resume::compatibility::windows_tests::probe_fixture_process";
+
+    struct FixtureRoot(PathBuf);
+
+    impl Drop for FixtureRoot {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    struct ChildGuard(Child);
+
+    impl Drop for ChildGuard {
+        fn drop(&mut self) {
+            let _ = self.0.kill();
+            let _ = self.0.wait();
+        }
+    }
+
+    // Hold a handle to the observed process, so cleanup cannot kill a reused PID.
+    struct ObservedProcess(OwnedHandle);
+
+    impl ObservedProcess {
+        fn open(pid: u32) -> Self {
+            let raw = unsafe {
+                OpenProcess(
+                    PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SYNCHRONIZE | PROCESS_TERMINATE,
+                    0,
+                    pid,
+                )
+            };
+            assert!(!raw.is_null(), "cannot observe fixture PID {pid}");
+            Self(unsafe { OwnedHandle::from_raw_handle(raw) })
+        }
+
+        fn exited(&self, timeout_ms: u32) -> bool {
+            let status = unsafe { WaitForSingleObject(self.0.as_raw_handle(), timeout_ms) };
+            assert!(
+                status == WAIT_OBJECT_0 || status == WAIT_TIMEOUT,
+                "fixture process wait failed: {status}"
+            );
+            status == WAIT_OBJECT_0
+        }
+    }
+
+    impl Drop for ObservedProcess {
+        fn drop(&mut self) {
+            unsafe {
+                // These handles were opened only after verifying the fixture ancestry.
+                TerminateProcess(self.0.as_raw_handle(), 1);
+                WaitForSingleObject(self.0.as_raw_handle(), 2_000);
+            }
+        }
+    }
+
+    fn marker(root: &Path, role: &str) -> (u32, u32) {
+        let started = Instant::now();
+        loop {
+            if let Ok(bytes) = fs::read(root.join(format!("{role}.json"))) {
+                if let Ok(ids) = serde_json::from_slice::<(u32, u32)>(&bytes) {
+                    return ids;
+                }
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(3),
+                "fixture {role} did not publish its owned process IDs"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    #[test]
+    fn probe_fixture_process() {
+        let Ok(role) = std::env::var(ROLE_ENV) else {
+            return;
+        };
+        if role != "descendant" && role != "sentinel" {
+            return;
+        }
+        let root = PathBuf::from(std::env::var_os(ROOT_ENV).unwrap());
+        let pid = Pid::from_u32(std::process::id());
+        let mut system = System::new();
+        system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+        let parent = system.process(pid).unwrap().parent().unwrap().as_u32();
+        fs::write(
+            root.join(format!("{role}.json")),
+            serde_json::to_vec(&(std::process::id(), parent)).unwrap(),
+        )
+        .unwrap();
+        // Even if the enclosing test process crashes, no fixture lives indefinitely.
+        std::thread::sleep(Duration::from_secs(20));
+    }
+
+    #[test]
+    fn probe_timeout_collects_wrapper_and_descendant() {
+        if std::env::var(ROLE_ENV).as_deref() == Ok("worker") {
+            let root = PathBuf::from(std::env::var_os(ROOT_ENV).unwrap());
+            check_timeout_in_isolated_worker(&root);
+            return;
+        }
+
+        let mut random = [0u8; 16];
+        getrandom::fill(&mut random).unwrap();
+        let root = FixtureRoot(std::env::temp_dir().join(format!(
+            "cialai-compat-windows-{:032x}",
+            u128::from_le_bytes(random)
+        )));
+        fs::create_dir(&root.0).unwrap();
+        let scratch = root.0.join("scratch");
+        fs::create_dir(&scratch).unwrap();
+        let helper = root.0.join("fixture.exe");
+        let current = std::env::current_exe().unwrap();
+        if fs::hard_link(&current, &helper).is_err() {
+            fs::copy(&current, &helper).unwrap();
+        }
+        // All paths come from %~dp0, with no interpolation into cmd syntax.
+        fs::write(
+            root.0.join("codex.cmd"),
+            format!(
+                "@echo off\r\nset \"{ROLE_ENV}=descendant\"\r\n\"%~dp0fixture.exe\" --exact {CHILD_TEST} --nocapture\r\n"
+            ),
+        )
+        .unwrap();
+
+        // Scope TEMP/TMP to this owned subprocess, without mutating the parallel
+        // test runner's environment or inspecting other tests' scratch files.
+        let mut worker = ChildGuard(
+            Command::new(&helper)
+                .args(["--exact", WORKER_TEST, "--nocapture"])
+                .env(ROOT_ENV, &root.0)
+                .env(ROLE_ENV, "worker")
+                .env("TEMP", &scratch)
+                .env("TMP", &scratch)
+                .stdin(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let started = Instant::now();
+        loop {
+            if let Some(status) = worker.0.try_wait().unwrap() {
+                assert!(status.success(), "isolated Windows probe regression failed");
+                break;
+            }
+            assert!(
+                started.elapsed() < Duration::from_secs(15),
+                "isolated Windows probe regression exceeded its deadline"
+            );
+            std::thread::sleep(Duration::from_millis(10));
+        }
+    }
+
+    fn check_timeout_in_isolated_worker(root: &Path) {
+        let mut sentinel = ChildGuard(
+            Command::new(root.join("fixture.exe"))
+                .args(["--exact", CHILD_TEST, "--nocapture"])
+                .env(ROLE_ENV, "sentinel")
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap(),
+        );
+        let (sentinel_pid, sentinel_parent) = marker(root, "sentinel");
+        assert_eq!(sentinel_pid, sentinel.0.id(), "sentinel identity changed");
+        assert_eq!(sentinel_parent, std::process::id(), "sentinel is not owned");
+        let session = AgentSession {
+            agent: CODEX.into(),
+            session_id: "12345678-1234-1234-1234-123456789abc".into(),
+            cwd: Some(root.to_string_lossy().into_owned()),
+            config_dir: None,
+            profile_name: None,
+            args: vec![],
+        };
+
+        std::thread::scope(|scope| {
+            let started = Instant::now();
+            let probe = scope.spawn(|| {
+                run_probe(
+                    &root.join("codex.cmd"),
+                    &["--version"],
+                    &session,
+                    root.to_str().unwrap(),
+                    Duration::from_secs(5),
+                )
+            });
+            let (child_pid, wrapper_pid) = marker(root, "descendant");
+            let mut system = System::new();
+            let ids = [Pid::from_u32(child_pid), Pid::from_u32(wrapper_pid)];
+            system.refresh_processes(ProcessesToUpdate::Some(&ids), true);
+            let child = system
+                .process(ids[0])
+                .expect("fixture child vanished before timeout");
+            let wrapper = system
+                .process(ids[1])
+                .expect("fixture wrapper vanished before timeout");
+            assert_eq!(
+                fs::canonicalize(child.exe().unwrap()).unwrap(),
+                fs::canonicalize(root.join("fixture.exe")).unwrap(),
+                "descendant executable is outside the fixture"
+            );
+            assert_eq!(
+                child.parent(),
+                Some(ids[1]),
+                "child is outside the wrapper tree"
+            );
+            assert_eq!(
+                wrapper.parent(),
+                Some(Pid::from_u32(std::process::id())),
+                "wrapper is outside the owned probe tree"
+            );
+            assert!(
+                wrapper
+                    .exe()
+                    .unwrap()
+                    .file_name()
+                    .unwrap()
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case("cmd.exe"),
+                "fixture wrapper is not cmd.exe"
+            );
+            let wrapper = ObservedProcess::open(wrapper_pid);
+            let child = ObservedProcess::open(child_pid);
+            assert!(!wrapper.exited(0), "wrapper did not remain blocked");
+            assert!(!child.exited(0), "descendant did not remain blocked");
+
+            let result = probe.join().unwrap();
+            assert!(result.is_err(), "blocked probe must time out");
+            assert!(
+                started.elapsed() < Duration::from_secs(8),
+                "probe timeout was unbounded"
+            );
+            assert!(
+                wrapper.exited(1_000),
+                "timed-out probe left its cmd wrapper alive"
+            );
+            assert!(
+                child.exited(1_000),
+                "timed-out probe left its descendant alive"
+            );
+            assert!(
+                sentinel.0.try_wait().unwrap().is_none(),
+                "probe killed an unrelated process"
+            );
+            assert_eq!(
+                fs::read_dir(root.join("scratch")).unwrap().count(),
+                0,
+                "timed-out probe left scratch files behind"
+            );
+        });
     }
 }
