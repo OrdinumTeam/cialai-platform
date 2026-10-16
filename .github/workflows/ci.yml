@@ -5,6 +5,11 @@ name: CI
 # e o job confere quem disparou.
 on:
   workflow_dispatch:
+    inputs:
+      tests_only:
+        description: Executar suítes sem gerar instaladores de diagnóstico
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -122,11 +127,11 @@ jobs:
       # No Linux o linuxdeploy do AppImage confere as dependências de todo ELF do bundle e não segue o $ORIGIN do tor
       # empacotado; a pasta dele entra no LD_LIBRARY_PATH só neste passo, para achar libevent, libssl e libcrypto.
       - name: Criar bundle sem assinatura
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && !inputs.tests_only
         run: npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
 
       - name: Criar bundle sem assinatura no Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !inputs.tests_only
         env:
           TOR_LIBRARIES: ${{ github.workspace }}/apps/desktop/src-tauri/resources/tor/tor
         run: LD_LIBRARY_PATH="$TOR_LIBRARIES${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" npm run build --workspace @cialai/desktop -- --config src-tauri/tauri.ci.conf.json
@@ -134,10 +139,11 @@ jobs:
       # O AppImage do linuxdeploy traz bibliotecas que o Mesa do sistema carrega e um AppRun que vaza variáveis;
       # o anexo sai corrigido como na release. O smoke em Ubuntu 24.04 e Arch fica no appimage-smoke.yml.
       - name: Corrigir o AppImage para distribuições novas
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && !inputs.tests_only
         run: node tools/release/fix-appimage.mjs apps/desktop/src-tauri/target/release/bundle/appimage/*.AppImage
 
       - name: Anexar bundles
+        if: '!inputs.tests_only'
         uses: actions/upload-artifact@v4
         with:
           name: cialai-${{ runner.os }}-${{ runner.arch }}

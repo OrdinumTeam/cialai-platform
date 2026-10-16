@@ -107,3 +107,11 @@ Use Node 22 e as versões fixadas pelo repositório. `CIALAI_NATIVE_SOAK_CYCLES`
 * Latência visual física, baseline de todo o aplicativo Tauri, transições reais de rede e Tor e soak de longa duração ainda exigem execução específica. Os números acima são do host de teste nativo e de Chromium isolado.
 
 O relatório não converte esses limites em aprovações e não declara todos os critérios globais homologados.
+
+## Matriz remota sem empacotamento duplicado
+
+O disparo manual de `ci.yml` aceita `tests_only=true`: mantém as suítes e verificações nos três sistemas, mas não gera nem anexa instaladores de diagnóstico. O padrão continua sendo a CI completa com bundles. Os instaladores publicados continuam sendo responsabilidade de `release.yml`, depois do portão AppImage.
+
+```sh
+gh workflow run ci.yml --repo OrdinumTeam/cialai-platform --ref main -f tests_only=true
+```

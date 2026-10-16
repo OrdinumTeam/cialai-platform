@@ -280,7 +280,7 @@ fn claude_session_from(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 fn codex_session(command: &CommandLine, pid: u32, start_sec: u64, home: &Path) -> Option<Detected> {
     codex_session_from(procs::system(), command, pid, start_sec, home)
 }

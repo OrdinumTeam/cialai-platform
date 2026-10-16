@@ -1590,6 +1590,7 @@ done
         )
     }
 
+    #[cfg(unix)]
     fn wait_until(limit: Duration, condition: impl Fn() -> bool) -> bool {
         let start = Instant::now();
         while !condition() {
