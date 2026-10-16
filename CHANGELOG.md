@@ -73,7 +73,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
-## 0.2.15 Linux curl test candidate
+## 0.2.15 Linux curl test distribution
 
 ### Fixed
 
@@ -83,7 +83,8 @@ Version 1.0.0 has not been published. Signed installers, native mobile archives,
 ### Verification
 
 * Local checks passed with 456 Rust tests, 383 UI tests and 39 runtime integration tests, including three Codex and Claude cards in the same directory. Native agent sessions remain unverified
-* Linux curl delivery is being prepared without a new tag, GitHub release or general website update. A Codex conversation without sufficient ownership evidence is not resumed automatically, and previously incorrect saved associations require manual selection
+* Linux curl delivery was published from successful workflow 38938939824. All three public packages passed SHA256 and updater signature checks, and the served installer selected 0.2.15 without executing an installation. The installer, general downloads, website pages, mobile package and latest GitHub release were preserved
+* The Linux runner passed 17 targeted Rust session tests, 39 runtime tests and 33 clipboard tests. A Codex conversation without sufficient ownership evidence is not resumed automatically, and previously incorrect saved associations require manual resumption with the original conversation UUID
 
 ## 0.2.14 desktop website distribution
 
