@@ -434,6 +434,7 @@ export default Object.freeze({
   'desktop.tunnel.error.tunnelStopped': 'The tunnel core stopped.',
   'desktop.tunnel.error.tunnelStopping': 'The tunnel core is shutting down.',
   'desktop.tunnel.error.tunnelTimeout': 'The tunnel core did not respond in time.',
+  'desktop.tunnel.error.tunnelBusy': 'The tunnel queue is busy. Try again.',
   'desktop.tunnel.error.tunnelUnavailable': 'The tunnel core is unavailable.',
   'desktop.tunnel.noResponse': 'The tunnel did not respond.',
   'desktop.tunnel.off': 'Network off',

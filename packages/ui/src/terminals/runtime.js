@@ -60,7 +60,8 @@ import { isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
-import { restoredNotice, savedSize, waitForPrompt } from './restore.js';
+import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
+import { installTerminalClipboard } from './clipboard.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
 import { installImeInput } from './ime-input.js';
@@ -630,6 +631,16 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   term.open(parking());
   // Teclado virtual rapido nao duplica nem perde texto; a conta esta em ime-input.js.
   session.disposables.push(installImeInput(term));
+  session.clipboard = installTerminalClipboard(term, {
+    paste: (text) => pasteText(session.id, text),
+    image: () => {
+      if (['Codex', 'Claude Code'].includes(session.activity?.foreground?.agent)) insertText(session.id, '\x16');
+    },
+    valid: () => state.sessions.get(session.id) === session && session.status === 'running',
+    identity: () => session.ptyId,
+    focus: () => { if (state.selectedId === session.id && session.host) term.focus(); },
+  });
+  session.disposables.push(session.clipboard);
   term.element?.addEventListener('pointerdown', () => {
     requestTerminalControl(session.id).catch((error) => dispatch({ type: 'error', message: messageOf(error) }));
   });
@@ -909,23 +920,47 @@ async function restoreDisconnected() {
 // Escreve direto no PTY, sem a concessao de largura, porque a sessao pode
 // estar fora da tela quando todas reabrem juntas. Se um programa ja tomou o
 // terminal, como algo aberto pelo .zshrc, nada e digitado.
+const resumeCoordinator = createResumeCoordinator({ concurrency: 2 });
 async function resumeAgent(session, plan) {
   const ptyId = session.ptyId;
-  const same = () => session.ptyId === ptyId && session.status === 'running';
+  const same = () => state.sessions.get(session.id) === session && session.ptyId === ptyId && session.status === 'running';
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const ready = await waitForPrompt(() => (same() ? session.receivedOffset : null), sleep);
-  if (!ready || !same()) return;
-  try {
-    const metrics = await invoke('pty_metrics');
-    if (Array.isArray(metrics) && metrics.find((item) => item.tag === session.id)?.foreground) return;
-  } catch (_error) { /* sem metricas, segue com o prompt observado */ }
-  if (!same()) return;
-  try {
-    await invoke('pty_write', { id: ptyId, data: `${plan.command}\r` });
-    dispatch({ type: 'notify', sessionId: session.id, message: translate('terminal.session.resuming', { agent: plan.agent, name: session.name }) });
-  } catch (error) {
-    dispatch({ type: 'error', message: messageOf(error) });
-  }
+  return resumeCoordinator.run(`${session.id}:${ptyId}`, plan.profileKey || plan.agent, async () => {
+    session.resumeState = 'waiting';
+    const ready = await waitForPrompt(() => (same() ? session.receivedOffset : null), sleep);
+    if (!same()) return;
+    if (!ready) {
+      session.resumeState = 'failed';
+      dispatch({ type: 'error', message: translate('terminal.restore.notReady') });
+      return;
+    }
+    try {
+      const args = { id: ptyId, tag: session.id, sessionId: plan.sessionId };
+      let result = await invoke('pty_resume_agent', args);
+      let notified = false;
+      const accept = () => {
+        session.resumeState = result?.status === 'waiting' ? 'waiting' : 'sent';
+        if (result?.status === 'sent' && !notified) {
+          notified = true;
+          dispatch({ type: 'notify', sessionId: session.id, message: translate('terminal.session.resuming', { agent: plan.agent, name: session.name }) });
+        }
+      };
+      accept();
+      // Only the backend may retry, after recognizing a transient startup
+      // failure and checking that the shell owns this PTY with no user input.
+      for (const delay of [1000, 2000, 4000]) {
+        if (!['sent', 'waiting'].includes(result?.status)) break;
+        await sleep(delay);
+        if (!same()) return;
+        result = await invoke('pty_resume_agent', { ...args, retry: true });
+        accept();
+      }
+      if (result?.status === 'waiting') throw new Error(translate('terminal.restore.draining'));
+    } catch (error) {
+      session.resumeState = 'failed';
+      dispatch({ type: 'error', message: messageOf(error) });
+    }
+  }, same);
 }
 
 // GPU que desenha o WebGL do xterm, lida do proprio contexto do terminal e
@@ -981,6 +1016,9 @@ function loadWebgl(session) {
 
 function unloadWebgl(session) {
   if (!session.webgl) return;
+  // Blur while the renderer is still attached so its cursor blink timers
+  // stop before disposal. addon-webgl 0.19 does not dispose that manager.
+  session.term.blur();
   try { session.webgl.dispose(); } catch (_error) { /* contexto ja perdido */ }
   session.webgl = null;
 }
@@ -1942,6 +1980,9 @@ export function focusSelected() {
 // rodava nela, a conversa volta pelo comando de retomada.
 export async function reopen(id) {
   const session = state.sessions.get(id);
+  if (session?.status === 'running' && session.resumeState === 'failed' && session.saved?.resume) {
+    return resumeAgent(session, session.saved.resume);
+  }
   if (!session || session.status === 'running' || session.spawning || session.reopening) return;
   session.reopening = true;
   try {
@@ -2016,6 +2057,8 @@ export async function closeSession(id) {
   if (session.fitTimer) clearTimeout(session.fitTimer);
   if (session.activityTimer) clearTimeout(session.activityTimer);
   if (session.idleTimer) clearTimeout(session.idleTimer);
+  if (session.reattachTimer) clearTimeout(session.reattachTimer);
+  session.viewport?.invalidate();
   session.outputChannel?.dispose?.();
   try { browserHooks.sessionClosed?.(session); } catch (_error) { /* sem browser */ }
   try { docgraphHooks.sessionClosed?.(session); } catch (_error) { /* sem grafo */ }

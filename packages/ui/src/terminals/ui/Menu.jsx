@@ -25,11 +25,18 @@ function flatten(items) {
 export default function Menu({ anchor, items, onClose, label }) {
   useI18n();
   const boxRef = useRef(null);
+  const activated = useRef(false);
+  const activate = (item) => {
+    if (activated.current || !item || item.disabled) return;
+    activated.current = true;
+    onClose(); item.run();
+  };
   const [position, setPosition] = useState({ top: anchor?.y ?? 0, left: anchor?.x ?? 0, ready: false });
   const [index, setIndex] = useState(-1);
   const enabled = flatten(items);
 
   useLayoutEffect(() => {
+    activated.current = false;
     const box = boxRef.current;
     if (!box || !anchor) return;
     const rect = box.getBoundingClientRect();
@@ -56,7 +63,8 @@ export default function Menu({ anchor, items, onClose, label }) {
       if (event.key === 'Enter' && index >= 0) {
         event.preventDefault();
         const item = enabled[index];
-        if (item && !item.disabled) { onClose(); item.run(); }
+        event.stopPropagation();
+        activate(item);
       }
     };
     // Rolar com a roda fora do menu fecha; a rolagem programatica do terminal
@@ -108,7 +116,7 @@ export default function Menu({ anchor, items, onClose, label }) {
                     className={`terminais-menu__swatchbtn${active ? ' is-active' : ''}${option.current ? ' is-current' : ''}`}
                     style={{ '--swatch': option.color }}
                     onMouseEnter={() => setIndex(enabled.indexOf(option))}
-                    onClick={() => { onClose(); option.run(); }}
+                    onClick={() => activate(option)}
                   >
                     <i aria-hidden="true" />
                   </button>
@@ -128,7 +136,7 @@ export default function Menu({ anchor, items, onClose, label }) {
             className={`terminais-menu__item${active ? ' is-active' : ''}${item.danger ? ' is-danger' : ''}`}
             disabled={item.disabled}
             onMouseEnter={() => setIndex(enabled.indexOf(item))}
-            onClick={() => { onClose(); item.run(); }}
+            onClick={() => activate(item)}
           >
             {Icon ? <Icon size={14} strokeWidth={1.75} aria-hidden="true" /> : <span className="terminais-menu__spacer" />}
             <span className="terminais-menu__label">{item.label}</span>

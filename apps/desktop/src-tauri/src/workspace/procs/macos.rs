@@ -438,7 +438,6 @@ fn chars_to_string(chars: &[c_char]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
 
     #[test]
     fn lists_the_files_the_process_keeps_open() {
@@ -531,16 +530,14 @@ mod tests {
     #[test]
     fn reads_env_of_child_process() {
         use std::process::{Command, Stdio};
-        // O kernel esconde o ambiente dos binarios restritos da Apple, como
-        // /bin/sleep e /bin/sh, mesmo para o proprio usuario; o python3 e os
-        // programas dos agentes, node e afins, mostram. O filho aqui e um
-        // python3 dormindo, que e o caso dos agentes de verdade.
-        if !Path::new("/usr/bin/python3").exists() {
-            eprintln!("sem /usr/bin/python3; teste pulado");
-            return;
-        }
-        let mut child = Command::new("/usr/bin/python3")
-            .args(["-c", "import time; time.sleep(5)"])
+        // Apple system binaries may hide their environment under SIP. Use
+        // our own test executable so this tests parsing, not host signing policy.
+        let mut child = Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "workspace::procs::macos::tests::environment_fixture",
+            ])
+            .env("CIALAI_ENV_FIXTURE", "1")
             .env("CLAUDE_PROFILE", "Teste")
             .env("CLAUDE_CONFIG_DIR", "/tmp/oc-perfil-teste")
             .env("SEGREDO_QUALQUER", "nao-deve-aparecer")
@@ -562,6 +559,13 @@ mod tests {
         assert!(!command.env.contains_key("SEGREDO_QUALQUER"));
         let _ = child.kill();
         let _ = child.wait();
+    }
+
+    #[test]
+    fn environment_fixture() {
+        if std::env::var("CIALAI_ENV_FIXTURE").as_deref() == Ok("1") {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+        }
     }
 
     #[test]

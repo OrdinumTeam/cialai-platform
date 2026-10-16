@@ -603,6 +603,11 @@ export default Object.freeze({
   'terminal.restore.invalidHistory': 'Histórico do terminal inválido.',
   'terminal.restore.restored': 'Histórico restaurado.',
   'terminal.restore.savedToday': 'Última gravação hoje às {time}.',
+  'terminal.restore.notReady': 'O shell não confirmou prontidão. O histórico e a conversa foram preservados; tente retomar novamente pelo menu da sessão.',
+  'terminal.restore.retry': 'Tentar retomar conversa',
+  'terminal.restore.draining': 'O Codex está reconectando o serviço compartilhado. O histórico foi preservado; tente retomar esta conversa em instantes.',
+  'terminal.restore.copyId': 'Copiar ID da conversa',
+  'terminal.restore.idCopied': 'ID da conversa copiado.',
   'terminal.restore.savedDate': 'Última gravação em {date} às {time}.',
 
   'terminal.color.azul': 'Azul',

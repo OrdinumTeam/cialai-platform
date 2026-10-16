@@ -14,9 +14,9 @@ const mocks = {
     constructor(options) { this.options=options; this.cols=options.cols; this.rows=options.rows;
       this.parser={registerOscHandler:off}; this.buffer={active:{}}; }
     onData=off; onBinary=off; onBell=off; onResize(handler){this.resizeHandler=handler;return {dispose(){}};}
-    open(parent) { this.element={isConnected:true,parentElement:parent,addEventListener(){}}; }
+    open(parent) { this.element={isConnected:true,parentElement:parent,addEventListener(){},removeEventListener(){}}; }
     loadAddon(addon){addon.term=this;} attachCustomKeyEventHandler(){} write(data, done){fixture.output.push(...data);done?.();} resize(cols,rows){this.cols=cols;this.rows=rows;this.resizeHandler?.({cols,rows});}
-    reset(){fixture.output=[];} focus(){} dispose(){}
+    reset(){fixture.output=[];} focus(){} blur(){} dispose(){}
   } export class FitAddon {fit(){this.term.resize(45,28);} proposeDimensions(){return {cols:45,rows:28};}} export class SearchAddon {} export class WebglAddon {constructor(){this._renderer={_gl:{getExtension:()=>({UNMASKED_RENDERER_WEBGL:37446}),getParameter:()=>fixture.glRenderer||'Apple M2'}};} onContextLoss(){} dispose(){fixture.webglDisposed=(fixture.webglDisposed||0)+1;}} export class WebLinksAddon {}`,
   downloads: 'export const openExternal = async () => {};',
   theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {};',
@@ -64,6 +64,7 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     if (cmd === 'ai_usage') return [];
     if (cmd === 'pty_saved') return this.saved?.[args.tag] ?? null;
     if (cmd === 'pty_saved_history') return new Uint8Array(this.history?.[args.tag] || []).buffer;
+    if (cmd === 'pty_resume_agent') return {status:args.retry ? 'already_started' : 'sent'};
     if (cmd === 'pty_write' || cmd === 'pty_prune' || cmd === 'pty_forget') return;
     throw new Error('Unexpected boundary call: '+cmd);
   } };
@@ -283,7 +284,62 @@ test('desktop restores saved history and resumes the agent once the new shell is
   assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_write'), false, 'Nothing is typed before the shell prints its prompt');
   s.fixture.calls.find(call => call.cmd === 'pty_spawn').args.onOutput.onmessage(new Uint8Array([36, 32]));
   await s.advance(1500); await reopening;
-  assert.equal(JSON.stringify(s.fixture.calls.filter(call => call.cmd === 'pty_write').map(call => call.args)), JSON.stringify([{ id: session.ptyId, data: `claude --resume ${conversation}\r` }]));
+  assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_write'), false, 'The backend validates and owns command execution');
+  assert.equal(JSON.stringify(s.fixture.calls.filter(call => call.cmd === 'pty_resume_agent').map(call => call.args)), JSON.stringify([
+    {id:session.ptyId,tag:'lost-session',sessionId:conversation},
+    {id:session.ptyId,tag:'lost-session',sessionId:conversation,retry:true},
+  ]));
+});
+
+for (const count of [5, 10, 20]) test(`desktop resumes ${count} saved conversations through the guarded backend without mixing PTYs`, async () => {
+  const saved = Array.from({length:count}, (_, i) => ({id:`restore-${i}`,cwd:`/fixture/${i}`,name:`fixture-${i}`}));
+  const s = scenario({saved});
+  s.fixture.saved = Object.fromEntries(saved.map((entry, i) => [entry.id, {tag:entry.id,cwd:entry.cwd,cols:80,rows:24,historyBytes:0,
+    resume:{agent:i%2 ? 'Codex':'Claude Code',sessionId:`ef374958-11c4-4e44-8fce-${String(i).padStart(12,'0')}`,command:'fixture-only',profileKey:`profile-${i%3}`}}]));
+  await s.runtime.hydrate(); await settle();
+  const running = saved.map((entry) => s.runtime.reopen(entry.id));
+  for (let i=0;i<5;i++) await settle();
+  const spawns = s.fixture.calls.filter((call) => call.cmd === 'pty_spawn');
+  assert.equal(spawns.length, count);
+  for (const call of spawns) call.args.onOutput.onmessage(new Uint8Array([36,32]));
+  await s.advance(30000); await Promise.all(running);
+  const starts = s.fixture.calls.filter((call) => call.cmd === 'pty_resume_agent' && !call.args.retry);
+  assert.equal(starts.length,count);
+  for (const entry of saved) {
+    const session = s.runtime.getSession(entry.id);
+    const calls = starts.filter((call) => call.args.tag === entry.id);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].args.id,session.ptyId);
+    assert.equal(calls[0].args.sessionId,s.fixture.saved[entry.id].resume.sessionId);
+  }
+  assert.equal(s.fixture.calls.some((call) => call.cmd === 'pty_write'), false);
+});
+
+for (const recovers of [true, false]) test(`daemon draining before command delivery ${recovers ? 'recovers' : 'fails recoverably'} with bounded retries`, async () => {
+  const conversation = 'ef374958-11c4-4e44-8fce-798df3af068e';
+  const s = scenario({saved:[{id:'draining-session',cwd:'/fixture'}]});
+  s.fixture.saved = {'draining-session':{tag:'draining-session',cwd:'/fixture',historyBytes:0,
+    resume:{agent:'Codex',sessionId:conversation,command:'fixture',profileKey:'codex-fixture'}}};
+  let requests=0, executed=0;
+  const original=s.fixture.invoke.bind(s.fixture);
+  s.fixture.invoke=async(cmd,args)=>{
+    if(cmd==='pty_resume_agent') {
+      s.fixture.calls.push({cmd,args}); requests++;
+      if(!recovers || requests<3) return {status:'waiting',compatibility:{daemonStatus:'draining'}};
+      if(requests===3) {executed++;return {status:'sent'};}
+      return {status:'already_started'};
+    }
+    return original(cmd,args);
+  };
+  await s.runtime.hydrate();await settle();
+  const running=s.runtime.reopen('draining-session');await settle();
+  s.fixture.calls.find(call=>call.cmd==='pty_spawn').args.onOutput.onmessage(new Uint8Array([36,32]));
+  await s.advance(10000);await running;
+  assert.equal(requests,4,'retry budget must stay finite');
+  assert.equal(executed,recovers ? 1 : 0);
+  assert.equal(s.runtime.getSession('draining-session').saved.resume.sessionId,conversation);
+  assert.equal(s.runtime.getSession('draining-session').resumeState,recovers ? 'sent':'failed');
+  assert.equal(s.fixture.calls.some(call=>call.cmd==='pty_write'),false);
 });
 
 test('the shell learns where the xterm cursor stands, below the history kept by a restart', async () => {

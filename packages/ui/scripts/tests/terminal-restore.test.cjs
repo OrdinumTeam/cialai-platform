@@ -33,10 +33,10 @@ test('a retomada espera saida do shell e leituras sem saida nova', async () => {
   assert.equal(ready, true); assert.equal(reads, 4 + PROMPT_QUIET_POLLS); assert.ok(slept.every((ms) => ms === PROMPT_POLL_MS));
 });
 
-test('a retomada desiste quando a sessao mudou e digita ao fim do prazo', async () => {
+test('a retomada desiste quando a sessao mudou ou o shell nao confirmou prontidao', async () => {
   const { waitForPrompt } = await load();
   assert.equal(await waitForPrompt(() => null, async () => {}), false);
   let reads = 0;
-  assert.equal(await waitForPrompt(() => { reads += 1; return 0; }, async () => {}, { maxPolls: 5 }), true);
-  assert.equal(reads, 6);
+  assert.equal(await waitForPrompt(() => { reads += 1; return 0; }, async () => {}, { maxPolls: 5 }), false);
+  assert.equal(reads, 5);
 });

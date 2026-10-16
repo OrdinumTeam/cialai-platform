@@ -338,6 +338,17 @@ pub fn pty_saved(terminals: State<'_, TerminalManager>, tag: String) -> Option<S
     terminals.saved(&tag)
 }
 
+#[tauri::command(async)]
+pub fn pty_resume_agent(
+    terminals: State<'_, TerminalManager>,
+    id: u32,
+    tag: String,
+    session_id: String,
+    retry: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    terminals.resume_agent(id, &tag, &session_id, retry.unwrap_or(false))
+}
+
 /// Historico gravado da sessao, como corpo binario.
 #[tauri::command(async)]
 pub fn pty_saved_history(

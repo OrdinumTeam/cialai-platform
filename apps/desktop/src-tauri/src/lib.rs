@@ -131,6 +131,7 @@ pub fn run() {
             commands::pty_list,
             commands::pty_metrics,
             commands::pty_saved,
+            commands::pty_resume_agent,
             commands::pty_saved_history,
             commands::pty_forget,
             commands::pty_prune,

@@ -38,9 +38,9 @@ export function savedSize(saved) {
 
 // Espera o shell novo mostrar o prompt: chegou saida e ela ficou parada por
 // algumas leituras. `read` devolve os bytes recebidos ate agora, ou null
-// quando a sessao deixou de ser a mesma. Devolve true para digitar, inclusive
-// ao fim do prazo com a sessao ainda de pe, porque o terminal guarda o que
-// chega antes do prompt. Conta leituras, e nao o relogio, para seguir o
+// quando a sessao deixou de ser a mesma. Silencio sem saida nao comprova
+// prontidao: ao fim do prazo a retomada permanece disponivel para nova tentativa.
+// Conta leituras, e nao o relogio, para seguir o
 // mesmo temporizador do resto do runtime.
 export async function waitForPrompt(read, sleep, { pollMs = PROMPT_POLL_MS, quietPolls = PROMPT_QUIET_POLLS, maxPolls = PROMPT_MAX_POLLS } = {}) {
   let last = -1;
@@ -57,5 +57,44 @@ export async function waitForPrompt(read, sleep, { pollMs = PROMPT_POLL_MS, quie
     }
     await sleep(pollMs);
   }
-  return read() !== null;
+  return false;
+}
+
+// Fila compartilhada pelas retomadas. O mesmo PTY tem uma unica operacao em
+// voo; perfis distintos podem progredir sem disputar o mesmo daemon. A chave
+// deve incluir a geracao do PTY, nunca somente o id visual da sessao.
+export function createResumeCoordinator({ concurrency = 2 } = {}) {
+  const pending = new Map();
+  const queue = [];
+  const profiles = new Set();
+  let active = 0;
+  function pump() {
+    while (active < concurrency) {
+      const index = queue.findIndex((job) => !profiles.has(job.profile));
+      if (index < 0) return;
+      const job = queue.splice(index, 1)[0];
+      active += 1;
+      profiles.add(job.profile);
+      Promise.resolve().then(() => job.valid() ? job.run() : { status: 'cancelled' })
+        .then(job.resolve, job.reject)
+        .finally(() => {
+          active -= 1;
+          profiles.delete(job.profile);
+          pending.delete(job.key);
+          pump();
+        });
+    }
+  }
+  return {
+    run(key, profile, run, valid = () => true) {
+      if (pending.has(key)) return pending.get(key);
+      let resolve, reject;
+      const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+      pending.set(key, promise);
+      queue.push({ key, profile, run, valid, resolve, reject });
+      pump();
+      return promise;
+    },
+    get size() { return pending.size; },
+  };
 }

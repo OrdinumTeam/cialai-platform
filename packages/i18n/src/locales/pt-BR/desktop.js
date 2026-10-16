@@ -434,6 +434,7 @@ export default Object.freeze({
   'desktop.tunnel.error.tunnelStopped': 'O núcleo do túnel foi encerrado.',
   'desktop.tunnel.error.tunnelStopping': 'O núcleo do túnel está encerrando.',
   'desktop.tunnel.error.tunnelTimeout': 'O núcleo do túnel não respondeu dentro do prazo.',
+  'desktop.tunnel.error.tunnelBusy': 'A fila do túnel está ocupada. Tente novamente.',
   'desktop.tunnel.error.tunnelUnavailable': 'O núcleo do túnel não está disponível.',
   'desktop.tunnel.noResponse': 'O túnel não respondeu.',
   'desktop.tunnel.off': 'Rede desligada',

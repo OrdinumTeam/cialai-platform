@@ -90,6 +90,10 @@ jobs:
         if: runner.os == 'Linux'
         run: npm run test:browser
 
+      - name: Regressões de clipboard e descarte de terminais
+        if: runner.os == 'Linux'
+        run: node tools/browser/check-terminal-stability.mjs
+
       # O runner muda de máquina a cada rodada e é mais lento que o computador
       # da linha de base, então o orçamento compara este commit com a main,
       # construída ao lado num worktree e aberta alternada na mesma máquina.

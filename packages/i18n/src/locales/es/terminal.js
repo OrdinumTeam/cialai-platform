@@ -603,6 +603,11 @@ export default Object.freeze({
   'terminal.restore.invalidHistory': 'El historial del terminal no es válido.',
   'terminal.restore.restored': 'Historial restaurado.',
   'terminal.restore.savedToday': 'Último guardado hoy a las {time}.',
+  'terminal.restore.notReady': 'El shell no confirmó que estuviera listo. Se conservaron el historial y la conversación; vuelve a intentarlo desde el menú de la sesión.',
+  'terminal.restore.retry': 'Reintentar conversación',
+  'terminal.restore.draining': 'Codex está reconectando el servicio compartido. El historial se conserva; reintenta esta conversación en unos instantes.',
+  'terminal.restore.copyId': 'Copiar ID de conversación',
+  'terminal.restore.idCopied': 'ID de conversación copiado.',
   'terminal.restore.savedDate': 'Último guardado el {date} a las {time}.',
 
   'terminal.color.azul': 'Azul',

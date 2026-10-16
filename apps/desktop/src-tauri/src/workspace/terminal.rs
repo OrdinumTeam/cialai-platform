@@ -25,7 +25,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
@@ -498,6 +498,12 @@ struct Session {
     view_owner: SubscriberKey,
     view_deadline: Option<Instant>,
     local_size: Option<(u16, u16)>,
+    // Saved conversation stays durable until its agent is observed again.
+    resume_record: Option<resume::AgentSession>,
+    resume_attempts: u8,
+    resume_output: String,
+    resume_at: Option<Instant>,
+    user_input: bool,
 }
 
 type KillTarget = (
@@ -588,6 +594,8 @@ pub struct TerminalManager {
     notify_view: ViewNotifier,
     /// Ultimo tempo de CPU por pid, para a proxima amostra virar percentual.
     samples: Arc<Mutex<HashMap<u32, (u64, Instant)>>>,
+    metrics_cache: Arc<Mutex<Option<MetricsCache>>>,
+    metrics_epoch: Arc<AtomicU64>,
     commands: Arc<Mutex<CommandCache>>,
     /// Homes do Codex das sessoes na ultima amostra, para o uso do plano
     /// achar perfis fora de `~/.codex*`.
@@ -601,6 +609,13 @@ pub struct TerminalManager {
     prefs: PrefsState,
     home: PathBuf,
 }
+
+struct MetricsCache {
+    at: Instant,
+    epoch: u64,
+    values: Vec<SessionMetrics>,
+}
+const METRICS_CACHE_TTL: Duration = Duration::from_millis(250);
 
 impl TerminalManager {
     pub fn new(app: AppHandle, prefs: PrefsState) -> Self {
@@ -709,6 +724,8 @@ impl TerminalManager {
             notify_exit,
             notify_view: notify_view.clone(),
             samples: Arc::new(Mutex::new(HashMap::new())),
+            metrics_cache: Arc::new(Mutex::new(None)),
+            metrics_epoch: Arc::new(AtomicU64::new(0)),
             commands: Arc::new(Mutex::new(CommandCache::default())),
             codex_homes: Arc::new(Mutex::new(Vec::new())),
             procs,
@@ -757,6 +774,7 @@ impl TerminalManager {
         let weak = Arc::downgrade(&self.inner);
         let commands = self.commands.clone();
         let home = self.home.clone();
+        let source = self.procs.clone();
         let _ = thread::Builder::new()
             .name("terminais-estado".into())
             .spawn(move || {
@@ -765,7 +783,7 @@ impl TerminalManager {
                     let Some(inner) = weak.upgrade() else {
                         break;
                     };
-                    snapshot(&inner, &store, &commands, &home);
+                    snapshot(&inner, &store, &commands, &home, source.as_ref());
                 }
             });
         self
@@ -1003,6 +1021,10 @@ impl TerminalManager {
 
         let manager = self.clone();
         let pump_link = link.clone();
+        let resume_record = self
+            .journal
+            .as_ref()
+            .and_then(|store| store.saved_agent(tag));
         self.lock().sessions.insert(
             id,
             Session {
@@ -1016,20 +1038,31 @@ impl TerminalManager {
                 view_owner: SubscriberKey::Webview,
                 view_deadline: None,
                 local_size: (key == SubscriberKey::Webview).then_some((cols, rows)),
+                resume_record: resume_record.clone(),
+                resume_attempts: 0,
+                resume_output: String::new(),
+                resume_at: None,
+                user_input: false,
             },
         );
         if let Some(store) = &self.journal {
-            store.write_meta(&SavedMeta::sample(tag, &cwd, cols, rows, None), || true);
+            store.write_meta(
+                &SavedMeta::sample(tag, &cwd, cols, rows, resume_record),
+                || true,
+            );
         }
         // Publish the session before the pump can observe a fast child exit.
+        self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         thread::spawn(move || manager.pump(id, rx, pump_link, journal));
         Ok(info)
     }
 
     pub fn write(&self, id: u32, bytes: &[u8]) -> Result<(), String> {
+        self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let writer = {
-            let guard = self.lock();
-            let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
+            let mut guard = self.lock();
+            let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
+            session.user_input = true;
             session.writer.clone()
         };
         writer
@@ -1038,6 +1071,110 @@ impl TerminalManager {
                 mpsc::TrySendError::Full(_) => t("native.error.terminalBusy"),
                 mpsc::TrySendError::Disconnected(_) => t("native.error.sessionEnded"),
             })
+    }
+
+    /// Checks the saved association and the owned PTY again after potentially
+    /// slow compatibility probes. No client-provided command is executed.
+    pub fn resume_agent(
+        &self,
+        id: u32,
+        tag: &str,
+        session_id: &str,
+        retry: bool,
+    ) -> Result<serde_json::Value, String> {
+        let record = {
+            let guard = self.lock();
+            let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
+            if session.info.tag != tag || self.closing.load(Ordering::SeqCst) {
+                return Err("A sessão mudou durante a recuperação.".into());
+            }
+            if session.resume_record.is_none() && session.resume_attempts > 0 {
+                return Ok(serde_json::json!({"status":"already_started"}));
+            }
+            let record = session
+                .resume_record
+                .clone()
+                .ok_or_else(|| "Não há conversa pendente para retomar.".to_string())?;
+            if record.session_id != session_id {
+                return Err("A conversa salva não corresponde à solicitação.".into());
+            }
+            if session.resume_attempts > 0
+                && (!retry || !transient_resume_failure(&session.resume_output))
+            {
+                return Ok(serde_json::json!({"status":"already_started"}));
+            }
+            if session.resume_attempts >= 3 {
+                return Err("O agente não recuperou a conexão após três tentativas. O histórico e o identificador foram preservados; tente manualmente quando o serviço estiver disponível.".into());
+            }
+            if session.user_input {
+                return Err("O terminal recebeu entrada; a retomada automática foi cancelada para preservar sua digitação.".into());
+            }
+            record
+        };
+        let (cwd, flavor) = {
+            let guard = self.lock();
+            let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
+            (session.info.cwd.clone(), session.info.shell_flavor)
+        };
+        let checked = resume::compatibility::validate(
+            &record,
+            &cwd,
+            flavor,
+            &self.home,
+            &platform::path_env(&self.prefs.get(), &self.home),
+        )?;
+        self.procs.refresh();
+        let mut guard = self.lock();
+        let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
+        if session.info.tag != tag
+            || session.resume_record.as_ref() != Some(&record)
+            || session.user_input
+            || self.closing.load(Ordering::SeqCst)
+        {
+            return Err("A sessão mudou durante a verificação. Nenhum comando foi enviado.".into());
+        }
+        if session.resume_attempts > 0
+            && (!retry || !transient_resume_failure(&session.resume_output))
+        {
+            return Ok(serde_json::json!({"status":"already_started"}));
+        }
+        let foreground = pty::foreground_pid(
+            session.master.as_ref(),
+            session.info.pid,
+            self.procs.as_ref(),
+        );
+        let shell_ready = session.info.pid.is_some()
+            && foreground == session.info.pid
+            && session.info.pid.is_some_and(|pid| {
+                resume_shell_identity(self.procs.as_ref(), pid, &session.info.shell)
+            })
+            && session
+                .link
+                .last_output()
+                .is_some_and(|at| at.elapsed() >= Duration::from_millis(350));
+        if !shell_ready {
+            return Err("O shell ainda não está pronto ou outro programa ocupa o terminal. O histórico foi preservado; saia do programa antes de tentar novamente.".into());
+        }
+        if checked.daemon_status == "draining" {
+            return Ok(
+                serde_json::json!({"status":"waiting", "retryAfterMs":1000, "compatibility":checked}),
+            );
+        }
+        if session.resume_attempts >= 3 {
+            return Err("Limite de tentativas de retomada atingido.".into());
+        }
+        session
+            .writer
+            .try_send(format!("{}\r", checked.command).into_bytes())
+            .map_err(|_| {
+                "O terminal não aceitou o comando de retomada. Tente novamente.".to_string()
+            })?;
+        session.resume_attempts += 1;
+        session.resume_at = Some(Instant::now());
+        session.resume_output.clear();
+        Ok(
+            serde_json::json!({"status":"sent", "compatibility":checked, "attempt":session.resume_attempts}),
+        )
     }
 
     /// Abre um agente numa conta escolhida, no terminal que ja esta aberto.
@@ -1347,6 +1484,7 @@ impl TerminalManager {
     /// graca de encerramento, para nao segurar a saida.
     pub fn kill_all_blocking(&self) {
         self.closing.store(true, Ordering::SeqCst);
+        self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let targets: Vec<KillTarget> = {
             let guard = self.lock();
             guard
@@ -1379,6 +1517,7 @@ impl TerminalManager {
                 pty::force_kill_tree(pid, tree.as_ref());
             }
         }
+        self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn list(&self) -> Vec<TerminalInfo> {
@@ -1434,6 +1573,32 @@ impl TerminalManager {
     /// Amostra CPU, memoria, primeiro plano e diretorio de cada sessao viva.
     /// As chamadas ao kernel ficam fora do lock das sessoes.
     pub fn metrics(&self) -> Vec<SessionMetrics> {
+        // One bounded sample shared by desktop and mobile callers. Serialize
+        // cache misses so concurrent windows never rescan the same processes.
+        let mut cache = lock(&self.metrics_cache);
+        let epoch = self.metrics_epoch.load(Ordering::Relaxed);
+        if let Some(cached) = cache
+            .as_ref()
+            .filter(|entry| entry.epoch == epoch && entry.at.elapsed() < METRICS_CACHE_TTL)
+        {
+            return cached.values.clone();
+        }
+        let values = self.sample_metrics();
+        *cache = Some(MetricsCache {
+            at: Instant::now(),
+            epoch,
+            values: values.clone(),
+        });
+        values
+    }
+
+    fn sample_metrics(&self) -> Vec<SessionMetrics> {
+        if self.lock().sessions.is_empty() {
+            lock(&self.samples).clear();
+            lock(&self.commands).retain(&[]);
+            lock(&self.codex_homes).clear();
+            return Vec::new();
+        }
         let source = self.procs.as_ref();
         source.refresh();
         let targets: Vec<MetricsTarget> = {
@@ -1556,7 +1721,7 @@ impl TerminalManager {
             // mesma deteccao diz qual e a conversa, e o id vai junto.
             let detected = agent
                 .is_some()
-                .then(|| resume::detect(pid, &tree, &mut commands, &home))
+                .then(|| resume::detect_from(source, pid, &tree, &mut commands, &home))
                 .flatten();
             let (agent_turn, agent_session_id) = agent_fields(detected);
 
@@ -1632,6 +1797,28 @@ impl TerminalManager {
                 }
             }
             if !batch.is_empty() {
+                {
+                    let mut guard = self.lock();
+                    if let Some(session) = guard.sessions.get_mut(&id) {
+                        if !session.user_input
+                            && session
+                                .resume_at
+                                .is_some_and(|at| at.elapsed() < Duration::from_secs(20))
+                        {
+                            session
+                                .resume_output
+                                .push_str(&String::from_utf8_lossy(&batch));
+                            // Bounded startup evidence only, never a second transcript.
+                            if session.resume_output.len() > 8192 {
+                                let mut cut = session.resume_output.len() - 8192;
+                                while !session.resume_output.is_char_boundary(cut) {
+                                    cut += 1;
+                                }
+                                session.resume_output.drain(..cut);
+                            }
+                        }
+                    }
+                }
                 if !link.wait_for_room(batch.len()) {
                     break;
                 }
@@ -1663,6 +1850,7 @@ impl TerminalManager {
 
     /// Remove a sessao e avisa o app. Devolve se o shell saiu cedo demais.
     fn finish(&self, id: u32, code: i32, signal: Option<String>) -> bool {
+        self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let removed = self.lock().sessions.remove(&id);
         let early = removed
             .as_ref()
@@ -1681,7 +1869,13 @@ impl TerminalManager {
                     .local_size
                     .unwrap_or((session.info.cols, session.info.rows));
                 store.write_meta(
-                    &SavedMeta::sample(&session.info.tag, &session.info.cwd, cols, rows, None),
+                    &SavedMeta::sample(
+                        &session.info.tag,
+                        &session.info.cwd,
+                        cols,
+                        rows,
+                        session.resume_record,
+                    ),
                     || true,
                 );
             }
@@ -1708,6 +1902,7 @@ fn snapshot(
     store: &JournalStore,
     commands: &Mutex<CommandCache>,
     home: &Path,
+    source: &dyn ProcSource,
 ) {
     let targets = lock(inner)
         .sessions
@@ -1724,21 +1919,81 @@ fn snapshot(
                 cols,
                 rows,
                 session.info.pid,
+                session.resume_record.clone(),
             )
         })
         .collect::<Vec<_>>();
-    for (id, tag, cwd, cols, rows, pid) in targets {
+    if targets.is_empty() {
+        return;
+    }
+    source.refresh();
+    for (id, tag, cwd, cols, rows, pid, retained) in targets {
         let agent = pid.and_then(|pid| {
             let mut tree = vec![pid];
-            tree.extend(procs::descendants(pid));
-            resume::detect(pid, &tree, &mut lock(commands), home).map(|found| found.session)
+            tree.extend(source.descendants(pid));
+            resume::detect_from(source, pid, &tree, &mut lock(commands), home)
+                .map(|found| found.session)
         });
-        store.write_meta(&SavedMeta::sample(&tag, &cwd, cols, rows, agent), || {
-            lock(inner)
-                .sessions
-                .get(&id)
-                .is_some_and(|session| session.info.pid == pid)
-        });
+        // A failed CLI start must not erase the conversation while the new
+        // shell is idle. Only successful detection replaces the saved record.
+        store.write_meta(
+            &SavedMeta::sample(&tag, &cwd, cols, rows, agent.clone().or(retained)),
+            || {
+                lock(inner)
+                    .sessions
+                    .get(&id)
+                    .is_some_and(|session| session.info.pid == pid)
+            },
+        );
+        if agent.is_some() {
+            if let Some(session) = lock(inner).sessions.get_mut(&id) {
+                // Opening a rollout does not prove a daemon handshake
+                // succeeded. Keep the retry target until user interaction;
+                // a transient launch may already have exited by this sample.
+                if session.info.pid == pid && (session.resume_attempts == 0 || session.user_input) {
+                    session.resume_record = None;
+                }
+            }
+        }
+    }
+}
+
+fn transient_resume_failure(output: &str) -> bool {
+    output.contains("Server is draining; retry after reconnecting")
+        || output.contains("Background server is not available")
+}
+
+fn resume_shell_identity(source: &dyn ProcSource, pid: u32, expected: &str) -> bool {
+    let Some(actual) = source.exe_path(pid) else {
+        return false;
+    };
+    let normalize = |path: &str| {
+        let name = procs::basename(path).to_ascii_lowercase();
+        name.strip_suffix(".exe").unwrap_or(&name).to_string()
+    };
+    match (dunce::canonicalize(&actual), dunce::canonicalize(expected)) {
+        (Ok(actual), Ok(expected)) => {
+            // macOS sh(1) is a launcher that re-execs bash/dash/zsh. Linux
+            // commonly uses a symlink, handled by canonicalization itself.
+            #[cfg(target_os = "macos")]
+            if expected == Path::new("/bin/sh")
+                && ["/bin/bash", "/bin/dash", "/bin/zsh"]
+                    .iter()
+                    .any(|shell| actual == Path::new(shell))
+            {
+                return true;
+            }
+            if cfg!(windows) {
+                actual
+                    .to_string_lossy()
+                    .eq_ignore_ascii_case(&expected.to_string_lossy())
+            } else {
+                actual == expected
+            }
+        }
+        // Bare shell commands and kernels reporting a removed executable can
+        // still prove the executable name; argv[0] alone would be spoofable.
+        _ => normalize(&actual) == normalize(expected),
     }
 }
 
@@ -1875,6 +2130,550 @@ fn validate_view_size(cols: u16, rows: u16) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resume_readiness_rejects_an_agent_that_exec_replaced_the_shell_pid() {
+        let source = procs::FakeProcs::default();
+        source.set_exe_path(42, "/usr/local/bin/codex");
+        assert!(!resume_shell_identity(&source, 42, "/bin/zsh"));
+        source.set_exe_path(42, "/bin/zsh");
+        assert!(resume_shell_identity(&source, 42, "/bin/zsh"));
+        assert!(
+            !resume_shell_identity(&source, 43, "/bin/zsh"),
+            "unknown executable cannot prove shell ownership"
+        );
+    }
+
+    #[test]
+    fn metrics_share_one_sample_and_invalidate_when_a_terminal_changes() {
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), source.clone());
+        assert!(manager.metrics().is_empty());
+        assert_eq!(
+            source.refresh_count(),
+            0,
+            "empty workspaces must not scan processes"
+        );
+        let shell = pty::TestShell::isolated();
+        let info = spawn_test_shell(
+            &manager,
+            &shell,
+            "cache_fixture",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        for _ in 0..100 {
+            assert_eq!(manager.metrics().len(), 1);
+        }
+        assert_eq!(
+            source.refresh_count(),
+            1,
+            "hot reads must share the process sample"
+        );
+        manager
+            .write(info.id, &shell.print("invalidate_fixture"))
+            .unwrap();
+        assert_eq!(manager.metrics().len(), 1);
+        assert_eq!(
+            source.refresh_count(),
+            2,
+            "input must invalidate foreground evidence"
+        );
+        manager.kill_all_blocking();
+        assert!(
+            manager.metrics().is_empty(),
+            "removed sessions must not survive in the cache"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resume_recovers_draining_once_without_losing_history_or_target() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut nonce = [0; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let dir =
+            std::env::temp_dir().join(format!("cialai-resume-{:032x}", u128::from_le_bytes(nonce)));
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        let config = dir.join("profile");
+        std::fs::create_dir_all(config.join("sessions")).unwrap();
+        let uuid = "12345678-1234-4234-8234-123456789abc";
+        std::fs::write(config.join(format!("sessions/rollout-2026-10-15-{uuid}.jsonl")),
+            serde_json::json!({"type":"session_meta", "payload":{"id":uuid,"cwd":dir.to_str().unwrap()}}).to_string()).unwrap();
+        let executable = dir.join("bin/codex");
+        std::fs::write(
+            &executable,
+            r#"#!/bin/sh
+case "$*" in
+  --version) echo 'codex-cli 0.162.1'; exit 0;;
+  'resume --help') echo 'resume SESSION_ID'; exit 0;;
+esac
+printf '%s\n' "$*" >> "$CODEX_HOME/invocations"
+if [ ! -f "$CODEX_HOME/attempted" ]; then
+  : > "$CODEX_HOME/attempted"
+  echo 'Server is draining; retry after reconnecting (code -32600)'
+  exit 1
+fi
+echo 'recovered-fixture'
+"#,
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let mut prefs = Preferences::default();
+        prefs.terminal.path_prefix = vec![dir.join("bin").to_string_lossy().into_owned()];
+        let manager = TerminalManager::with_environment(
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+            PrefsState::new(prefs),
+            dir.clone(),
+            Arc::new(SystemProcs::default()),
+        )
+        .with_journal(dir.join("journal"));
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), dir.clone());
+        let record = resume::AgentSession {
+            agent: resume::CODEX.into(),
+            session_id: uuid.into(),
+            cwd: Some(dir.to_string_lossy().into_owned()),
+            config_dir: Some(config.to_string_lossy().into_owned()),
+            profile_name: Some("isolated".into()),
+            args: vec![],
+        };
+        manager.journal.as_ref().unwrap().write_meta(
+            &SavedMeta::sample(
+                "resume_fixture",
+                dir.to_str().unwrap(),
+                80,
+                24,
+                Some(record.clone()),
+            ),
+            || true,
+        );
+        let shell = pty::TestShell::isolated();
+        let info = spawn_test_shell(
+            &manager,
+            &shell,
+            "resume_fixture",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        assert_eq!(
+            manager
+                .saved("resume_fixture")
+                .unwrap()
+                .resume
+                .unwrap()
+                .session_id,
+            uuid
+        );
+        let quiet = || {
+            let start = Instant::now();
+            loop {
+                if manager
+                    .lock()
+                    .sessions
+                    .get(&info.id)
+                    .unwrap()
+                    .link
+                    .last_output()
+                    .is_some_and(|at| at.elapsed() > Duration::from_millis(400))
+                {
+                    break;
+                }
+                assert!(
+                    start.elapsed() < Duration::from_secs(5),
+                    "fixture prompt timed out"
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
+        };
+        quiet();
+        // Simulate a startup file leaving a child in the foreground. This
+        // uses only this fixture's writer and does not count as user input.
+        manager
+            .lock()
+            .sessions
+            .get(&info.id)
+            .unwrap()
+            .writer
+            .try_send(b"printf 'startup-job\\n'; /bin/sleep 2\n".to_vec())
+            .unwrap();
+        thread::sleep(Duration::from_millis(100));
+        quiet();
+        assert!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, false)
+                .unwrap_err()
+                .contains("ocupa")
+        );
+        thread::sleep(Duration::from_millis(1800));
+        quiet();
+        assert!(
+            manager
+                .resume_agent(info.id, "wrong_generation", uuid, false)
+                .is_err()
+        );
+        assert!(
+            manager
+                .resume_agent(
+                    info.id,
+                    "resume_fixture",
+                    "00000000-0000-4000-8000-000000000000",
+                    false
+                )
+                .is_err()
+        );
+        assert_eq!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, false)
+                .unwrap_or_else(|error| panic!(
+                    "{error}: expected shell {}, kernel executable {:?}",
+                    info.shell,
+                    manager.procs.exe_path(info.pid.unwrap())
+                ))["status"],
+            "sent"
+        );
+        thread::sleep(Duration::from_millis(100));
+        quiet();
+        assert!(transient_resume_failure(
+            &manager.lock().sessions.get(&info.id).unwrap().resume_output
+        ));
+        // A process existing briefly during a failed start is not evidence
+        // that the agent connected successfully. A journal sample must not
+        // erase the pending retry association.
+        let source = procs::FakeProcs::default();
+        let shell_pid = info.pid.unwrap();
+        source.set_children(shell_pid, vec![424242]);
+        source.set_info(procs::ProcInfo {
+            pid: 424242,
+            ppid: shell_pid,
+            ..Default::default()
+        });
+        source.set_cwd(424242, dir.to_string_lossy());
+        source.set_command(
+            424242,
+            CommandLine {
+                exe: "codex".into(),
+                argv: vec!["codex".into(), "resume".into(), uuid.into()],
+                env: [
+                    ("CODEX_HOME".into(), config.to_string_lossy().into_owned()),
+                    ("CODEX_PROFILE".into(), "isolated".into()),
+                ]
+                .into(),
+            },
+        );
+        source.set_open_files(
+            424242,
+            vec![
+                config
+                    .join(format!("sessions/rollout-2026-10-15-{uuid}.jsonl"))
+                    .to_string_lossy()
+                    .into_owned(),
+            ],
+        );
+        snapshot(
+            &manager.inner,
+            manager.journal.as_ref().unwrap(),
+            &manager.commands,
+            &dir,
+            &source,
+        );
+        assert_eq!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, false)
+                .unwrap()["status"],
+            "already_started"
+        );
+        assert_eq!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, true)
+                .unwrap()["attempt"],
+            2
+        );
+        thread::sleep(Duration::from_millis(100));
+        quiet();
+        assert_eq!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, true)
+                .unwrap()["status"],
+            "already_started"
+        );
+        assert_eq!(
+            std::fs::read_to_string(config.join("invocations")).unwrap(),
+            format!("resume {uuid}\nresume {uuid}\n")
+        );
+        let store = manager.journal.as_ref().unwrap();
+        store.write_meta(
+            &SavedMeta::sample(
+                "typing_fixture",
+                dir.to_str().unwrap(),
+                80,
+                24,
+                Some(record.clone()),
+            ),
+            || true,
+        );
+        let typing = spawn_test_shell(
+            &manager,
+            &shell,
+            "typing_fixture",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        manager
+            .write(typing.id, b"# typed by fixture user\n")
+            .unwrap();
+        assert!(
+            manager
+                .resume_agent(typing.id, "typing_fixture", uuid, false)
+                .unwrap_err()
+                .contains("digitação")
+        );
+        // Close the application while the compatibility subprocess is in
+        // flight. The final generation check must forbid delivery afterward.
+        store.write_meta(
+            &SavedMeta::sample(
+                "closing_fixture",
+                dir.to_str().unwrap(),
+                80,
+                24,
+                Some(record),
+            ),
+            || true,
+        );
+        let closing = spawn_test_shell(
+            &manager,
+            &shell,
+            "closing_fixture",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        std::fs::write(&executable, "#!/bin/sh\n: > \"$CODEX_HOME/probe-entered\"\n/bin/sleep 0.3\ncase \"$1\" in --version) echo 'codex-cli 0.162.1';; *) echo SESSION_ID;; esac\n").unwrap();
+        let probing = manager.clone();
+        let recovery =
+            thread::spawn(move || probing.resume_agent(closing.id, "closing_fixture", uuid, false));
+        let start = Instant::now();
+        while !config.join("probe-entered").exists() {
+            assert!(start.elapsed() < Duration::from_secs(3));
+            thread::sleep(Duration::from_millis(10));
+        }
+        manager.kill_all_blocking();
+        assert!(recovery.join().unwrap().is_err());
+        assert_eq!(
+            std::fs::read_to_string(config.join("invocations"))
+                .unwrap()
+                .lines()
+                .count(),
+            2
+        );
+        assert!(
+            manager
+                .resume_agent(info.id, "resume_fixture", uuid, true)
+                .is_err()
+        );
+        assert_eq!(
+            manager
+                .saved("resume_fixture")
+                .unwrap()
+                .resume
+                .unwrap()
+                .session_id,
+            uuid
+        );
+        assert!(
+            String::from_utf8_lossy(&manager.saved_history("resume_fixture"))
+                .contains("Server is draining")
+        );
+    }
+
+    /// Local fixture benchmark. No personal shell startup files or agent state.
+    /// Run with --ignored --nocapture --test-threads=1; debug timings compare
+    /// only equivalent builds, and are not application/WebView measurements.
+    #[test]
+    #[ignore = "configurable local resource microbenchmark"]
+    fn benchmark_isolated_terminal_metrics() {
+        let rounds = std::env::var("CIALAI_BENCH_ROUNDS")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(100)
+            .clamp(10, 10000);
+        for count in [0, 1, 10, 30] {
+            let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+            let shell = pty::TestShell::isolated();
+            let start = Instant::now();
+            for index in 0..count {
+                spawn_test_shell(
+                    &manager,
+                    &shell,
+                    &format!("bench_{index}"),
+                    SubscriberKey::Webview,
+                    Channel::new(|_| Ok(())),
+                );
+            }
+            let open_ms = start.elapsed().as_secs_f64() * 1000.0;
+            let idle_before = procs::usage(std::process::id());
+            thread::sleep(Duration::from_millis(250));
+            let idle_after = procs::usage(std::process::id());
+            manager.metrics();
+            let before = procs::usage(std::process::id());
+            let mut elapsed = Vec::with_capacity(rounds);
+            for _ in 0..rounds {
+                let start = Instant::now();
+                std::hint::black_box(manager.metrics());
+                elapsed.push(start.elapsed().as_secs_f64() * 1000.0);
+            }
+            elapsed.sort_by(f64::total_cmp);
+            let after = procs::usage(std::process::id());
+            println!(
+                "METRICS_BENCH {}",
+                serde_json::json!({
+                    "sessions":count, "rounds":rounds, "openMs":open_ms,
+                    "meanMs":elapsed.iter().sum::<f64>() / rounds as f64,
+                    "p50Ms":elapsed[rounds / 2], "p95Ms":elapsed[rounds * 95 / 100],
+                    "cpuMs":before.zip(after).map(|(a,b)| b.cpu_nanos.saturating_sub(a.cpu_nanos) as f64 / 1_000_000.0),
+                    "footprintBytes":after.map(|u| u.footprint),
+                    "idleCpuMsPer250ms":idle_before.zip(idle_after).map(|(a,b)| b.cpu_nanos.saturating_sub(a.cpu_nanos) as f64 / 1_000_000.0),
+                    "resources":fixture_resources(),
+                })
+            );
+            manager.kill_all_blocking();
+            assert_eq!(manager.live_count(), 0);
+            assert!(manager.metrics().is_empty());
+            thread::sleep(Duration::from_millis(100));
+            println!("CLOSED_RESOURCES {}", fixture_resources());
+        }
+    }
+
+    fn fixture_resources() -> serde_json::Value {
+        #[cfg(target_os = "macos")]
+        {
+            let mut task: libc::proc_taskinfo = unsafe { std::mem::zeroed() };
+            let size = std::mem::size_of_val(&task) as i32;
+            // SAFETY: task is a correctly sized proc_taskinfo output buffer.
+            let read = unsafe {
+                libc::proc_pidinfo(
+                    std::process::id() as i32,
+                    libc::PROC_PIDTASKINFO,
+                    0,
+                    &mut task as *mut _ as *mut libc::c_void,
+                    size,
+                )
+            };
+            serde_json::json!({"rssBytes":(read == size).then_some(task.pti_resident_size),
+                "threads":(read == size).then_some(task.pti_threadnum),
+                "fds":std::fs::read_dir("/dev/fd").ok().map(|fds| fds.count()),
+                "childProcesses":procs::system().descendants(std::process::id()).len()})
+        }
+        #[cfg(not(target_os = "macos"))]
+        serde_json::json!({"childProcesses":procs::system().descendants(std::process::id()).len()})
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn resource_agent_fixture() {
+        if std::env::var("CIALAI_RESOURCE_AGENT").as_deref() != Ok("1") {
+            return;
+        }
+        use std::io::Write;
+        let mut memory = vec![0_u8; 8 * 1024 * 1024];
+        for (index, page) in memory.chunks_mut(4096).enumerate() {
+            page[0] = index as u8;
+        }
+        println!("resource-fixture-ready");
+        std::io::stdout().flush().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(60);
+        while Instant::now() < deadline {
+            for byte in memory.iter_mut().step_by(4096) {
+                *byte = std::hint::black_box(byte.wrapping_add(1));
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        std::hint::black_box(memory);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "local isolated 5/10-agent resource benchmark"]
+    fn benchmark_simulated_agents_and_resource_release() {
+        let mut nonce = [0; 16];
+        getrandom::fill(&mut nonce).unwrap();
+        let root = std::env::temp_dir().join(format!(
+            "cialai-resource-{:032x}",
+            u128::from_le_bytes(nonce)
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let exe = root.join("codex");
+        std::os::unix::fs::symlink(std::env::current_exe().unwrap(), &exe).unwrap();
+        let cycles = std::env::var("CIALAI_NATIVE_SOAK_CYCLES")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(2)
+            .clamp(1, 100);
+        for cycle in 0..cycles {
+            for count in [5, 10] {
+                let baseline = fixture_resources();
+                let manager =
+                    TerminalManager::with_notifier(Arc::new(|_| {})).with_home(root.clone());
+                struct Cleanup(TerminalManager);
+                impl Drop for Cleanup {
+                    fn drop(&mut self) {
+                        self.0.kill_all_blocking();
+                    }
+                }
+                let _cleanup = Cleanup(manager.clone());
+                let shell = pty::TestShell::isolated();
+                for i in 0..count {
+                    let info = spawn_test_shell(
+                        &manager,
+                        &shell,
+                        &format!("agent_fixture_{i}"),
+                        SubscriberKey::Webview,
+                        Channel::new(|_| Ok(())),
+                    );
+                    let command = format!(
+                        "CIALAI_RESOURCE_AGENT=1 {} --exact workspace::terminal::tests::resource_agent_fixture --nocapture\n",
+                        resume::shell_quote(exe.to_str().unwrap(), ShellFlavor::Posix)
+                    );
+                    manager.write(info.id, command.as_bytes()).unwrap();
+                }
+                let start = Instant::now();
+                while procs::system().descendants(std::process::id()).len() < count * 2 {
+                    assert!(start.elapsed() < Duration::from_secs(5));
+                    thread::sleep(Duration::from_millis(20));
+                }
+                thread::sleep(Duration::from_millis(250));
+                let before = procs::usage(std::process::id()).unwrap();
+                let start = Instant::now();
+                for _ in 0..10 {
+                    manager.sample_metrics();
+                    thread::sleep(Duration::from_millis(100));
+                }
+                let elapsed = start.elapsed();
+                let after = procs::usage(std::process::id()).unwrap();
+                let live = fixture_resources();
+                manager.kill_all_blocking();
+                assert_eq!(manager.live_count(), 0);
+                thread::sleep(Duration::from_millis(500));
+                let released = fixture_resources();
+                assert!(
+                    procs::system().descendants(std::process::id()).is_empty(),
+                    "fixture process survived close"
+                );
+                println!(
+                    "AGENT_RESOURCE_BENCH {}",
+                    serde_json::json!({"cycle":cycle,"agents":count,"baseline":baseline,"live":live,"released":released,
+                    "samplingWallMs":elapsed.as_secs_f64()*1000.0,"samplingCpuMs":(after.cpu_nanos-before.cpu_nanos) as f64/1_000_000.0})
+                );
+            }
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     fn spawn_test_shell(
         manager: &TerminalManager,
@@ -3529,10 +4328,10 @@ mod tests {
         let project = std::env::temp_dir().join("projeto");
         fake.set_cwd(shell, project.to_string_lossy());
 
-        let first = manager.metrics().remove(0);
+        let first = manager.sample_metrics().remove(0);
         assert_eq!(first.cpu_percent, None);
         std::thread::sleep(Duration::from_millis(10));
-        let second = manager.metrics().remove(0);
+        let second = manager.sample_metrics().remove(0);
         assert_eq!(second.processes, 2);
         assert_eq!(second.memory_bytes, Some(12_288));
         assert!(second.cpu_percent.is_some_and(|cpu| cpu > 0.0));

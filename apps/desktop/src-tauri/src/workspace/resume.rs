@@ -12,7 +12,7 @@
 //!   `<CODEX_HOME>/sessions`. O id sai do nome desse arquivo, achado entre os
 //!   descritores do processo.
 //!
-//! [`detect`] roda a cada amostra do estado da sessao e [`resume_command`]
+//! [`detect_from`] roda a cada amostra do estado da sessao e [`resume_command`]
 //! monta, na hora de reabrir e conforme o sabor do shell, `claude --resume
 //! <id>` ou `codex resume <id>` com o perfil, a pasta e as opcoes de permissao
 //! e modelo da linha de comando original. As opcoes passam por listas fechadas
@@ -30,6 +30,9 @@ use serde::{Deserialize, Serialize};
 use crate::platform::ShellFlavor;
 
 use super::procs::{self, CommandCache, CommandLine};
+
+pub mod compatibility;
+mod daemon;
 
 pub const CLAUDE: &str = "Claude Code";
 pub const CODEX: &str = "Codex";
@@ -120,6 +123,7 @@ const CLAUDE_FLAGS: FlagSpec = FlagSpec {
 
 const CODEX_FLAGS: FlagSpec = FlagSpec {
     switches: &[
+        ("--no-daemon", "--no-daemon"),
         ("--yolo", "--dangerously-bypass-approvals-and-sandbox"),
         (
             "--dangerously-bypass-approvals-and-sandbox",
@@ -154,7 +158,8 @@ const CODEX_FLAGS: FlagSpec = FlagSpec {
 /// Conversa do agente mais proximo do shell na arvore da sessao. `tree`
 /// inclui o proprio shell. Um Codex aberto por um Claude Code, por exemplo,
 /// perde para o Claude Code.
-pub fn detect(
+pub fn detect_from(
+    source: &dyn procs::ProcSource,
     shell: u32,
     tree: &[u32],
     commands: &mut CommandCache,
@@ -164,7 +169,7 @@ pub fn detect(
     let mut best: Option<(usize, Detected)> = None;
     let mut found = Vec::new();
     for &pid in tree {
-        let Some(info) = procs::info(pid) else {
+        let Some(info) = source.info(pid) else {
             continue;
         };
         parents.insert(pid, info.ppid);
@@ -173,12 +178,12 @@ pub fn detect(
         }
     }
     for (pid, start_sec) in found {
-        let Some(command) = commands.get(pid, start_sec) else {
+        let Some(command) = commands.get_from(source, pid, start_sec) else {
             continue;
         };
         let session = match procs::agent_of(&command) {
-            Some(CLAUDE) => claude_session(&command, pid, start_sec, home),
-            Some(CODEX) => codex_session(&command, pid, start_sec, home),
+            Some(CLAUDE) => claude_session_from(source, &command, pid, start_sec, home),
+            Some(CODEX) => codex_session_from(source, &command, pid, start_sec, home),
             _ => None,
         };
         let Some(session) = session else { continue };
@@ -217,7 +222,18 @@ struct ClaudeSessionFile {
     kind: Option<String>,
 }
 
+#[cfg(test)]
 fn claude_session(
+    command: &CommandLine,
+    pid: u32,
+    start_sec: u64,
+    home: &Path,
+) -> Option<Detected> {
+    claude_session_from(procs::system(), command, pid, start_sec, home)
+}
+
+fn claude_session_from(
+    source: &dyn procs::ProcSource,
     command: &CommandLine,
     pid: u32,
     start_sec: u64,
@@ -255,7 +271,7 @@ fn claude_session(
             cwd: file
                 .cwd
                 .filter(|cwd| valid_value(cwd))
-                .or_else(|| procs::cwd(pid)),
+                .or_else(|| source.cwd(pid)),
             config_dir: profile.explicit.then_some(profile.config_dir),
             profile_name: profile.name,
             args: keep_flags(program_args(&command.argv), &CLAUDE_FLAGS),
@@ -264,18 +280,45 @@ fn claude_session(
     })
 }
 
+#[cfg(test)]
 fn codex_session(command: &CommandLine, pid: u32, start_sec: u64, home: &Path) -> Option<Detected> {
+    codex_session_from(procs::system(), command, pid, start_sec, home)
+}
+
+fn codex_session_from(
+    source: &dyn procs::ProcSource,
+    command: &CommandLine,
+    pid: u32,
+    start_sec: u64,
+    home: &Path,
+) -> Option<Detected> {
     let profile = procs::agent_profile(command, CODEX, home)?;
     let sessions = Path::new(&profile.config_dir).join("sessions");
-    let cwd = procs::cwd(pid);
-    let (rollout, session_id) = procs::open_files(pid)
-        .iter()
-        .filter(|path| Path::new(path.as_str()).starts_with(&sessions))
-        .find_map(|path| rollout_session_id(path).map(|id| (PathBuf::from(path.as_str()), id)))
-        .or_else(|| {
-            cwd.as_deref()
-                .and_then(|cwd| newest_codex_rollout(&sessions, cwd, start_sec))
-        })?;
+    let cwd = source.cwd(pid);
+    let explicit_id = command
+        .argv
+        .windows(2)
+        .find(|args| args[0] == "resume" && is_session_id(&args[1]))
+        .map(|args| args[1].as_str());
+    let mut opened = source
+        .open_files(pid)
+        .into_iter()
+        .filter(|path| Path::new(path).starts_with(&sessions))
+        .filter_map(|path| rollout_session_id(&path).map(|id| (PathBuf::from(&path), id)))
+        .filter(|(_, id)| explicit_id.is_none_or(|expected| id.eq_ignore_ascii_case(expected)))
+        .collect::<Vec<_>>();
+    opened.sort();
+    opened.dedup();
+    // An app-server may have several rollouts open. Their enumeration order
+    // does not establish which conversation belongs to this terminal.
+    if opened.len() > 1 {
+        return None;
+    }
+    let (rollout, session_id) = opened.pop().or_else(|| {
+        cwd.as_deref()
+            .and_then(|cwd| newest_codex_rollout(&sessions, cwd, start_sec))
+            .filter(|(_, id)| explicit_id.is_none_or(|expected| id.eq_ignore_ascii_case(expected)))
+    })?;
     Some(Detected {
         session: AgentSession {
             agent: CODEX.to_string(),
@@ -303,9 +346,8 @@ struct CodexSessionMeta {
 }
 
 /// Reserva para Windows, onde enumerar handles abertos exigiria privilegios:
-/// escolhe o rollout mais recente criado depois do processo e cuja primeira
-/// linha `session_meta` aponta para o mesmo cwd. Dois Codex simultaneos na
-/// mesma pasta continuam sendo uma ambiguidade conhecida.
+/// aceita somente uma conversa inequivoca no cwd. Com duas candidatas a
+/// associacao nao pode ser adivinhada pela data de modificacao.
 fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(PathBuf, String)> {
     let expected_cwd = dunce::canonicalize(cwd).ok()?;
     let mut pending = vec![sessions.to_path_buf()];
@@ -318,7 +360,7 @@ fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(P
         for entry in entries.flatten() {
             inspected += 1;
             if inspected > CODEX_FILE_LIMIT {
-                return best.map(|(_, path, id)| (path, id));
+                return None;
             }
             let path = entry.path();
             let Ok(file_type) = entry.file_type() else {
@@ -361,12 +403,10 @@ fn newest_codex_rollout(sessions: &Path, cwd: &str, start_sec: u64) -> Option<(P
             {
                 continue;
             }
-            if best
-                .as_ref()
-                .is_none_or(|(known_modified, _, _)| modified_sec > *known_modified)
-            {
-                best = Some((modified_sec, path, id));
+            if best.is_some() {
+                return None;
             }
+            best = Some((modified_sec, path, id));
         }
     }
     best.map(|(_, path, id)| (path, id))
@@ -499,6 +539,15 @@ pub fn resume_command(
     shell_cwd: &str,
     flavor: ShellFlavor,
 ) -> Option<String> {
+    resume_command_for(session, shell_cwd, flavor, None)
+}
+
+pub(super) fn resume_command_for(
+    session: &AgentSession,
+    shell_cwd: &str,
+    flavor: ShellFlavor,
+    executable: Option<&str>,
+) -> Option<String> {
     if !is_session_id(&session.session_id) {
         return None;
     }
@@ -518,10 +567,9 @@ pub fn resume_command(
             ),
             _ => return None,
         };
-    let cwd = session
-        .cwd
-        .as_deref()
-        .filter(|cwd| *cwd != shell_cwd && valid_value(cwd) && Path::new(cwd).is_dir());
+    let cwd = session.cwd.as_deref().filter(|cwd| {
+        valid_value(cwd) && (executable.is_some() || (*cwd != shell_cwd && Path::new(cwd).is_dir()))
+    });
     let mut environment = Vec::new();
     if let Some(dir) = session.config_dir.as_deref() {
         if !valid_value(dir) || !Path::new(dir).is_absolute() {
@@ -540,6 +588,12 @@ pub fn resume_command(
         .iter()
         .map(|word| word.to_string())
         .collect::<Vec<_>>();
+    if let Some(executable) = executable {
+        command[0] = shell_quote_always(executable, flavor);
+        if flavor == ShellFlavor::Powershell {
+            command[0] = format!("& {}", command[0]);
+        }
+    }
     command.push(session.session_id.to_ascii_lowercase());
     command.extend(keep_flags(&session.args, spec).iter().map(|value| {
         if value.starts_with("--") {
@@ -556,6 +610,9 @@ pub fn resume_command(
             if let Some(cwd) = cwd {
                 parts.push(format!("cd {} &&", shell_quote(cwd, flavor)));
             }
+            if executable.is_some() && session.profile_name.is_none() {
+                parts.push(format!("env -u {name_key}"));
+            }
             parts.extend(
                 environment
                     .iter()
@@ -565,9 +622,17 @@ pub fn resume_command(
         ShellFlavor::Powershell => {
             if let Some(cwd) = cwd {
                 parts.push(format!(
-                    "Set-Location -LiteralPath {};",
-                    shell_quote_always(cwd, flavor)
+                    "Set-Location -LiteralPath {}{};",
+                    shell_quote_always(cwd, flavor),
+                    if executable.is_some() {
+                        " -ErrorAction Stop"
+                    } else {
+                        ""
+                    }
                 ));
+            }
+            if executable.is_some() && session.profile_name.is_none() {
+                parts.push(format!("$env:{name_key}=$null;"));
             }
             parts.extend(
                 environment.iter().map(|(key, value)| {
@@ -578,6 +643,9 @@ pub fn resume_command(
         ShellFlavor::Cmd => {
             if let Some(cwd) = cwd {
                 parts.push(format!("cd /d {} &&", shell_quote_always(cwd, flavor)));
+            }
+            if executable.is_some() && session.profile_name.is_none() {
+                parts.push(format!("set \"{name_key}=\" &&"));
             }
             parts.extend(environment.iter().map(|(key, value)| {
                 // `set` altera o ambiente deste cmd; isso e intencional e a
@@ -1126,6 +1194,48 @@ mod tests {
                 u64::MAX
             )
             .is_none()
+        );
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn codex_ambiguous_rollouts_never_choose_another_conversation() {
+        let home = scratch("codex-ambiguous");
+        let day = home.join("sessions");
+        fs::create_dir_all(&day).unwrap();
+        let other = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+        let mut files = Vec::new();
+        for id in [ID, other] {
+            let file = day.join(format!("rollout-2026-10-15-{id}.jsonl"));
+            fs::write(
+                &file,
+                serde_json::json!({"type":"session_meta","payload":{"id":id,"cwd":home}})
+                    .to_string(),
+            )
+            .unwrap();
+            files.push(file.to_string_lossy().into_owned());
+        }
+        assert!(newest_codex_rollout(&day, home.to_str().unwrap(), 0).is_none());
+        let source = procs::FakeProcs::default();
+        source.set_cwd(42, home.to_string_lossy());
+        source.set_open_files(42, files);
+        let mut command = CommandLine {
+            exe: "codex".into(),
+            argv: strings(&["codex"]),
+            env: [("CODEX_HOME".into(), home.to_string_lossy().into_owned())].into(),
+        };
+        assert!(
+            codex_session_from(&source, &command, 42, 0, &home).is_none(),
+            "two open rollouts are ambiguous"
+        );
+        command.argv = strings(&["codex", "resume", ID]);
+        assert_eq!(
+            codex_session_from(&source, &command, 42, 0, &home)
+                .unwrap()
+                .session
+                .session_id,
+            ID,
+            "an explicit resume UUID disambiguates the process's open rollouts"
         );
         let _ = fs::remove_dir_all(home);
     }

@@ -73,6 +73,23 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.13 preview
+
+Desktop stability preview dated 2026-10-16. Pairing identities and agent histories are preserved. Android and iOS applications are not republished in this delivery.
+
+### Fixed
+
+* Tunnel ownership now uses a process-lifetime operating system lock instead of numeric PID existence. Legacy records are checked against executable identity and creation time; stale and corrupt records do not permanently block startup
+* The tunnel supervisor retries after its rolling cooldown, isolates responses by process generation and includes blocked stdin delivery in the RPC deadline without replaying mutating operations
+* Codex and Claude Code resumes validate the saved conversation, account, working directory, executable and supported arguments. A bounded per-profile queue, PTY generation checks and user-input cancellation prevent duplicate or misdirected commands
+* Shared Codex daemon checks are passive and bounded. Transient draining can be retried without restarting shared services or forcing every session into no-daemon mode. Failed recovery preserves history and the exact conversation identifier for another attempt
+* Native clipboard events and asynchronous reads share one delivery path. Text takes precedence over images, empty or denied reads never trigger image paste, and closing a terminal cancels pending delivery
+* Disposing a WebGL terminal now pauses its cursor timers. Terminal metrics share a short-lived process sample rather than repeating the same scan for concurrent consumers
+
+### Validation limits
+
+* Isolated fixtures, local benchmarks and browser lifecycle tests are reproducible; they do not replace physical operating system, native clipboard, real-agent or extended production soak validation
+
 ## 0.2.12 preview
 
 Preview dated 2026-10-12. Every terminal card shows the Claude Code reading of its own conversation, the sessions column fits narrow windows and agent accounts are one flat list. The phone keeps the accounts, projects and sessions a computer sent, shows one card per agent, lists every account in the Agents tab, shows Projects as a list and keeps one header in the session. The Linux pairing dialog says why the network did not start, and the iPhone app adopts the UIScene lifecycle, so a build made with Xcode 27 opens again. It is also the version that carries the phone Home, the Projects and Agents tabs, the local notices and the device keyboard button to the App Store and Google Play, which stayed on 0.2.9.

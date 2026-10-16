@@ -19,7 +19,7 @@ import { registerPaletteProvider } from '../../desktop/palette-registry.js';
 import { shell } from '../../desktop/shell-bridge.js';
 import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
-  getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pasteText, pickAndOpen,
+  getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
   setSessionColor, setSessionSubtitle, subscribe, togglePinned, viewMounted,
 } from '../runtime.js';
@@ -294,6 +294,10 @@ export default function Workbench() {
         : null,
       { separator: true },
       { id: 'copy', label: translate('terminal.explorer.copyPath'), icon: Copy, run: async () => { const ok = await copyToClipboard(session.cwd); notify(translate(ok ? 'terminal.common.pathCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning'); } },
+      session.saved?.resume?.sessionId ? { id: 'copy-conversation', label: translate('terminal.restore.copyId'), icon: Copy, run: async () => {
+        const ok = await copyToClipboard(session.saved.resume.sessionId);
+        notify(translate(ok ? 'terminal.restore.idCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning');
+      } } : null,
       { id: 'finder', label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
       { id: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
       {
@@ -307,6 +311,9 @@ export default function Workbench() {
       { id: 'dir', label: translate('terminal.menu.changeFolder'), icon: FolderSearch, run: () => changeDirectory(session.id).catch((error) => notify(error.message, 'warning')) },
       { separator: true },
       { id: 'restart', label: translate('terminal.menu.restartTerminal'), icon: RotateCcw, run: () => restart(session.id) },
+      session.resumeState === 'failed' && session.saved?.resume
+        ? { id: 'resume', label: translate('terminal.restore.retry'), icon: RotateCcw, run: () => reopen(session.id) }
+        : null,
       { id: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true, run: () => requestCloseSession(session) },
     ];
     setMenu({ anchor, items });
@@ -460,9 +467,8 @@ export default function Workbench() {
       copyToClipboard(text).then((ok) => notify(translate(ok ? 'terminal.common.selectionCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning'));
     };
     const pasteTerminalClipboard = () => {
-      if (!navigator.clipboard?.readText) { notify(translate('terminal.common.pasteFailed'), 'warning'); return; }
-      navigator.clipboard.readText()
-        .then((text) => { if (text) pasteText(selected.id, text); })
+      selected.clipboard.read(navigator.clipboard)
+        .then((kind) => { if (kind === 'empty') notify(translate('terminal.phone.clipboardEmpty'), 'info'); })
         .catch(() => notify(translate('terminal.common.pasteFailed'), 'warning'));
     };
     selected.term.attachCustomKeyEventHandler((event) => {
@@ -471,7 +477,9 @@ export default function Workbench() {
         if (event.type === 'keydown') insertText(selected.id, '\n');
         return false;
       }
-      const editAction = terminalEditAction(event);
+      const editAction = terminalEditAction(event, undefined, {
+        hasSelection: selected.term.hasSelection(), agent: selected.activity?.foreground?.agent,
+      });
       if (editAction) {
         if (event.type === 'keydown') {
           event.preventDefault?.();

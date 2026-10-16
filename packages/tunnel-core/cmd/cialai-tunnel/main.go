@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -75,7 +76,11 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 	}
 	lock, err := statedir.Acquire(paths, os.Getpid(), alive)
 	if err != nil {
-		_, _ = fmt.Fprintln(stdio.err, "o núcleo do túnel já está em execução")
+		if errors.Is(err, statedir.ErrLocked) {
+			_, _ = fmt.Fprintln(stdio.err, "o núcleo do túnel já está em execução")
+		} else {
+			_, _ = fmt.Fprintln(stdio.err, "não foi possível adquirir a propriedade do estado do túnel")
+		}
 		return 2
 	}
 	defer lock.Release()
