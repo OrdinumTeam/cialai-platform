@@ -129,6 +129,8 @@ O relatório não converte esses limites em aprovações e não declara todos os
 
 A [0.2.13](https://github.com/OrdinumTeam/cialai-platform/releases/tag/v0.2.13) foi publicada em 16/10/2026 pelo [workflow 38887488052](https://github.com/OrdinumTeam/cialai-platform/actions/runs/38887488052). Os quatro alvos de desktop passaram; ambos os macOS receberam Developer ID e notarização. Foram conferidas localmente as dezessete entradas SHA-256 e as assinaturas de sete pacotes de atualização, anunciados em onze chaves de plataforma no manifesto. Os instaladores Windows continuam sem Authenticode, conforme as notas da versão.
 
+O [site de downloads](https://cialai.com.br/downloads/) e o espelho foram atualizados e seus caches invalidados. A conferência pública aprovou seis páginas em três idiomas, dez objetos de download com ETag e tamanho iguais aos do armazenamento, manifesto com onze entradas e somas SHA-256. O `install.sh` servido é idêntico ao código local e consulta o manifesto 0.2.13, sem instalação no host. O APK 0.2.12 manteve os mesmos bytes e a mesma versão do objeto. O [anúncio no Discord](https://github.com/OrdinumTeam/cialai-platform/actions/runs/38891267857) foi enviado depois dessas conferências. A publicação remota foi autorizada pelo usuário durante a execução; não houve PR nem publicação móvel.
+
 O usuário dispensou novas validações físicas ou em emulador nesta entrega. Elas não são convertidas em aprovações; a evidência nativa Windows é da CI. Android e iOS não foram recompilados nem publicados nesta atualização desktop.
 
 ## Matriz remota sem empacotamento duplicado
