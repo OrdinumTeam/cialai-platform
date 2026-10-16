@@ -83,7 +83,7 @@ assert.ok(
   'o bundle só pode ser criado depois da suíte',
 );
 const fixStep = workflow.slice(workflow.indexOf('- name: Corrigir o AppImage para distribuições novas'), workflow.indexOf('- name: Anexar bundles'));
-assert.match(fixStep, /\n\s+if: runner\.os == 'Linux'\n/, 'a correção do AppImage roda só no Linux');
+assert.match(fixStep, /\n\s+if: runner\.os == 'Linux' && !inputs\.tests_only\n/, 'a correção do AppImage roda só no Linux e quando houve bundle');
 assert.ok(
   workflow.indexOf('- name: Criar bundle sem assinatura no Linux') < workflow.indexOf('- name: Corrigir o AppImage para distribuições novas')
     && workflow.indexOf('- name: Corrigir o AppImage para distribuições novas') < workflow.indexOf('- name: Anexar bundles'),
@@ -118,6 +118,17 @@ assert.equal(ciConfig.bundle.createUpdaterArtifacts, false, 'o bundle da CI não
 const { createRequire } = await import('node:module');
 // O mesmo js-yaml que o teste do codemagic.yaml resolve a partir do app móvel.
 const yaml = createRequire(`${root}/apps/mobile/package.json`)('js-yaml');
+const desktopFlow = yaml.load(workflow);
+assert.equal(desktopFlow.on.workflow_dispatch.inputs.tests_only.type, 'boolean');
+assert.equal(desktopFlow.on.workflow_dispatch.inputs.tests_only.default, false, 'a CI completa continua sendo o padrão');
+const desktopSteps = desktopFlow.jobs.desktop.steps;
+assert.equal(desktopSteps.find((step) => step.name === 'Executar suítes').if, undefined, 'tests_only não pode pular as suítes');
+for (const [name, condition] of [
+  ['Criar bundle sem assinatura', "runner.os != 'Linux' && !inputs.tests_only"],
+  ['Criar bundle sem assinatura no Linux', "runner.os == 'Linux' && !inputs.tests_only"],
+  ['Corrigir o AppImage para distribuições novas', "runner.os == 'Linux' && !inputs.tests_only"],
+  ['Anexar bundles', '!inputs.tests_only'],
+]) assert.equal(desktopSteps.find((step) => step.name === name)?.if, condition, `${name} respeita tests_only`);
 const mobileSource = readFileSync(`${root}/.github/workflows/mobile-artifacts.yml`, 'utf8');
 const mobile = yaml.load(mobileSource);
 assert.deepEqual(Object.keys(mobile.on), ['workflow_dispatch'], 'os bindings móveis só rodam por disparo manual');
