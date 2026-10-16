@@ -73,6 +73,19 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.14 desktop website distribution
+
+### Fixed
+
+* Linux terminal copy and paste use the native GTK clipboard with Ctrl+Shift+C/V. Plain Ctrl+C/V remain available to the foreground program regardless of its name.
+* Clipboard files and images are delivered as quoted paths, with private temporary files for image data. Pending operations check the terminal identity before delivery, and copy fallback restores focus.
+* Windows keeps its copy and paste shortcuts. macOS keeps native Command shortcuts and accepts the requested Control aliases.
+
+### Distribution
+
+* Windows EXE and MSI, notarized Apple Silicon and Intel DMGs, and the unchanged user-tested Linux packages are available on the website as version 0.2.14.
+* Builds, updater signatures, Mac notarization, public download hashes and the website were verified. This delivery creates no GitHub release or tag and leaves mobile distribution unchanged. Physical Windows and Mac clipboard validation remains separate from build and browser checks.
+
 ## 0.2.13 preview
 
 Desktop stability preview dated 2026-10-16. Pairing identities and agent histories are preserved. Android and iOS applications are not republished in this delivery.
