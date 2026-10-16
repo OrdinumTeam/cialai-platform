@@ -10,7 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
-| [0.2.13](0.2.13.md) | 16/10/2026 | `v0.2.13` | Candidata de estabilidade desktop |
+| [0.2.13](0.2.13.md) | 16/10/2026 | `v0.2.13` | `OrdinumTeam/cialai-platform`, estabilidade desktop |
 | [0.2.12](0.2.12.md) | 12/10/2026 | `v0.2.12` | `OrdinumTeam/cialai-platform` |
 | [0.2.11](0.2.11.md) | 11/10/2026 | `v0.2.11` | `OrdinumTeam/cialai-platform` |
 | [0.2.10](0.2.10.md) | 25/09/2026 | Não houve | Somente o `.exe` do Windows, no site; a entrega completa saiu como 0.2.11 |

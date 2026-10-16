@@ -125,6 +125,12 @@ Use Node 22 e as versões fixadas pelo repositório. `CIALAI_NATIVE_SOAK_CYCLES`
 
 O relatório não converte esses limites em aprovações e não declara todos os critérios globais homologados.
 
+## Publicação da prévia
+
+A [0.2.13](https://github.com/OrdinumTeam/cialai-platform/releases/tag/v0.2.13) foi publicada em 16/10/2026 pelo [workflow 38887488052](https://github.com/OrdinumTeam/cialai-platform/actions/runs/38887488052). Os quatro alvos de desktop passaram; ambos os macOS receberam Developer ID e notarização. Foram conferidas localmente as dezessete entradas SHA-256 e as assinaturas de sete pacotes de atualização, anunciados em onze chaves de plataforma no manifesto. Os instaladores Windows continuam sem Authenticode, conforme as notas da versão.
+
+O usuário dispensou novas validações físicas ou em emulador nesta entrega. Elas não são convertidas em aprovações; a evidência nativa Windows é da CI. Android e iOS não foram recompilados nem publicados nesta atualização desktop.
+
 ## Matriz remota sem empacotamento duplicado
 
 O disparo manual de `ci.yml` aceita `tests_only=true`: mantém as suítes e verificações nos três sistemas, mas não gera nem anexa instaladores de diagnóstico. O padrão continua sendo a CI completa com bundles. Os instaladores publicados continuam sendo responsabilidade de `release.yml`, depois do portão AppImage.
