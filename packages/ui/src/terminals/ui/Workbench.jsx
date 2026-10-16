@@ -478,7 +478,7 @@ export default function Workbench() {
         return false;
       }
       const editAction = terminalEditAction(event, undefined, {
-        hasSelection: selected.term.hasSelection(), agent: selected.activity?.foreground?.agent,
+        hasSelection: selected.term.hasSelection(),
       });
       if (editAction) {
         if (event.type === 'keydown') {

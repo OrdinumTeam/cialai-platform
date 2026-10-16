@@ -62,6 +62,7 @@ import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
 import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { installTerminalClipboard } from './clipboard.js';
+import { currentOs } from '../lib/keys.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
 import { installImeInput } from './ime-input.js';
@@ -633,9 +634,25 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   session.disposables.push(installImeInput(term));
   session.clipboard = installTerminalClipboard(term, {
     paste: (text) => pasteText(session.id, text),
-    image: () => {
-      if (['Codex', 'Claude Code'].includes(session.activity?.foreground?.agent)) insertText(session.id, '\x16');
+    paths: (paths) => insertPaths(session.id, paths),
+    files: async (files) => {
+      if (!isTauri()) throw new Error('clipboard_files_require_desktop');
+      const paths = [];
+      for (const file of files) {
+        if (file.size > 32 * 1024 * 1024) throw new Error('clipboard_file_too_large');
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[file.type] || 'bin';
+        paths.push(await invoke('clipboard_store_file', { name: file.name || `clipboard.${extension}`, data }));
+      }
+      return paths;
     },
+    readNative: isTauri() && currentOs() === 'linux' ? () => invoke('clipboard_read') : null,
+    onError: () => dispatch({ type: 'error', message: translate('terminal.common.pasteFailed') }),
     valid: () => state.sessions.get(session.id) === session && session.status === 'running',
     identity: () => session.ptyId,
     focus: () => { if (state.selectedId === session.id && session.host) term.focus(); },

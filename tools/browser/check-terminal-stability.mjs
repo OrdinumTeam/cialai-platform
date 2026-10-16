@@ -50,7 +50,7 @@ try {
   for (const [os, shortcut, agent] of [
     ['windows', 'Shift+Insert', null], ['windows', 'Control+Shift+v', 'Claude Code'],
     ['linux', 'Control+Shift+v', null], ['linux', 'Shift+Insert', null],
-    ['linux', 'Control+v', 'Codex'], ['linux', 'Control+v', 'Claude Code'],
+    ['macos', 'Control+v', null],
   ]) {
     await page.evaluate(({ os, agent, runtime }) => import(runtime).then((api) => {
       document.documentElement.dataset.platform = os;
@@ -62,13 +62,15 @@ try {
     await page.waitForFunction(() => window.__stabilityOutput.length > 0);
     assert.deepEqual(await page.evaluate(() => [...window.__stabilityOutput]), [result.expected], `${os} ${shortcut} ${agent || 'shell'} inserts once`);
   }
-  await page.evaluate(async (runtime) => {
-    document.documentElement.dataset.platform = 'linux';
-    const api = await import(runtime); api.getState().selected.activity = { foreground: null };
-    window.__stabilityOutput.length = 0;
-  }, runtime);
-  await page.keyboard.press('Control+v');
-  assert.deepEqual(await page.evaluate(() => [...window.__stabilityOutput]), ['\x16'], 'Linux shell retains literal-next');
+  for (const agent of [null, 'Codex', 'Claude Code', 'Gemini CLI']) {
+    await page.evaluate(async ({ runtime, agent }) => {
+      document.documentElement.dataset.platform = 'linux';
+      const api = await import(runtime); api.getState().selected.activity = { foreground: agent ? { agent } : null };
+      window.__stabilityOutput.length = 0;
+    }, { runtime, agent });
+    await page.keyboard.press('Control+v');
+    assert.deepEqual(await page.evaluate(() => [...window.__stabilityOutput]), ['\x16'], `Linux Ctrl+V stays with ${agent || 'shell'}`);
+  }
   await page.evaluate(async (runtime) => {
     const session = (await import(runtime)).getState().selected;
     document.documentElement.dataset.platform = 'windows';
@@ -93,21 +95,34 @@ try {
     const session = (await import(runtime)).getState().selected;
     session.activity = {foreground:{agent:'Codex'}};
     const writes = [];
-    window.__TAURI_INTERNALS__ = {invoke: async (command, args) => { if(command==='pty_write') writes.push(args.data); }};
+    let delivered;
+    window.__TAURI_INTERNALS__ = {invoke: async (command, args) => {
+      if (command === 'clipboard_store_file') {
+        if (args.data !== 'Zml4dHVyZQ==') throw new Error('clipboard file bytes changed');
+        return '/tmp/cialai-clipboard-fixture.png';
+      }
+      if (command === 'pty_write') { writes.push(args.data); delivered?.(); }
+    }};
     const send = async (text, image) => {
       window.__stabilityOutput.length = 0;
       writes.length = 0;
       const data = new DataTransfer();
       if (text) data.setData('text/plain', text);
       if (image) data.items.add(new File(['fixture'], 'fixture.png', {type:'image/png'}));
+      let timer;
+      const delivery = new Promise((resolve) => { delivered = resolve; });
       session.term.textarea.dispatchEvent(new ClipboardEvent('paste', {bubbles:true,cancelable:true,clipboardData:data}));
-      await session.lastWrite;
+      try {
+        if (text || image) await Promise.race([delivery, new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('clipboard delivery timeout')), 2000);
+        })]);
+      } finally { clearTimeout(timer); delivered = null; }
       return [...writes];
     };
     try { return {image:await send('',true),empty:await send('',false),multi:await send('texto',true)}; }
     finally { delete window.__TAURI_INTERNALS__; }
   }, runtime);
-  assert.deepEqual(formats.image, ['\x16'], 'only an actual image invokes the agent image-paste path');
+  assert.deepEqual(formats.image, ['\x1b[200~/tmp/cialai-clipboard-fixture.png \x1b[201~'], 'image bytes become a temporary path through bracketed paste');
   assert.deepEqual(formats.empty, [], 'empty clipboard must not invoke image paste');
   assert.deepEqual(formats.multi, ['\x1b[200~texto\x1b[201~'], 'text wins over image in mixed formats');
   const editables = await page.evaluate(() => ['textarea','div'].map((tag) => {

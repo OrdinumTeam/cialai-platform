@@ -536,13 +536,14 @@ dependencies = [
 
 [[package]]
 name = "cialai-desktop"
-version = "0.2.13"
+version = "0.2.14"
 dependencies = [
  "base64 0.21.7",
  "chrono",
  "dunce",
  "futures-util",
  "getrandom 0.3.4",
+ "gtk",
  "keepawake",
  "keyring",
  "libc",
@@ -564,6 +565,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tauri-plugin-window-state",
+ "tempfile",
  "tokio",
  "tokio-tungstenite",
  "trash",

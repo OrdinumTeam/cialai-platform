@@ -19,8 +19,8 @@ test('copiar e colar no terminal respeitam sistema, seleção, agente e modifica
     ['Windows Ctrl+Meta+C não copia a seleção', 'windows', press('c', 'KeyC', { ctrlKey: true, metaKey: true }), { hasSelection: true }, null],
     ['Windows V sem Ctrl não cola', 'windows', press('v', 'KeyV'), {}, null],
     ['Windows C sem Ctrl não copia a seleção', 'windows', press('c', 'KeyC'), { hasSelection: true }, null],
-    ['Linux Ctrl+V cola no Codex', 'linux', press('v', 'KeyV', { ctrlKey: true }), { agent: 'Codex' }, 'paste'],
-    ['Linux Ctrl+V cola no Claude Code', 'linux', press('v', 'KeyV', { ctrlKey: true }), { agent: 'Claude Code' }, 'paste'],
+    ['Linux Ctrl+V fica com o Codex', 'linux', press('v', 'KeyV', { ctrlKey: true }), { agent: 'Codex' }, null],
+    ['Linux Ctrl+V fica com o Claude Code', 'linux', press('v', 'KeyV', { ctrlKey: true }), { agent: 'Claude Code' }, null],
     ['Linux Ctrl+V sem agente preserva literal-next', 'linux', press('v', 'KeyV', { ctrlKey: true }), {}, null],
     ['Linux Ctrl+V no shell preserva literal-next', 'linux', press('v', 'KeyV', { ctrlKey: true }), { agent: 'bash' }, null],
     ['Linux Ctrl+Shift+V cola no shell', 'linux', press('V', 'KeyV', { ctrlKey: true, shiftKey: true }), {}, 'paste'],
@@ -36,11 +36,18 @@ test('copiar e colar no terminal respeitam sistema, seleção, agente e modifica
     ['Linux Shift+V não cola no Claude Code', 'linux', press('V', 'KeyV', { shiftKey: true }), { agent: 'Claude Code' }, null],
     ['macOS Cmd+C mantém a cópia nativa', 'macos', press('c', 'KeyC', { metaKey: true }), { hasSelection: true }, null],
     ['macOS Cmd+V mantém a colagem nativa', 'macos', press('v', 'KeyV', { metaKey: true }), { agent: 'Codex' }, null],
-    ['macOS Ctrl+C mantém a interrupção mesmo com seleção', 'macos', press('c', 'KeyC', { ctrlKey: true }), { hasSelection: true }, null],
-    ['macOS Ctrl+V não é convertido em colagem', 'macos', press('v', 'KeyV', { ctrlKey: true }), { agent: 'Claude Code' }, null],
+    ['macOS Ctrl+C copia com seleção', 'macos', press('c', 'KeyC', { ctrlKey: true }), { hasSelection: true }, 'copy'],
+    ['macOS Ctrl+C mantém a interrupção sem seleção', 'macos', press('c', 'KeyC', { ctrlKey: true }), {}, null],
+    ['macOS Ctrl+V cola no shell', 'macos', press('v', 'KeyV', { ctrlKey: true }), {}, 'paste'],
+    ['macOS Ctrl+Alt+V não cola', 'macos', press('v', 'KeyV', { ctrlKey: true, altKey: true }), {}, null],
   ];
 
   for (const [description, os, event, context, expected] of cases) {
     assert.equal(terminalEditAction(event, os, context), expected, description);
+  }
+  for (const agent of [null, 'Codex', 'Claude Code', 'Gemini CLI', 'bash']) {
+    assert.equal(terminalEditAction(press('C', 'KeyC', { ctrlKey: true, shiftKey: true }), 'linux', { agent }), 'copy');
+    assert.equal(terminalEditAction(press('V', 'KeyV', { ctrlKey: true, shiftKey: true }), 'linux', { agent }), 'paste');
+    assert.equal(terminalEditAction(press('c', 'KeyC', { ctrlKey: true }), 'linux', { agent, hasSelection: true }), null);
   }
 });

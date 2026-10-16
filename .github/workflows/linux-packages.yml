@@ -1,9 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 name: Linux packages
 
-# Só disparo manual. Refaz o .deb e o .rpm de uma versão já publicada, com o mesmo caminho do job Linux do
-# release.yml, sem AppImage e sem tocar na release: os arquivos saem como artefato do run, e a troca na release e
-# no espelho do site é feita depois de conferidos.
+# Só disparo manual. Os pacotes saem como artefatos, sem publicar release ou
+# espelho. O AppImage é opcional e recebe a mesma correção e assinatura da release.
 on:
   workflow_dispatch:
     inputs:
@@ -11,17 +10,22 @@ on:
         description: Commit ou branch a compilar
         required: true
         type: string
+      include_appimage:
+        description: Incluir AppImage corrigido e assinado junto com deb e rpm
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   packages:
-    name: deb e rpm
+    name: Linux bundles
     # Só o dono do projeto dispara; ver docs/engenharia/10-ci-cd-e-distribuicao.md.
     if: contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     runs-on: ubuntu-22.04
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       TARGET: x86_64-unknown-linux-gnu
     steps:
@@ -57,16 +61,33 @@ jobs:
           node tools/fetch-tor.mjs --stage --target "$TARGET"
           node tools/fetch-tor.mjs --verify-resource --target "$TARGET"
       - run: npm ci
+      - name: Clipboard and shortcut regressions
+        run: node --test packages/ui/scripts/tests/clipboard-system.test.cjs packages/ui/scripts/tests/terminal-clipboard*.test.cjs packages/ui/scripts/tests/keys.test.cjs packages/ui/scripts/tests/windows-paths.test.cjs
       - name: Keep the release build environment
         run: echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/apps/desktop/src-tauri/resources/tor/tor${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Write the release configuration
         run: node tools/release/signing-mode.mjs --target "$TARGET" --config-out apps/desktop/src-tauri/tauri.release.conf.json
-      - name: Build the deb and rpm
+      - name: Build the Linux bundles
         working-directory: apps/desktop
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: npx tauri build --target "$TARGET" --config src-tauri/tauri.release.conf.json --bundles deb,rpm
+          BUNDLES: ${{ inputs.include_appimage && 'deb,rpm,appimage' || 'deb,rpm' }}
+        run: npx tauri build --target "$TARGET" --config src-tauri/tauri.release.conf.json --bundles "$BUNDLES" -- --locked
+      - name: Fix the AppImage and sign it again
+        if: inputs.include_appimage
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          BUNDLE: apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle
+        run: |
+          appimage=("$GITHUB_WORKSPACE/$BUNDLE"/appimage/*.AppImage)
+          test "${#appimage[@]}" -eq 1 && test -f "${appimage[0]}"
+          node tools/release/fix-appimage.mjs "${appimage[0]}"
+          rm "${appimage[0]}.sig"
+          (cd apps/desktop && npx tauri signer sign "${appimage[0]}")
+          node tools/release/verify-updater-signature.mjs "${appimage[0]}"
       - name: Check the packaged Tor launcher and the updater signatures
         shell: bash
         env:
@@ -90,5 +111,7 @@ jobs:
             apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/deb/*.deb.sig
             apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm
             apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/rpm/*.rpm.sig
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
+            apps/desktop/src-tauri/target/x86_64-unknown-linux-gnu/release/bundle/appimage/*.AppImage.sig
           if-no-files-found: error
           retention-days: 7
