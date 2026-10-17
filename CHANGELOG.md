@@ -84,7 +84,10 @@ Version 1.0.0 has not been published. Signed installers, native mobile archives,
 
 ### Verification
 
-* Candidate prepared for Windows, macOS Apple Silicon and Intel, and Linux distribution through the website and curl. Publication and public download verification remain pending
+* Local validation passed with 457 Rust tests and seven ignored, 390 UI tests, 40 runtime integration tests and 67 targeted native mobile tests, plus Rust formatting and visible text and translation checks
+* Linux packages were built in workflow 39068060524 and Windows and both Mac architectures in workflow 39068063158, all from commit 2552946. Each runner passed three badge tests, 40 runtime tests and 33 clipboard tests; Linux and Mac passed 19 targeted Rust tests each and Windows passed 18
+* The nine public desktop binaries passed SHA256 checks and all seven updater signatures were verified. Both Mac DMGs passed Developer ID and notarization checks. The six public website pages passed WKWebView checks in Portuguese, English and Spanish, and the served curl installer selected the new common channel without installing anything
+* Distribution uses the website and curl, with no GitHub release, tag, announcement or mobile publication. The existing Android package, installer script and separate Linux channel were preserved. The screenshot's original opening failure remains undiagnosed; the new action and error tooltip were verified with isolated fixtures
 
 ## 0.2.15 desktop website distribution
 
