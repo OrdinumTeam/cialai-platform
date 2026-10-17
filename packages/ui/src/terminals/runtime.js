@@ -52,6 +52,7 @@ import { platform } from '../lib/platform.js';
 import { isTerminalFocusReport } from './shortcut-actions.js';
 import { windowLabel } from '../notch/copy.js';
 import { demoProfiles } from './agent-profiles-demo.js';
+import { activityProfile, profileBadge } from './profile-badge.js';
 import { translate } from '../shared/i18n.js';
 
 export { NATIVE_ONLY_MESSAGE };
@@ -1411,6 +1412,11 @@ export function accountFor(profile) {
   return state.agentAccounts.get(profile) || null;
 }
 
+// Selo de perfil do card, com o apelido da conta quando houver.
+export function sessionProfileLabel(activity) {
+  return profileBadge(activity, accountFor(activityProfile(activity)));
+}
+
 // Uso do plano da conta do agente da sessao, ja normalizado para o card.
 //
 // A leitura preferida e a das contas, porque e uma so para Claude Code e
@@ -1516,6 +1522,7 @@ async function sampleUsage() {
   if (!hasBridge() || state.demo) return false;
   const wanted = [...state.sessions.values()].some((session) => session.status === 'running' && session.activity?.agent);
   if (!wanted) return false;
+  const previousAccounts = state.agentAccounts;
   try {
     const list = await invoke('ai_usage');
     if (!Array.isArray(list)) return;
@@ -1537,7 +1544,8 @@ async function sampleUsage() {
     const activity = session.activity;
     if (!activity) return;
     const usage = usageFor(activity.agent, activity.profile);
-    if (usage === activity.usage) return;
+    const previousLabel = profileBadge(activity, previousAccounts.get(activityProfile(activity)));
+    if (usage === activity.usage && previousLabel === sessionProfileLabel(activity)) return;
     session.activity = { ...activity, usage };
     emitActivity(session);
   });

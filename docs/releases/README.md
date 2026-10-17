@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.2.16](0.2.16.md) | 17/10/2026 | Sem tag | Candidata desktop, apelidos dos perfis e ação para sessões com falha |
 | [0.2.15](0.2.15.md) | 16/10/2026 | Sem tag | Site e curl, associação das conversas nos três desktops |
 | [0.2.14](0.2.14.md) | 16/10/2026 | Sem tag | Site, copiar e colar nos três desktops |
 | [0.2.13](0.2.13.md) | 16/10/2026 | `v0.2.13` | `OrdinumTeam/cialai-platform`, estabilidade desktop |

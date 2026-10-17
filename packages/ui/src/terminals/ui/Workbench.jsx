@@ -701,6 +701,7 @@ export default function Workbench() {
             onSelect={onSelect}
             onNew={openPicker}
             onMenu={sessionMenu}
+            onClose={requestCloseSession}
             renamingId={renamingId}
             onRename={onRename}
             onRenameDone={onRenameDone}

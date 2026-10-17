@@ -65,8 +65,10 @@ jobs:
         run: node --test packages/ui/scripts/tests/clipboard-system.test.cjs packages/ui/scripts/tests/terminal-clipboard*.test.cjs packages/ui/scripts/tests/keys.test.cjs packages/ui/scripts/tests/windows-paths.test.cjs
       - name: Session restoration regressions
         run: |
+          node --test packages/ui/scripts/tests/profile-badge.test.cjs
           (cd packages/ui && node scripts/check-terminal-sync.mjs)
           npm run build:mobile-resource --workspace @cialai/desktop
+          cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib agent_profile_tests::
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::resume::tests:: -- --test-threads=4
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::terminal::tests::three_cards_keep_proven_conversations_through_snapshot_and_restart -- --exact
           cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml --locked --lib workspace::terminal::tests::proven_conversation_is_not_inherited_by_a_reused_agent_pid -- --exact

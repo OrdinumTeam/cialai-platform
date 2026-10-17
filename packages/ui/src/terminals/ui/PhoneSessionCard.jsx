@@ -9,9 +9,9 @@
 //
 // Como o card do computador, assina só a atividade da própria sessão.
 import React, { memo, useEffect, useRef } from 'react';
-import { ArrowRight, EllipsisVertical, Folder, Pin } from 'lucide-react';
+import { ArrowRight, EllipsisVertical, Folder, Pin, Power } from 'lucide-react';
 import { fmtCpu, fmtElapsed, fmtMemory, shortPath } from '../files.js';
-import { describe, runningLabel, sessionAccent } from '../runtime.js';
+import { describe, runningLabel, sessionAccent, sessionProfileLabel } from '../runtime.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { sessionPhase } from '../phone-session-list.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
@@ -26,7 +26,7 @@ function accentStyle(session) {
   return { '--terminais-accent-light': accent.light, '--terminais-accent-dark': accent.dark };
 }
 
-function PhoneSessionCard({ session, onSelect, onMenu }) {
+function PhoneSessionCard({ session, onSelect, onMenu, onClose }) {
   useI18n();
   useRuntimeEvents(['activity', 'sessions'], session.id);
   const longPress = useRef(null);
@@ -37,6 +37,7 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
   const phase = sessionPhase(status);
   const running = runningLabel(session);
   const activity = session.activity;
+  const profileLabel = running?.agent ? sessionProfileLabel(activity) : null;
   const live = session.status === 'running';
   const cpu = live && activity?.available && activity.cpu != null ? fmtCpu(activity.cpu) : null;
   const memory = live && activity?.available && activity.memory > 0 ? fmtMemory(activity.memory) : null;
@@ -88,9 +89,13 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
       </div>
       {session.subtitle ? <div className="phone-session__subtitle">{session.subtitle}</div> : null}
       <div className={`phone-session__agent${running?.agent ? ' is-agent' : ''}`}>{agent}</div>
+      {profileLabel ? <div className="phone-session__profile"><span className="terminais-card__profile" title={translate('terminal.session.profile', { profile: profileLabel })}>{profileLabel}</span></div> : null}
       <div className="phone-session__dir"><Folder size={13} strokeWidth={1.8} aria-hidden="true" /><span>{shortPath(session.cwd)}</span></div>
+      {session.status === 'error' && onClose ? <button type="button" className="phone-session__close btn btn-quiet" onClick={(event) => { event.stopPropagation(); onClose(session); }}>
+        <Power size={16} strokeWidth={2} aria-hidden="true" />{translate('terminal.menu.closeSession')}
+      </button> : null}
       <div className="phone-session__state">
-        <span className={`phone-session__status phone-session__status--${status.tone}`}>{status.label}</span>
+        <span className={`phone-session__status phone-session__status--${status.tone}`} title={session.status === 'error' ? session.error : undefined}>{status.label}</span>
         {elapsed ? <span className="phone-session__elapsed">{elapsed}</span> : null}
       </div>
       <div className="phone-session__foot">

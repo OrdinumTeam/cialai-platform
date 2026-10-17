@@ -73,6 +73,19 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.2.16 desktop website distribution
+
+### Fixed
+
+* Session profile badges and agent account screens use the alias from the AI Bar, preserving its capitalization for default and named profiles. A default profile without an alias keeps no badge, and a named profile without an alias keeps the terminal's exported name
+* The default agent profile is resolved even without an exported profile variable. Alias changes refresh session cards independently of usage readings
+* Phone session cards display the same profile badge, and native account snapshots preserve the account label
+* Sessions that fail to open offer End session above the failure status on desktop and phone. The status tooltip includes the opening error, and the action retains the existing close confirmation
+
+### Verification
+
+* Candidate prepared for Windows, macOS Apple Silicon and Intel, and Linux distribution through the website and curl. Publication and public download verification remain pending
+
 ## 0.2.15 desktop website distribution
 
 ### Fixed

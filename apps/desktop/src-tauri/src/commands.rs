@@ -923,7 +923,12 @@ pub struct AgentProfileView {
     pub id: String,
     /// `claude` ou `codex`.
     pub agent: String,
+    /// Nome mostrado, o mesmo dos anéis da Barra de IA: o apelido quando há.
     pub label: String,
+    /// Apelido dado na Barra de IA. Vem separado do rótulo para o card da
+    /// sessão saber que a pasta padrão também tem nome próprio.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub alias: Option<String>,
     pub plan: Option<String>,
     /// A pasta sem sufixo, que o agente usa quando nada é escolhido.
     pub is_default: bool,
@@ -958,11 +963,13 @@ pub fn agent_profiles(
 ) -> Result<Vec<AgentProfileView>, String> {
     let home = app.path().home_dir().map_err(|error| error.to_string())?;
     let snapshots = notch.all_snapshots();
-    let active = prefs.get().agents.active_profile.clone();
+    let settings = prefs.get();
+    let active = settings.agents.active_profile.clone();
     Ok(crate::notch::profiles::discover(&home)
         .into_iter()
         .map(|profile| {
             let agent = profile.provider.as_str().to_string();
+            let (label, alias) = profile_label(&profile, &settings.notch);
             let usage = snapshots
                 .iter()
                 .find(|item| item.id == profile.id)
@@ -978,7 +985,8 @@ pub fn agent_profiles(
                 active: active.get(&agent) == Some(profile.id.as_str()),
                 is_default: profile.slug.is_none(),
                 needs_login: needs_login(&profile, usage.as_ref()),
-                label: profile.label.clone(),
+                label,
+                alias,
                 // O plano da leitura vence o do arquivo de conta: o Claude
                 // Code só publica a assinatura na credencial, que a loja lê.
                 plan: usage
@@ -992,6 +1000,17 @@ pub fn agent_profiles(
             }
         })
         .collect())
+}
+
+/// Rótulo da conta e apelido. O apelido da Barra de IA vence o rótulo
+/// descoberto, que na pasta padrão é a parte local do e-mail da conta.
+fn profile_label(
+    profile: &crate::notch::profiles::Profile,
+    notch: &crate::notch::prefs::NotchPreferences,
+) -> (String, Option<String>) {
+    let alias = notch.profile_alias(&profile.id);
+    let label = alias.clone().unwrap_or_else(|| profile.label.clone());
+    (label, alias)
 }
 
 /// A conta ainda não fez login. A leitura de uso já responde isso na maioria
@@ -1172,6 +1191,7 @@ mod agent_profile_tests {
             id: "codex-work".into(),
             agent: "codex".into(),
             label: "work".into(),
+            alias: None,
             plan: Some("plus".into()),
             is_default: false,
             active: true,
@@ -1244,6 +1264,59 @@ mod agent_profile_tests {
                 "{forbidden} nao pode sair: {text}"
             );
         }
+    }
+
+    /// A pasta padrão tem rótulo tirado do e-mail da conta. Com apelido na
+    /// Barra de IA, a lista de contas usa o mesmo nome dos anéis e conta ao
+    /// card da sessão que esse nome existe.
+    #[test]
+    fn the_alias_names_the_account_like_the_ring() {
+        use crate::notch::prefs::{NotchPreferences, ProfilePreference};
+        let profile = crate::notch::profiles::Profile {
+            id: "claude".into(),
+            provider: crate::notch::profiles::Provider::Claude,
+            slug: None,
+            config_dir: String::new(),
+            account: None,
+            account_key: None,
+            plan: None,
+            label: "pessoa".into(),
+            duplicate: false,
+        };
+        let mut notch = NotchPreferences::default();
+        assert_eq!(profile_label(&profile, &notch), ("pessoa".into(), None));
+        notch.profiles.insert(
+            "claude".into(),
+            ProfilePreference {
+                alias: Some("  Minha eQUIPE ".into()),
+                ..ProfilePreference::default()
+            },
+        );
+        assert_eq!(
+            profile_label(&profile, &notch),
+            ("Minha eQUIPE".into(), Some("Minha eQUIPE".into()))
+        );
+        notch.profiles.get_mut("claude").unwrap().alias = Some("   ".into());
+        assert_eq!(profile_label(&profile, &notch), ("pessoa".into(), None));
+        let named = crate::notch::profiles::Profile {
+            id: "codex-work".into(),
+            provider: crate::notch::profiles::Provider::Codex,
+            slug: Some("work".into()),
+            label: "work".into(),
+            ..profile
+        };
+        assert_eq!(profile_label(&named, &notch), ("work".into(), None));
+        notch.profiles.insert(
+            named.id.clone(),
+            ProfilePreference {
+                alias: Some("Meu Trabalho".into()),
+                ..ProfilePreference::default()
+            },
+        );
+        assert_eq!(
+            profile_label(&named, &notch),
+            ("Meu Trabalho".into(), Some("Meu Trabalho".into()))
+        );
     }
 }
 

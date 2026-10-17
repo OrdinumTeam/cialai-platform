@@ -328,7 +328,7 @@ export default function PhoneWorkbench() {
         />
       </div>
       <div className={`phone-terminal__sessions${settled ? ' is-settled' : ''}`} aria-label={`${translate('terminal.phone.terminalSessions')}, ${countLabel}`} aria-busy={!hydrated || undefined}>
-        {hydrated ? filtered.map((session) => <PhoneSessionCard key={session.id} session={session} onSelect={open} onMenu={setMenuFor} />) : null}
+        {hydrated ? filtered.map((session) => <PhoneSessionCard key={session.id} session={session} onSelect={open} onMenu={setMenuFor} onClose={setCloseFor} />) : null}
         {!hydrated && <>
           <span className="sr-only" role="status">{translate('terminal.phone.loadingSessions')}</span>
           <PhoneSessionSkeleton /><PhoneSessionSkeleton /><PhoneSessionSkeleton />

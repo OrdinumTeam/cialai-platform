@@ -75,7 +75,7 @@ function sample({ status = 'running', agentTurn = null, outputAgeMs = null, cpuP
   };
 }
 
-function render({ touch = false, session = sample(), menu = true } = {}) {
+function render({ touch = false, session = sample(), menu = true, close = true } = {}) {
   const fixture = { desktop: !touch };
   const context = vm.createContext({
     fixture, console, URLSearchParams, Uint8Array, ArrayBuffer,
@@ -89,11 +89,20 @@ function render({ touch = false, session = sample(), menu = true } = {}) {
   const Card = context.module.exports.default;
   return renderToStaticMarkup(React.createElement(Card, {
     session, touch, selected: false, dragging: false, renaming: false,
-    onSelect() {}, onMenu: menu ? () => {} : undefined, onRename() {}, onRenameDone() {},
+    onSelect() {}, onMenu: menu ? () => {} : undefined, onClose: close ? () => {} : undefined, onRename() {}, onRenameDone() {},
   }));
 }
 
 const EFFORT_WORDS = /Esforço|Esfuerzo|effort|reasoning/i;
+
+test('o erro oferece encerrar acima da falha e mostra o motivo na dica', () => {
+  const session = { ...sample({ status: 'error' }), error: 'Pasta não encontrada' };
+  const html = render({ session });
+  assert.ok(html.indexOf('Encerrar sessão') < html.indexOf('Falha ao abrir'));
+  assert.match(html, /title="Pasta não encontrada"/);
+  assert.doesNotMatch(render(), /terminais-card__close/);
+  assert.doesNotMatch(render({ session, close: false }), /terminais-card__close/);
+});
 
 test('o card mostra modelo, uso do plano e contexto no computador e nao mostra esforco', () => {
   const html = render();

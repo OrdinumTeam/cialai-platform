@@ -93,6 +93,14 @@ test('integracoes ausentes viram listas vazias e os limites valem', () => {
   assert.equal(many.projects.length, snapshot.DASHBOARD_LIMITS.projects);
 });
 
+test('o retrato nativo preserva o apelido de padroes e nomeados sem mudar a caixa', () => {
+  const result = snapshot.buildDashboardSnapshot({ accounts: [
+    { id: 'codex', agent: 'codex', label: 'Minha eQUIPE', alias: 'Minha eQUIPE' },
+    { id: 'claude-work', agent: 'claude', label: 'Pessoal e Trabalho', alias: 'Pessoal e Trabalho' },
+  ] });
+  assert.deepEqual([...result.accounts.map((account) => account.label)], ['Minha eQUIPE', 'Pessoal e Trabalho']);
+});
+
 test('as pastas recentes do telefone seguem na ordem, sem vazios e com limite', () => {
   const recent = ['/p/nova', '', 42, '/p/velha', ...Array.from({ length: 20 }, (_, index) => `/r${index}`)];
   const result = snapshot.buildDashboardSnapshot({ recent, now: 1 });

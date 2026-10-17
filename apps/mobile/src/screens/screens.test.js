@@ -436,6 +436,22 @@ async function renderAgents(props = {}, { dashboard = snapshot(), loaded = true 
   return { tree, handlers };
 }
 
+test('Agents preserves aliases supplied as labels for default and named accounts', async () => {
+  jest.useFakeTimers({ now: NOW });
+  const base = snapshot();
+  const accounts = [
+    { ...base.accounts[0], id: 'codex', label: 'Minha eQUIPE' },
+    { ...base.accounts[1], id: 'claude-work', label: 'Pessoal e Trabalho' },
+  ];
+  const { tree } = await renderAgents({}, { dashboard: { ...base, accounts } });
+  expect(text(tree)).toContain('Minha eQUIPE');
+  expect(text(tree)).toContain('Pessoal e Trabalho');
+  await tap(tree, 'Detalhes de Minha eQUIPE no Codex');
+  expect(text(tree)).toContain('Minha eQUIPE');
+  await act(async () => tree.unmount());
+  jest.useRealTimers();
+});
+
 test('Agents lists each account in a flat list with plan, the in-use badge, usage and the switch note', async () => {
   jest.useFakeTimers({ now: NOW });
   const { tree, handlers } = await renderAgents();

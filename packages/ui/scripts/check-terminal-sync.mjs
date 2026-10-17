@@ -62,6 +62,7 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     if (cmd === 'pty_view_release') return;
     if (cmd === 'pty_metrics') return this.metrics || [];
     if (cmd === 'ai_usage') return [];
+    if (cmd === 'agent_profiles') return this.accounts || [];
     if (cmd === 'pty_saved') return this.saved?.[args.tag] ?? null;
     if (cmd === 'pty_saved_history') return new Uint8Array(this.history?.[args.tag] || []).buffer;
     if (cmd === 'pty_resume_agent') return {status:args.retry ? 'already_started' : 'sent'};
@@ -96,6 +97,27 @@ const mac = {id:1,pid:1001,tag:'mac-session',cwd:'/fixture/mac',cols:120,rows:32
 const phone = {id:2,pid:1002,tag:'phone-session',cwd:'/fixture/phone',cols:80,rows:24};
 const settle = async () => { for (let i=0;i<30;i++) await Promise.resolve(); };
 const host = () => ({getBoundingClientRect:()=>({width:350,height:480,bottom:480}),appendChild(child){child.parentElement=this;}});
+
+test('default profile aliases refresh on desktop and phone even without usage data', async () => {
+  for (const desktop of [true, false]) {
+    const s = scenario({ desktop, alive: [{ ...mac }] });
+    s.fixture.metrics = [{ id: 1, tag: mac.tag, available: true, agent: 'Codex', agentProfile: null }];
+    s.fixture.accounts = [{ id: 'codex', label: 'Minha eQUIPE', alias: 'Minha eQUIPE' }];
+    await s.runtime.hydrate();
+    await s.advance(90_000);
+    const session = s.runtime.getSession(mac.tag);
+    assert.equal(s.runtime.sessionProfileLabel(session.activity), 'Minha eQUIPE');
+    const events = [];
+    s.runtime.subscribe((event) => events.push(event));
+    s.fixture.accounts = [{ id: 'codex', label: 'Outra Conta', alias: 'Outra Conta' }];
+    await s.advance(90_000);
+    assert.equal(s.runtime.sessionProfileLabel(session.activity), 'Outra Conta');
+    assert.ok(events.some((event) => event.type === 'activity' && event.id === mac.tag), 'alias-only changes redraw the card');
+    s.fixture.accounts = [{ id: 'codex', label: 'pessoa' }];
+    await s.advance(90_000);
+    assert.equal(s.runtime.sessionProfileLabel(session.activity), null);
+  }
+});
 
 test('phone exit and error reflow retained history locally without remote resize or control calls',async()=>{
   const s=scenario({desktop:false,alive:[{...mac,view:{id:1,owner:'local',leaseId:1,revision:1,cols:120,rows:32}}]});

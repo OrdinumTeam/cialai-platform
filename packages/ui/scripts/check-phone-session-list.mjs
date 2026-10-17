@@ -57,7 +57,7 @@ test('filtrar preserva a ordem recebida, com as fixadas na frente', () => {
 
 // O card, renderizado com o runtime trocado por dados fixos.
 const boundaries = {
-  runtime: `export const describe=(s)=>fixture.status[s.id], runningLabel=(s)=>fixture.running[s.id]||null, sessionAccent=(s)=>s.color?{light:'#1a4fa0',dark:'#4a8ae6'}:null;`,
+  runtime: `import {profileBadge} from './src/terminals/profile-badge.js'; export const describe=(s)=>fixture.status[s.id], runningLabel=(s)=>fixture.running[s.id]||null, sessionAccent=(s)=>s.color?{light:'#1a4fa0',dark:'#4a8ae6'}:null, sessionProfileLabel=(activity)=>profileBadge(activity,fixture.account);`,
   files: `export const fmtCpu=(v)=>v+'%', fmtMemory=(v)=>Math.round(v/1048576)+' MB', fmtElapsed=()=>'2 min', shortPath=(p)=>p.replace('/home/ana','~');`,
   hooks: `export const useRuntimeEvents=()=>{};`,
 };
@@ -69,7 +69,7 @@ const bundle = await build({
       const key = path.split('/').at(-1).replace(/\.jsx?$/, '');
       if (boundaries[key]) return { path: key, namespace: 'fixture' };
     });
-    api.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ contents: boundaries[path], loader: 'js' }));
+    api.onLoad({ filter: /.*/, namespace: 'fixture' }, ({ path }) => ({ contents: boundaries[path], loader: 'js', resolveDir: fileURLToPath(new URL('..', import.meta.url)) }));
   } }],
 });
 
@@ -91,9 +91,27 @@ function card(session) {
   });
   vm.runInContext(bundle.outputFiles[0].text, context);
   const { default: Card } = context.module.exports;
-  return renderToStaticMarkup(React.createElement(Card, { session, onSelect() {}, onMenu() {} }));
+  return renderToStaticMarkup(React.createElement(Card, { session, onSelect() {}, onMenu() {}, onClose() {} }));
 }
 const base = { status: 'running', cwd: '/home/ana/psicoapp', subtitle: '', pinned: false, color: null };
+
+test('o selo do celular usa o mesmo apelido e deixa o padrao sem apelido sem selo', () => {
+  const session = { ...base, id: 'busy', name: 'projeto', activity: { agent: 'Codex', profile: null } };
+  fixture.account = { id: 'codex', label: 'Minha eQUIPE', alias: 'Minha eQUIPE' };
+  assert.match(card(session), /terminais-card__profile[^>]*>Minha eQUIPE</);
+  fixture.account = { id: 'codex', label: 'pessoa' };
+  assert.doesNotMatch(card(session), /terminais-card__profile/);
+  fixture.account = null;
+  session.activity = { agent: 'Codex', profile: 'codex-work', profileName: 'WORK' };
+  assert.match(card(session), /terminais-card__profile[^>]*>WORK</);
+});
+
+test('a falha no celular oferece encerrar acima do estado', () => {
+  fixture.status.openError = { code: 'error', label: 'Falha ao abrir', tone: 'bad' };
+  const html = card({ ...base, id: 'openError', name: 'projeto', status: 'error', error: 'Pasta não encontrada' });
+  assert.ok(html.indexOf('Encerrar sessão') < html.indexOf('Falha ao abrir'));
+  assert.match(html, /title="Pasta não encontrada"/);
+});
 
 test('o card ativo mostra agente, pasta, estado, tempo, CPU, memória e o botão redondo', () => {
   const html = card({ ...base, id: 'busy', name: 'psicoapp', jobStartedAt: 1, activity: { available: true, cpu: 21, memory: 1363148800 } });
