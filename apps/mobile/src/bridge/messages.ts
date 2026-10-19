@@ -71,6 +71,9 @@ export type ShellIntent =
   | { id: string; kind: 'profiles' }
   | { id: string; kind: 'pick-project' };
 export type AuthResponse = { type: 'auth'; id: number; ok: boolean };
+// O mesmo pedido, entregue com a página já aberta: o bootstrap só leva o de
+// quando ela carregou, e o toque num aviso chega depois.
+export type IntentMessage = { type: 'intent'; intent: ShellIntent };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -248,7 +251,7 @@ export function parsePageMessage(raw: string, allowDevelopmentLoopback = false):
   return null;
 }
 
-export function pageMessageScript(message: ShellMessage | AuthResponse | NavigateBackMessage): string {
+export function pageMessageScript(message: ShellMessage | AuthResponse | NavigateBackMessage | IntentMessage): string {
   const serialized = JSON.stringify(message).replace(/</g, '\\u003c');
   return `window.__cialaiShellReceive?.(${serialized}); true;`;
 }

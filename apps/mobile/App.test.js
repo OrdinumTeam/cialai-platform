@@ -752,3 +752,25 @@ test('core log events reach the diagnostic ring', async () => {
   expect(recentDiagnostics().at(-1)).toMatchObject({ level: 'debug', message: 'pathmgr: adopt direct' });
   await act(async () => tree.unmount());
 });
+
+// Toque num aviso de sessão com o terminal já aberto: o pedido vai por
+// mensagem à página carregada, sem remontar o WebView, porque o bootstrap só
+// leva o pedido de quando a página carregou.
+test('tapping a session notice with the terminal open sends the intent to the loaded page', async () => {
+  const tree = await render();
+  const webView = tree.root.findAll(node => node.props.source?.uri)[0];
+  await act(async () => { webView.props.onLoad(); });
+  const node = webViewMounts.at(-1);
+  node.injectJavaScript.mockClear();
+  const notifications = require('expo-notifications');
+  const listener = notifications.addNotificationResponseReceivedListener.mock.calls.at(-1)[0];
+  await act(async () => {
+    listener({ notification: { request: { identifier: 'aviso', content: { data: { target: { desktopId, sessionId: 's9' } } } }, date: 1 } });
+  });
+  await flush();
+  const scripts = node.injectJavaScript.mock.calls.map(([script]) => script).join('\n');
+  expect(scripts).toMatch(/"type":"intent"/);
+  expect(scripts).toMatch(/"kind":"session","sessionId":"s9"/);
+  expect(webViewMounts.at(-1)).toBe(node);
+  await act(async () => tree.unmount());
+});

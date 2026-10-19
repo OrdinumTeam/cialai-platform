@@ -163,3 +163,23 @@ test('o pedido da casca vale uma vez por id', () => {
   window.__CIALAI_SHELL__ = {};
   assert.equal(shell.takeShellIntent(storage), null);
 });
+
+test('o pedido que chega com a pagina aberta, como o toque num aviso, vale uma vez e avisa quem espera', () => {
+  const store = new Map();
+  const storage = { getItem: (key) => store.get(key) ?? null, setItem: (key, value) => store.set(key, value) };
+  window.__CIALAI_SHELL__ = { theme: 'dark' };
+  let avisos = 0;
+  const parar = shell.onShellIntent(() => { avisos += 1; });
+  shell.receiveShellMessage({ type: 'intent', intent: { id: 'aviso-1', kind: 'session', sessionId: 's1' } });
+  assert.equal(avisos, 1);
+  assert.equal(window.__CIALAI_SHELL__.theme, 'dark', 'o resto do bootstrap fica');
+  assert.deepEqual({ ...shell.takeShellIntent(storage) }, { id: 'aviso-1', kind: 'session', sessionId: 's1' });
+  assert.equal(shell.takeShellIntent(storage), null, 'o mesmo aviso nao abre duas vezes');
+  shell.receiveShellMessage({ type: 'intent', intent: { id: 'x', kind: 'apagar-tudo' } });
+  shell.receiveShellMessage({ type: 'intent' });
+  assert.equal(avisos, 1, 'pedido fora do formato nao avisa');
+  parar();
+  shell.receiveShellMessage({ type: 'intent', intent: { id: 'aviso-2', kind: 'profiles' } });
+  assert.equal(avisos, 1, 'quem parou de ouvir nao recebe');
+  window.__CIALAI_SHELL__ = {};
+});

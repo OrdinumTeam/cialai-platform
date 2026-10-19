@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { ArrowDown, ChevronLeft, ChevronUp, CornerDownLeft, Delete, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
-import { onNavigateBack, postProjectPicked, postView, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
+import { onNavigateBack, onShellIntent, postProjectPicked, postView, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
 import { baseName } from '../files.js';
 import { applicationCursorKeys, blurTerminal, bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, launchAgentWhenReady, moveSessionBy, onTerminalFocus, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setInputTransform, setSessionColor, setSessionIcon, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalAttaching, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
 import { phoneRoute, phoneRouteStorage, readPhoneRoute, writePhoneRoute } from '../phone-navigation.js';
@@ -153,8 +153,9 @@ export default function PhoneWorkbench() {
   // Rota restaurada depois de recarregar: a sessao aparece com a hidratacao.
   useEffect(() => { if (selected) selectSession(selected.id); }, [selected?.id]);
   useEffect(() => {
-    hydrate().then(() => {
-      // Pedido feito no Inicio do aplicativo, consumido uma vez.
+    // Pedido da casca, consumido uma vez: o do Inicio chega com a pagina, e o
+    // do toque num aviso pode chegar com ela ja aberta.
+    const applyIntent = () => {
       const intent = takeShellIntent();
       if (!intent) return;
       if (intent.kind === 'profiles') setProfiles(true);
@@ -162,10 +163,13 @@ export default function PhoneWorkbench() {
       // A pasta do pedido só preenche o fluxo: a sessão abre no toque final.
       else if (intent.kind === 'new-session') setPicker({ path: typeof intent.cwd === 'string' ? intent.cwd : '' });
       else if (intent.kind === 'pick-project') setPickProject(true);
-    }).catch((error) => notify(error.message, 'warning'));
+    };
+    let hydrated = false;
+    hydrate().then(() => { hydrated = true; applyIntent(); }).catch((error) => notify(error.message, 'warning'));
+    const offIntent = onShellIntent(() => { if (hydrated) applyIntent(); });
     viewMounted(true);
     const off = subscribe((event) => { if (event.type === 'error') notify(event.message, 'warning'); });
-    return () => { off(); viewMounted(false); };
+    return () => { off(); offIntent(); viewMounted(false); };
   }, [notify]);
   const available = hasBridge() || isDemo();
   const supported = supportsPhoneTerminal();
