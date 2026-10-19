@@ -20,14 +20,18 @@
 //
 // O uso vem do mesmo lugar para os dois provedores, a loja da Barra de IA, e
 // cada percentual aparece com o nome da janela a que pertence. Sem leitura o
-// número não vira zero: vira o estado da leitura.
+// número não vira zero: vira o estado da leitura. O limite semanal segue a
+// regra do anel interno da barra: a barra só aparece para uma janela de sete
+// dias, e no lugar dela uma linha discreta diz se a conta não tem limite
+// semanal ou se a leitura ainda não o confirma.
 import React, { useCallback, useEffect, useState } from 'react';
 import { Check, CirclePlus, Info, RefreshCw } from 'lucide-react';
 import claudeGlyph from '../../notch/glyphs/claude.svg?raw';
 import openaiGlyph from '../../notch/glyphs/openai.svg?raw';
 import { invoke } from '../../lib/native.js';
 import { demoProfiles, demoProfilesEnabled } from '../agent-profiles-demo.js';
-import { DASH, ageCopy, percentText, qualifierFor, resetCopy, statusMessage, windowLabel } from '../../notch/copy.js';
+import { DASH, ageCopy, percentText, qualifierFor, resetCopy, statusMessage, weeklyStateCopy, windowLabel } from '../../notch/copy.js';
+import { DEFAULT_CRITICAL_LIMIT, DEFAULT_WATCH_LIMIT, weeklyState } from '../../notch/model.js';
 import { translate } from '../../shared/i18n.js';
 
 // Os dois agentes, na ordem em que aparecem. O rótulo vem do dicionário, que
@@ -58,18 +62,20 @@ export function headlineWindow(usage) {
   return (usage.windows || []).find((window) => window.id === id) || null;
 }
 
-// A janela semanal só aparece quando não repete a do anel.
+// A janela apontada como semanal, quando não repete a do anel. Não confere a
+// duração: a tela de contas usa `profileWeekly`, que confere.
 export function weeklyWindow(usage) {
   const id = usage?.weeklyId;
   if (!id || id === usage?.headlineId) return null;
   return (usage.windows || []).find((window) => window.id === id) || null;
 }
 
-// Tom do número: neutro até 75 por cento, atenção até 90, alarme acima disso.
+// Tom do número, nas faixas padrão da Barra de IA: neutro abaixo de 60 por
+// cento, atenção de 60 a 79 e alarme de 80 em diante.
 export function usageTone(fraction) {
   if (!Number.isFinite(fraction)) return 'none';
-  if (fraction >= 0.9) return 'bad';
-  if (fraction >= 0.75) return 'warn';
+  if (fraction >= DEFAULT_CRITICAL_LIMIT) return 'bad';
+  if (fraction >= DEFAULT_WATCH_LIMIT) return 'warn';
   return 'ok';
 }
 
@@ -86,6 +92,31 @@ export function readingState(profile) {
   if (kind === 'unsupported') return 'unmetered';
   if (!usage.windows?.length) return usage.fetchedAtMs ? 'unavailable' : 'reading';
   return kind === 'stale' ? 'stale' : 'ok';
+}
+
+// Estado da linha no código de estado da Barra de IA, para `weeklyState`
+// separar login pendente e erro de leitura que ainda não chegou.
+const SNAPSHOT_STATUS = Object.freeze({ needsLogin: 'needsAuth', error: 'error', unmetered: 'unsupported', stale: 'stale', ok: 'ok' });
+
+// A leitura da conta no formato que a Barra de IA entende: janelas, a do anel,
+// a semanal e o estado.
+export function profileSnapshot(profile) {
+  const usage = profile?.usage || {};
+  return {
+    windows: Array.isArray(usage.windows) ? usage.windows : [],
+    headlineId: usage.headlineId ?? null,
+    weeklyId: usage.weeklyId ?? null,
+    status: { kind: SNAPSHOT_STATUS[readingState(profile)] || usage.status?.kind || null },
+  };
+}
+
+// Limite semanal da conta, pela mesma regra do anel interno: `available` só
+// com uma janela de sete dias e fração lida, inclusive zero; `none` quando a
+// leitura não traz limite semanal, ou traz uma janela longa que não é de uma
+// semana; `unknown` quando a leitura não confirma. Nenhum dos dois últimos
+// vira zero por cento.
+export function profileWeekly(profile) {
+  return weeklyState(profileSnapshot(profile));
 }
 
 const STATE_KEYS = Object.freeze({
@@ -125,7 +156,9 @@ function UsageCell({ profile }) {
   const usage = profile.usage;
   const state = readingState(profile);
   const headline = headlineWindow(usage);
-  const weekly = weeklyWindow(usage);
+  const weekly = profileWeekly(profile);
+  // A janela do anel já é a semanal: a linha de sem limite mentiria.
+  const weeklyInHeadline = Boolean(headline && usage?.weeklyId && usage.weeklyId === usage.headlineId);
   const title = usageTitle(profile);
   if (state !== 'ok' && state !== 'stale') {
     return (
@@ -138,7 +171,8 @@ function UsageCell({ profile }) {
   return (
     <span className={`agent-profiles__usage${state === 'stale' ? ' is-stale' : ''}`} title={title}>
       {headline ? <WindowMeter window={headline} label={windowLabel(headline)} qualifier={qualifier} /> : null}
-      {weekly ? <WindowMeter window={weekly} label={windowLabel(weekly)} qualifier={qualifier} /> : null}
+      {weekly.kind === 'available' ? <WindowMeter window={weekly.window} label={windowLabel(weekly.window)} qualifier={qualifier} /> : null}
+      {weekly.kind !== 'available' && !weeklyInHeadline ? <span className={`agent-profiles__weekly agent-profiles__weekly--${weekly.kind}`}>{weeklyStateCopy(weekly)}</span> : null}
       {state === 'stale' ? <span className="agent-profiles__stale">{translate('terminal.profiles.stale')}</span> : null}
     </span>
   );

@@ -2,14 +2,19 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
 import { t } from '../i18n';
-import type { LocalNotice } from './watch';
+import type { LocalNotice, NoticeChannel, NoticeTarget } from './watch';
 
 // Avisos locais, disparados pelo próprio app quando um retrato novo do
 // computador chega. Não há push remoto: com o app fechado, ou suspenso pelo
 // sistema, nenhum retrato chega e nenhum aviso sai.
 export type NotificationPermission = 'granted' | 'denied' | 'undetermined';
 
-const CHANNEL_ID = 'activity';
+// No Android, a atenção tem canal próprio, com importância alta para aparecer
+// por cima da tela; atividade e uso seguem discretos.
+const CHANNELS: Record<NoticeChannel, { key: string; importance: Notifications.AndroidImportance }> = {
+  activity: { key: 'mobile.notify.channel', importance: Notifications.AndroidImportance.DEFAULT },
+  attention: { key: 'mobile.notify.channel.attention', importance: Notifications.AndroidImportance.HIGH }
+};
 const MAX_REMEMBERED = 200;
 const shown = new Set<string>();
 let configured = false;
@@ -21,10 +26,9 @@ function configure() {
     handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: false, shouldSetBadge: false })
   });
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync(CHANNEL_ID, {
-      name: t('mobile.notify.channel'),
-      importance: Notifications.AndroidImportance.DEFAULT
-    }).catch(() => undefined);
+    for (const [id, channel] of Object.entries(CHANNELS)) {
+      Notifications.setNotificationChannelAsync(id, { name: t(channel.key), importance: channel.importance }).catch(() => undefined);
+    }
   }
 }
 
@@ -64,9 +68,44 @@ export async function presentNotices(notices: readonly LocalNotice[]): Promise<v
   for (const notice of fresh) {
     shown.add(notice.key);
     if (shown.size > MAX_REMEMBERED) shown.delete(shown.values().next().value!);
-    await Notifications.scheduleNotificationAsync({
-      content: { title: notice.title, body: notice.body },
-      trigger: Platform.OS === 'android' ? { channelId: CHANNEL_ID } : null
-    }).catch(() => undefined);
+    await Notifications.scheduleNotificationAsync(noticeRequest(notice)).catch(() => undefined);
   }
+}
+
+// Pedido ao sistema para um aviso: título, corpo, o computador como subtítulo
+// no iOS, a cor da sessão no Android e a sessão que o toque abre.
+export function noticeRequest(notice: LocalNotice): Notifications.NotificationRequestInput {
+  const channelId = notice.channel ?? 'activity';
+  return {
+    ...(notice.identifier ? { identifier: notice.identifier } : {}),
+    content: {
+      title: notice.title,
+      body: notice.body,
+      ...(notice.subtitle ? { subtitle: notice.subtitle } : {}),
+      ...(notice.color ? { color: notice.color } : {}),
+      ...(notice.target ? { data: { target: notice.target } } : {})
+    },
+    trigger: Platform.OS === 'android' ? { channelId } : null
+  };
+}
+
+function targetOf(response: Notifications.NotificationResponse | null): NoticeTarget | null {
+  const target = response?.notification.request.content.data?.target as Partial<NoticeTarget> | undefined;
+  return target && typeof target.desktopId === 'string' && typeof target.sessionId === 'string'
+    ? { desktopId: target.desktopId, sessionId: target.sessionId } : null;
+}
+
+// Toque num aviso de sessão: com o app aberto, e também quando o toque é que
+// abriu o app. A resposta guardada pelo sistema é apagada depois de atendida,
+// para a mesma sessão não reabrir na próxima montagem.
+export function onNoticeOpened(listener: (target: NoticeTarget) => void): () => void {
+  const deliver = (response: Notifications.NotificationResponse | null) => {
+    const target = targetOf(response);
+    if (!target) return;
+    try { Notifications.clearLastNotificationResponse(); } catch { /* sem resposta guardada */ }
+    listener(target);
+  };
+  const subscription = Notifications.addNotificationResponseReceivedListener(deliver);
+  try { deliver(Notifications.getLastNotificationResponse()); } catch { /* módulo sem resposta guardada */ }
+  return () => subscription.remove();
 }

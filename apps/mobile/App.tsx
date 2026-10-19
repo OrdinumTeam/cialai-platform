@@ -49,8 +49,8 @@ import { checkControlHealth, HEALTH_RECHECK_TIMEOUT_MS } from './src/network/hea
 import { RequestGate } from './src/network/request-gate';
 import type { DashboardMessage, ShellIntent } from './src/bridge/messages';
 import { addFavorite, dashboardFor, forgetDashboard, recordSnapshot } from './src/dashboard/store';
-import { notificationPermission, presentNotices, requestNotificationPermission, type NotificationPermission } from './src/notifications/notify';
-import { NOTIFICATION_STORAGE_KEY, noticesFor, parseNotificationPrefs, type NotificationPrefs } from './src/notifications/watch';
+import { notificationPermission, onNoticeOpened, presentNotices, requestNotificationPermission, type NotificationPermission } from './src/notifications/notify';
+import { NOTIFICATION_STORAGE_KEY, noticesFor, parseNotificationPrefs, type NoticeTarget, type NotificationPrefs } from './src/notifications/watch';
 import { Agents } from './src/screens/Agents';
 import { Desktops } from './src/screens/Desktops';
 import { Home, type IntentRequest, type StoreState } from './src/screens/Home';
@@ -756,6 +756,22 @@ function AppContent() {
     setShellIntent({ ...request, id: `${Date.now().toString(36)}.${Math.random().toString(36).slice(2, 10)}` } as ShellIntent);
     void openSelected(desktop.id);
   }, [openSelected]);
+  // Toque num aviso de sessão abre aquela sessão no terminal. Com o app
+  // abrindo a frio pelo toque, o pedido espera os computadores carregarem.
+  const pendingNotice = useRef<NoticeTarget | null>(null);
+  const openNotice = useCallback((target: NoticeTarget) => {
+    const desktop = storeState === 'ready' ? findDesktop(storeRef.current, target.desktopId) : undefined;
+    if (!desktop) {
+      if (storeState !== 'ready') pendingNotice.current = target;
+      return;
+    }
+    pendingNotice.current = null;
+    openWithIntent(desktop, { kind: 'session', sessionId: target.sessionId });
+  }, [openWithIntent, storeState]);
+  useEffect(() => onNoticeOpened(openNotice), [openNotice]);
+  useEffect(() => {
+    if (storeState === 'ready' && pendingNotice.current) openNotice(pendingNotice.current);
+  }, [openNotice, storeState]);
   // Troca de computador pela barra da página: o proxy atual fica guardado pelo
   // prazo de sempre e fecha assim que o outro computador abrir; se ele falhar,
   // a volta ao anterior ainda reaproveita a página.
@@ -771,11 +787,11 @@ function AppContent() {
     void openSelected(desktopId);
   }, [biometricSession, endShellReconnect, keepShell, openSelected]);
   // Antes de guardar o retrato novo, compara com o anterior: uma sessão que
-  // terminou ou um limite que passou do aviso vira notificação local, se o
-  // usuário ligou esse aviso nos ajustes.
+  // pediu atenção ou terminou, ou um limite que passou do aviso, vira
+  // notificação local, se o usuário ligou esse aviso nos ajustes.
   const saveDashboard = useCallback((desktopId: string, snapshot: DashboardMessage) => {
     const prefs = notificationPrefsRef.current;
-    if (prefs.sessions || prefs.usage) {
+    if (prefs.attention || prefs.sessions || prefs.usage) {
       const name = findDesktop(storeRef.current, desktopId)?.name ?? t('desktop.fallback');
       const notices = noticesFor(dashboardFor(desktopId).snapshot, snapshot, desktopId, name, prefs, t);
       if (notices.length) void presentNotices(notices);

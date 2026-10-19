@@ -59,6 +59,9 @@ export async function checkWindowToolbar(page, os) {
           assert.ok(button.x >= geometry.toolbar.x && button.x + button.width <= geometry.toolbar.right + 1, `${context}: clipped control`);
           assert.ok(button.y >= geometry.toolbar.y && button.y + button.height <= geometry.toolbar.bottom + 1, `${context}: control outside toolbar`);
         }
+        // The menu ignores clicks for 250ms after closing to prevent an
+        // outside click from reopening it. Allow that guard between layouts.
+        await page.waitForTimeout(260);
         await menu.click();
         await page.getByRole('menu').waitFor();
         await page.keyboard.press('Escape');

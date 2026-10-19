@@ -15,7 +15,7 @@ const source = (relative) => readFileSync(fileURLToPath(new URL(relative, import
 
 const mocks = {
   native: `export const invoke = (cmd, args) => fixture.invoke(cmd, args); export const isTauri = () => false;`,
-  SessionCard: `export const planTone = (percent) => (percent >= 90 ? 'bad' : percent >= 75 ? 'warn' : 'ok');`,
+  SessionCard: `export const planTone = (percent) => (percent >= 80 ? 'bad' : percent >= 60 ? 'warn' : 'ok');`,
   files: `export const fmtPlan = (value) => \`\${Math.round(value)}%\`;`,
 };
 
@@ -193,8 +193,12 @@ test('a conta em uso é marcada e as outras oferecem a troca', () => {
 
 test('o tom do número segue as mesmas faixas em qualquer provedor', () => {
   const { api } = load();
+  // As faixas da Barra de IA: ambar de 60 a 79 por cento, vermelho de 80.
   assert.equal(api.usageTone(0.41), 'ok');
-  assert.equal(api.usageTone(0.8), 'warn');
+  assert.equal(api.usageTone(0.59), 'ok');
+  assert.equal(api.usageTone(0.6), 'warn');
+  assert.equal(api.usageTone(0.79), 'warn');
+  assert.equal(api.usageTone(0.8), 'bad');
   assert.equal(api.usageTone(0.95), 'bad');
   // Sem leitura não há tom, e muito menos zero por cento.
   assert.equal(api.usageTone(null), 'none');
@@ -280,4 +284,55 @@ test('o erro de leitura aparece como alerta com a opção de tentar de novo', ()
   assert.match(text, /terminal\.profiles\.retry/);
   const css = source('../src/views/Terminais.css');
   assert.match(css, /prefers-reduced-motion: reduce\)\{\.agent-profiles__shimmer\{animation:none\}/);
+});
+
+test('o limite semanal segue a regra do anel interno: barra só para sete dias, linha discreta no resto', () => {
+  const { api } = load();
+  const HOUR = 3_600_000;
+  const row = (usage) => renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: { ...LIST[0], usage: reading(usage) }, busy: false, onSelect: () => {} }));
+  const bars = (html) => (html.match(/agent-profiles__bar/g) || []).length;
+  // Disponível: a janela semanal do Claude e a de 168 horas do Codex.
+  assert.equal(api.profileWeekly(LIST[0]).kind, 'available');
+  const codexWeek = { headlineId: 'primary', weeklyId: 'secondary', windows: [{ id: 'primary', label: 'duration', usedFraction: 0.03, durationMs: 5 * HOUR }, { id: 'secondary', label: 'duration', usedFraction: 0.09, durationMs: 168 * HOUR }] };
+  const week = row(codexWeek);
+  assert.equal(bars(week), 2);
+  assert.doesNotMatch(week, /agent-profiles__weekly/);
+  // Sem janela semanal na leitura: linha de sem limite, nenhuma barra a mais.
+  const none = row({ headlineId: 'session', windows: [{ id: 'session', label: 'session', usedFraction: 0.5 }] });
+  assert.equal(bars(none), 1);
+  assert.match(none, /agent-profiles__weekly agent-profiles__weekly--none">Sem limite semanal informado</);
+  // Janela longa que não é de uma semana, como o mês do plano grátis: também sem limite semanal, e a barra dela some.
+  const month = row({ ...codexWeek, windows: [codexWeek.windows[0], { ...codexWeek.windows[1], durationMs: 30 * 24 * HOUR }] });
+  assert.equal(bars(month), 1);
+  assert.match(month, /agent-profiles__weekly--none/);
+  // Janela longa sem duração informada: a leitura não confirma, e nada vira zero.
+  const unknown = row({ ...codexWeek, windows: [codexWeek.windows[0], { id: 'secondary', label: 'duration', usedFraction: 0.09 }] });
+  assert.equal(bars(unknown), 1);
+  assert.match(unknown, /agent-profiles__weekly agent-profiles__weekly--unknown">Janela longa sem duração informada</);
+  // A dica continua listando a janela; a tela não a desenha como medida.
+  assert.doesNotMatch(unknown, /<strong>9%/);
+  // A janela do anel já é a semanal: nenhuma linha de sem limite.
+  const same = row({ headlineId: 'weekly_all', weeklyId: 'weekly_all', windows: [{ id: 'weekly_all', label: 'weeklyAll', usedFraction: 0.2 }] });
+  assert.equal(bars(same), 1);
+  assert.doesNotMatch(same, /agent-profiles__weekly/);
+  // Sem leitura, o estado da linha fala sozinho, sem linha semanal.
+  const login = renderToStaticMarkup(React.createElement(api.ProfileRow, { profile: LIST[2], busy: false, onSelect: () => {} }));
+  assert.doesNotMatch(login, /agent-profiles__weekly/);
+  // O estado da linha chega no formato da Barra de IA.
+  assert.equal(api.profileSnapshot(LIST[2]).status.kind, 'needsAuth');
+  assert.equal(api.profileWeekly(LIST[2]).kind, 'unknown');
+  assert.equal(api.profileWeekly(LIST[3]).reason, 'error');
+  assert.equal(api.profileSnapshot(LIST[4]).status.kind, 'stale');
+});
+
+test('o símbolo do agente fica solto, sem placa, no computador e no celular', () => {
+  const css = source('../src/views/Terminais.css');
+  const base = css.match(/\n\.agent-profiles__glyph\{[^}]*\}/)?.[0] || '';
+  assert.ok(base, 'regra base do símbolo');
+  assert.doesNotMatch(base, /background|border-radius/);
+  const phone = css.match(/\[data-form-factor="phone"\] \.agent-profiles__glyph\{[^}]*\}/)?.[0] || '';
+  assert.ok(phone, 'regra do símbolo no celular');
+  assert.doesNotMatch(phone, /background|border-radius/);
+  const desktop = readFileSync(fileURLToPath(new URL('../src/desktop/solid.css', import.meta.url)), 'utf8');
+  assert.match(desktop, /\.agent-profiles__glyph\)\{width:auto;height:auto;padding:0;border-radius:0;background:none/);
 });

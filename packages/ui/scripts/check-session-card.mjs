@@ -29,7 +29,7 @@ const mocks = {
   theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {};',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => ({status:"connected",features:[]}); export const subscribeState = () => () => {};',
-  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {};',
+  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {}; export const isMobileShell = () => false;',
   hooks: 'export const useRuntimeEvents = () => {};',
   ui: 'export const useToast = () => () => {}; export const AppModal = () => null;',
   drag: 'export const wasDragged = () => false;',
@@ -39,6 +39,8 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/terminals/ui/SessionCard.jsx', import.meta.url))], bundle: true, write: false, format: 'cjs',
   external: ['react', 'react-dom', 'lucide-react'],
   plugins: [{ name: 'session-card-boundaries', setup(api) {
+    api.onResolve({ filter: /\.svg\?raw$/ }, ({ path }) => ({ path, namespace: 'glyph' }));
+    api.onLoad({ filter: /.*/, namespace: 'glyph' }, () => ({ contents: 'export default "<svg></svg>";', loader: 'js' }));
     api.onResolve({ filter: /./ }, ({ path }) => {
       if (path.startsWith('@xterm/')) return { path: 'renderer', namespace: 'fixture' };
       const key = path.split('/').at(-1)?.replace(/\.jsx?$/, '');
@@ -75,7 +77,7 @@ function sample({ status = 'running', agentTurn = null, outputAgeMs = null, cpuP
   };
 }
 
-function render({ touch = false, session = sample(), menu = true } = {}) {
+function render({ touch = false, session = sample(), menu = true, close = true } = {}) {
   const fixture = { desktop: !touch };
   const context = vm.createContext({
     fixture, console, URLSearchParams, Uint8Array, ArrayBuffer,
@@ -89,11 +91,20 @@ function render({ touch = false, session = sample(), menu = true } = {}) {
   const Card = context.module.exports.default;
   return renderToStaticMarkup(React.createElement(Card, {
     session, touch, selected: false, dragging: false, renaming: false,
-    onSelect() {}, onMenu: menu ? () => {} : undefined, onRename() {}, onRenameDone() {},
+    onSelect() {}, onMenu: menu ? () => {} : undefined, onClose: close ? () => {} : undefined, onRename() {}, onRenameDone() {},
   }));
 }
 
 const EFFORT_WORDS = /Esforço|Esfuerzo|effort|reasoning/i;
+
+test('o erro oferece encerrar acima da falha e mostra o motivo na dica', () => {
+  const session = { ...sample({ status: 'error' }), error: 'Pasta não encontrada' };
+  const html = render({ session });
+  assert.ok(html.indexOf('Encerrar sessão') < html.indexOf('Falha ao abrir'));
+  assert.match(html, /title="Pasta não encontrada"/);
+  assert.doesNotMatch(render(), /terminais-card__close/);
+  assert.doesNotMatch(render({ session, close: false }), /terminais-card__close/);
+});
 
 test('o card mostra modelo, uso do plano e contexto no computador e nao mostra esforco', () => {
   const html = render();

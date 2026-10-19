@@ -26,6 +26,7 @@ import { onNativeDragDrop } from '../../lib/native.js';
 import { altKeyLabel, shortcutLabel } from '../../lib/keys.js';
 import { isExplorerDeleteShortcut } from '../shortcut-actions.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+import { sessionAccentStyle } from '../session-accent.js';
 
 // Linhas novas que entram escalonadas na arvore; acima disso nenhuma anima.
 const FRESH_ROWS_LIMIT = 60;
@@ -568,7 +569,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const gitStatus = gitIndex.status;
 
   return (
-    <aside className="terminais-explorer" id="terminais-explorer" aria-label={translate('terminal.explorer.projectFiles')}>
+    <aside className="terminais-explorer session-scope" id="terminais-explorer" style={sessionAccentStyle(session)} aria-label={translate('terminal.explorer.projectFiles')}>
       <div className="terminais-pane__head">
         <span className="terminais-pane__title">{translate('terminal.explorer.files')}</span>
         <span className="terminais-pane__count" title={shortPath(root)}>{baseName(root)}</span>

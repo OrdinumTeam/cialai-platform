@@ -411,6 +411,7 @@ impl CommandCache {
 #[cfg(test)]
 #[derive(Default)]
 pub struct FakeProcs {
+    refreshes: std::sync::atomic::AtomicUsize,
     children: std::sync::Mutex<HashMap<u32, Vec<u32>>>,
     usages: std::sync::Mutex<HashMap<u32, std::collections::VecDeque<Usage>>>,
     infos: std::sync::Mutex<HashMap<u32, ProcInfo>>,
@@ -423,6 +424,9 @@ pub struct FakeProcs {
 
 #[cfg(test)]
 impl FakeProcs {
+    pub fn refresh_count(&self) -> usize {
+        self.refreshes.load(std::sync::atomic::Ordering::Relaxed)
+    }
     pub fn set_children(&self, pid: u32, children: Vec<u32>) {
         self.children.lock().unwrap().insert(pid, children);
     }
@@ -449,10 +453,25 @@ impl FakeProcs {
     pub fn set_command(&self, pid: u32, command: CommandLine) {
         self.commands.lock().unwrap().insert(pid, command);
     }
+
+    pub fn set_open_files(&self, pid: u32, files: Vec<String>) {
+        self.files.lock().unwrap().insert(pid, files);
+    }
+
+    pub fn set_exe_path(&self, pid: u32, executable: impl Into<String>) {
+        self.executables
+            .lock()
+            .unwrap()
+            .insert(pid, executable.into());
+    }
 }
 
 #[cfg(test)]
 impl ProcSource for FakeProcs {
+    fn refresh(&self) {
+        self.refreshes
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
     fn children(&self, pid: u32) -> Vec<u32> {
         self.children
             .lock()

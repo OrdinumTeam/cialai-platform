@@ -109,6 +109,7 @@ pub struct ResumePlan {
     pub agent: String,
     pub session_id: String,
     pub command: String,
+    pub profile_key: String,
 }
 
 /// Tag que pode virar nome de arquivo: letras, numeros, `_` e `-`.
@@ -229,6 +230,12 @@ impl JournalStore {
                 agent: agent.agent.clone(),
                 session_id: agent.session_id.clone(),
                 command,
+                profile_key: format!(
+                    "{}:{}:{}",
+                    agent.agent,
+                    agent.config_dir.as_deref().unwrap_or("default"),
+                    agent.profile_name.as_deref().unwrap_or("")
+                ),
             })
         });
         Some(SavedTerminal {
@@ -240,6 +247,13 @@ impl JournalStore {
             history_bytes,
             resume,
         })
+    }
+
+    pub(super) fn saved_agent(&self, tag: &str) -> Option<AgentSession> {
+        if !self.accepts(tag) {
+            return None;
+        }
+        self.meta(tag)?.agent
     }
 
     fn meta(&self, tag: &str) -> Option<SavedMeta> {

@@ -31,7 +31,7 @@ function sameTarget(a, b) {
 }
 
 export default function SessionsPane({
-  sessions, selectedId, onSelect, onNew, onMenu, renamingId, onRename, onRenameDone, attentionCount,
+  sessions, selectedId, onSelect, onNew, onMenu, onClose, renamingId, onRename, onRenameDone, attentionCount,
   onJumpAttention, disconnectedCount, onReopenAll, onAccounts,
 }) {
   useI18n();
@@ -213,6 +213,7 @@ export default function SessionsPane({
             renaming={renamingId === session.id}
             onSelect={onSelect}
             onMenu={onMenu}
+            onClose={onClose}
             onRename={onRename}
             onRenameDone={onRenameDone}
             onDragStart={onDragStart}

@@ -19,10 +19,13 @@ export const DEFAULT_NOTCH_PREFERENCES = Object.freeze({
   profiles: Object.freeze({}),
   order: Object.freeze([]),
   hideDefaultWhenDuplicate: true,
-  watchLimit: 0.5,
-  criticalLimit: 0.7,
+  watchLimit: 0.6,
+  criticalLimit: 0.8,
   alerts: Object.freeze({ threshold: false, limitReached: false, reset: false }),
   resetTimeFormat: 'automatic',
+  // Versao das faixas. O Rust usa para trocar uma unica vez os antigos 50 e
+  // 70 por cento pelos 60 e 80 atuais; a interface so devolve o que recebeu.
+  limitsRevision: 1,
 });
 
 export const DEFAULT_PREFERENCES = Object.freeze({
@@ -73,6 +76,7 @@ export function normalizeNotchPreferences(value = {}) {
       reset: config.alerts?.reset === true,
     },
     resetTimeFormat: NOTCH_RESET_FORMATS.includes(config.resetTimeFormat) ? config.resetTimeFormat : DEFAULT_NOTCH_PREFERENCES.resetTimeFormat,
+    limitsRevision: Number.isInteger(config.limitsRevision) && config.limitsRevision > 0 ? config.limitsRevision : DEFAULT_NOTCH_PREFERENCES.limitsRevision,
   };
 }
 

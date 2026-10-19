@@ -71,11 +71,11 @@ Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• A native Home with agent usage, your computers, favourite projects and quick actions.
-• Projects tab, as a grid or a list, and Agents tab with every account in one list.
-• Device keyboard button in the terminal bar and one header in the session.
-• Notices for a finished session and for a usage limit close to its end.
-• Accounts, projects and sessions no longer vanish when switching tabs.
+• Notices when a session needs you, with its name and colour; tapping opens the session.
+• Enter, Esc, Ctrl C and Ctrl V always in sight in the terminal bar.
+• Each session's colour and icon across the app.
+• Weekly limit on Home and in Agents, with bands at 60 and 80%.
+• The official brand and cleaner icons.
 ```
 <!-- PLAY_RELEASE_END -->
 

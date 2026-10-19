@@ -14,17 +14,40 @@ async function until(test, label) {
   return test();
 }
 
-async function assertTransparentMark(selector) {
-  const mark = await until(() => {
-    const image = document.querySelector(selector);
+// A assinatura oficial na barra lateral: a peca do tema atual visivel, com o
+// nome no alt, no tamanho minimo da marca, e a outra escondida. O simbolo
+// vazado antigo e o nome em fonte do sistema nao podem voltar.
+// Com a lateral fechada, o lettering da assinatura, sem a cabeca, passa para
+// a toolbar, pequeno e apagado, e volta a sair dela quando a lateral reabre.
+async function assertToolbarLockup(dark) {
+  const toggle = document.querySelector('.mac-toolbar__leading .mac-tool');
+  assert(toggle, 'Sidebar toggle missing');
+  assert(!document.querySelector('.mac-toolbar__brand'), 'Toolbar wordmark must wait for the sidebar to close');
+  toggle.click();
+  const visible = await until(() => {
+    const image = document.querySelector(`.mac-toolbar__wordmark--${dark ? 'dark' : 'light'}`);
+    return image?.complete && image.naturalWidth && image.getBoundingClientRect().width ? image : null;
+  }, 'toolbar wordmark');
+  assert(visible.alt === 'Cialai', 'Toolbar wordmark must name the brand');
+  assert(/cialai-wordmark(-dark)?\.png|data:image\/png/.test(visible.src), 'Toolbar must use the official lettering without the head');
+  const box = visible.getBoundingClientRect();
+  assert(box.height <= 18 && box.width >= 40, 'Toolbar wordmark must stay small and legible');
+  assert(Number(getComputedStyle(visible).opacity) < 1, 'Toolbar wordmark must be faded');
+  assert(!document.querySelector(`.mac-toolbar__wordmark--${dark ? 'light' : 'dark'}`), 'Only the toolbar wordmark of the current theme may load');
+  toggle.click();
+  await until(() => !document.querySelector('.mac-toolbar__brand'), 'toolbar wordmark leaves with the sidebar back');
+}
+
+async function assertBrandLockup(dark) {
+  const visible = await until(() => {
+    const image = document.querySelector(`.mac-sidebar__lockup--${dark ? 'dark' : 'light'}`);
     return image?.complete && image.naturalWidth ? image : null;
-  }, 'Cialai mark');
-  const canvas = document.createElement('canvas');
-  canvas.width = 1;
-  canvas.height = 1;
-  const context = canvas.getContext('2d');
-  context.drawImage(mark, 0, 0, 1, 1, 0, 0, 1, 1);
-  assert(context.getImageData(0, 0, 1, 1).data[3] === 0, 'Cialai mark must keep its transparent margin');
+  }, 'Cialai lockup');
+  assert(visible.alt === 'Cialai', 'Cialai lockup must name the brand');
+  assert(/cialai-lockup(-dark)?\.png|data:image\/png/.test(visible.src), 'Cialai lockup must use the official asset');
+  assert(visible.getBoundingClientRect().width >= 120, 'Cialai lockup below the brand minimum width');
+  assert(!document.querySelector(`.mac-sidebar__lockup--${dark ? 'light' : 'dark'}`), 'Only the lockup of the current theme may load: a hidden image is still downloaded');
+  assert(!document.querySelector('.mac-sidebar__logo, .mac-sidebar__brand-name'), 'Old hollow mark or typed brand name is back');
 }
 
 // Teclado virtual no xterm real: keydown 229, valor novo com input e keyup,
@@ -137,11 +160,13 @@ if (document.documentElement.dataset.formFactor === 'phone') {
 } else {
   await until(() => document.querySelector('.terminais-terminal__host .xterm'), 'desktop terminal');
   assertTerminalSurface(document.querySelector('.terminais-terminal__host'));
-  assert(document.querySelector('.mac-sidebar__brand-name')?.textContent === 'Cialai', 'Cialai brand missing');
-  await assertTransparentMark('.mac-sidebar__logo');
-  const sidebarGradient = getComputedStyle(document.querySelector('.mac-sidebar')).backgroundImage;
-  assert(sidebarGradient.includes(dark ? '58, 27, 51' : '255, 214, 230'), 'Cialai sidebar gradient missing');
-  assert(!/10, 42, 94|21, 63, 128|31, 87, 171/.test(sidebarGradient), 'Ordinum blue gradient remains visible');
+  await assertBrandLockup(dark);
+  // Barra lateral rosa e solida, sem gradiente: rosa clarinho no claro e o
+  // ameixa da marca no escuro.
+  const sidebarStyle = getComputedStyle(document.querySelector('.mac-sidebar'));
+  assert(sidebarStyle.backgroundImage === 'none', 'Desktop sidebar must be solid');
+  assert(sidebarStyle.backgroundColor === (dark ? 'rgb(49, 24, 44)' : 'rgb(252, 235, 243)'), 'Desktop sidebar pink tone missing');
+  await assertToolbarLockup(dark);
   assert(document.querySelectorAll('.mac-nav-item').length === 2, 'Desktop navigation must expose Terminais and Dispositivos');
   assert(!/Ordinum Control|Stack local|Reuniões/.test(document.body.textContent), 'Removed Control UI is visible');
   assert(runtime.orderedSessions().length >= 2, 'Terminal demo sessions missing');

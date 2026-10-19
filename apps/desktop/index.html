@@ -21,16 +21,16 @@
         align-items: center;
         justify-content: center;
         background: #37112F;
-        color: #f4e9f1;
-        font: 500 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-        letter-spacing: .02em;
       }
+      /* A assinatura oficial com as letras em branco, no lugar do nome em
+         fonte do sistema. Gerada por tools/brand/build-ui-lockup.mjs. */
+      #boot img { display: block; width: 180px; height: auto; user-select: none; -webkit-user-drag: none; }
       #root:not(:empty) ~ #boot { display: none; }
     </style>
   </head>
   <body>
     <div id="root"></div>
-    <div id="boot" data-tauri-drag-region="deep" aria-hidden="true">Cialai</div>
+    <div id="boot" data-tauri-drag-region="deep" aria-hidden="true"><img src="./src/assets/boot-lockup.png" alt="" width="360" height="121" draggable="false" /></div>
     <script type="module" src="./src/desktop.jsx"></script>
   </body>
 </html>

@@ -191,3 +191,39 @@ test('os textos visiveis da barra nao usam parenteses nem travessao como separad
     for (const key of keys) assert.doesNotMatch(dictionary[key], /[()–—]| - /, `${locale} ${key}`);
   }
 });
+
+test('a descricao dos aneis nomeia as duas janelas, o uso e a renovacao', async () => {
+  const { ringsCopy } = await load();
+  const t = await translators();
+  const now = new Date(2026, 9, 18, 10, 0).getTime();
+  const snapshot = {
+    provider: 'claude', headlineId: 'session', weeklyId: 'weekly_all', status: { kind: 'ok' },
+    windows: [
+      { id: 'session', label: 'session', usedFraction: 0.26, resetsAtMs: now + 90 * 60_000, durationMs: 5 * 3_600_000 },
+      { id: 'weekly_all', label: 'weeklyAll', usedFraction: 0, resetsAtMs: null, durationMs: 7 * 24 * 3_600_000 },
+    ],
+  };
+  assert.equal(
+    ringsCopy(snapshot, { resetTimeFormat: 'remaining' }, now, t['pt-BR'], 'pt-BR'),
+    'Anel externo, Sessão atual, 26% usado. Renova em 1 h 30 min. Anel interno, Todos os modelos, 0% usado.',
+  );
+  const none = { ...snapshot, provider: 'codex', headlineId: 'session', weeklyId: null, windows: [snapshot.windows[0]] };
+  assert.equal(ringsCopy(none, { resetTimeFormat: 'remaining' }, now, t.en, 'en'), 'Outer ring, Current session, 26% used. Renews in 1 h 30 min. No weekly limit reported.');
+  const loading = { provider: 'codex', windows: [], status: { kind: 'ok' } };
+  assert.equal(ringsCopy(loading, {}, now, t.es, 'es'), 'Anillo exterior, sin lectura. Límite semanal aún sin lectura.');
+  const failed = { provider: 'codex', windows: [], status: { kind: 'error', message: 'network' } };
+  assert.equal(ringsCopy(failed, {}, now, t['pt-BR'], 'pt-BR'), 'Anel externo, sem leitura. Limite semanal indisponível.');
+});
+
+test('o limite semanal sem janela para medir tem a mesma frase na barra e na tela de contas', async () => {
+  const { weeklyStateCopy } = await load();
+  const t = await translators();
+  assert.equal(weeklyStateCopy({ kind: 'available', window: { id: 'weekly_all' } }, t['pt-BR']), '');
+  assert.equal(weeklyStateCopy(null, t['pt-BR']), '');
+  assert.equal(weeklyStateCopy({ kind: 'none' }, t['pt-BR']), 'Sem limite semanal informado');
+  assert.equal(weeklyStateCopy({ kind: 'none' }, t.en), 'No weekly limit reported');
+  assert.equal(weeklyStateCopy({ kind: 'unknown', reason: 'loading' }, t.es), 'Límite semanal aún sin lectura');
+  assert.equal(weeklyStateCopy({ kind: 'unknown', reason: 'auth' }, t['pt-BR']), 'Limite semanal indisponível');
+  assert.equal(weeklyStateCopy({ kind: 'unknown', reason: 'unconfirmed' }, t['pt-BR']), 'Janela longa sem duração informada');
+  assert.equal(weeklyStateCopy({ kind: 'unknown' }, t['pt-BR']), 'Limite semanal ainda sem leitura');
+});

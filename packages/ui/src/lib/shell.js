@@ -7,6 +7,7 @@ const pending = new Map();
 const lockListeners = new Set();
 const navigateBackListeners = new Set();
 const themeListeners = new Set();
+const intentListeners = new Set();
 const THEME_MODES = ['system', 'light', 'dark'];
 export const isMobileShell = () => typeof window !== 'undefined' && Boolean(window.ReactNativeWebView || window.__CIALAI_SHELL__);
 export const isPhone = () => typeof document !== 'undefined' && document.documentElement.dataset.formFactor === 'phone';
@@ -21,11 +22,21 @@ export const shellTheme = () => {
 export function onShellLock(listener) { lockListeners.add(listener); return () => lockListeners.delete(listener); }
 export function onNavigateBack(listener) { navigateBackListeners.add(listener); return () => navigateBackListeners.delete(listener); }
 export function onShellTheme(listener) { themeListeners.add(listener); return () => themeListeners.delete(listener); }
+export function onShellIntent(listener) { intentListeners.add(listener); return () => intentListeners.delete(listener); }
 
 export function receiveShellMessage(message) {
   if (!message || typeof message !== 'object') return;
   if (message.type === 'navigate-back') {
     navigateBackListeners.forEach((listener) => listener());
+    return;
+  }
+  // Pedido feito com a pagina ja aberta, como o toque num aviso da sessao: o
+  // bootstrap so leva o pedido de quando a pagina carregou.
+  if (message.type === 'intent') {
+    if (validIntent(message.intent) && typeof window !== 'undefined') {
+      window.__CIALAI_SHELL__ = { ...(window.__CIALAI_SHELL__ || {}), intent: message.intent };
+      intentListeners.forEach((listener) => listener());
+    }
     return;
   }
   if (message.type === 'shell' && THEME_MODES.includes(message.theme)) themeListeners.forEach((listener) => listener(message.theme));
@@ -106,9 +117,12 @@ export const shellDesktopName = () => {
 // vez por id, mesmo se a pagina recarregar.
 const INTENT_KINDS = ['session', 'new-session', 'profiles', 'pick-project'];
 const INTENTS_USED_KEY = 'cialai_shell_intents';
+function validIntent(intent) {
+  return Boolean(intent) && typeof intent === 'object' && typeof intent.id === 'string' && INTENT_KINDS.includes(intent.kind);
+}
 export function takeShellIntent(storage = typeof window !== 'undefined' ? window.localStorage : null) {
   const intent = typeof window !== 'undefined' ? window.__CIALAI_SHELL__?.intent : null;
-  if (!intent || typeof intent.id !== 'string' || !INTENT_KINDS.includes(intent.kind)) return null;
+  if (!validIntent(intent)) return null;
   let used = [];
   try { used = JSON.parse(storage?.getItem(INTENTS_USED_KEY) || '[]'); } catch (_error) { used = []; }
   if (!Array.isArray(used)) used = [];

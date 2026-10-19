@@ -7,7 +7,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Weak, mpsc};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -124,7 +124,7 @@ impl LaunchConfig {
 struct ProcessHandle {
     generation: u64,
     ready: Arc<AtomicBool>,
-    stdin: Arc<Mutex<ChildStdin>>,
+    stdin: mpsc::SyncSender<StdioRequest>,
     child: Arc<Mutex<Child>>,
     /// No Windows o sidecar e o `tor` que ele abre vivem neste Job Object com
     /// `KILL_ON_JOB_CLOSE`: se o app morre, o sistema fecha o handle e leva a
@@ -132,6 +132,52 @@ struct ProcessHandle {
     /// `tor` sai sozinho ao perder o controle que o possui.
     #[cfg(target_os = "windows")]
     job: crate::platform::win_job::JobHandle,
+}
+
+struct StdioRequest {
+    id: u64,
+    line: String,
+    deadline: Instant,
+}
+
+// A single bounded writer owns the pipe. Callers can time out even while the
+// OS pipe is full; killing our child then releases the writer. A queued call
+// that already expired is never sent into a later operation.
+fn write_input(
+    owner: Weak<Inner>,
+    generation: u64,
+    mut stdin: ChildStdin,
+    requests: mpsc::Receiver<StdioRequest>,
+) {
+    for request in requests {
+        if Instant::now() >= request.deadline {
+            continue;
+        }
+        let current = owner.upgrade().is_some_and(|owner| {
+            lock(&owner.pending)
+                .get(&request.id)
+                .is_some_and(|(epoch, _)| *epoch == generation)
+        });
+        if !current {
+            continue;
+        }
+        if let Err(error) = stdin
+            .write_all(request.line.as_bytes())
+            .and_then(|_| stdin.flush())
+        {
+            if let Some(owner) = owner.upgrade() {
+                owner.fail_pending(
+                    Some(generation),
+                    RpcProblem::local(
+                        "tunnel_disconnected",
+                        format!("O sidecar fechou a entrada stdio: {error}"),
+                        true,
+                    ),
+                );
+            }
+            break;
+        }
+    }
 }
 
 impl ProcessHandle {
@@ -187,11 +233,13 @@ struct Inner {
     next_id: AtomicU64,
     next_generation: AtomicU64,
     process: Mutex<Option<ProcessHandle>>,
-    pending: Mutex<HashMap<u64, mpsc::SyncSender<PendingResult>>>,
+    pending: Mutex<HashMap<u64, (u64, mpsc::SyncSender<PendingResult>)>>,
     start_gate: Mutex<()>,
     stopping: AtomicBool,
     restart_active: AtomicBool,
     restarts: Mutex<RestartBudget>,
+    retry_wait: Mutex<()>,
+    retry_wake: Condvar,
 }
 
 #[derive(Clone)]
@@ -263,6 +311,8 @@ impl Supervisor {
                 stopping: AtomicBool::new(false),
                 restart_active: AtomicBool::new(false),
                 restarts: Mutex::new(RestartBudget::new()),
+                retry_wait: Mutex::new(()),
+                retry_wake: Condvar::new(),
             }),
         }
     }
@@ -280,7 +330,30 @@ impl Supervisor {
         let process = self.inner.ready_process()?;
         let result = self
             .inner
-            .send_on(&process, command, args.clone(), CALL_TIMEOUT)?;
+            .send_on(&process, command, args.clone(), CALL_TIMEOUT);
+        let result = match result {
+            Ok(result) => result,
+            Err(problem) => {
+                if matches!(
+                    problem.code.as_str(),
+                    "tunnel_timeout" | "tunnel_disconnected"
+                ) {
+                    // Only our exact child is invalidated, never a PID-file owner.
+                    let _gate = lock(&self.inner.start_gate);
+                    self.inner.fail_start(&process);
+                    self.inner
+                        .fail_pending(Some(process.generation), problem.clone());
+                    // A delayed failure from an older generation must not
+                    // announce another recovery after its replacement is ready.
+                    if !self.inner.stopping.load(Ordering::SeqCst)
+                        && self.inner.ready_process().is_err()
+                    {
+                        self.inner.schedule_restart();
+                    }
+                }
+                return Err(problem);
+            }
+        };
         self.inner.sync_bridge_call(command, &args, &result);
         if command == "net.start" {
             // A ponte precisa dos nomes dos celulares antes da primeira
@@ -443,9 +516,9 @@ impl Inner {
         match self.start_once() {
             Ok(()) => Ok(()),
             Err(problem) => {
-                // Com a janela de inícios esgotada não há o que rearmar: a
-                // interface volta a pedir quando o mais antigo sair da janela.
-                if problem.code != RESTART_LIMIT_CODE && !self.stopping.load(Ordering::SeqCst) {
+                // Recovery also remains armed while the start budget cools
+                // down, so an initial failure never needs an app restart.
+                if problem.retryable && !self.stopping.load(Ordering::SeqCst) {
                     self.schedule_restart();
                 }
                 Err(problem)
@@ -462,6 +535,15 @@ impl Inner {
                 "O núcleo do túnel está encerrando.",
                 true,
             ));
+        }
+        let previous = lock(&self.process).clone();
+        if let Some(process) = previous {
+            if process.ready.load(Ordering::SeqCst)
+                && matches!(lock(&process.child).try_wait(), Ok(None))
+            {
+                return Ok(());
+            }
+            self.fail_start(&process);
         }
         if let Err(wait) = lock(&self.restarts).admit(Instant::now()) {
             return Err(RpcProblem::local(
@@ -535,10 +617,13 @@ impl Inner {
             RpcProblem::local("tunnel_start", "O sidecar não abriu a saída stdio.", true)
         })?;
         let generation = self.next_generation.fetch_add(1, Ordering::SeqCst);
+        let (write_tx, write_rx) = mpsc::sync_channel(8);
+        let writer_owner = Arc::downgrade(self);
+        thread::spawn(move || write_input(writer_owner, generation, stdin, write_rx));
         let process = ProcessHandle {
             generation,
             ready: Arc::new(AtomicBool::new(false)),
-            stdin: Arc::new(Mutex::new(stdin)),
+            stdin: write_tx,
             child: Arc::new(Mutex::new(child)),
             #[cfg(target_os = "windows")]
             job,
@@ -610,18 +695,25 @@ impl Inner {
         let line = encode_request(id, command, args)
             .map_err(|message| RpcProblem::local("rpc_invalid", message, false))?;
         let (sender, receiver) = mpsc::sync_channel(1);
-        lock(&self.pending).insert(id, sender);
-        let write = {
-            let mut stdin = lock(&process.stdin);
-            stdin.write_all(line.as_bytes()).and_then(|_| stdin.flush())
-        };
-        if let Err(error) = write {
+        lock(&self.pending).insert(id, (process.generation, sender));
+        if let Err(error) = process.stdin.try_send(StdioRequest {
+            id,
+            line,
+            deadline: Instant::now() + timeout,
+        }) {
             lock(&self.pending).remove(&id);
-            return Err(RpcProblem::local(
-                "tunnel_disconnected",
-                format!("O sidecar fechou a entrada stdio: {error}"),
-                true,
-            ));
+            return Err(match error {
+                mpsc::TrySendError::Full(_) => RpcProblem::local(
+                    "tunnel_busy",
+                    "A fila do túnel está ocupada. Tente novamente.",
+                    true,
+                ),
+                mpsc::TrySendError::Disconnected(_) => RpcProblem::local(
+                    "tunnel_disconnected",
+                    "O sidecar fechou a entrada stdio.",
+                    true,
+                ),
+            });
         }
         match receiver.recv_timeout(timeout) {
             Ok(result) => result,
@@ -665,22 +757,28 @@ impl Inner {
         removed.collect_tree();
         // As sessões móveis morreram com o processo sem emitir `session.closed`.
         self.awake.sidecar_exited();
-        self.fail_pending(RpcProblem::local(
-            "tunnel_disconnected",
-            "O núcleo do túnel foi desconectado.",
-            true,
-        ));
+        self.fail_pending(
+            Some(generation),
+            RpcProblem::local(
+                "tunnel_disconnected",
+                "O núcleo do túnel foi desconectado.",
+                true,
+            ),
+        );
         if was_ready && !self.stopping.load(Ordering::SeqCst) {
-            self.emit_local("tunnel.state", json!({"state":"restarting"}));
             self.schedule_restart();
         }
     }
 
-    fn fail_pending(&self, problem: RpcProblem) {
-        let pending = std::mem::take(&mut *lock(&self.pending));
-        for (_, sender) in pending {
-            let _ = sender.send(Err(problem.clone()));
-        }
+    fn fail_pending(&self, generation: Option<u64>, problem: RpcProblem) {
+        lock(&self.pending).retain(|_, (owner, sender)| {
+            if generation.is_none_or(|generation| generation == *owner) {
+                let _ = sender.send(Err(problem.clone()));
+                false
+            } else {
+                true
+            }
+        });
     }
 
     fn schedule_restart(self: &Arc<Self>) {
@@ -691,13 +789,21 @@ impl Inner {
         {
             return;
         }
+        // The UI reapplies net.start after the next running event. This is
+        // required for initial failures and RPC timeouts as well as exits.
+        self.emit_local("tunnel.state", json!({"state":"restarting"}));
         let owner = self.clone();
         thread::spawn(move || {
-            for delay in restart_delays() {
+            let mut delays = restart_delays();
+            let mut delay = delays.next().unwrap();
+            loop {
                 if owner.stopping.load(Ordering::SeqCst) {
                     break;
                 }
-                thread::sleep(delay);
+                let wait = lock(&owner.retry_wait);
+                let _ = owner
+                    .retry_wake
+                    .wait_timeout_while(wait, delay, |_| !owner.stopping.load(Ordering::SeqCst));
                 let _gate = lock(&owner.start_gate);
                 match owner.start_once() {
                     Ok(()) => {
@@ -706,8 +812,23 @@ impl Inner {
                     }
                     // A janela de inícios esgotou: o resto da escada não
                     // mudaria nada além de somar processos.
-                    Err(problem) if problem.code == RESTART_LIMIT_CODE => break,
-                    Err(_) => {}
+                    Err(problem) if problem.code == RESTART_LIMIT_CODE => {
+                        delay = lock(&owner.restarts)
+                            .attempts
+                            .front()
+                            .map(|at| RESTART_WINDOW.saturating_sub(at.elapsed()))
+                            .unwrap_or(Duration::from_secs(1))
+                            .max(Duration::from_millis(10));
+                        owner.emit_local(
+                            "tunnel.state",
+                            json!({"state":"failed", "retryAfterMs":delay.as_millis()}),
+                        );
+                        delays = restart_delays();
+                    }
+                    Err(problem) if !problem.retryable => break,
+                    Err(_) => {
+                        delay = delays.next().unwrap_or(Duration::from_secs(30));
+                    }
                 }
             }
             owner.restart_active.store(false, Ordering::SeqCst);
@@ -721,10 +842,14 @@ impl Inner {
         if self.stopping.swap(true, Ordering::SeqCst) {
             return;
         }
+        self.retry_wake.notify_all();
         // Espera um início em andamento registrar o processo, para encerrá-lo
         // em vez de deixá-lo nascer depois do encerramento.
         let _gate = lock(&self.start_gate);
-        if let Some(process) = lock(&self.process).clone() {
+        // Release the process lock before waiting for the response: the
+        // reader needs it to validate the generation before delivering ACKs.
+        let process = lock(&self.process).clone();
+        if let Some(process) = process {
             // O sidecar fecha a borda e o `tor` antes de sair; o `tor` tem 3 s
             // depois de `SIGNAL SHUTDOWN`, dentro deste prazo.
             let _ = self.send_on(&process, "shutdown", json!({}), Duration::from_secs(3));
@@ -740,11 +865,10 @@ impl Inner {
         }
         *lock(&self.process) = None;
         self.awake.sidecar_exited();
-        self.fail_pending(RpcProblem::local(
-            "tunnel_stopped",
-            "O núcleo do túnel foi encerrado.",
-            false,
-        ));
+        self.fail_pending(
+            None,
+            RpcProblem::local("tunnel_stopped", "O núcleo do túnel foi encerrado.", false),
+        );
         self.emit_local("tunnel.state", json!({"state":"stopped"}));
     }
 
@@ -787,9 +911,15 @@ fn read_output(
         let Some(owner) = owner.upgrade() else {
             break;
         };
+        if !lock(&owner.process)
+            .as_ref()
+            .is_some_and(|current| current.generation == generation)
+        {
+            break;
+        }
         match frame {
             Inbound::Response(response) => {
-                if let Some(sender) = lock(&owner.pending).remove(&response.id) {
+                if let Some((_, sender)) = lock(&owner.pending).remove(&response.id) {
                     let result = if response.ok {
                         Ok(response.result.unwrap_or(Value::Null))
                     } else {
@@ -1419,6 +1549,295 @@ printf '%s\n' '{"ok":true,"checks":{"state":{"ok":true}}}'
         args: Vec<String>,
     }
 
+    /// Fixture que aceita IDs de qualquer geração, sem iniciar Tor ou outro
+    /// processo. O arquivo `available` permite recuperar o mesmo supervisor.
+    #[cfg(unix)]
+    fn recovery_supervisor(root: &Path) -> Supervisor {
+        recovery_supervisor_with_events(root, Arc::new(|_, _| {}))
+    }
+
+    #[cfg(unix)]
+    fn recovery_supervisor_with_events(root: &Path, events: EventSink) -> Supervisor {
+        let script = root.join("fake-recovery-sidecar.sh");
+        fs::write(
+            &script,
+            r#"#!/bin/sh
+[ -f "$1/available" ] || exit 17
+printf '%s\n' "$$" >> "$1/starts"
+printf '%s\n' '{"event":"hello","data":{"protocol":1,"version":"0.1.0","tailscale":"fixture","pid":42},"ts":"2026-09-12T20:00:00Z"}'
+while IFS= read -r request; do
+    id=${request#*\"id\":}
+    id=${id%%,*}
+    case "$request" in
+        *'"cmd":"hello"'*) result='{"protocol":1}' ;;
+        *'"cmd":"shutdown"'*) printf '{"id":%s,"ok":true,"result":{}}\n' "$id"; exit 0 ;;
+        *) result="{\"pid\":$$}" ;;
+    esac
+    printf '{"id":%s,"ok":true,"result":%s}\n' "$id" "$result"
+    if [ -f "$1/block-stdin" ]; then while :; do :; done; fi
+done
+"#,
+        )
+        .unwrap();
+        let mut launch = fixture(
+            root,
+            PathBuf::from("/bin/sh"),
+            BridgeSession::new(3720, "fixture".into()),
+        );
+        launch.binary_args = vec![
+            script.to_string_lossy().into_owned(),
+            root.to_string_lossy().into_owned(),
+        ];
+        Supervisor::new(
+            launch,
+            events,
+            Arc::new(RecordingBridge::default()),
+            ApiKeyStore::new(root.join("key")),
+            Awake::disabled(),
+        )
+    }
+
+    #[cfg(unix)]
+    fn wait_until(limit: Duration, condition: impl Fn() -> bool) -> bool {
+        let start = Instant::now();
+        while !condition() {
+            if start.elapsed() >= limit {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(10));
+        }
+        true
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn scheduled_restart_keeps_the_child_recovered_by_a_foreground_call() {
+        let root = cascade_root("foreground-recovery");
+        let supervisor = recovery_supervisor(&root);
+        assert!(supervisor.call("net.status", json!({})).is_err());
+        fs::write(root.join("available"), "ready").unwrap();
+        let first = supervisor.call("net.status", json!({})).unwrap();
+        let original = supervisor.inner.ready_process().unwrap();
+        let finished = wait_until(Duration::from_secs(3), || {
+            !supervisor.inner.restart_active.load(Ordering::SeqCst)
+        });
+        let second = supervisor.call("net.status", json!({}));
+        let starts = fs::read_to_string(root.join("starts")).unwrap();
+        supervisor.shutdown_blocking();
+        // Também recolhe o filho original se a regressão substituir seu handle.
+        original.kill();
+        fs::remove_dir_all(root).unwrap();
+        assert!(finished, "o reinício pendente não terminou");
+        assert_eq!(second.unwrap(), first, "o filho recuperado foi substituído");
+        assert_eq!(starts.lines().count(), 1, "nasceu um sidecar duplicado");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_initial_failure_emits_recovery_before_running_so_the_ui_restarts_network() {
+        let root = cascade_root("initial-network-recovery");
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let recorded = events.clone();
+        let supervisor = recovery_supervisor_with_events(
+            &root,
+            Arc::new(move |_, value| {
+                lock(&recorded).push(value);
+            }),
+        );
+        assert!(supervisor.call("net.start", json!({})).is_err());
+        fs::write(root.join("available"), "ready").unwrap();
+        let recovered = wait_until(Duration::from_secs(4), || {
+            supervisor.inner.ready_process().is_ok()
+        });
+        supervisor.shutdown_blocking();
+        let states = lock(&events)
+            .iter()
+            .filter_map(|frame| frame.get("data")?.get("state")?.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        fs::remove_dir_all(root).unwrap();
+        assert!(recovered);
+        let restarting = states
+            .iter()
+            .position(|state| state == "restarting")
+            .expect("recovery must be announced after initial failure");
+        let running = states.iter().position(|state| state == "running").unwrap();
+        assert!(
+            restarting < running,
+            "UI must be armed before the process recovers: {states:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn exhausted_restart_budget_recovers_after_cooldown_without_an_app_restart() {
+        let root = cascade_root("cooldown-recovery");
+        let supervisor = recovery_supervisor(&root);
+        fs::write(root.join("available"), "ready").unwrap();
+        let near_expiry = Instant::now() - RESTART_WINDOW + Duration::from_millis(1800);
+        lock(&supervisor.inner.restarts).attempts =
+            std::iter::repeat_n(near_expiry, MAX_RESTARTS).collect();
+        assert_eq!(
+            supervisor.call("net.status", json!({})).unwrap_err().code,
+            RESTART_LIMIT_CODE
+        );
+        let recovered = wait_until(Duration::from_secs(5), || {
+            supervisor.inner.ready_process().is_ok()
+        });
+        let starts = fs::read_to_string(root.join("starts")).unwrap_or_default();
+        supervisor.shutdown_blocking();
+        fs::remove_dir_all(root).unwrap();
+        assert!(recovered, "budget exhaustion became permanent");
+        assert_eq!(starts.lines().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failure_from_an_old_generation_does_not_cancel_new_requests() {
+        let root = cascade_root("pending-generations");
+        let supervisor = recovery_supervisor(&root);
+        let (old_tx, old_rx) = mpsc::sync_channel(1);
+        let (new_tx, new_rx) = mpsc::sync_channel(1);
+        lock(&supervisor.inner.pending).insert(10, (1, old_tx));
+        lock(&supervisor.inner.pending).insert(11, (2, new_tx));
+        supervisor
+            .inner
+            .fail_pending(Some(1), RpcProblem::local("test", "fixture", true));
+        assert!(old_rx.try_recv().unwrap().is_err());
+        assert!(matches!(new_rx.try_recv(), Err(mpsc::TryRecvError::Empty)));
+        assert!(lock(&supervisor.inner.pending).contains_key(&11));
+        supervisor.shutdown_blocking();
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_late_failed_call_keeps_the_recovered_generation_running() {
+        let root = cascade_root("late-failed-call");
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let recorded = events.clone();
+        let supervisor = recovery_supervisor_with_events(
+            &root,
+            Arc::new(move |_, value| lock(&recorded).push(value)),
+        );
+        fs::write(root.join("available"), "ready").unwrap();
+        fs::write(root.join("block-stdin"), "fixture").unwrap();
+        supervisor.inner.ensure_started().unwrap();
+        let old_process = supervisor.inner.ready_process().unwrap();
+        let caller = supervisor.clone();
+        let old_call = thread::spawn(move || caller.call("logs.tail", json!({"lines":10})));
+        assert!(
+            wait_until(Duration::from_secs(1), || {
+                lock(&supervisor.inner.pending)
+                    .values()
+                    .any(|(generation, _)| *generation == old_process.generation)
+            }),
+            "generation A never registered its pending call"
+        );
+
+        // Intercept the actual exit failure so A's caller receives it only
+        // after B has recovered, independent of thread scheduling.
+        let (exit_tx, exit_rx) = mpsc::sync_channel(1);
+        let delayed_tx = {
+            let mut pending = lock(&supervisor.inner.pending);
+            let (_, sender) = pending
+                .values_mut()
+                .find(|(generation, _)| *generation == old_process.generation)
+                .unwrap();
+            std::mem::replace(sender, exit_tx)
+        };
+        old_process.kill();
+        let old_failure = exit_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("generation A's exit did not fail its pending RPC");
+        assert!(
+            old_failure.is_err(),
+            "the intercepted call must have failed"
+        );
+        fs::remove_file(root.join("block-stdin")).unwrap();
+        let recovered = supervisor.call("net.status", json!({})).unwrap();
+        let recovered_process = supervisor.inner.ready_process().unwrap();
+        let recovery_finished = wait_until(Duration::from_secs(3), || {
+            !supervisor.inner.restart_active.load(Ordering::SeqCst)
+        });
+        let before_late_failure = lock(&events).len();
+
+        delayed_tx.send(old_failure).unwrap();
+        let old_result = old_call.join().unwrap();
+        let unnecessary_restart = supervisor.inner.restart_active.load(Ordering::SeqCst);
+        let follow_up = supervisor.call("net.status", json!({}));
+        let late_states = lock(&events)[before_late_failure..]
+            .iter()
+            .filter_map(|frame| frame.get("data")?.get("state")?.as_str().map(str::to_owned))
+            .collect::<Vec<_>>();
+        let last_state = lock(&events)
+            .iter()
+            .rev()
+            .find_map(|frame| frame.get("data")?.get("state")?.as_str().map(str::to_owned));
+        let starts = fs::read_to_string(root.join("starts")).unwrap();
+        supervisor.shutdown_blocking();
+        recovered_process.kill();
+        fs::remove_dir_all(root).unwrap();
+
+        assert!(
+            recovery_finished,
+            "B's recovery did not settle before A resumed"
+        );
+        assert!(
+            old_result.is_err(),
+            "A must still receive its original failure"
+        );
+        assert_eq!(
+            follow_up.unwrap(),
+            recovered,
+            "A's late failure replaced or killed generation B"
+        );
+        assert_eq!(starts.lines().count(), 2, "an extra sidecar was started");
+        assert!(
+            !unnecessary_restart && !late_states.iter().any(|state| state == "restarting"),
+            "A's late failure scheduled another restart after B recovered: {late_states:?}"
+        );
+        assert_eq!(
+            last_state.as_deref(),
+            Some("running"),
+            "the tunnel must stay running after B recovered"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unread_stdin_pipe_cannot_bypass_the_rpc_deadline() {
+        let root = cascade_root("blocked-stdio");
+        let supervisor = recovery_supervisor(&root);
+        fs::write(root.join("available"), "ready").unwrap();
+        fs::write(root.join("block-stdin"), "fixture").unwrap();
+        supervisor.inner.ensure_started().unwrap();
+        let process = supervisor.inner.ready_process().unwrap();
+        let owner = supervisor.inner.clone();
+        let blocked = process.clone();
+        let (tx, rx) = mpsc::sync_channel(1);
+        let call = thread::spawn(move || {
+            let result = owner.send_on(
+                &blocked,
+                "logs.tail",
+                json!({"fixture":"x".repeat(MAX_LINE_BYTES / 2)}),
+                Duration::from_millis(100),
+            );
+            let _ = tx.send(result);
+        });
+        let result = rx.recv_timeout(Duration::from_millis(500));
+        supervisor.inner.fail_start(&process);
+        call.join().unwrap();
+        supervisor.shutdown_blocking();
+        fs::remove_dir_all(root).unwrap();
+        assert_eq!(
+            result
+                .expect("writing the pipe bypassed the RPC timeout")
+                .unwrap_err()
+                .code,
+            "tunnel_timeout"
+        );
+    }
+
     impl TestChild {
         fn sidecar(root: &Path) -> Self {
             #[cfg(unix)]
@@ -1493,11 +1912,17 @@ printf '%s\n' '{"id":3,"ok":true,"result":{}}'
         );
         let result = supervisor.call("logs.tail", json!({"lines":10})).unwrap();
         assert_eq!(result, json!({"lines":[]}));
+        let shutdown_started = Instant::now();
         supervisor.shutdown_blocking();
+        let shutdown_elapsed = shutdown_started.elapsed();
         assert!(lock(&events).iter().any(|(channel, value)| {
             channel == "tunnel://state" && value["data"]["state"] == "running"
         }));
         fs::remove_dir_all(root).unwrap();
+        assert!(
+            shutdown_elapsed < Duration::from_secs(1),
+            "a responsive sidecar ACK must complete shutdown promptly: {shutdown_elapsed:?}"
+        );
     }
 
     /// Sidecar falso que confere a injeção dos campos da borda em `net.start`

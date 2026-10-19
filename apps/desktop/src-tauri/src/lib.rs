@@ -7,6 +7,7 @@
 
 pub mod bridge;
 pub mod cli;
+mod clipboard;
 mod commands;
 mod diagnostics;
 mod i18n;
@@ -107,6 +108,9 @@ pub fn run() {
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
+            clipboard::clipboard_read,
+            clipboard::clipboard_write_text,
+            clipboard::clipboard_store_file,
             commands::get_preferences,
             commands::set_preferences,
             commands::tunnel_call,
@@ -131,6 +135,7 @@ pub fn run() {
             commands::pty_list,
             commands::pty_metrics,
             commands::pty_saved,
+            commands::pty_resume_agent,
             commands::pty_saved_history,
             commands::pty_forget,
             commands::pty_prune,
@@ -206,6 +211,7 @@ pub fn run() {
             ));
             app.manage(workspace::watch::Watcher::new(app.handle().clone()));
             app.manage(workspace::files::FindCache::default());
+            app.manage(clipboard::ClipboardFiles::default());
             app.manage(workspace::ai::UsageCache::default());
             app.manage(workspace::preview::PreviewRoots::default());
             app.manage(workspace::docgraph::DocScans::default());
@@ -327,6 +333,9 @@ pub fn run() {
                 return;
             }
             diagnostics::note("saida pedida: encerrando browsers e terminais");
+            if let Some(files) = handle.try_state::<clipboard::ClipboardFiles>() {
+                files.clear();
+            }
             if let Some(notch) = handle.try_state::<notch::NotchManager>() {
                 notch.stop();
             }

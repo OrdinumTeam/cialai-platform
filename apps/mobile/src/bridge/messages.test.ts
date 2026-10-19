@@ -100,13 +100,45 @@ describe('page bridge messages', () => {
       recent: ['/p/psicoapp']
     };
 
+    // Página anterior aos avisos de atenção: sem estado semanal nem os campos
+    // novos da sessão, que chegam nulos.
+    const older = {
+      ...valid,
+      accounts: [{ ...valid.accounts[0], weeklyState: 'unknown' }],
+      sessions: [{ ...valid.sessions[0], color: null, tone: null, icon: null, attention: null, turn: null, viewed: false }]
+    };
+
     test('accepts the shape the page sends', () => {
-      expect(parsePageMessage(JSON.stringify(valid))).toEqual(valid);
+      expect(parsePageMessage(JSON.stringify(valid))).toEqual(older);
+    });
+
+    test('reads the session tone, icon, attention and agent turn, and the weekly state', () => {
+      const tone = { light: { base: '#1f9d5b', text: '#187a46' }, dark: { base: '#3ccf76', text: '#3ccf76' } };
+      const session = { ...valid.sessions[0], color: 'verde', tone, icon: 'rocket',
+        attention: { kind: 'bell', at: 1200, message: 'Pediu atenção' }, turn: { state: 'waiting', waitingFor: 'permission' }, viewed: true };
+      const raw = { ...valid, accounts: [{ ...valid.accounts[0], weeklyState: 'none' }], sessions: [session] };
+      const parsed = parsePageMessage(JSON.stringify(raw));
+      expect(parsed).toEqual(raw);
+    });
+
+    test('a weekly window from an older page counts as available', () => {
+      const raw = { ...valid, accounts: [{ ...valid.accounts[0], windows: [{ ...valid.accounts[0]!.windows[0], weekly: true }] }] };
+      const parsed = parsePageMessage(JSON.stringify(raw));
+      expect(parsed?.type === 'dashboard' && parsed.accounts[0]?.weeklyState).toBe('available');
+    });
+
+    test('new session fields out of shape become empty without rejecting the snapshot', () => {
+      const session = { ...valid.sessions[0], color: 'Verde!', tone: { light: { base: 'green', text: '#000000' } }, icon: '../x',
+        attention: { kind: 'siren', at: 1 }, turn: { state: 'sleeping' }, viewed: 'yes' };
+      const parsed = parsePageMessage(JSON.stringify({ ...valid, sessions: [session] }));
+      expect(parsed?.type === 'dashboard' && parsed.sessions[0]).toEqual(older.sessions[0]);
+      const long = parsePageMessage(JSON.stringify({ ...valid, sessions: [{ ...valid.sessions[0], attention: { kind: 'notify', at: 5, message: 'x'.repeat(400) } }] }));
+      expect(long?.type === 'dashboard' && long.sessions[0]?.attention?.message).toHaveLength(160);
     });
 
     test('reads a page without recent folders as an empty list', () => {
-      const { recent: _recent, ...older } = valid;
-      expect(parsePageMessage(JSON.stringify(older))).toEqual({ ...older, recent: [] });
+      const { recent: _recent, ...withoutRecent } = valid;
+      expect(parsePageMessage(JSON.stringify(withoutRecent))).toEqual({ ...older, recent: [] });
     });
 
     test('clamps the used fraction', () => {

@@ -73,6 +73,101 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.3.0 preview
+
+Preview dated 2026-10-19 for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session carries its own colour and icon, the AI Bar shows the weekly limit and the phone raises attention notices.
+
+### Added
+
+* An icon per session. Thirty Lucide icons are picked together with the colour at creation or from Colour and icon, shown loose next to the name on the card and in the header on the computer and on the phone, and stored in the terminal presentation with the same validation as the colour. Without a choice the agent glyph or a terminal is shown
+* A weekly inner ring in the AI Bar. The outer ring is the 5 hour session and the inner one the weekly window, with the same stroke and convention. Weekly state is available, none or unknown, decided only from the windows that arrived, so a missing reading never becomes 0% or unlimited. The tooltip and the accessible description name both windows, usage and reset
+* Attention notices on the phone. The page snapshot carries each session's resolved tone, icon, attention and agent turn, and the app turns a new bell, terminal notice, finished command, agent waiting or asking for permission and finished answer into a local notice with the session name and colour, on a high importance Android channel. The notice for the session in view is skipped, a newer notice replaces the previous one of the same session and tapping opens the session, also on a cold start
+* Four fixed keys in the phone terminal bar: Enter, Esc, Ctrl C and Ctrl V. Modifier shortcuts stack the modifier over the letter so the bar fits from 320 px; an untouched old bar migrates once and a customised one is kept
+
+### Changed
+
+* The desktop shell uses solid surfaces, rounded components and tone separation from the mobile design, without gradients, glass or glow, behind `html[data-shell="desktop"]` so the phone page is unaffected. The sidebar stays solid pink. Every interactive control and colour change shares a short transition
+* The session colour drives the inner accents of its card, header, terminal focus ring, cursor and selection, palette entry, on screen notice and the AI Bar of the selected session, through one resolver with a 4.5:1 text contrast. Without a colour the Cialai pink applies. Semantic colours, ANSI colours and CLI output are untouched
+* Usage bands are amber from 60% and red from 80% on the computer, the phone page and the native app. Preferences still on the old 50 and 70 defaults migrate once through `limits_revision`. The context chip keeps 75 and 90
+* The official lockup replaces the hollow symbol in the sidebar, splash, boot screen and onboarding; with the sidebar closed the lettering shows small in the toolbar. The phone app uses the same lockup per theme and the coloured head. The pieces are generated from the brand masters by `tools/brand/build-ui-lockup.mjs`
+* Decorative plates behind icons were removed on the desktop, the phone page and the native app
+* The phone page and the native app follow the session tone, the weekly states and the new bands; the phone composer is solid
+
+### Compatibility
+
+* The terminal presentation gained the optional `icon` field and the Rust side rejects unknown fields, so the desktop front end and the Rust core ship in the same build. New dashboard snapshot fields are optional for the app: an older computer sends none and the app shows no attention notices
+
+### Fixed
+
+* Tapping an attention notice with the terminal already open now opens the session. The shell intent used to reach the page only through the bootstrap at load time; the app now also sends it as an `intent` message to the loaded page, and each intent id is still used once
+
+### Verification
+
+* The `v0.3.0` tag points at `9926eda`, the commit the packages were tested from. The full `npm test` passed with Node 22, plus 41 and 426 UI tests, 372 mobile tests, 5 browser scenarios and the performance budget at 729 KB and 853 ms. CI runs 39196103132 and 39192265156 passed on macOS, Linux and Windows
+* Windows and both Mac packages came from runs 39192267839 and 39196105711, Linux from 39192270260, and AppImage smoke run 39192273255 opened the app on Ubuntu 24.04 and Arch. On the Windows 11 VM the installer exited 0 and colour, icon, theme and history survived a restart. Both DMGs passed Developer ID, stapled notarization and Gatekeeper checks
+* On an Android 35 emulator paired with the VM desktop over the Tor backup, versionCode 37 showed the session colour and icon, raised the attention notice with the session dot, colour and computer name, and the tap opened the session. The iOS Release simulator build launched; build 18 is in internal TestFlight and in App Store and external beta review. No physical device was used
+
+## 0.2.16 desktop website distribution
+
+### Fixed
+
+* Session profile badges and agent account screens use the alias from the AI Bar, preserving its capitalization for default and named profiles. A default profile without an alias keeps no badge, and a named profile without an alias keeps the terminal's exported name
+* The default agent profile is resolved even without an exported profile variable. Alias changes refresh session cards independently of usage readings
+* Phone session cards display the same profile badge, and native account snapshots preserve the account label
+* Sessions that fail to open offer End session above the failure status on desktop and phone. The status tooltip includes the opening error, and the action retains the existing close confirmation
+
+### Verification
+
+* Local validation passed with 457 Rust tests and seven ignored, 390 UI tests, 40 runtime integration tests and 67 targeted native mobile tests, plus Rust formatting and visible text and translation checks
+* Linux packages were built in workflow 39068060524 and Windows and both Mac architectures in workflow 39068063158, all from commit 2552946. Each runner passed three badge tests, 40 runtime tests and 33 clipboard tests; Linux and Mac passed 19 targeted Rust tests each and Windows passed 18
+* The nine public desktop binaries passed SHA256 checks and all seven updater signatures were verified. Both Mac DMGs passed Developer ID and notarization checks. The six public website pages passed WKWebView checks in Portuguese, English and Spanish, and the served curl installer selected the new common channel without installing anything
+* Distribution uses the website and curl, with no GitHub release, tag, announcement or mobile publication. The existing Android package, installer script and separate Linux channel were preserved. The screenshot's original opening failure remains undiagnosed; the new action and error tooltip were verified with isolated fixtures
+
+## 0.2.15 desktop website distribution
+
+### Fixed
+
+* Codex conversation ownership no longer falls back to a matching directory and recent modification time. Process-owned rollout files and explicit conversation identifiers remain supported
+* Proven card associations survive temporary loss of process file access, remain bound to the process generation, and are preserved during application shutdown
+
+### Verification
+
+* Local checks passed with 456 Rust tests, 383 UI tests and 39 runtime integration tests, including three Codex and Claude cards in the same directory. Native agent sessions remain unverified
+* Initial Linux-only curl delivery was published from successful workflow 38938939824. All three public packages passed SHA256 and updater signature checks, and the served installer selected 0.2.15 without executing an installation. General downloads and website pages were preserved during that first stage; the installer, mobile package and latest GitHub release remain unchanged after the desktop rollout
+* The Linux runner passed 17 targeted Rust session tests, 39 runtime tests and 33 clipboard tests. A Codex conversation without sufficient ownership evidence is not resumed automatically, and previously incorrect saved associations require manual resumption with the original conversation UUID
+* Windows and macOS packages were delivered through successful target jobs in workflows 38971131140 and 38971840253, with no new GitHub release or tag. Each Mac runner passed 17 targeted Rust session tests and Windows passed 16; all three jobs also passed 39 runtime and 33 clipboard tests. Mac Intel was retried after preparing the native host sidecar required by its tests
+* Both Mac app archives passed version and architecture inspection, both DMGs passed Developer ID and notarization checks, and all seven updater signatures were verified. The nine public desktop binaries passed SHA256 checks. The common installer channel now offers 0.2.15, reusing the exact Linux packages and preserving the Android package
+
+## 0.2.14 desktop website distribution
+
+### Fixed
+
+* Linux terminal copy and paste use the native GTK clipboard with Ctrl+Shift+C/V. Plain Ctrl+C/V remain available to the foreground program regardless of its name.
+* Clipboard files and images are delivered as quoted paths, with private temporary files for image data. Pending operations check the terminal identity before delivery, and copy fallback restores focus.
+* Windows keeps its copy and paste shortcuts. macOS keeps native Command shortcuts and accepts the requested Control aliases.
+
+### Distribution
+
+* Windows EXE and MSI, notarized Apple Silicon and Intel DMGs, and the unchanged user-tested Linux packages are available on the website as version 0.2.14.
+* Builds, updater signatures, Mac notarization, public download hashes and the website were verified. This delivery creates no GitHub release or tag and leaves mobile distribution unchanged. Physical Windows and Mac clipboard validation remains separate from build and browser checks.
+
+## 0.2.13 preview
+
+Desktop stability preview dated 2026-10-16. Pairing identities and agent histories are preserved. Android and iOS applications are not republished in this delivery.
+
+### Fixed
+
+* Tunnel ownership now uses a process-lifetime operating system lock instead of numeric PID existence. Legacy records are checked against executable identity and creation time; stale and corrupt records do not permanently block startup
+* The tunnel supervisor retries after its rolling cooldown, isolates responses by process generation and includes blocked stdin delivery in the RPC deadline without replaying mutating operations
+* Codex and Claude Code resumes validate the saved conversation, account, working directory, executable and supported arguments. A bounded per-profile queue, PTY generation checks and user-input cancellation prevent duplicate or misdirected commands
+* Shared Codex daemon checks are passive and bounded. Transient draining can be retried without restarting shared services or forcing every session into no-daemon mode. Failed recovery preserves history and the exact conversation identifier for another attempt
+* Native clipboard events and asynchronous reads share one delivery path. Text takes precedence over images, empty or denied reads never trigger image paste, and closing a terminal cancels pending delivery
+* Disposing a WebGL terminal now pauses its cursor timers. Terminal metrics share a short-lived process sample rather than repeating the same scan for concurrent consumers
+
+### Validation limits
+
+* Isolated fixtures, local benchmarks and browser lifecycle tests are reproducible; they do not replace physical operating system, native clipboard, real-agent or extended production soak validation
+
 ## 0.2.12 preview
 
 Preview dated 2026-10-12. Every terminal card shows the Claude Code reading of its own conversation, the sessions column fits narrow windows and agent accounts are one flat list. The phone keeps the accounts, projects and sessions a computer sent, shows one card per agent, lists every account in the Agents tab, shows Projects as a list and keeps one header in the session. The Linux pairing dialog says why the network did not start, and the iPhone app adopts the UIScene lifecycle, so a build made with Xcode 27 opens again. It is also the version that carries the phone Home, the Projects and Agents tabs, the local notices and the device keyboard button to the App Store and Google Play, which stayed on 0.2.9.

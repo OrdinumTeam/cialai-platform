@@ -45,10 +45,12 @@ type ProgressProps = {
   label?: string;
   detail?: string;
   accessibilityLabel?: string;
+  // Trilho mais fino, para uma linha secundária abaixo da principal.
+  thin?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export function ProgressIndicator({ value, tone = 'primary', label, detail, accessibilityLabel, style }: ProgressProps) {
+export function ProgressIndicator({ value, tone = 'primary', label, detail, accessibilityLabel, thin, style }: ProgressProps) {
   const { colors } = useTokens();
   const clamped = Math.min(1, Math.max(0, Number.isFinite(value) ? value : 0));
   const { fg } = toneColors(colors, tone);
@@ -61,7 +63,7 @@ export function ProgressIndicator({ value, tone = 'primary', label, detail, acce
           {detail ? <Text style={[typography.footnote, { color: colors.textSecondary }]}>{detail}</Text> : null}
         </View>
       ) : null}
-      <View style={[styles.track, { backgroundColor: colors.surfaceMuted }]}>
+      <View style={[styles.track, thin && styles.thin, { backgroundColor: colors.surfaceMuted }]}>
         <View style={[styles.fill, { width: `${clamped * 100}%`, backgroundColor: fg }]} />
       </View>
     </View>
@@ -97,6 +99,7 @@ const styles = StyleSheet.create({
   progress: { gap: space.xs },
   progressHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', gap: space.sm },
   track: { height: 6, borderRadius: 3, overflow: 'hidden' },
+  thin: { height: 4, borderRadius: 2 },
   fill: { height: '100%', borderRadius: 3 },
   section: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space.sm },
   sectionTitle: { flexShrink: 1 },

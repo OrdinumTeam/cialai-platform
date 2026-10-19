@@ -33,6 +33,16 @@ assert.equal(lastDefinition('--mac-accent', [':root', SHELL]), 'var(--cialai-mag
 assert.match(lastDefinition('--mac-sidebar-bg', [':root', SHELL]), /var\(--cialai-blush\)/, 'brand.css perdeu a sidebar clara para a casca');
 assert.equal(lastDefinition('--mac-accent', [':root[data-theme=dark]', `${SHELL}[data-theme=dark]`]), 'var(--cialai-pink)', 'brand.css perdeu o acento escuro para a casca');
 
+// A camada sólida do desktop vem depois da marca: no desktop a lateral é cor
+// sólida, nunca o gradiente que brand.css ainda define para a página do
+// celular, e os tokens dela não podem perder para os de brand.css.
+const DESKTOP = 'html[data-shell=desktop]';
+assert.doesNotMatch(lastDefinition('--mac-sidebar-bg', [DESKTOP]), /gradient/, 'solid.css perdeu a lateral sólida');
+assert.doesNotMatch(lastDefinition('--mac-sidebar-bg', [`${DESKTOP}[data-theme=dark]`]), /gradient/, 'solid.css perdeu a lateral sólida no escuro');
+const brandBlock = rules.findLast((rule) => rule.selector === ':root' && rule.body.includes('--mac-sidebar-bg:'));
+const solidBlock = rules.findLast((rule) => rule.selector === DESKTOP && rule.body.includes('--mac-sidebar-bg:'));
+assert.ok(brandBlock && solidBlock && solidBlock.index > brandBlock.index, 'solid.css precisa vir depois de brand.css');
+
 // O estúdio troca o padding padrão da área de conteúdo depois da casca.
 const contentRule = rules.findLast((rule) => rule.selector === '.mac-content');
 const studioRule = rules.findLast((rule) => rule.selector.includes('.mac-content:has(>.terminais-page)') || rule.selector.includes('.mac-content:has(> .terminais-page)'));
@@ -49,4 +59,4 @@ for (const host of ['.terminais-terminal__host', '.phone-terminal__host']) {
   assert.ok(xtermViewport.some((rule) => rule.selector.includes(host)), `fundo do viewport do xterm sem regra específica para ${host}`);
 }
 
-console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand and studio order in production, and the terminal viewport outranks the xterm black on desktop and phone`);
+console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand, solid surfaces and studio order in production, and the terminal viewport outranks the xterm black on desktop and phone`);

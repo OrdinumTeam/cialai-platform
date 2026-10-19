@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 [package]
 name = "cialai-desktop"
-version = "0.2.12"
+version = "0.3.0"
 description = "Cialai desktop terminal studio"
 authors = ["Ordinum"]
 edition = "2024"
@@ -30,9 +30,10 @@ libc = "0.2"
 base64 = "0.21"
 getrandom = "0.3"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-tokio = { version = "1", features = ["net", "time", "macros"] }
+tokio = { version = "1", features = ["net", "time", "macros", "sync"] }
 tokio-tungstenite = "0.30"
 futures-util = { version = "0.3", features = ["sink"] }
+tempfile = "3.27.0"
 sys-locale = "0.3"
 which = "7"
 dunce = "1"
@@ -58,6 +59,7 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSResponder", "NSView", "NSWindow", "NSButton", "NSControl", "NSScreen", "NSApplication", "NSEvent", "NSGraphicsContext", "NSDragging", "NSDraggingItem", "NSDraggingSession", "NSPasteboard", "NSImage", "NSWorkspace", "NSRunningApplication", "libc"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18.2"
 keyring = { version = "3.6.3", features = ["sync-secret-service", "crypto-rust"] }
 notify = "8"
 sysinfo = "0.36.1"
@@ -69,7 +71,7 @@ keyring = { version = "3.6.3", features = ["windows-native"] }
 notify = "8"
 sysinfo = "0.36.1"
 trash = "5"
-windows-sys = { version = "0.61.2", features = ["Wdk_System_SystemServices", "Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_JobObjects", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
+windows-sys = { version = "0.61.2", features = ["Wdk_System_SystemServices", "Win32_Foundation", "Win32_Networking_WinSock", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Console", "Win32_System_Diagnostics_ToolHelp", "Win32_System_JobObjects", "Win32_System_ProcessStatus", "Win32_System_Registry", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_UI_WindowsAndMessaging"] }
 
 [profile.release]
 codegen-units = 1

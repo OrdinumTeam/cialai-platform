@@ -1,10 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { AgentAccount, AgentId, UsageWindow } from '../../bridge/messages';
-import { percentOf, usageLevel, type UsageLevel } from '../../dashboard/model';
+import { percentOf, usageLevel, type UsageLevel, type WeeklyView } from '../../dashboard/model';
 import { formatReset, formatResetAt } from '../../desktops/format';
 import { useI18n } from '../../i18n';
-import { useTokens } from '../../theme';
+import { useTokens, type Palette } from '../../theme';
 import { ProgressIndicator, space, typography, type Tone } from '../../ui';
 
 // Partes do uso dos agentes que o Início e a aba Agentes dividem.
@@ -16,8 +16,31 @@ export const AGENT_NAME_KEYS: Readonly<Record<AgentId, string>> = {
 
 export const AGENTS: readonly AgentId[] = ['codex', 'claude'];
 
+// Mesmas faixas da Barra de IA do desktop: abaixo de 60% o rosa, a faixa de
+// atenção no âmbar e, de 80% em diante, o vermelho.
 export function levelTone(level: UsageLevel): Tone {
-  return level === 'exhausted' ? 'danger' : level === 'near' ? 'warning' : level === 'unavailable' ? 'neutral' : 'primary';
+  switch (level) {
+    case 'exhausted':
+    case 'critical': return 'danger';
+    case 'near': return 'warning';
+    case 'unavailable': return 'neutral';
+    default: return 'primary';
+  }
+}
+
+// Cor do percentual: o texto comum abaixo da faixa de atenção.
+export function levelColor(colors: Palette, level: UsageLevel): string {
+  return level === 'exhausted' || level === 'critical' ? colors.danger : level === 'near' ? colors.warning : colors.text;
+}
+
+type Translate = ReturnType<typeof useI18n>['t'];
+
+// O semanal numa frase: o rótulo curto com o percentual, ou, sem número, se a
+// conta não tem limite semanal ou se ele ainda não foi lido. Serve à linha e
+// ao leitor de tela.
+export function weeklyText(weekly: WeeklyView, t: Translate): string {
+  if (weekly.kind === 'available') return `${t('mobile.home.usage.weekly')} ${percentOf(weekly.window.usedFraction)}%`;
+  return t(weekly.kind === 'none' ? 'mobile.home.usage.weeklyNone' : 'mobile.home.usage.weeklyUnknown');
 }
 
 // Texto do estado quando não há número para mostrar. Ausência de leitura
@@ -54,7 +77,7 @@ export function WindowRow({ window, now, variant = 'regular' }: RowProps) {
       <View style={styles.windowHead}>
         <Text numberOfLines={2} style={[typography.footnote, styles.flex, { color: colors.textSecondary }]}>{window.label}</Text>
         <Text style={[variant === 'compact' ? typography.callout : typography.headline, styles.percent,
-          { color: level === 'exhausted' ? colors.danger : level === 'near' ? colors.warning : colors.text }]}>{percent}</Text>
+          { color: levelColor(colors, level) }]}>{percent}</Text>
       </View>
       <ProgressIndicator accessibilityLabel={`${window.label} ${percent}`} tone={levelTone(level)} value={window.usedFraction} />
       {level === 'exhausted' || reset ? (
@@ -63,7 +86,8 @@ export function WindowRow({ window, now, variant = 'regular' }: RowProps) {
             <Text style={[typography.caption, styles.exhausted, { color: colors.danger }]}>{t('mobile.home.usage.exhausted')}</Text>
           ) : null}
           {reset ? (
-            <Text numberOfLines={1} style={[typography.caption, styles.flexShrink, { color: level === 'near' ? colors.warning : colors.textSecondary }]}>
+            <Text numberOfLines={1} style={[typography.caption, styles.flexShrink,
+              { color: level === 'critical' ? colors.danger : level === 'near' ? colors.warning : colors.textSecondary }]}>
               {t('mobile.home.usage.renews', { time: reset })}
             </Text>
           ) : null}
@@ -74,6 +98,28 @@ export function WindowRow({ window, now, variant = 'regular' }: RowProps) {
           ) : null}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+// Semanal compacto do card do Início, abaixo da janela principal. Com número,
+// o rótulo curto, o percentual na cor da faixa e um trilho fino; sem limite
+// semanal ou sem leitura, só a frase apagada, sem barra e sem 0%.
+export function WeeklyLine({ weekly }: { weekly: WeeklyView }) {
+  const { colors } = useTokens();
+  const { t } = useI18n();
+  if (weekly.kind !== 'available') {
+    return <Text numberOfLines={1} style={[typography.footnote, { color: colors.textTertiary }]}>{weeklyText(weekly, t)}</Text>;
+  }
+  const label = t('mobile.home.usage.weekly');
+  const percent = `${percentOf(weekly.window.usedFraction)}%`;
+  return (
+    <View style={styles.weekly}>
+      <View style={styles.windowHead}>
+        <Text numberOfLines={1} style={[typography.footnote, styles.flex, { color: colors.textSecondary }]}>{label}</Text>
+        <Text style={[typography.footnote, styles.percent, styles.weeklyPercent, { color: levelColor(colors, weekly.level) }]}>{percent}</Text>
+      </View>
+      <ProgressIndicator accessibilityLabel={`${label} ${percent}`} thin tone={levelTone(weekly.level)} value={weekly.window.usedFraction} />
     </View>
   );
 }
@@ -97,5 +143,7 @@ const styles = StyleSheet.create({
   percent: { fontVariant: ['tabular-nums'] },
   caption: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6 },
   exhausted: { fontWeight: '700' },
+  weekly: { gap: 3 },
+  weeklyPercent: { fontWeight: '600' },
   unavailable: { gap: 6, marginTop: 2 }
 });

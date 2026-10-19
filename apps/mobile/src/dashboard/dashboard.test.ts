@@ -1,15 +1,19 @@
 import { beforeEach, describe, expect, test } from '@jest/globals';
 
-import type { AgentAccount, DashboardMessage } from '../bridge/messages';
+import type { AgentAccount, DashboardMessage, DashboardSession } from '../bridge/messages';
 import { formatAge, formatDuration, formatReset, formatResetAt } from '../desktops/format';
 import { getLocale, setLocale, t } from '../i18n';
-import { accountLevel, accountWindows, agentAccounts, agentSummary, homeAccountId, orderDesktops, orderedAccounts, orderProjects, projectSections, projectTint, sessionsIn, shortPath, usageLevel } from './model';
+import { accountLevel, accountWindows, agentAccounts, agentSummary, DEFAULT_SESSION_TONE, homeAccountId, orderDesktops, orderedAccounts, orderProjects, projectSections, projectTint,
+  sessionShade, sessionsIn, shortPath, usageLevel, weeklyView } from './model';
 import { addFavorite, dashboardFor, forgetDashboard, loadDashboard, moveFavorite, parseDashboardFile, recordSnapshot, removeFavorite, resetDashboardForTests, toggleFavorite } from './store';
 
 const window = (id: string, usedFraction: number, flags: { headline?: boolean; weekly?: boolean } = {}) =>
   ({ id, label: id, usedFraction, resetsAtMs: null, durationMs: null, headline: !!flags.headline, weekly: !!flags.weekly });
 const account = (overrides: Partial<AgentAccount>): AgentAccount => ({
-  id: 'codex', agent: 'codex', label: 'Codex', plan: null, active: false, state: 'ok', fetchedAtMs: 1, windows: [], ...overrides
+  id: 'codex', agent: 'codex', label: 'Codex', plan: null, active: false, state: 'ok', fetchedAtMs: 1, windows: [], weeklyState: 'unknown', ...overrides
+});
+const session = (overrides: Partial<DashboardSession> & Pick<DashboardSession, 'id' | 'cwd'>): DashboardSession => ({
+  name: overrides.id, status: 'running', agent: null, color: null, tone: null, icon: null, attention: null, turn: null, viewed: false, ...overrides
 });
 const snapshot = (accounts: AgentAccount[] = [], extra: Partial<DashboardMessage> = {}): DashboardMessage =>
   ({ type: 'dashboard', at: 10, accounts, projects: [], sessions: [], recent: [], ...extra });
@@ -17,10 +21,14 @@ const snapshot = (accounts: AgentAccount[] = [], extra: Partial<DashboardMessage
 beforeEach(async () => { if (getLocale() !== 'pt-BR') await setLocale('pt-BR'); });
 
 describe('usage levels', () => {
-  test('normal below 75%, near up to the limit, exhausted at 100% and unavailable without a number', () => {
+  test('the AI Bar bands: amber from 60%, red from 80%, exhausted at 100% and unavailable without a number', () => {
+    expect(usageLevel(0)).toBe('normal');
     expect(usageLevel(0.1)).toBe('normal');
-    expect(usageLevel(0.75)).toBe('near');
-    expect(usageLevel(0.99)).toBe('near');
+    expect(usageLevel(0.599)).toBe('normal');
+    expect(usageLevel(0.6)).toBe('near');
+    expect(usageLevel(0.79)).toBe('near');
+    expect(usageLevel(0.8)).toBe('critical');
+    expect(usageLevel(0.99)).toBe('critical');
     expect(usageLevel(1)).toBe('exhausted');
     expect(usageLevel(null)).toBe('unavailable');
     expect(usageLevel(Number.NaN)).toBe('unavailable');
@@ -31,8 +39,31 @@ describe('usage levels', () => {
       window('weekly', 0.8, { weekly: true }), window('session', 0.2, { headline: true }), window('spark', 0.1)
     ] })]), 'codex');
     expect(summary.rows.map(row => row.id)).toEqual(['session', 'weekly']);
-    expect(summary.level).toBe('near');
+    expect(summary.level).toBe('critical');
     expect(summary.readable).toBe(true);
+  });
+
+  test('the worst window sets the level, in the band order', () => {
+    const level = (...fractions: number[]) => agentSummary(snapshot([account({ active: true, windows: fractions.map((used, index) =>
+      window(`w${index}`, used, { headline: index === 0, weekly: index === 1 })) })]), 'codex').level;
+    expect(level(0.2, 0.3)).toBe('normal');
+    expect(level(0.2, 0.65)).toBe('near');
+    expect(level(0.85, 0.65)).toBe('critical');
+    expect(level(0.85, 1)).toBe('exhausted');
+  });
+
+  test('the weekly limit has three states and missing data never becomes 0% or unlimited', () => {
+    const weekly = window('weekly', 0, { weekly: true });
+    const available = weeklyView(account({ weeklyState: 'available', windows: [window('session', 0.2, { headline: true }), weekly] }));
+    expect(available).toEqual({ kind: 'available', window: weekly, level: 'normal' });
+    expect(weeklyView(account({ weeklyState: 'available', windows: [window('weekly', 0.82, { weekly: true })] }))).toMatchObject({ kind: 'available', level: 'critical' });
+    expect(weeklyView(account({ weeklyState: 'none', windows: [window('session', 0.2, { headline: true })] }))).toEqual({ kind: 'none' });
+    expect(weeklyView(account({ weeklyState: 'unknown', windows: [window('session', 0.2, { headline: true })] }))).toEqual({ kind: 'unknown' });
+    // Disse que tem semanal mas a janela não veio, ou a conta está sem leitura válida: sem leitura.
+    expect(weeklyView(account({ weeklyState: 'available', windows: [window('session', 0.2, { headline: true })] }))).toEqual({ kind: 'unknown' });
+    expect(weeklyView(account({ weeklyState: 'available', state: 'error', windows: [weekly] }))).toEqual({ kind: 'unknown' });
+    expect(weeklyView(account({ weeklyState: 'available', state: 'stale', windows: [weekly] }))).toMatchObject({ kind: 'available' });
+    expect(weeklyView(null)).toEqual({ kind: 'unknown' });
   });
 
   test('the chosen account wins, then the active one; a pending login has no number', () => {
@@ -74,7 +105,7 @@ describe('agent accounts tab', () => {
   test('Codex shows the five hour and weekly windows apart, Claude Code every window it read', () => {
     const codex = account({ windows: [window('extra', 0.2), window('weekly', 0.4, { weekly: true }), window('session', 0.9, { headline: true })] });
     expect(accountWindows(codex).map(item => item.id)).toEqual(['session', 'weekly']);
-    expect(accountLevel(codex)).toBe('near');
+    expect(accountLevel(codex)).toBe('critical');
     const onlyWeekly = account({ windows: [window('weekly', 1, { weekly: true })] });
     expect(accountWindows(onlyWeekly).map(item => item.id)).toEqual(['weekly']);
     expect(accountLevel(onlyWeekly)).toBe('exhausted');
@@ -116,23 +147,31 @@ describe('ordering', () => {
 
   test('sessions belong to the folder and its subfolders only', () => {
     const sessions = [
-      { id: '1', name: 'a', cwd: '/p/app', status: 'running', agent: null },
-      { id: '2', name: 'b', cwd: '/p/app/web', status: 'running', agent: null },
-      { id: '3', name: 'c', cwd: '/p/application', status: 'running', agent: null },
-      { id: '4', name: 'd', cwd: '/p/app', status: 'exited', agent: null },
-      { id: '5', name: 'e', cwd: '/p/app/api', status: 'error', agent: null }
+      session({ id: '1', cwd: '/p/app' }),
+      session({ id: '2', cwd: '/p/app/web' }),
+      session({ id: '3', cwd: '/p/application' }),
+      session({ id: '4', cwd: '/p/app', status: 'exited' }),
+      session({ id: '5', cwd: '/p/app/api', status: 'error' })
     ];
     expect(sessionsIn(snapshot([], { sessions }), '/p/app/').map(session => session.id)).toEqual(['1', '2']);
     const windows = [
-      { id: 'w1', name: 'a', cwd: 'C:\\Users\\a\\proj', status: 'running', agent: null },
-      { id: 'w2', name: 'b', cwd: 'C:\\Users\\a\\proj\\api', status: 'starting', agent: null },
-      { id: 'w3', name: 'c', cwd: 'C:\\Users\\a\\project', status: 'running', agent: null }
+      session({ id: 'w1', cwd: 'C:\\Users\\a\\proj' }),
+      session({ id: 'w2', cwd: 'C:\\Users\\a\\proj\\api', status: 'starting' }),
+      session({ id: 'w3', cwd: 'C:\\Users\\a\\project' })
     ];
     expect(sessionsIn(snapshot([], { sessions: windows }), 'C:\\Users\\a\\proj\\').map(session => session.id)).toEqual(['w1', 'w2']);
   });
 
   test('each project keeps the same tint', () => {
     expect(projectTint('psicoapp')).toBe(projectTint('psicoapp'));
+  });
+
+  test('a session paints with the tone the page resolved, or the Cialai pink without one', () => {
+    const tone = { light: { base: '#0EA5E9', text: '#0369A1' }, dark: { base: '#7DD3FC', text: '#7DD3FC' } };
+    expect(sessionShade(session({ id: 's', cwd: '/p', color: 'azul', tone }), 'light')).toEqual({ base: '#0EA5E9', text: '#0369A1' });
+    expect(sessionShade(session({ id: 's', cwd: '/p', color: 'azul', tone }), 'dark')).toEqual({ base: '#7DD3FC', text: '#7DD3FC' });
+    expect(sessionShade(session({ id: 's', cwd: '/p' }), 'light')).toEqual({ base: '#E23B84', text: '#C73474' });
+    expect(sessionShade(session({ id: 's', cwd: '/p' }), 'dark')).toEqual(DEFAULT_SESSION_TONE.dark);
   });
 });
 

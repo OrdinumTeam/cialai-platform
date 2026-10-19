@@ -107,7 +107,7 @@ function Body() {
 
 export default function DocPreviewWindow() {
   const appearance = useAppearance();
-  const theme = React.useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
+  const theme = React.useMemo(() => buildMacTheme(appearance.resolved, { solid: true }), [appearance.resolved]);
   return (
     <AppearanceContext.Provider value={appearance}>
       <ThemeProvider theme={theme}>

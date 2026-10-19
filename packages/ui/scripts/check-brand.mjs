@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { buildTheme, opaqueColor, searchDecorations } from '../src/terminals/theme.js';
+import { resolveSessionAccent } from '../src/terminals/session-accent.js';
 
 const themePath = fileURLToPath(new URL('../src/desktop/theme.macos.js', import.meta.url));
 const { build } = await import('esbuild');
@@ -42,6 +43,29 @@ test('o azul ANSI continua azul quando o acento da interface fica rosa', () => {
   assert.equal(theme.blue, '#1a4fa0');
   assert.equal(theme.brightBlue, '#4a8ae6');
   assert.equal(theme.selectionBackground, 'rgba(226,59,132,.14)');
+});
+
+test('cursor e selecao do terminal ficam no tom da sessao, e texto e ANSI nao mudam', () => {
+  cssTokens.set('--mac-label', '#20232C');
+  cssTokens.set('--mac-surface-2', '#F2F4F9');
+  const plain = buildTheme();
+  const green = resolveSessionAccent('verde');
+  const toned = buildTheme(green);
+  assert.equal(toned.cursor, green.light.text);
+  assert.equal(toned.selectionBackground, green.light.softHover);
+  assert.equal(toned.cursorAccent, plain.cursorAccent);
+  for (const key of ['background', 'foreground', 'red', 'green', 'yellow', 'blue', 'magenta', 'cyan', 'brightBlue']) {
+    assert.equal(toned[key], plain[key], key);
+  }
+  // Sem cor, o tom e o rosa padrao, nunca o cursor neutro de antes.
+  assert.equal(buildTheme(resolveSessionAccent(null)).cursor, resolveSessionAccent(null).light.text);
+  const page = globalThis.document;
+  try {
+    globalThis.document = { documentElement: { getAttribute: (name) => ({ 'data-theme': 'dark', 'data-form-factor': 'phone' })[name] ?? null } };
+    assert.equal(buildTheme(green).cursor, '#e9eaf0', 'o celular mantem o cursor dele');
+  } finally {
+    globalThis.document = page;
+  }
 });
 
 test('a busca no terminal entrega ao xterm cores opacas em hex', () => {

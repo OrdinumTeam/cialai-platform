@@ -14,7 +14,8 @@
 // padrão.
 
 export const KEYBOARD_PREFS_KEY = 'cialai_terminal_keyboard';
-export const MAX_FAVORITES = 3;
+export const KEYBOARD_PREFS_VERSION = 2;
+export const MAX_FAVORITES = 4;
 export const PASTE_KEY = 'Paste';
 
 const ctrl = { ctrl: true };
@@ -23,8 +24,8 @@ const ctrl = { ctrl: true };
 export const KEY_CATALOG = Object.freeze({
   Escape: { key: 'Escape', cap: 'Esc' },
   Tab: { key: 'Tab', cap: 'Tab' },
-  Enter: { key: 'Enter', cap: 'Enter' },
-  Backspace: { key: 'Backspace', cap: 'Backspace' },
+  Enter: { key: 'Enter', cap: 'Enter', icon: 'enter' },
+  Backspace: { key: 'Backspace', cap: 'Backspace', icon: 'backspace' },
   ArrowUp: { key: 'ArrowUp', cap: '↑', name: 'terminal.phone.arrowUp' },
   ArrowDown: { key: 'ArrowDown', cap: '↓', name: 'terminal.phone.arrowDown' },
   ArrowLeft: { key: 'ArrowLeft', cap: '←', name: 'terminal.phone.keys.arrowLeft' },
@@ -35,15 +36,16 @@ export const KEY_CATALOG = Object.freeze({
   PageDown: { key: 'PageDown', cap: 'PgDn', name: 'Page Down' },
   Delete: { key: 'Delete', cap: 'Delete' },
   Insert: { key: 'Insert', cap: 'Ins', name: 'Insert' },
-  ShiftTab: { key: 'Tab', mods: { shift: true }, cap: 'Shift Tab', hint: 'terminal.phone.keys.hint.shiftTab' },
-  CtrlC: { key: 'c', mods: ctrl, cap: 'Ctrl C', hint: 'terminal.phone.keys.hint.ctrlC' },
-  CtrlD: { key: 'd', mods: ctrl, cap: 'Ctrl D', hint: 'terminal.phone.keys.hint.ctrlD' },
-  CtrlL: { key: 'l', mods: ctrl, cap: 'Ctrl L', hint: 'terminal.phone.keys.hint.ctrlL' },
-  // `icon` faz a tecla aparecer na barra só com o ícone.
-  CtrlV: { key: 'v', mods: ctrl, cap: 'terminal.phone.keys.pasteCtrlV', translated: true, name: 'terminal.phone.keys.pasteCtrlVName', hint: 'terminal.phone.keys.hint.ctrlV', icon: 'paste' },
-  CtrlA: { key: 'a', mods: ctrl, cap: 'Ctrl A', hint: 'terminal.phone.keys.hint.ctrlA' },
-  CtrlZ: { key: 'z', mods: ctrl, cap: 'Ctrl Z', hint: 'terminal.phone.keys.hint.ctrlZ' },
-  CtrlR: { key: 'r', mods: ctrl, cap: 'Ctrl R', hint: 'terminal.phone.keys.hint.ctrlR' },
+  ShiftTab: { key: 'Tab', mods: { shift: true }, cap: 'Shift Tab', hint: 'terminal.phone.keys.hint.shiftTab', bar: ['Shift', 'Tab'] },
+  CtrlC: { key: 'c', mods: ctrl, cap: 'Ctrl C', hint: 'terminal.phone.keys.hint.ctrlC', bar: ['Ctrl', 'C'] },
+  CtrlD: { key: 'd', mods: ctrl, cap: 'Ctrl D', hint: 'terminal.phone.keys.hint.ctrlD', bar: ['Ctrl', 'D'] },
+  CtrlL: { key: 'l', mods: ctrl, cap: 'Ctrl L', hint: 'terminal.phone.keys.hint.ctrlL', bar: ['Ctrl', 'L'] },
+  // Na barra, `icon` mostra a tecla só com o ícone, e `bar` empilha o
+  // modificador pequeno sobre a letra, para o atalho caber sem reticências.
+  CtrlV: { key: 'v', mods: ctrl, cap: 'terminal.phone.keys.pasteCtrlV', translated: true, name: 'terminal.phone.keys.pasteCtrlVName', hint: 'terminal.phone.keys.hint.ctrlV', bar: ['Ctrl', 'V'] },
+  CtrlA: { key: 'a', mods: ctrl, cap: 'Ctrl A', hint: 'terminal.phone.keys.hint.ctrlA', bar: ['Ctrl', 'A'] },
+  CtrlZ: { key: 'z', mods: ctrl, cap: 'Ctrl Z', hint: 'terminal.phone.keys.hint.ctrlZ', bar: ['Ctrl', 'Z'] },
+  CtrlR: { key: 'r', mods: ctrl, cap: 'Ctrl R', hint: 'terminal.phone.keys.hint.ctrlR', bar: ['Ctrl', 'R'] },
   [PASTE_KEY]: { key: null, cap: 'terminal.phone.paste', name: 'terminal.phone.pasteLabel', translated: true, hint: 'terminal.phone.keys.hint.pastePhone' },
   ...Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`F${index + 1}`, { key: `F${index + 1}`, cap: `F${index + 1}` }])),
 });
@@ -70,9 +72,15 @@ export const KEYBOARD_TABS = [
 // botões pequenos em fila que o painel existe para evitar.
 export const FAVORITE_CHOICES = ['Escape', 'Tab', 'Enter', 'ShiftTab', 'CtrlC', 'CtrlV', 'CtrlD', 'CtrlL', 'CtrlR', 'CtrlZ', 'Backspace', 'Home', 'End', PASTE_KEY];
 
+// A barra que vinha antes da versão 2. Quem nunca mexeu nela recebe a nova;
+// quem escolheu as próprias teclas fica com elas.
+const LEGACY_FAVORITES = ['Escape', 'Tab', 'CtrlV'];
+
 export const defaultKeyboardPrefs = () => ({
-  // Colar, que é Ctrl V, já vem na barra: é o que mais se usa com os agentes.
-  favorites: ['Escape', 'Tab', 'CtrlV'],
+  // As quatro que mais se usam com os agentes ficam sempre à vista: Enter
+  // confirma, Esc cancela, Ctrl C interrompe e Ctrl V cola o que está na
+  // área de transferência do computador. O resto fica atrás da setinha.
+  favorites: ['Enter', 'Escape', 'CtrlC', 'CtrlV'],
   modifierMode: 'oneShot',
   haptics: false,
   autoOpen: false,
@@ -98,13 +106,18 @@ export function normalizeKeyboardPrefs(value) {
 }
 
 export function readKeyboardPrefs(storage) {
-  try { return normalizeKeyboardPrefs(JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null')); }
-  catch (_error) { return defaultKeyboardPrefs(); }
+  try {
+    const stored = JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null');
+    const prefs = normalizeKeyboardPrefs(stored);
+    const untouched = stored && stored.version !== KEYBOARD_PREFS_VERSION
+      && prefs.favorites.join() === LEGACY_FAVORITES.join();
+    return untouched ? { ...prefs, favorites: defaultKeyboardPrefs().favorites } : prefs;
+  } catch (_error) { return defaultKeyboardPrefs(); }
 }
 
 export function writeKeyboardPrefs(storage, prefs) {
   const normalized = normalizeKeyboardPrefs(prefs);
-  try { storage?.setItem(KEYBOARD_PREFS_KEY, JSON.stringify({ version: 1, ...normalized })); }
+  try { storage?.setItem(KEYBOARD_PREFS_KEY, JSON.stringify({ version: KEYBOARD_PREFS_VERSION, ...normalized })); }
   catch (_error) { /* sem storage */ }
   return normalized;
 }

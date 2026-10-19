@@ -14,17 +14,20 @@
 // atividade so animam com um processo rodando de verdade.
 
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Bell, CheckCircle2, MoreHorizontal, Pin, Sparkles, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, MoreHorizontal, Pin, Power, Sparkles, XCircle } from 'lucide-react';
 import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, runningLabel, sessionAccent, sessionPlan, sessionUsage } from '../runtime.js';
+import { describe, runningLabel, sessionPlan, sessionProfileLabel, sessionUsage } from '../runtime.js';
+import { sessionAccentStyle } from '../session-accent.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
 import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
+import SessionIcon from './SessionIcon.jsx';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+import { DEFAULT_CRITICAL_LIMIT, DEFAULT_WATCH_LIMIT } from '../../notch/model.js';
 
 // Toque longo que abre o menu de acoes, sem disparar selecao nem rolagem.
 const LONG_PRESS_MS = 500;
@@ -42,7 +45,7 @@ function AttentionIcon({ kind }) {
 function planTitle(plan, activity, model) {
   const lines = [];
   const usage = activity?.usage || null;
-  const profileName = activity?.profileName || usage?.profileName;
+  const profileName = sessionProfileLabel(activity) || activity?.profileName || usage?.profileName;
   const dir = usage?.configDir || activity?.configDir;
   lines.push(translate(dir ? 'terminal.plan.profilePath' : 'terminal.plan.profile', {
     profile: profileName || usage?.profile || activity?.profile,
@@ -85,9 +88,18 @@ function missingTitle(activity) {
   return undefined;
 }
 
-// Tom do numero de uso do plano: neutro ate 75 por cento, atencao ate 90 e
-// alarme acima disso. A tela de contas usa o mesmo.
+// Tom do numero de uso do plano, nas faixas padrao da Barra de IA: neutro
+// abaixo de 60 por cento, atencao de 60 a 79 e alarme de 80 em diante. A tela
+// de contas usa as mesmas.
 export function planTone(percent) {
+  if (percent >= DEFAULT_CRITICAL_LIMIT * 100) return 'bad';
+  if (percent >= DEFAULT_WATCH_LIMIT * 100) return 'warn';
+  return 'ok';
+}
+
+// Tom do contexto usado da conversa: nao e limite da conta, entao segue as
+// faixas proprias, atencao a partir de 75 por cento e alarme a partir de 90.
+function contextTone(percent) {
   if (percent >= 90) return 'bad';
   if (percent >= 75) return 'warn';
   return 'ok';
@@ -117,17 +129,17 @@ function InstallHook({ activity }) {
   </button>;
 }
 
-// Variaveis CSS com o tom atribuido a sessao.
+// Variaveis CSS com o tom da sessao: a cor escolhida, ou o rosa do Cialai.
+// Vao inline no card, no cabecalho, no explorador e no menu da sessao, que
+// levam a classe `session-scope`, entao cada sessao fica com o proprio tom.
 export function accentStyle(session) {
-  const accent = sessionAccent(session);
-  if (!accent) return undefined;
-  return { '--terminais-accent-light': accent.light, '--terminais-accent-dark': accent.dark };
+  return sessionAccentStyle(session);
 }
 
 function SessionCard({
   order = 0,
   touch = false,
-  session, selected, dragging, dropBefore, dropAfter, dropInto = false, renaming, onSelect, onMenu, onRename, onRenameDone,
+  session, selected, dragging, dropBefore, dropAfter, dropInto = false, renaming, onSelect, onMenu, onClose, onRename, onRenameDone,
   onDragStart,
 }) {
   useI18n();
@@ -172,11 +184,11 @@ function SessionCard({
   const cost = detail?.costUsd != null ? fmtCost(detail.costUsd) : null;
   const missing = Boolean(activity?.agent && activity.profile && !planWindow);
   const showInstall = missing && activity.agent === 'Claude Code' && !touch && session.status === 'running';
-  const showProfile = Boolean(activity?.profileName && activity.profile && !['claude', 'codex'].includes(activity.profile));
+  const profileLabel = sessionProfileLabel(activity);
   const elapsed = session.jobStartedAt && session.status === 'running' ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
   const attention = session.attention;
 
-  const classes = ['terminais-card'];
+  const classes = ['terminais-card', 'session-scope'];
   if (selected) classes.push('is-selected');
   if (dragging) classes.push('is-dragging');
   if (dropBefore) classes.push('is-drop-before');
@@ -200,11 +212,12 @@ function SessionCard({
       data-session-id={session.id}
       onClick={() => { if (wasDragged()) return; onSelect(session.id); }}
       onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(session.id); }
       }}
       onContextMenu={touch ? undefined : (event) => { event.preventDefault(); onMenu(session, { x: event.clientX, y: event.clientY, align: 'left' }); }}
       onPointerDown={touch && onMenu ? (event) => {
-        if (event.target.closest?.('.terminais-card__menu')) return;
+        if (event.target.closest?.('button')) return;
         cancelLongPress();
         longPress.current = setTimeout(() => { longPress.current = null; onMenu(session, { touch: true }); }, LONG_PRESS_MS);
       } : undefined}
@@ -212,13 +225,13 @@ function SessionCard({
       onPointerUp={touch && onMenu ? cancelLongPress : undefined}
       onPointerCancel={touch && onMenu ? cancelLongPress : undefined}
       onMouseDown={touch || renaming || !onDragStart ? undefined : (event) => {
-        if (event.target.closest?.('.terminais-card__menu, .terminais-card__rename, .terminais-card__install')) return;
+        if (event.target.closest?.('button, input')) return;
         onDragStart(event, session);
       }}
       title={shortPath(session.cwd)}
     >
       <div className="terminais-card__row">
-        <ActivityIndicator tone={status.tone} animated={status.animated} />
+        <SessionIcon session={session} size={15} className="terminais-card__icon" />
         {renaming ? (
           <input
             ref={inputRef}
@@ -266,16 +279,20 @@ function SessionCard({
           {elapsed && !running.background ? <span className="terminais-card__elapsed">{elapsed}</span> : null}
         </div>
       ) : null}
-      {running?.agent && (model || context || cost || showProfile) ? (
+      {running?.agent && (model || context || cost || profileLabel) ? (
         <div className="terminais-card__agent-row">
           {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
-          {context ? <span className={`terminais-card__chip terminais-card__chip--${planTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
+          {context ? <span className={`terminais-card__chip terminais-card__chip--${contextTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
           {cost ? <span className="terminais-card__chip" title={translate('terminal.session.costTitle', { amount: cost })}>{translate('terminal.session.cost', { amount: cost })}</span> : null}
-          {showProfile ? <span className="terminais-card__profile" title={translate(usage?.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: activity.profileName, path: shortPath(usage?.configDir) })}>{activity.profileName}</span> : null}
+          {profileLabel ? <span className="terminais-card__profile" title={translate(usage?.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: profileLabel, path: shortPath(usage?.configDir) })}>{profileLabel}</span> : null}
         </div>
       ) : null}
+      {session.status === 'error' && onClose ? <button type="button" className="terminais-card__close btn btn-quiet btn-sm" onClick={(event) => { event.stopPropagation(); onClose(session); }}>
+        <Power size={12} strokeWidth={2} aria-hidden="true" />{translate('terminal.menu.closeSession')}
+      </button> : null}
       <div className="terminais-card__state">
-        <span className={`terminais-card__status terminais-card__status--${status.tone}`}>{status.label}</span>
+        <ActivityIndicator tone={status.tone} animated={status.animated} />
+        <span className={`terminais-card__status terminais-card__status--${status.tone}`} title={session.status === 'error' ? session.error : undefined}>{status.label}</span>
       </div>
       {attention && attention.kind !== 'exited' && attention.kind !== 'error' ? (
         <div className={`terminais-card__attention terminais-card__attention--${attention.kind}`}>

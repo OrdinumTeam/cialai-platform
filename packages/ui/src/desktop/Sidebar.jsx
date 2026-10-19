@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Link2, Settings } from 'lucide-react';
 import { groupViews } from '../views/registry.js';
-import logo from '../assets/cialai-mark-256.png';
+import BrandLockup from './BrandLockup.jsx';
 import { translate } from './i18n.js';
 
 const GROUPS_KEY = 'cialai_groups_closed';
@@ -53,7 +53,7 @@ export default function Sidebar({ views, active, onNavigate, hidden, tunnelStatu
     return <button key={view.id} type="button" className={`mac-nav-item${isActive ? ' is-active' : ''}`} style={{ '--i': index }} onClick={() => onNavigate(view.id)} aria-current={isActive ? 'page' : undefined} title={view.sub}><Icon size={16} strokeWidth={1.75} className="mac-nav-item__icon" aria-hidden="true" /><span className="mac-nav-item__label">{view.label}</span></button>;
   };
 
-  return <aside className={`mac-sidebar${hidden ? ' is-hidden' : ''}`} aria-label={translate('desktop.navigation.main')} aria-hidden={hidden}><div className="mac-sidebar__drag" data-tauri-drag-region /><div className="mac-sidebar__brand" data-tauri-drag-region="deep"><img src={logo} alt="" className="mac-sidebar__logo" draggable="false" /><span className="mac-sidebar__brand-name">Cialai</span></div><nav className="mac-sidebar__nav" ref={navRef}><span className={`mac-nav-indicator${indicator.visible ? ' is-visible' : ''}${indicator.settled ? ' is-settled' : ''}`} style={{ transform: `translateY(${indicator.y}px)`, height: indicator.height }} aria-hidden="true" />{groups.map((entry) => {
+  return <aside className={`mac-sidebar${hidden ? ' is-hidden' : ''}`} aria-label={translate('desktop.navigation.main')} aria-hidden={hidden}><div className="mac-sidebar__drag" data-tauri-drag-region /><div className="mac-sidebar__brand" data-tauri-drag-region="deep"><BrandLockup className="mac-sidebar__lockup" /></div><nav className="mac-sidebar__nav" ref={navRef}><span className={`mac-nav-indicator${indicator.visible ? ' is-visible' : ''}${indicator.settled ? ' is-settled' : ''}`} style={{ transform: `translateY(${indicator.y}px)`, height: indicator.height }} aria-hidden="true" />{groups.map((entry) => {
     if (!entry.group) return entry.views.map(renderItem);
     const collapsed = closed.has(entry.group) && !entry.views.some((view) => view.id === active); const index = order++;
     return <section key={entry.key} className={`mac-nav-group${collapsed ? ' is-collapsed' : ''}`}><button type="button" className="mac-nav-group__header" style={{ '--i': index }} onClick={() => toggleGroup(entry.group)} aria-expanded={!collapsed}><span>{entry.group}</span><ChevronRight size={12} strokeWidth={2} className="mac-nav-group__chevron" aria-hidden="true" /></button><div className="mac-nav-group__items"><div>{entry.views.map(renderItem)}</div></div></section>;

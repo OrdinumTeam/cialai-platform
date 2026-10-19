@@ -8,7 +8,9 @@ const React = require('react');
 const { renderToStaticMarkup } = require('react-dom/server');
 
 async function bundle(entryPoint) {
-  const result = await build({ entryPoints: [entryPoint], bundle: true, write: false, outfile: 'bundle.js', format: 'cjs', external: ['react'] });
+  // A toolbar mostra a assinatura com a lateral fechada; a imagem entra
+  // embutida, como no fixture do terminal do celular.
+  const result = await build({ entryPoints: [entryPoint], bundle: true, write: false, outfile: 'bundle.js', format: 'cjs', external: ['react'], loader: { '.png': 'dataurl' } });
   return result.outputFiles.find((file) => file.path.endsWith('.js')).text;
 }
 
@@ -47,9 +49,9 @@ test('desktop toolbar renders the selected Spanish locale', async () => {
   const browser = browserContext();
   vm.runInContext(source, browser.context);
   const Toolbar = browser.context.module.exports.default;
-  const markup = renderToStaticMarkup(React.createElement(Toolbar, {
+  const props = (sidebarHidden) => ({
     view: { id: 'terminais', label: 'Terminales', sub: 'Sesiones' },
-    sidebarHidden: false,
+    sidebarHidden,
     onToggleSidebar() {},
     onOpenPalette() {},
     onReload() {},
@@ -59,8 +61,18 @@ test('desktop toolbar renders the selected Spanish locale', async () => {
     onOpenPair() {},
     menuActions: {},
     views: [],
-  }));
+  });
+  const markup = renderToStaticMarkup(React.createElement(Toolbar, props(false)));
   assert.match(markup, /Mostrar u ocultar la barra lateral/);
   assert.match(markup, /Vincular teléfono/);
   assert.match(markup, /Preparando el acceso/);
+  // Com a lateral aberta a assinatura e dela; fechada, o lettering passa
+  // para a toolbar.
+  assert.doesNotMatch(markup, /mac-toolbar__wordmark/);
+  const hidden = renderToStaticMarkup(React.createElement(Toolbar, props(true)));
+  // So a peca do tema atual entra na pagina: a escondida por CSS seria
+  // baixada do mesmo jeito. Sem tema escuro marcado, a de cores.
+  assert.match(hidden, /class="mac-toolbar__wordmark mac-toolbar__wordmark--light"/);
+  assert.doesNotMatch(hidden, /mac-toolbar__wordmark--dark/);
+  assert.equal((hidden.match(/alt="Cialai"/g) || []).length, 1);
 });

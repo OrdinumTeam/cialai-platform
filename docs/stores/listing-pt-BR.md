@@ -75,11 +75,11 @@ Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/202
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Início nativo com o uso dos agentes, os computadores, os projetos favoritos e as ações rápidas.
-• Abas Projetos, em grade ou em lista, e Agentes, com todas as contas numa lista só.
-• Botão do teclado do aparelho na barra do terminal e um cabeçalho só na sessão.
-• Avisos de sessão finalizada e de limite de uso perto do fim.
-• Contas, projetos e sessões que não somem mais ao trocar de aba.
+• Avisos quando uma sessão pede atenção, com o nome e a cor dela; o toque abre a sessão.
+• Enter, Esc, Ctrl C e Ctrl V sempre à vista na barra do terminal.
+• Cor e ícone de cada sessão em toda a interface.
+• Limite semanal no Início e em Agentes, com faixas em 60 e 80%.
+• Marca oficial e ícones mais limpos.
 ```
 <!-- PLAY_RELEASE_END -->
 
@@ -112,17 +112,15 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização traz ao iPhone tudo que chegou desde a 0.2.9.
+Esta atualização traz ao iPhone a nova cara do Cialai e avisos de atenção.
 
-• Início nativo como ponto de partida, com um cartão por agente mostrando o limite da conta em uso, os computadores, os projetos favoritos e as ações rápidas. O cartão continuar chega ao terminal num toque.
-• Aba Projetos com as pastas que têm sessões, em grade ou em lista, com a escolha guardada no aparelho.
-• Aba Agentes com todas as contas do Claude Code e do Codex numa lista só, a em uso primeiro, cada uma com plano e uso.
-• Botão do teclado do aparelho na barra do terminal. Ele abre e fecha o teclado sem tocar no terminal. Esc, Tab e Colar continuam na barra, e as teclas especiais passaram para um botão de expandir.
-• Um cabeçalho só na tela da sessão, e Nova sessão e Ajustes mais compactos.
-• Tela de carregamento no lugar da página branca até o computador responder.
-• Avisos locais de sessão finalizada e de limite de uso perto do fim, ligados um a um nos Ajustes.
-• Contas, projetos e sessões abertas que não somem mais ao trocar de aba.
-• Sem computador vinculado, as abas que dependem dele ficam travadas, e a tela sem conexão junta tudo num cartão.
+• Avisos quando uma sessão pede atenção: o sino do terminal, o comando que terminou, o agente aguardando você ou pedindo permissão e a resposta pronta. O aviso traz o nome e a cor da sessão, e o toque abre a sessão. Liga em Ajustes, em Sessões pedindo atenção.
+• Enter, Esc, Ctrl C e Ctrl V sempre à vista na barra do terminal. A setinha continua abrindo o teclado especial.
+• Cada sessão com a própria cor e o próprio ícone, no card, no cabeçalho e nas pastas do Início. Sem cor, o rosa do Cialai.
+• Limite semanal no Início e na aba Agentes, que diferencia conta sem limite semanal de leitura que ainda não chegou.
+• Faixas de uso novas: âmbar a partir de 60% e vermelho a partir de 80%.
+• Marca oficial do Cialai e ícones sem placas de fundo.
+• Os avisos são locais e saem enquanto o app está com o terminal aberto ou logo depois de ir para segundo plano. Atualize também o Cialai do computador para receber os avisos de atenção.
 ```
 <!-- ASC_WHATS_NEW_END -->
 

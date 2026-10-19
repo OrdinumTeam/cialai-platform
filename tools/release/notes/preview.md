@@ -1,24 +1,21 @@
 ## Cialai {{version}} preview
 
-An early preview of Cialai for macOS, Windows, Linux, Android and iOS. Expect rough edges.
+A preview of Cialai for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session gets its own colour and icon everywhere, and the phone tells you when a session needs you.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **A native phone Home, with Projects and Agents tabs.** The app opens on one usage card per agent with the account in use, your computers, your favourite projects and quick actions. Agents lists every account of both agents, the one in use first, and Projects shows the folders as a grid or as a list, with the choice kept on the device.
-* **A device keyboard button in the phone terminal bar.** It opens and closes the keyboard without touching the terminal. Esc, Tab and Paste stay in the bar, and the special keys moved to an expand button.
-* **One header in the phone session.** The shell hides its computer bar while a terminal or the files are open. The new session flow and Settings are more compact.
-* **No more blank page while the terminal loads.** The phone shows a loading screen until the computer page answers, and the page says Opening the terminal until the session is ready.
-* **Local notices** for a finished session and for a usage limit close to its end, switched on one by one in the phone Settings.
-* **The phone keeps what the computer sent.** The snapshot with accounts, projects and sessions only goes out while the bridge is connected and follows each reconnection. Without a paired computer the tabs that depend on one are locked.
-* **Each terminal card shows its own conversation.** The Claude Code model, context and cost are matched by the conversation id of each terminal, so terminals in the same folder no longer show the same reading.
-* **The sessions column fits narrow windows.** Below 230 px the agent row wraps and the chips truncate with an ellipsis. In the header the session name shrinks first and the path gives way last.
-* **Agent accounts in one list,** on the computer and on the phone, with the agent glyph on every row and a new profile button per agent.
-* **The keyboard works on Windows.** The window kept asking the WebView2 for focus on every focus event, which the WebView2 itself raises on Windows, so no key ever landed. The terminal also gets its colours and font back, `claude` and `codex` are found right after installing, and clicking back into the terminal no longer leaves `[I` on the command line.
-* **The Linux pairing dialog says what stopped.** Instead of Preparing the connection forever, it shows the real error, where the `app.log` is and a diagnostics button. An identity key with open permission bits is repaired instead of killing the tunnel.
-* **The iPhone app opens again.** It adopts the UIScene lifecycle required by the iOS 27 SDK.
-* **The terminal bar, the loading screen, the snapshot fix and the accounts list are served by the computer,** so the phone shows them once the desktop app is updated.
+* **The desktop speaks the phone's visual language.** Solid surfaces, rounded corners and separation by tone, with no gradients, glass or glow. The sidebar stays pink, light in the light theme and plum in the dark one. Buttons, fields, menus and colour changes share the same short animation.
+* **The session colour leads what belongs to the session.** The card bar, the icon, the agent name, the usage percentage, buttons, focus, the terminal cursor and selection, the palette entry, the on screen notice and the AI Bar follow the chosen colour. Without a colour everything stays Cialai pink. Warning and error colours, ANSI colours and the output of the CLIs never change.
+* **An icon per session.** Thirty icons, picked together with the colour when the session is created or from Colour and icon. The icon sits next to the name on the card and in the header, on the computer and on the phone. Without a choice it shows the agent running there or a terminal.
+* **The weekly limit in the AI Bar.** The outer ring is the 5 hour session and the inner ring is the weekly window, drawn with the same stroke. An account without a weekly limit and a reading that has not arrived yet look different from 0%. The tooltip and the screen reader name the window, the usage and the reset.
+* **New usage bands.** Amber from 60% and red from 80%, on the computer, on the phone page and in the app. Anyone still on the old 50 and 70 defaults moves to the new ones once.
+* **The official signature.** The brand with the website lettering appears in the sidebar, the splash and the loading screen. With the sidebar closed, the lettering shows small in the toolbar.
+* **Four keys always in sight on the phone.** The terminal bar shows Enter, Esc, Ctrl C and Ctrl V, and the arrow still opens the special keyboard. Anyone who had picked their own keys keeps them.
+* **Attention notices on the phone.** The terminal bell, a notice sent by the program, a finished command, an agent waiting for you or asking for permission and a finished answer become a notice with the session name and colour. Tapping it opens the session. Turn it on in Settings, under Sessions asking for attention. Notices are local: they go out while the app has the terminal open and shortly after it moves to the background.
+* **The native app keeps pace.** Home and the Agents tab show the weekly window, the sessions of a folder show their colour and icon, the official brand replaces the old symbol and icons lost their background plates.
+* **Update the computer and the phone together.** The phone page is served by the computer and carries the attention, colour and icon of each session; a new app with an older computer works, without attention notices.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

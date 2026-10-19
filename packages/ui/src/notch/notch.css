@@ -73,7 +73,7 @@
   gap: 3px;
   padding: 8px 2px 7px;
   border: 0;
-  border-radius: var(--mac-radius-field);
+  border-radius: 14px;
   background: transparent;
   color: inherit;
   font: inherit;
@@ -125,6 +125,16 @@
 .notch-ring__arc.is-critical, .notch-ring__arc.is-exhausted { stroke: var(--mac-bad); }
 .notch-ring__glyph { fill: var(--mac-label); color: var(--mac-label); }
 .notch-ring__glyph.is-spent { opacity: 0.35; }
+
+/* Anel semanal, por dentro: mesma espessura, mesma trilha e mesmas cores de
+   banda do anel da sessao, para os dois pesarem igual. Sem leitura, a trilha
+   fica tracejada e sem arco, para nao parecer 0%. */
+.notch-ring__weekly-track { stroke: var(--mac-surface-3); }
+.notch-ring__weekly.is-unknown .notch-ring__weekly-track { stroke: var(--mac-label-3); opacity: 0.5; }
+.notch-ring__weekly-arc { transition: stroke-dasharray var(--mac-slow) var(--mac-ease), stroke var(--mac-fast) linear; }
+.notch-ring__weekly-arc.is-ample { stroke: var(--mac-accent); }
+.notch-ring__weekly-arc.is-watch { stroke: var(--mac-warn); }
+.notch-ring__weekly-arc.is-critical, .notch-ring__weekly-arc.is-exhausted { stroke: var(--mac-bad); }
 
 /* ── atividade da sessao, na linguagem do estudio ──────────────────── */
 
@@ -196,11 +206,9 @@
   gap: 6px;
   max-height: inherit;
   overflow-y: auto;
-  padding: 10px 12px 12px;
-  border-radius: var(--mac-radius-card);
-  background: var(--mac-glass);
-  -webkit-backdrop-filter: blur(30px) saturate(160%);
-  backdrop-filter: blur(30px) saturate(160%);
+  padding: 12px 12px 14px;
+  border-radius: 20px;
+  background: var(--mac-surface);
   border: 1px solid var(--mac-separator);
   box-shadow: var(--mac-shadow-popover);
   color: var(--mac-label);
@@ -220,18 +228,25 @@
 .notch-card__window.is-headline .notch-card__label { color: var(--mac-label); font-weight: 600; }
 
 .notch-card__row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.notch-card__label { font-size: 12px; line-height: 15px; color: var(--mac-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notch-card__label { min-width: 0; font-size: 12px; line-height: 15px; color: var(--mac-label); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Marca do anel na linha da janela: o circulo destacado diz qual dos dois
+   aneis mostra aquele numero. */
+.notch-card__ringmark { display: inline-flex; flex: 0 0 auto; margin-right: 5px; color: var(--mac-label-3); }
+.notch-card__ringmark circle { stroke: currentColor; opacity: 0.4; }
+.notch-card__ringmark.is-outer .notch-card__ringmark-outer,
+.notch-card__ringmark.is-inner .notch-card__ringmark-inner { stroke: var(--mac-accent); opacity: 1; }
 .notch-card__meta { font-size: 11px; line-height: 14px; color: var(--mac-label-3); flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.notch-card__used { font-size: 11px; line-height: 14px; color: var(--mac-label-2); font-variant-numeric: tabular-nums; }
+.notch-card__used { display: flex; align-items: center; font-size: 11px; line-height: 14px; color: var(--mac-label-2); font-variant-numeric: tabular-nums; }
 
 .notch-card__track { display: block; width: 100%; height: 4px; border-radius: var(--radius-pill); background: var(--mac-surface-3); overflow: hidden; }
-.notch-card__fill { display: block; height: 100%; border-radius: var(--radius-pill); transition: width var(--mac-slow) var(--mac-ease); }
+.notch-card__fill { display: block; height: 100%; border-radius: var(--radius-pill); transition: width var(--mac-slow) var(--mac-ease), background-color var(--mac-normal) var(--mac-ease); }
 .notch-card__fill.is-ample { background: var(--mac-accent); }
 .notch-card__fill.is-watch { background: var(--mac-warn); }
 .notch-card__fill.is-critical, .notch-card__fill.is-exhausted { background: var(--mac-bad); }
 .notch-card__fill.is-none { background: var(--mac-label-4); }
 
-.notch-card__group { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: var(--mac-radius-field); background: var(--mac-surface-2); }
+.notch-card__group { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; background: var(--mac-surface-2); }
 .notch-card__group-title { font-size: 11px; color: var(--mac-label-3); }
 
 .notch-card__sessions { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--mac-separator); }

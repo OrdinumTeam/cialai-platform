@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 var ErrLocked = errors.New("tunnel state is already owned by a live process")
@@ -29,6 +30,7 @@ type Paths struct {
 	PairLock    string
 	Log         string
 	PID         string
+	ProcessLock string
 }
 
 func Prepare(root string) (Paths, error) {
@@ -48,6 +50,7 @@ func Prepare(root string) (Paths, error) {
 		PairLock:    filepath.Join(root, "pair.lock"),
 		Log:         filepath.Join(root, "tunnel.log"),
 		PID:         filepath.Join(root, "pid"),
+		ProcessLock: filepath.Join(root, "process.lock"),
 	}
 	for _, path := range []string{paths.Root, paths.TSNet} {
 		if err := privateDir(path); err != nil {
@@ -80,6 +83,9 @@ func (paths Paths) contains(path string) bool {
 func (paths Paths) WriteAtomic(path string, data []byte) error {
 	if !paths.contains(path) {
 		return errors.New("state write escaped the owned directory")
+	}
+	if filepath.Clean(path) == paths.ProcessLock {
+		return errors.New("the process lock file must never be replaced")
 	}
 	parent := filepath.Dir(path)
 	if err := privateDir(parent); err != nil {
@@ -118,62 +124,81 @@ func (paths Paths) WriteAtomic(path string, data []byte) error {
 }
 
 type lockRecord struct {
-	PID   int    `json:"pid"`
-	Nonce string `json:"nonce"`
+	PID       int    `json:"pid"`
+	Nonce     string `json:"nonce"`
+	Mechanism string `json:"mechanism,omitempty"`
 }
 
 type Lock struct {
+	mu    sync.Mutex
+	file  *os.File
 	path  string
 	nonce string
 }
 
+// Acquire holds an OS lock until Release or process exit. process.lock must
+// never be removed or replaced: waiters must always lock the same inode. The
+// pid file is only diagnostic metadata and is safe to replace atomically.
 func Acquire(paths Paths, pid int, alive func(int) bool) (*Lock, error) {
-	if pid <= 0 || alive == nil || !paths.contains(paths.PID) {
+	if pid <= 0 || alive == nil || !paths.contains(paths.PID) || !paths.contains(paths.ProcessLock) || paths.ProcessLock == paths.PID {
 		return nil, errors.New("valid pid and liveness check are required")
 	}
-	for range 4 {
-		nonce, err := randomNonce()
-		if err != nil {
-			return nil, err
-		}
-		record := lockRecord{PID: pid, Nonce: nonce}
-		file, err := os.OpenFile(paths.PID, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
-		if err == nil {
-			encoder := json.NewEncoder(file)
-			if encodeErr := encoder.Encode(record); encodeErr != nil {
-				_ = file.Close()
-				_ = os.Remove(paths.PID)
-				return nil, encodeErr
-			}
-			if syncErr := file.Sync(); syncErr != nil {
-				_ = file.Close()
-				_ = os.Remove(paths.PID)
-				return nil, syncErr
-			}
-			if closeErr := file.Close(); closeErr != nil {
-				_ = os.Remove(paths.PID)
-				return nil, closeErr
-			}
-			return &Lock{path: paths.PID, nonce: nonce}, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return nil, fmt.Errorf("create state lock: %w", err)
-		}
-		owner, same, err := readLock(paths.PID)
-		if err == nil && owner.PID > 0 && alive(owner.PID) {
-			return nil, fmt.Errorf("%w: pid %d", ErrLocked, owner.PID)
-		}
-		if same != nil {
-			current, statErr := os.Stat(paths.PID)
-			if statErr == nil && !os.SameFile(same, current) {
-				continue
-			}
-		}
-		if err := os.Remove(paths.PID); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, fmt.Errorf("remove stale state lock: %w", err)
-		}
+	file, err := openProcessLock(paths.ProcessLock)
+	if err != nil {
+		return nil, fmt.Errorf("open state lock: %w", err)
 	}
-	return nil, errors.New("state lock changed during acquisition")
+	owned := false
+	defer func() {
+		if !owned {
+			_ = file.Close()
+		}
+	}()
+	if err := lockProcessFile(file); err != nil {
+		return nil, fmt.Errorf("acquire state lock: %w", err)
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("identify tunnel executable: %w", err)
+	}
+	if err := checkLegacyOwner(paths.PID, executable, alive, inspectProcess); err != nil {
+		return nil, err
+	}
+	nonce, err := randomNonce()
+	if err != nil {
+		return nil, err
+	}
+	record, err := json.Marshal(lockRecord{PID: pid, Nonce: nonce, Mechanism: "os-lock-v1"})
+	if err != nil {
+		return nil, err
+	}
+	if err := paths.WriteAtomic(paths.PID, append(record, '\n')); err != nil {
+		return nil, fmt.Errorf("write state owner: %w", err)
+	}
+	owned = true
+	return &Lock{file: file, path: paths.PID, nonce: nonce}, nil
+}
+
+func openProcessLock(path string) (*os.File, error) {
+	if info, err := os.Lstat(path); err == nil && !info.Mode().IsRegular() {
+		return nil, errors.New("state lock must be a regular file")
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	info, statErr := file.Stat()
+	current, pathErr := os.Lstat(path)
+	if statErr != nil || pathErr != nil || !info.Mode().IsRegular() || !current.Mode().IsRegular() || !os.SameFile(info, current) {
+		_ = file.Close()
+		return nil, errors.New("state lock changed while opening")
+	}
+	if err := file.Chmod(0o600); err != nil {
+		_ = file.Close()
+		return nil, err
+	}
+	return file, nil
 }
 
 func readLock(path string) (lockRecord, os.FileInfo, error) {
@@ -206,9 +231,23 @@ func randomNonce() (string, error) {
 }
 
 func (lock *Lock) Release() error {
-	if lock == nil || lock.path == "" {
+	if lock == nil {
 		return nil
 	}
+	lock.mu.Lock()
+	defer lock.mu.Unlock()
+	if lock.file == nil {
+		return nil
+	}
+	// Clean up metadata while still holding the OS lock. Close releases the
+	// lock even if the metadata has gone missing or become unreadable.
+	err := lock.removeMetadata()
+	closeErr := lock.file.Close()
+	lock.file = nil
+	return errors.Join(err, closeErr)
+}
+
+func (lock *Lock) removeMetadata() error {
 	record, _, err := readLock(lock.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -222,7 +261,6 @@ func (lock *Lock) Release() error {
 	if err := os.Remove(lock.path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return fmt.Errorf("release state lock: %w", err)
 	}
-	lock.path = ""
 	return nil
 }
 

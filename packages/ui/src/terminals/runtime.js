@@ -52,15 +52,18 @@ import { platform } from '../lib/platform.js';
 import { isTerminalFocusReport } from './shortcut-actions.js';
 import { windowLabel } from '../notch/copy.js';
 import { demoProfiles } from './agent-profiles-demo.js';
+import { activityProfile, profileBadge } from './profile-badge.js';
 import { translate } from '../shared/i18n.js';
 
 export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
-import { isPhone, onShellLock } from '../lib/shell.js';
+import { isMobileShell, isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
-import { restoredNotice, savedSize, waitForPrompt } from './restore.js';
+import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
+import { installTerminalClipboard } from './clipboard.js';
+import { currentOs } from '../lib/keys.js';
 import { TerminalViewport } from './viewport.js';
 import { createTouchScroll } from './touch-scroll.js';
 import { installImeInput } from './ime-input.js';
@@ -69,6 +72,8 @@ import { installImeInput } from './ime-input.js';
 // tom para o claro e outro para o escuro, como os tokens da camada macOS.
 import { ORGANIZATION_COLORS as SESSION_COLORS } from '../lib/organization-colors.js';
 import { demoParam } from '../lib/demo.js';
+import { validIcon } from './session-icons.js';
+import { resolveSessionAccent } from './session-accent.js';
 export { SESSION_COLORS };
 
 const STORAGE_KEY = isPhone() ? 'cialai_terminals_phone' : 'cialai_terminals';
@@ -252,6 +257,7 @@ function serializeSession(session) {
     customName: session.customName,
     subtitle: session.subtitle,
     color: session.color,
+    icon: session.icon,
     pinned: session.pinned,
     createdAt: session.createdAt,
     editor: {
@@ -294,7 +300,7 @@ export function persist() {
     if (hasBridge() && !state.demo) state.order.forEach((id, order) => {
       const session = state.sessions.get(id);
       if (session?.ptyId == null) return;
-      const presentation = { name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order };
+      const presentation = { name: session.name, subtitle: session.subtitle, color: session.color, icon: session.icon, pinned: session.pinned, order };
       const identity = terminalIdentity(session);
       const signature = JSON.stringify([identity, presentation]);
       if (session.publishedPresentation === signature) return;
@@ -462,7 +468,13 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
-function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
+// Tema do xterm da sessao: cursor e selecao no tom dela, o resto igual para
+// todas. Reaplicado quando a cor ou a aparencia mudam.
+function applySessionTheme(session) {
+  session.term.options.theme = buildTheme(resolveSessionAccent(session.color));
+}
+
+function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
   // Toda pasta guardada na sessao usa a forma portatil. O Rust ja devolve
   // assim; o que vem do armazenamento antigo ou de um caminho digitado pode
@@ -476,6 +488,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     customName: Boolean(customName),
     subtitle: typeof subtitle === 'string' ? subtitle : '',
     color: validColor(color),
+    icon: validIcon(icon),
     pinned: Boolean(pinned),
     createdAt: createdAt || Date.now(),
     term,
@@ -630,11 +643,38 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   term.open(parking());
   // Teclado virtual rapido nao duplica nem perde texto; a conta esta em ime-input.js.
   session.disposables.push(installImeInput(term));
+  session.clipboard = installTerminalClipboard(term, {
+    paste: (text) => pasteText(session.id, text),
+    paths: (paths) => insertPaths(session.id, paths),
+    files: async (files) => {
+      if (!isTauri()) throw new Error('clipboard_files_require_desktop');
+      const paths = [];
+      for (const file of files) {
+        if (file.size > 32 * 1024 * 1024) throw new Error('clipboard_file_too_large');
+        const data = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result).split(',')[1]);
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(file);
+        });
+        const extension = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' }[file.type] || 'bin';
+        paths.push(await invoke('clipboard_store_file', { name: file.name || `clipboard.${extension}`, data }));
+      }
+      return paths;
+    },
+    readNative: isTauri() && currentOs() === 'linux' ? () => invoke('clipboard_read') : null,
+    onError: () => dispatch({ type: 'error', message: translate('terminal.common.pasteFailed') }),
+    valid: () => state.sessions.get(session.id) === session && session.status === 'running',
+    identity: () => session.ptyId,
+    focus: () => { if (state.selectedId === session.id && session.host) term.focus(); },
+  });
+  session.disposables.push(session.clipboard);
   term.element?.addEventListener('pointerdown', () => {
     requestTerminalControl(session.id).catch((error) => dispatch({ type: 'error', message: messageOf(error) }));
   });
   installWheelScroll(session);
   installTouchScroll(session);
+  applySessionTheme(session);
   state.sessions.set(session.id, session);
   return session;
 }
@@ -905,27 +945,66 @@ async function restoreDisconnected() {
   invoke('pty_prune', { keep: [...state.order] }).catch(() => {});
 }
 
-// Espera o prompt do shell novo e digita o comando que devolve a conversa.
-// Escreve direto no PTY, sem a concessao de largura, porque a sessao pode
-// estar fora da tela quando todas reabrem juntas. Se um programa ja tomou o
-// terminal, como algo aberto pelo .zshrc, nada e digitado.
-async function resumeAgent(session, plan) {
+// Espera o shell novo e pede ao backend a retomada da conversa salva.
+// O backend confere o PTY e autoriza cada envio, inclusive novas tentativas.
+const resumeCoordinator = createResumeCoordinator({ concurrency: 2 });
+const resumeOperations = new WeakMap();
+function resumeAgent(session, plan, { retry = false } = {}) {
   const ptyId = session.ptyId;
-  const same = () => session.ptyId === ptyId && session.status === 'running';
+  const token = session.spawnToken;
+  const pending = resumeOperations.get(session);
+  if (pending?.ptyId === ptyId && pending.token === token) return pending.promise;
+  const operation = { ptyId, token };
+  const same = () => state.sessions.get(session.id) === session && session.ptyId === ptyId && session.spawnToken === token && session.status === 'running';
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-  const ready = await waitForPrompt(() => (same() ? session.receivedOffset : null), sleep);
-  if (!ready || !same()) return;
-  try {
-    const metrics = await invoke('pty_metrics');
-    if (Array.isArray(metrics) && metrics.find((item) => item.tag === session.id)?.foreground) return;
-  } catch (_error) { /* sem metricas, segue com o prompt observado */ }
-  if (!same()) return;
-  try {
-    await invoke('pty_write', { id: ptyId, data: `${plan.command}\r` });
-    dispatch({ type: 'notify', sessionId: session.id, message: translate('terminal.session.resuming', { agent: plan.agent, name: session.name }) });
-  } catch (error) {
-    dispatch({ type: 'error', message: messageOf(error) });
-  }
+  // Only backend calls occupy a slot; observing one startup must not delay
+  // other conversations sharing its profile during the backoff sleeps.
+  const request = (args) => resumeCoordinator.run(operation, plan.profileKey || plan.agent, () => invoke('pty_resume_agent', args), same);
+  const promise = (async () => {
+    session.resumeState = 'waiting';
+    const ready = await waitForPrompt(() => (same() ? session.receivedOffset : null), sleep);
+    if (!same()) return;
+    if (!ready) {
+      session.resumeState = 'failed';
+      dispatch({ type: 'error', message: translate('terminal.restore.notReady') });
+      return;
+    }
+    try {
+      const args = { id: ptyId, tag: session.id, sessionId: plan.sessionId, ...(retry ? { retry: true } : {}) };
+      let result = await request(args);
+      if (!same()) return;
+      let notified = false;
+      const accept = () => {
+        session.resumeState = result?.status === 'waiting' ? 'waiting' : 'sent';
+        if (result?.status === 'sent' && !notified) {
+          notified = true;
+          dispatch({ type: 'notify', sessionId: session.id, message: translate('terminal.session.resuming', { agent: plan.agent, name: session.name }) });
+        }
+      };
+      accept();
+      // Only the backend may retry, after recognizing a transient startup
+      // failure and checking that the shell owns this PTY with no user input.
+      for (const delay of [1000, 2000, 4000]) {
+        // A running CLI may report its startup failure after this response.
+        if (!['sent', 'waiting', 'already_started'].includes(result?.status)) break;
+        await sleep(delay);
+        if (!same()) return;
+        result = await request({ ...args, retry: true });
+        if (!same()) return;
+        accept();
+      }
+      if (result?.status === 'waiting') throw new Error(translate('terminal.restore.draining'));
+    } catch (error) {
+      if (!same()) return;
+      session.resumeState = 'failed';
+      dispatch({ type: 'error', message: messageOf(error) });
+    }
+  })().finally(() => {
+    if (resumeOperations.get(session)?.promise === promise) resumeOperations.delete(session);
+  });
+  operation.promise = promise;
+  resumeOperations.set(session, operation);
+  return promise;
 }
 
 // GPU que desenha o WebGL do xterm, lida do proprio contexto do terminal e
@@ -981,6 +1060,9 @@ function loadWebgl(session) {
 
 function unloadWebgl(session) {
   if (!session.webgl) return;
+  // Blur while the renderer is still attached so its cursor blink timers
+  // stop before disposal. addon-webgl 0.19 does not dispose that manager.
+  session.term.blur();
   try { session.webgl.dispose(); } catch (_error) { /* contexto ja perdido */ }
   session.webgl = null;
 }
@@ -1118,7 +1200,7 @@ function watchPixelRatio() {
 
 /* ── atencao e atividade ──────────────────────────────────────────── */
 
-function isViewed(session) {
+export function isViewed(session) {
   return state.viewMounted && state.viewVisible && state.windowFocused && state.selectedId === session.id;
 }
 
@@ -1341,6 +1423,11 @@ export function accountFor(profile) {
   return state.agentAccounts.get(profile) || null;
 }
 
+// Selo de perfil do card, com o apelido da conta quando houver.
+export function sessionProfileLabel(activity) {
+  return profileBadge(activity, accountFor(activityProfile(activity)));
+}
+
 // Uso do plano da conta do agente da sessao, ja normalizado para o card.
 //
 // A leitura preferida e a das contas, porque e uma so para Claude Code e
@@ -1446,6 +1533,7 @@ async function sampleUsage() {
   if (!hasBridge() || state.demo) return false;
   const wanted = [...state.sessions.values()].some((session) => session.status === 'running' && session.activity?.agent);
   if (!wanted) return false;
+  const previousAccounts = state.agentAccounts;
   try {
     const list = await invoke('ai_usage');
     if (!Array.isArray(list)) return;
@@ -1467,7 +1555,8 @@ async function sampleUsage() {
     const activity = session.activity;
     if (!activity) return;
     const usage = usageFor(activity.agent, activity.profile);
-    if (usage === activity.usage) return;
+    const previousLabel = profileBadge(activity, previousAccounts.get(activityProfile(activity)));
+    if (usage === activity.usage && previousLabel === sessionProfileLabel(activity)) return;
     session.activity = { ...activity, usage };
     emitActivity(session);
   });
@@ -1509,7 +1598,10 @@ function ensureMetrics() {
     state.metricsTimer = null;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (![...state.sessions.values()].some(measurable)) return;
-    if (!hidden) await sampleMetrics();
+    // No aplicativo a amostra continua, devagar, com a pagina oculta: e ela
+    // que traz a vez do agente e o fim do processo, que viram aviso enquanto
+    // o sistema mantem o app vivo em segundo plano.
+    if (!hidden || isMobileShell()) await sampleMetrics();
     if (!hidden && Date.now() - state.usageAt > USAGE_MS) {
       if (await sampleUsage()) state.usageAt = Date.now();
     }
@@ -1522,7 +1614,7 @@ function ensureMetrics() {
 function ensureWatchers() {
   if (!state.themeWatcher) {
     state.themeWatcher = watchTheme(() => {
-      state.sessions.forEach((session) => { session.term.options.theme = buildTheme(); });
+      state.sessions.forEach(applySessionTheme);
       dispatch({ type: 'theme' });
     });
   }
@@ -1658,6 +1750,8 @@ async function syncSharedSessions() {
         if (typeof shared.name === 'string' && shared.name) session.name = shared.name;
         session.subtitle = typeof shared.subtitle === 'string' ? shared.subtitle : '';
         session.color = validColor(shared.color);
+        applySessionTheme(session);
+        session.icon = validIcon(shared.icon);
         session.pinned = Boolean(shared.pinned);
         session.remoteOrder = shared.order;
         adopted.push(session);
@@ -1680,7 +1774,7 @@ async function syncSharedSessions() {
       adopted.forEach((session) => {
         const order = state.order.indexOf(session.id);
         session.publishedPresentation = JSON.stringify([terminalIdentity(session), {
-          name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order,
+          name: session.name, subtitle: session.subtitle, color: session.color, icon: session.icon, pinned: session.pinned, order,
         }]);
       });
       persist();
@@ -1764,13 +1858,13 @@ export function hydrate() {
 
 // Cria a sessao e abre o shell na hora, mesmo sem ser exibida. Devolve o
 // identificador ou null quando recusou.
-export function openSession(cwd, { name, subtitle, color, select = true } = {}) {
+export function openSession(cwd, { name, subtitle, color, icon, select = true } = {}) {
   if (!hasBridge() && !state.demo) {
     dispatch({ type: 'error', message: translate('terminal.common.desktopOnly') });
     return null;
   }
   if (!cwd) return null;
-  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null });
+  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null });
   state.order.push(session.id);
   if (select || !state.selectedId) state.selectedId = session.id;
   persist();
@@ -1942,6 +2036,9 @@ export function focusSelected() {
 // rodava nela, a conversa volta pelo comando de retomada.
 export async function reopen(id) {
   const session = state.sessions.get(id);
+  if (session?.status === 'running' && ['failed', 'sent'].includes(session.resumeState) && session.saved?.resume) {
+    return resumeAgent(session, session.saved.resume, { retry: true });
+  }
   if (!session || session.status === 'running' || session.spawning || session.reopening) return;
   session.reopening = true;
   try {
@@ -2016,6 +2113,8 @@ export async function closeSession(id) {
   if (session.fitTimer) clearTimeout(session.fitTimer);
   if (session.activityTimer) clearTimeout(session.activityTimer);
   if (session.idleTimer) clearTimeout(session.idleTimer);
+  if (session.reattachTimer) clearTimeout(session.reattachTimer);
+  session.viewport?.invalidate();
   session.outputChannel?.dispose?.();
   try { browserHooks.sessionClosed?.(session); } catch (_error) { /* sem browser */ }
   try { docgraphHooks.sessionClosed?.(session); } catch (_error) { /* sem grafo */ }
@@ -2065,6 +2164,16 @@ export function setSessionColor(id, color) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.color = validColor(color);
+  applySessionTheme(session);
+  persist();
+  emitSessions();
+}
+
+// Icone do card. `null` volta ao padrao, que sai do que roda na sessao.
+export function setSessionIcon(id, icon) {
+  const session = state.sessions.get(id);
+  if (!session) return;
+  session.icon = validIcon(icon);
   persist();
   emitSessions();
 }
@@ -2561,7 +2670,7 @@ function seedDemo() {
   first.jobStartedAt = Date.now() - 154000;
   first.term.write(`\x1b[2m$ claude --resume\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.reading')}\r\n\x1b[2m  ⎿  Read 612 lines\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.adjustCard')}\r\n`);
   first.explorer.git = { isRepo: true, branch: 'main', ahead: 2, behind: 0, changes: [{ path: 'packages/ui/src/terminals/runtime.js', status: 'modified', staged: false, worktree: true }, { path: 'packages/ui/src/views/Terminais.css', status: 'modified', staged: false, worktree: true }, { path: 'docs/arquitetura/04-desktop.md', status: 'untracked', staged: false, worktree: true }] };
-  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'verde', subtitle: translate('terminal.demo.devServer') });
+  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'azul', icon: 'globe', subtitle: translate('terminal.demo.devServer') });
   second.status = 'running';
   second.activity = { available: true, cpu: 0.6, memory: 96 * 1024 * 1024, processes: 2, foreground: { pid: 5100, name: 'node', command: 'npm', agent: null, stopped: false }, agent: null, shellCwd: `${home}/site-exemplo` };
   // Sem sinal proprio, com saida chegando agora: Em execucao.
@@ -2570,7 +2679,7 @@ function seedDemo() {
   second.metricsAt = Date.now();
   second.term.write('$ npm run dev\r\n\r\n  VITE v7.3.6  ready in 412 ms\r\n\r\n  ➜  Local:   http://127.0.0.1:5173/\r\n');
   second.jobStartedAt = Date.now() - 3600000;
-  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', subtitle: translate('terminal.demo.backendTests') });
+  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', icon: 'flask', subtitle: translate('terminal.demo.backendTests') });
   third.status = 'running';
   third.activity = { available: true, cpu: 0, memory: 14 * 1024 * 1024, processes: 1, foreground: null, agent: null, shellCwd: `${home}/api-exemplo` };
   // Shell em prompt: Pronto para comando, sem animacao.

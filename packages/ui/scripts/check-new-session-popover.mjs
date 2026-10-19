@@ -26,6 +26,8 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/terminals/ui/NewSessionPopover.jsx', import.meta.url))],
   bundle: true, write: false, format: 'cjs', external: ['react', 'react-dom', 'lucide-react'],
   plugins: [{ name: 'popover-boundaries', setup(api) {
+    api.onResolve({ filter: /\.svg\?raw$/ }, ({ path }) => ({ path, namespace: 'glyph' }));
+    api.onLoad({ filter: /.*/, namespace: 'glyph' }, () => ({ contents: 'export default "<svg></svg>";', loader: 'js' }));
     api.onResolve({ filter: /\.(js|jsx)$/ }, ({ path }) => {
       const key = path.split('/').at(-1).replace(/\.jsx?$/, '');
       if (mocks[key]) return { path: key, namespace: 'fixture' };

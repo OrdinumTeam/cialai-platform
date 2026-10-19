@@ -10,6 +10,11 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.3.0](0.3.0.md) | 19/10/2026 | `v0.3.0` | `OrdinumTeam/cialai-platform`, visual novo, cor e ícone por sessão e avisos de atenção no celular |
+| [0.2.16](0.2.16.md) | 17/10/2026 | Sem tag | Site e curl, apelidos dos perfis e ação para sessões com falha |
+| [0.2.15](0.2.15.md) | 16/10/2026 | Sem tag | Site e curl, associação das conversas nos três desktops |
+| [0.2.14](0.2.14.md) | 16/10/2026 | Sem tag | Site, copiar e colar nos três desktops |
+| [0.2.13](0.2.13.md) | 16/10/2026 | `v0.2.13` | `OrdinumTeam/cialai-platform`, estabilidade desktop |
 | [0.2.12](0.2.12.md) | 12/10/2026 | `v0.2.12` | `OrdinumTeam/cialai-platform` |
 | [0.2.11](0.2.11.md) | 11/10/2026 | `v0.2.11` | `OrdinumTeam/cialai-platform` |
 | [0.2.10](0.2.10.md) | 25/09/2026 | Não houve | Somente o `.exe` do Windows, no site; a entrega completa saiu como 0.2.11 |

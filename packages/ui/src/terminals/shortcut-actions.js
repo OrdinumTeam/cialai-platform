@@ -29,7 +29,11 @@ export function isTerminalAppShortcut(event, os = currentOs()) {
     .some((combo) => isAppShortcut(event, combo, { inTerminal: true, os }));
 }
 
-export function terminalEditAction(event, os = currentOs()) {
+export function terminalEditAction(event, os = currentOs(), { hasSelection = false } = {}) {
+  // Linux reserves plain Ctrl+C/V for the foreground program, regardless of
+  // its name. macOS also accepts the requested Ctrl aliases; Cmd stays native.
+  if (os !== 'linux' && hasSelection && isShortcut(event, 'Ctrl+C', os)) return 'copy';
+  if (os !== 'linux' && isShortcut(event, 'Ctrl+V', os)) return 'paste';
   if (os === 'macos') return isShortcut(event, 'Mod+Backspace', os) ? 'delete-line' : null;
   if (isShortcut(event, terminalSafe('Mod+C', os), os) || isShortcut(event, 'Ctrl+Insert', os)) return 'copy';
   if (isShortcut(event, terminalSafe('Mod+V', os), os) || isShortcut(event, 'Shift+Insert', os)) return 'paste';

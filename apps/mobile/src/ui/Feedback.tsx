@@ -53,13 +53,15 @@ type EmptyProps = {
   tone?: 'default' | 'error';
 };
 
+// Estado vazio ou de erro: o ícone grande e solto, sem placa, na cor do tom,
+// o título, o detalhe e a ação.
 export function EmptyState({ icon, title, detail, action, tone = 'default' }: EmptyProps) {
   const { colors } = useTokens();
   const error = tone === 'error';
   return (
     <View style={styles.empty}>
-      <View style={[styles.emptyIcon, { backgroundColor: error ? colors.dangerSoft : colors.primarySoft }]}>
-        <Icon color={error ? colors.danger : colors.primary} name={icon} size={30} strokeWidth={1.6} />
+      <View style={styles.emptyIcon}>
+        <Icon color={error ? colors.danger : colors.primary} name={icon} size={44} strokeWidth={1.5} />
       </View>
       <Text accessibilityRole="header" style={[typography.title, styles.center, { color: colors.text }]}>{title}</Text>
       {detail ? <Text style={[typography.body, styles.center, { color: colors.textSecondary }]}>{detail}</Text> : null}
@@ -111,7 +113,7 @@ const styles = StyleSheet.create({
   sheetTitle: { flex: 1 },
   sheetBody: { paddingHorizontal: space.lg, paddingBottom: space.xs, gap: space.sm },
   empty: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: space.sm, paddingHorizontal: space.xl, paddingVertical: space.xxl },
-  emptyIcon: { width: 72, height: 72, borderRadius: 36, alignItems: 'center', justifyContent: 'center', marginBottom: space.xs },
+  emptyIcon: { marginBottom: space.xxs },
   center: { textAlign: 'center' },
   emptyAction: { marginTop: space.sm, alignSelf: 'stretch' }
 });

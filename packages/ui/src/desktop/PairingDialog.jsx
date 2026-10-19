@@ -191,8 +191,7 @@ export default function PairingDialog({ open, onClose, onDevices, onDiagnostics 
       <div className="mac-pair__copy">
         <span className="mac-pair__device"><Smartphone aria-hidden="true" /></span>
         <p className="mac-pair__eyebrow">{tunnel.desktopName}</p>
-        <h3>{translate('desktop.action.pairPhone')}</h3>
-        <p>{translate('desktop.pair.instructions')}</p>
+        <p className="mac-pair__lead">{translate('desktop.pair.instructions')}</p>
         <dl className="mac-pair__reserve">
           <div><dt>{translate('desktop.access.direct')}</dt><dd><DirectValue snapshot={tunnel.snapshot} /></dd></div>
           <div><dt>{translate('desktop.access.reserve')}</dt><dd><ReserveValue tor={tor} /></dd></div>

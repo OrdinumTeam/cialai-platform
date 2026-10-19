@@ -3,8 +3,11 @@
 // atividade, agendador do hover, posicao do popover e ordem dos perfis. Sem
 // DOM e sem React, para os testes cobrirem cada decisao sem abrir o app.
 
-export const DEFAULT_WATCH_LIMIT = 0.5;
-export const DEFAULT_CRITICAL_LIMIT = 0.7;
+/// Faixas padrao do uso: abaixo de 60% o tom da sessao, de 60% a 79% o
+/// ambar e de 80% em diante o vermelho. Os mesmos valores do Rust, e os que o
+/// card da sessao e a tela de contas usam.
+export const DEFAULT_WATCH_LIMIT = 0.6;
+export const DEFAULT_CRITICAL_LIMIT = 0.8;
 /// O ponteiro pode ir da celula ao popover sem ele fechar no caminho.
 export const HOVER_GRACE_MS = 180;
 /// Altura da toolbar, que o popover nunca cobre.
@@ -25,7 +28,7 @@ export function toggleShortcut(os) {
 
 const number = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
-/// Banda de uso. Os limiares sao preferencia; os padroes sao 50 e 70 por
+/// Banda de uso. Os limiares sao preferencia; os padroes sao 60 e 80 por
 /// cento. Sem leitura a banda e `none`, que nao e o mesmo que zero.
 export function bandOf(fraction, watch = DEFAULT_WATCH_LIMIT, critical = DEFAULT_CRITICAL_LIMIT) {
   const used = number(fraction);
@@ -51,6 +54,62 @@ export function cellState(snapshot, prefs = {}) {
   const hasReading = Array.isArray(snapshot?.windows) && snapshot.windows.length > 0;
   const stale = !hasReading || snapshot?.status?.kind === 'stale';
   return { fraction, hasReading, stale, band: bandOf(fraction, prefs.watchLimit, prefs.criticalLimit) };
+}
+
+/// Duracao de uma semana e a folga para aceitar uma janela como semanal.
+export const WEEK_MS = 7 * 24 * 3_600_000;
+const WEEK_TOLERANCE_MS = 12 * 3_600_000;
+
+/// A janela semanal geral, apontada por `weeklyId`: `weekly_all` no Claude,
+/// a de "Todos os modelos", e `secondary` no Codex. Nula quando repete a do
+/// anel. E a mesma regra de `weeklyWindow` em `AgentProfiles.jsx`.
+export function weeklyWindow(snapshot) {
+  const windows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
+  if (!snapshot?.weeklyId || snapshot.weeklyId === snapshot.headlineId) return null;
+  return windows.find((limit) => limit && limit.id === snapshot.weeklyId) || null;
+}
+
+const STATUS_WITHOUT_READING = Object.freeze({
+  needsAuth: 'auth',
+  signedOutByOwner: 'auth',
+  accessDenied: 'auth',
+  error: 'error',
+  unsupported: 'error',
+});
+
+/// O anel interno, do uso semanal. Tres estados, que nunca se confundem:
+///
+/// - `available`: a conta informou uma janela semanal com fracao, inclusive 0.
+/// - `none`: ha leitura e nela nao existe janela semanal, ou a janela longa
+///   nao e de uma semana, como o mes do plano gratis do Codex. So o anel da
+///   sessao aparece.
+/// - `unknown`: ainda sem leitura, leitura com erro, login pendente, ou uma
+///   janela longa sem duracao informada. Nao vira 0% nem ilimitado.
+///
+/// A decisao vem so dos dados que chegaram; nome e preco do plano nao
+/// entram.
+export function weeklyState(snapshot, prefs = {}) {
+  const windows = Array.isArray(snapshot?.windows) ? snapshot.windows : [];
+  if (windows.length === 0) {
+    return { kind: 'unknown', reason: STATUS_WITHOUT_READING[snapshot?.status?.kind] || 'loading' };
+  }
+  const limit = weeklyWindow(snapshot);
+  if (!limit) return { kind: 'none' };
+  const duration = number(limit.durationMs);
+  const weekly = duration !== null
+    ? Math.abs(duration - WEEK_MS) <= WEEK_TOLERANCE_MS
+    : limit.label === 'weeklyAll';
+  if (!weekly) return duration !== null ? { kind: 'none' } : { kind: 'unknown', reason: 'unconfirmed' };
+  const fraction = number(limit.usedFraction);
+  if (fraction === null) return { kind: 'unknown', reason: 'unconfirmed' };
+  return {
+    kind: 'available',
+    window: limit,
+    fraction,
+    band: bandOf(fraction, prefs.watchLimit, prefs.criticalLimit),
+    stale: snapshot?.status?.kind === 'stale',
+    resetsAtMs: number(limit.resetsAtMs),
+  };
 }
 
 /// Resumo da atividade de um perfil a partir das sessoes: aguardando vence

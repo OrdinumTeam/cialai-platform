@@ -96,6 +96,13 @@ export function Shell({
     inject(shellMessageScript(message));
   }, [desktopId, inject, themeMode, version]);
 
+  // Pedido novo com a página já carregada, como o toque num aviso de sessão:
+  // vai por mensagem, porque o bootstrap só roda quando a página carrega. A
+  // página consome cada id uma vez, então o pedido do bootstrap não repete.
+  useEffect(() => {
+    if (intent) inject(pageMessageScript({ type: 'intent', intent }));
+  }, [inject, intent]);
+
   useEffect(() => {
     if (lockSignal > 0) emitShellState(false);
   }, [emitShellState, lockSignal]);

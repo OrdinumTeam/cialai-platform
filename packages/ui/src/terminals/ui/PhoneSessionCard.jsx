@@ -7,26 +7,32 @@
 // A conexão do terminal com o computador é outra coisa e aparece numa pílula
 // à parte, para "Processando" e "Desconectado" nunca se confundirem.
 //
-// Como o card do computador, assina só a atividade da própria sessão.
+// Como o card do computador, assina só a atividade da própria sessão, e o
+// tom vem do mesmo lugar: a cor escolhida ou, sem cor, o rosa do Cialai, na
+// barra lateral, no ícone, no nome do agente, nas barras de atividade e no
+// botão de abrir.
 import React, { memo, useEffect, useRef } from 'react';
-import { ArrowRight, EllipsisVertical, Folder, Pin } from 'lucide-react';
+import { ArrowRight, Bell, CheckCircle2, EllipsisVertical, Folder, Pin, Power, XCircle } from 'lucide-react';
 import { fmtCpu, fmtElapsed, fmtMemory, shortPath } from '../files.js';
-import { describe, runningLabel, sessionAccent } from '../runtime.js';
+import { describe, runningLabel, sessionProfileLabel } from '../runtime.js';
+import { sessionAccentStyle } from '../session-accent.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { sessionPhase } from '../phone-session-list.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
+import SessionIcon from './SessionIcon.jsx';
 import { translate, useI18n } from '../../shared/i18n.js';
 
 // Toque longo que abre o menu de ações, sem disparar seleção nem rolagem.
 const LONG_PRESS_MS = 500;
 
-function accentStyle(session) {
-  const accent = sessionAccent(session);
-  if (!accent) return undefined;
-  return { '--terminais-accent-light': accent.light, '--terminais-accent-dark': accent.dark };
+// O mesmo sinal de atenção do card do computador: concluído, erro ou o sino.
+function AttentionIcon({ kind }) {
+  if (kind === 'finished') return <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />;
+  if (kind === 'error') return <XCircle size={14} strokeWidth={2} aria-hidden="true" />;
+  return <Bell size={14} strokeWidth={2} aria-hidden="true" />;
 }
 
-function PhoneSessionCard({ session, onSelect, onMenu }) {
+function PhoneSessionCard({ session, onSelect, onMenu, onClose }) {
   useI18n();
   useRuntimeEvents(['activity', 'sessions'], session.id);
   const longPress = useRef(null);
@@ -37,6 +43,7 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
   const phase = sessionPhase(status);
   const running = runningLabel(session);
   const activity = session.activity;
+  const profileLabel = running?.agent ? sessionProfileLabel(activity) : null;
   const live = session.status === 'running';
   const cpu = live && activity?.available && activity.cpu != null ? fmtCpu(activity.cpu) : null;
   const memory = live && activity?.available && activity.memory > 0 ? fmtMemory(activity.memory) : null;
@@ -47,14 +54,20 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
   const linkLost = session.status === 'disconnected' && status.code !== 'disconnected';
   const agent = running?.text || translate('terminal.phone.defaultShell');
 
-  const classes = ['phone-session', `phone-session--${phase}`];
+  // Encerramento e falha já aparecem no estado escrito; o resto da atenção
+  // ganha uma linha própria, como no computador.
+  const attention = session.attention && session.attention.kind !== 'exited' && session.attention.kind !== 'error' ? session.attention : null;
+  // `session-scope` com as variáveis inline: o card fica com o tom da sessão
+  // e nunca herda o de outra. A barra lateral aparece em todo card.
+  const classes = ['phone-session', 'session-scope', `phone-session--${phase}`];
   if (session.color) classes.push('has-color');
+  if (attention) classes.push('has-attention', `has-attention--${attention.kind}`);
   if (session.pinned) classes.push('is-pinned');
 
   return (
     <div
       className={classes.join(' ')}
-      style={accentStyle(session)}
+      style={sessionAccentStyle(session)}
       role="button"
       tabIndex={0}
       data-session-id={session.id}
@@ -75,6 +88,7 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
     >
       <div className="phone-session__head">
         <ActivityIndicator tone={status.tone} animated={status.animated} />
+        <SessionIcon session={session} size={17} className="phone-session__icon" />
         <span className="phone-session__name">{session.name}</span>
         {session.pinned ? <Pin size={13} strokeWidth={2} className="phone-session__pin" role="img" aria-label={translate('terminal.session.pinned')} /> : null}
         <button
@@ -88,11 +102,21 @@ function PhoneSessionCard({ session, onSelect, onMenu }) {
       </div>
       {session.subtitle ? <div className="phone-session__subtitle">{session.subtitle}</div> : null}
       <div className={`phone-session__agent${running?.agent ? ' is-agent' : ''}`}>{agent}</div>
+      {profileLabel ? <div className="phone-session__profile"><span className="terminais-card__profile" title={translate('terminal.session.profile', { profile: profileLabel })}>{profileLabel}</span></div> : null}
       <div className="phone-session__dir"><Folder size={13} strokeWidth={1.8} aria-hidden="true" /><span>{shortPath(session.cwd)}</span></div>
+      {session.status === 'error' && onClose ? <button type="button" className="phone-session__close btn btn-quiet" onClick={(event) => { event.stopPropagation(); onClose(session); }}>
+        <Power size={16} strokeWidth={2} aria-hidden="true" />{translate('terminal.menu.closeSession')}
+      </button> : null}
       <div className="phone-session__state">
-        <span className={`phone-session__status phone-session__status--${status.tone}`}>{status.label}</span>
+        <span className={`phone-session__status phone-session__status--${status.tone}`} title={session.status === 'error' ? session.error : undefined}>{status.label}</span>
         {elapsed ? <span className="phone-session__elapsed">{elapsed}</span> : null}
       </div>
+      {attention ? (
+        <div className={`phone-session__attention phone-session__attention--${attention.kind}`}>
+          <AttentionIcon kind={attention.kind} />
+          <span>{attention.message}</span>
+        </div>
+      ) : null}
       <div className="phone-session__foot">
         <div className="phone-session__metrics">
           {cpu != null ? <span><em>{translate('terminal.common.cpu')}</em> {cpu}</span> : null}

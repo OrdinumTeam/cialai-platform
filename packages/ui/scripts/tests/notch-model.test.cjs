@@ -12,10 +12,10 @@ test('a banda muda nos limiares e none e diferente de zero', async () => {
   assert.equal(bandOf(undefined), 'none');
   assert.equal(bandOf(Number.NaN), 'none');
   assert.equal(bandOf(0), 'ample');
-  assert.equal(bandOf(0.4999), 'ample');
-  assert.equal(bandOf(0.5), 'watch');
-  assert.equal(bandOf(0.6999), 'watch');
-  assert.equal(bandOf(0.7), 'critical');
+  assert.equal(bandOf(0.5999), 'ample');
+  assert.equal(bandOf(0.6), 'watch');
+  assert.equal(bandOf(0.7999), 'watch');
+  assert.equal(bandOf(0.8), 'critical');
   assert.equal(bandOf(0.999), 'critical');
   assert.equal(bandOf(1), 'exhausted');
   assert.equal(bandOf(1.2), 'exhausted');
@@ -134,8 +134,8 @@ test('as preferencias da barra sao normalizadas com os nomes e valores do Rust',
   assert.deepEqual(NOTCH_RESET_FORMATS, ['automatic', 'remaining']);
   assert.deepEqual(NOTCH_THRESHOLDS, [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]);
   assert.deepEqual(normalizeNotchPreferences(null), {
-    visibility: 'open', profiles: {}, order: [], hideDefaultWhenDuplicate: true, watchLimit: 0.5, criticalLimit: 0.7,
-    alerts: { threshold: false, limitReached: false, reset: false }, resetTimeFormat: 'automatic',
+    visibility: 'open', profiles: {}, order: [], hideDefaultWhenDuplicate: true, watchLimit: 0.6, criticalLimit: 0.8,
+    alerts: { threshold: false, limitReached: false, reset: false }, resetTimeFormat: 'automatic', limitsRevision: 1,
   });
   assert.deepEqual(Object.keys(normalizeNotchPreferences(null)), Object.keys(DEFAULT_NOTCH_PREFERENCES));
   const normalized = normalizeNotchPreferences({
@@ -147,6 +147,7 @@ test('as preferencias da barra sao normalizadas com os nomes e valores do Rust',
     criticalLimit: 7,
     alerts: { threshold: 1, reset: true },
     resetTimeFormat: 'remaining',
+    limitsRevision: 1,
   });
   assert.deepEqual(normalized, {
     visibility: 'open',
@@ -154,11 +155,81 @@ test('as preferencias da barra sao normalizadas com os nomes e valores do Rust',
     order: ['b', 'a'],
     hideDefaultWhenDuplicate: false,
     watchLimit: 0.4,
-    criticalLimit: 0.7,
+    criticalLimit: 0.8,
     alerts: { threshold: false, limitReached: false, reset: true },
     resetTimeFormat: 'remaining',
+    limitsRevision: 1,
   });
   assert.deepEqual(normalizePreferenceDraft({}).notch, normalizeNotchPreferences(null));
   assert.equal(sanitizePreferences({ notch: { visibility: 'hidden' } }).notch.visibility, 'hidden');
   assert.equal(sanitizePreferences({}).network.desktopName, null, 'o bloco notch nao mexe nas outras secoes');
+});
+
+const WEEK = 7 * 24 * 3_600_000;
+const limit = (id, label, used, durationMs, extra = {}) => ({ id, label, usedFraction: used, resetsAtMs: 1_800_000_000_000, durationMs, ...extra });
+const claudeWith = (week) => ({
+  provider: 'claude', headlineId: 'session', weeklyId: 'weekly_all', status: { kind: 'ok' },
+  windows: [limit('session', 'session', 0.2, 5 * 3_600_000), ...(week === undefined ? [] : [limit('weekly_all', 'weeklyAll', week, WEEK)])],
+});
+const codexWith = (secondary, extra = {}) => ({
+  provider: 'codex', headlineId: 'primary', weeklyId: secondary ? 'secondary' : null, status: { kind: 'ok' },
+  windows: [limit('primary', 'duration', 0.3, 5 * 3_600_000), ...(secondary ? [secondary] : [])], ...extra,
+});
+
+test('o anel semanal mostra 0% como leitura, nao como ausencia', async () => {
+  const { weeklyState } = await load();
+  const zero = weeklyState(claudeWith(0));
+  assert.equal(zero.kind, 'available');
+  assert.equal(zero.fraction, 0);
+  assert.equal(zero.band, 'ample');
+  assert.equal(zero.window.id, 'weekly_all');
+  assert.equal(zero.resetsAtMs, 1_800_000_000_000);
+  const high = weeklyState(claudeWith(0.92), { watchLimit: 0.5, criticalLimit: 0.7 });
+  assert.equal(high.band, 'critical');
+  assert.equal(weeklyState({ ...claudeWith(0.4), status: { kind: 'stale', sinceMs: 1 } }).stale, true);
+});
+
+test('leitura sem janela semanal e conta sem limite semanal, so o anel da sessao', async () => {
+  const { weeklyState } = await load();
+  assert.deepEqual(weeklyState(codexWith(null)), { kind: 'none' });
+  // Janela longa que nao e de uma semana, como o mes do plano gratis.
+  assert.deepEqual(weeklyState(codexWith(limit('secondary', 'duration', 0.4, 30 * 24 * 3_600_000))), { kind: 'none' });
+  // O Claude sem `weekly_all` na leitura: a conta nao informou limite semanal.
+  assert.deepEqual(weeklyState(claudeWith(undefined)), { kind: 'none' });
+});
+
+test('o Codex com janela semanal informada ganha o anel, decidido pela duracao', async () => {
+  const { weeklyState } = await load();
+  const weekly = weeklyState(codexWith(limit('secondary', 'duration', 0.55, WEEK)));
+  assert.equal(weekly.kind, 'available');
+  assert.equal(weekly.fraction, 0.55);
+  // Uma folga de horas na duracao ainda e uma semana.
+  assert.equal(weeklyState(codexWith(limit('secondary', 'duration', 0.1, WEEK - 3_600_000))).kind, 'available');
+});
+
+test('sem leitura, com erro ou sem duracao, o semanal fica desconhecido', async () => {
+  const { weeklyState } = await load();
+  assert.deepEqual(weeklyState({ windows: [], status: { kind: 'ok' } }), { kind: 'unknown', reason: 'loading' });
+  assert.deepEqual(weeklyState({ windows: [], status: { kind: 'error', message: 'http' } }), { kind: 'unknown', reason: 'error' });
+  assert.deepEqual(weeklyState({ windows: [], status: { kind: 'needsAuth' } }), { kind: 'unknown', reason: 'auth' });
+  assert.deepEqual(weeklyState(null), { kind: 'unknown', reason: 'loading' });
+  // Janela longa sem duracao informada: nao da para dizer que e semanal.
+  assert.deepEqual(weeklyState(codexWith(limit('secondary', 'longWindow', 0.6, null))), { kind: 'unknown', reason: 'unconfirmed' });
+  // A janela semanal do Claude nao precisa da duracao: o rotulo diz o que ela e.
+  assert.equal(weeklyState({ ...claudeWith(0.3), windows: [limit('session', 'session', 0.2, null), limit('weekly_all', 'weeklyAll', 0.3, null)] }).kind, 'available');
+  // Fracao ausente na janela semanal nao vira zero.
+  assert.deepEqual(weeklyState(claudeWith(null)), { kind: 'unknown', reason: 'unconfirmed' });
+});
+
+test('a janela semanal nunca repete a do anel externo', async () => {
+  const { weeklyState, weeklyWindow } = await load();
+  const same = { provider: 'codex', headlineId: 'primary', weeklyId: 'primary', status: { kind: 'ok' }, windows: [limit('primary', 'duration', 0.3, WEEK)] };
+  assert.equal(weeklyWindow(same), null);
+  assert.deepEqual(weeklyState(same), { kind: 'none' });
+});
+
+test('as faixas padrao sao as do Rust: ambar a partir de 60 por cento e vermelho a partir de 80', async () => {
+  const { DEFAULT_WATCH_LIMIT, DEFAULT_CRITICAL_LIMIT } = await load();
+  assert.equal(DEFAULT_WATCH_LIMIT, 0.6);
+  assert.equal(DEFAULT_CRITICAL_LIMIT, 0.8);
 });

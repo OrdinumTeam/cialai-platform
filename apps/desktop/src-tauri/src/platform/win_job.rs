@@ -4,12 +4,15 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::io;
+use std::os::windows::io::AsRawHandle;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
+use std::time::{Duration, Instant};
 
 use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
-    JOBOBJECT_BASIC_PROCESS_ID_LIST, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+    JOBOBJECT_BASIC_ACCOUNTING_INFORMATION, JOBOBJECT_BASIC_PROCESS_ID_LIST,
+    JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JobObjectBasicAccountingInformation,
     JobObjectBasicProcessIdList, JobObjectExtendedLimitInformation, QueryInformationJobObject,
     SetInformationJobObject, TerminateJobObject,
 };
@@ -55,16 +58,71 @@ impl JobHandle {
         let ok = unsafe { TerminateJobObject(self.inner.raw(), 1) };
         bool_result(ok)
     }
+
+    /// Termination is asynchronous. Wait for every owned process to release its
+    /// resources before a caller removes files inherited by those processes.
+    pub(crate) fn terminate_and_wait(&self, timeout: Duration) -> io::Result<()> {
+        self.terminate()?;
+        let start = Instant::now();
+        loop {
+            let mut accounting = JOBOBJECT_BASIC_ACCOUNTING_INFORMATION::default();
+            // SAFETY: the class matches the initialized buffer and its size.
+            bool_result(unsafe {
+                QueryInformationJobObject(
+                    self.inner.raw(),
+                    JobObjectBasicAccountingInformation,
+                    &mut accounting as *mut _ as *mut c_void,
+                    std::mem::size_of_val(&accounting) as u32,
+                    std::ptr::null_mut(),
+                )
+            })?;
+            if accounting.ActiveProcesses == 0 {
+                return Ok(());
+            }
+            if start.elapsed() >= timeout {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "job cleanup timed out",
+                ));
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
 }
 
 /// Cria um job privado, ativa `KILL_ON_JOB_CLOSE` e atribui o shell.
 pub(crate) fn assign(shell_pid: u32) -> io::Result<JobHandle> {
+    // SAFETY: rights needed to assign and terminate the shell through its job.
+    let process = unsafe {
+        OpenProcess(
+            PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
+            0,
+            shell_pid,
+        )
+    };
+    if process.is_null() {
+        return Err(io::Error::last_os_error());
+    }
+    let result = create_and_assign(process);
+    // SAFETY: this temporary process handle is no longer needed.
+    unsafe { CloseHandle(process) };
+    let job = result?;
+    lock(registry()).insert(shell_pid, Arc::downgrade(&job.inner));
+    Ok(job)
+}
+
+/// Ephemeral probes own their Child handle and never enter the session registry.
+pub(crate) fn assign_private(child: &std::process::Child) -> io::Result<JobHandle> {
+    create_and_assign(child.as_raw_handle())
+}
+
+fn create_and_assign(process: HANDLE) -> io::Result<JobHandle> {
     // SAFETY: atributos e nome nulos criam um Job Object anonimo.
     let handle = unsafe { CreateJobObjectW(std::ptr::null(), std::ptr::null()) };
     if handle.is_null() {
         return Err(io::Error::last_os_error());
     }
-    let result = configure_and_assign(handle, shell_pid);
+    let result = configure_and_assign(handle, process);
     if let Err(error) = result {
         // SAFETY: falha antes de transferir o handle ao Arc.
         unsafe {
@@ -75,11 +133,10 @@ pub(crate) fn assign(shell_pid: u32) -> io::Result<JobHandle> {
     let inner = Arc::new(JobInner {
         handle: handle as usize,
     });
-    lock(registry()).insert(shell_pid, Arc::downgrade(&inner));
     Ok(JobHandle { inner })
 }
 
-fn configure_and_assign(job: HANDLE, shell_pid: u32) -> io::Result<()> {
+fn configure_and_assign(job: HANDLE, process: HANDLE) -> io::Result<()> {
     let mut limits = JOBOBJECT_EXTENDED_LIMIT_INFORMATION::default();
     limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
     // SAFETY: a classe corresponde ao layout e tamanho de `limits`.
@@ -93,23 +150,8 @@ fn configure_and_assign(job: HANDLE, shell_pid: u32) -> io::Result<()> {
     };
     bool_result(ok)?;
 
-    // SAFETY: direitos minimos para atribuir e encerrar o processo pelo job.
-    let process = unsafe {
-        OpenProcess(
-            PROCESS_SET_QUOTA | PROCESS_TERMINATE | PROCESS_QUERY_LIMITED_INFORMATION,
-            0,
-            shell_pid,
-        )
-    };
-    if process.is_null() {
-        return Err(io::Error::last_os_error());
-    }
     // SAFETY: ambos os handles sao validos durante a chamada.
     let assigned = unsafe { AssignProcessToJobObject(job, process) };
-    // SAFETY: o handle de processo nao e guardado.
-    unsafe {
-        CloseHandle(process);
-    }
     bool_result(assigned)
 }
 

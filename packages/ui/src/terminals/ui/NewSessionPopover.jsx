@@ -10,15 +10,23 @@
 // nativo não existe. "Escolher outra pasta" continua abrindo o diálogo do
 // sistema, só no Tauri. Popover por portal em body, fora da região de arrasto
 // da toolbar.
+//
+// Com `customize`, uma faixa recolhida escolhe a cor e o ícone do card antes
+// de abrir, com as mesmas grades do menu "Cor e ícone". Sem escolha, o card
+// nasce no rosa padrão e com o ícone padrão.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { CornerLeftUp, FolderOpen, FolderSearch, FolderTree, Search } from 'lucide-react';
+import { ChevronDown, CornerLeftUp, FolderOpen, FolderSearch, FolderTree, Search } from 'lucide-react';
 import { invoke, isTauri, hasBridge } from '../../lib/native.js';
 import { isPhone } from '../../lib/shell.js';
 import { getRecent, isDemo } from '../runtime.js';
 import { baseName, portablePath, shortPath } from '../files.js';
 import { translate, useI18n } from '../../shared/i18n.js';
+import { ORGANIZATION_COLORS, organizationColorStyle } from '../../lib/organization-colors.js';
+import { SESSION_ICONS } from '../session-icons.js';
+import { sessionAccentStyle } from '../session-accent.js';
+import SessionIcon from './SessionIcon.jsx';
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -51,10 +59,49 @@ export function folderGroups({ recent = [], repos = null, query = '' }) {
   return result;
 }
 
-export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, startPath = null, title = null, confirmLabel = null }) {
+// Cor e ícone do card que vai nascer. As grades repetem as do menu da sessão.
+function Customize({ open, onToggle, color, icon, onColor, onIcon }) {
+  const current = translate('terminal.common.current');
+  const look = { color, icon, activity: null };
+  return (
+    <div className="terminais-pop__customize session-scope" style={sessionAccentStyle(look)}>
+      <button type="button" className={`terminais-pop__customize-head${open ? ' is-open' : ''}`} onClick={onToggle} aria-expanded={open}>
+        <SessionIcon session={look} size={16} />
+        <span className="terminais-pop__customize-title">{translate('terminal.newSession.customize')}</span>
+        <span className="terminais-pop__customize-hint">{translate('terminal.newSession.customizeHint')}</span>
+        <ChevronDown size={14} strokeWidth={2} aria-hidden="true" className="terminais-pop__customize-chevron" />
+      </button>
+      {open ? (
+        <div className="terminais-pop__customize-body">
+          <div className="terminais-pop__grid" role="radiogroup" aria-label={translate('terminal.newSession.color')}>
+            <button type="button" role="radio" aria-checked={!color} className={`terminais-pop__swatch is-none${!color ? ' is-current' : ''}`} title={!color ? `${translate('terminal.menu.noColor')}, ${current}` : translate('terminal.menu.noColor')} aria-label={translate('terminal.menu.noColor')} onClick={() => onColor(null)}><i aria-hidden="true" /></button>
+            {ORGANIZATION_COLORS.map((entry) => {
+              const label = translate(`terminal.color.${entry.id}`);
+              const active = color === entry.id;
+              return <button key={entry.id} type="button" role="radio" aria-checked={active} className={`terminais-pop__swatch${active ? ' is-current' : ''}`} style={organizationColorStyle(entry.id)} title={active ? `${label}, ${current}` : label} aria-label={label} onClick={() => onColor(entry.id)}><i aria-hidden="true" /></button>;
+            })}
+          </div>
+          <div className="terminais-pop__grid terminais-pop__grid--icons" role="radiogroup" aria-label={translate('terminal.newSession.icon')}>
+            <button type="button" role="radio" aria-checked={!icon} className={`terminais-pop__iconbtn is-default${!icon ? ' is-current' : ''}`} title={translate('terminal.menu.defaultIcon')} aria-label={translate('terminal.menu.defaultIcon')} onClick={() => onIcon(null)}>{translate('terminal.icon.default')}</button>
+            {SESSION_ICONS.map((entry) => {
+              const label = translate(entry.labelKey);
+              const active = icon === entry.id;
+              const { Icon } = entry;
+              return <button key={entry.id} type="button" role="radio" aria-checked={active} className={`terminais-pop__iconbtn${active ? ' is-current' : ''}`} title={active ? `${label}, ${current}` : label} aria-label={label} onClick={() => onIcon(entry.id)}><Icon size={15} strokeWidth={1.9} aria-hidden="true" /></button>;
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, startPath = null, title = null, confirmLabel = null, customize = false }) {
   const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [name, setName] = useState('');
+  const [look, setLook] = useState({ open: false, color: null, icon: null });
+  const chosen = customize ? { color: look.color, icon: look.icon } : undefined;
   const [repos, setRepos] = useState(null);
   const [index, setIndex] = useState(0);
   // `null` fora do modo navegar. Dentro dele, o que `list_dirs` devolveu.
@@ -101,7 +148,7 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
   const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   useEffect(() => { setIndex(0); }, [query]);
 
-  const pick = useCallback((path) => { onPick(path, name.trim()); }, [onPick, name]);
+  const pick = useCallback((path) => { onPick(path, name.trim(), chosen); }, [onPick, name, chosen?.color, chosen?.icon]);
 
   const onKeyDown = (event) => {
     if (event.key === 'Escape') { event.preventDefault(); onClose(); }
@@ -110,7 +157,7 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
     else if (event.key === 'Enter') {
       event.preventDefault();
       if (flat[index]) pick(flat[index].path);
-      else if (!flat.length && isTauri()) onBrowse(name.trim());
+      else if (!flat.length && isTauri()) onBrowse(name.trim(), chosen);
     }
   };
 
@@ -222,9 +269,19 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
           aria-label={translate('terminal.session.name')}
         />
       </div>
+      {customize ? (
+        <Customize
+          open={look.open}
+          onToggle={() => setLook((value) => ({ ...value, open: !value.open }))}
+          color={look.color}
+          icon={look.icon}
+          onColor={(color) => setLook((value) => ({ ...value, color }))}
+          onIcon={(icon) => setLook((value) => ({ ...value, icon }))}
+        />
+      ) : null}
       <div className="terminais-pop__foot">
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => openFolder(startPath || null)}><FolderTree size={13} />{translate('terminal.session.browseFolders')}</button>
-        {isTauri() && onBrowse ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => onBrowse(name.trim())}><FolderSearch size={13} />{translate('terminal.session.chooseFolder')}</button> : null}
+        {isTauri() && onBrowse ? <button type="button" className="btn btn-ghost btn-sm" onClick={() => onBrowse(name.trim(), chosen)}><FolderSearch size={13} />{translate('terminal.session.chooseFolder')}</button> : null}
       </div>
     </div>,
     document.body,

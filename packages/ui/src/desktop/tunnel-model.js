@@ -32,6 +32,7 @@ export const TUNNEL_ERROR_KEYS = Object.freeze({
   payload_invalid: 'desktop.tunnel.error.payloadInvalid',
   rpc_invalid: 'desktop.tunnel.error.rpcInvalid',
   tunnel_disconnected: 'desktop.tunnel.error.tunnelDisconnected',
+  tunnel_busy: 'desktop.tunnel.error.tunnelBusy',
   tunnel_handshake: 'desktop.tunnel.error.tunnelHandshake',
   tunnel_internal: 'desktop.tunnel.error.tunnelInternal',
   tunnel_restart_limit: 'desktop.tunnel.error.tunnelRestartLimit',
