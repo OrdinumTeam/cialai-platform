@@ -73,6 +73,30 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.3.0 preview
+
+Preview dated 2026-10-19 for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session carries its own colour and icon, the AI Bar shows the weekly limit and the phone raises attention notices.
+
+### Added
+
+* An icon per session. Thirty Lucide icons are picked together with the colour at creation or from Colour and icon, shown loose next to the name on the card and in the header on the computer and on the phone, and stored in the terminal presentation with the same validation as the colour. Without a choice the agent glyph or a terminal is shown
+* A weekly inner ring in the AI Bar. The outer ring is the 5 hour session and the inner one the weekly window, with the same stroke and convention. Weekly state is available, none or unknown, decided only from the windows that arrived, so a missing reading never becomes 0% or unlimited. The tooltip and the accessible description name both windows, usage and reset
+* Attention notices on the phone. The page snapshot carries each session's resolved tone, icon, attention and agent turn, and the app turns a new bell, terminal notice, finished command, agent waiting or asking for permission and finished answer into a local notice with the session name and colour, on a high importance Android channel. The notice for the session in view is skipped, a newer notice replaces the previous one of the same session and tapping opens the session, also on a cold start
+* Four fixed keys in the phone terminal bar: Enter, Esc, Ctrl C and Ctrl V. Modifier shortcuts stack the modifier over the letter so the bar fits from 320 px; an untouched old bar migrates once and a customised one is kept
+
+### Changed
+
+* The desktop shell uses solid surfaces, rounded components and tone separation from the mobile design, without gradients, glass or glow, behind `html[data-shell="desktop"]` so the phone page is unaffected. The sidebar stays solid pink. Every interactive control and colour change shares a short transition
+* The session colour drives the inner accents of its card, header, terminal focus ring, cursor and selection, palette entry, on screen notice and the AI Bar of the selected session, through one resolver with a 4.5:1 text contrast. Without a colour the Cialai pink applies. Semantic colours, ANSI colours and CLI output are untouched
+* Usage bands are amber from 60% and red from 80% on the computer, the phone page and the native app. Preferences still on the old 50 and 70 defaults migrate once through `limits_revision`. The context chip keeps 75 and 90
+* The official lockup replaces the hollow symbol in the sidebar, splash, boot screen and onboarding; with the sidebar closed the lettering shows small in the toolbar. The phone app uses the same lockup per theme and the coloured head. The pieces are generated from the brand masters by `tools/brand/build-ui-lockup.mjs`
+* Decorative plates behind icons were removed on the desktop, the phone page and the native app
+* The phone page and the native app follow the session tone, the weekly states and the new bands; the phone composer is solid
+
+### Compatibility
+
+* The terminal presentation gained the optional `icon` field and the Rust side rejects unknown fields, so the desktop front end and the Rust core ship in the same build. New dashboard snapshot fields are optional for the app: an older computer sends none and the app shows no attention notices
+
 ## 0.2.16 desktop website distribution
 
 ### Fixed

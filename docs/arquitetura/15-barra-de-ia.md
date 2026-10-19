@@ -229,12 +229,15 @@ definem a variável continuam funcionando.
   "profiles": { "codex-amorim": { "enabled": true, "alias": null, "muted": false } },
   "order": ["claude-ordinum", "codex-amorim"],
   "hideDefaultWhenDuplicate": true,
-  "watchLimit": 0.5,
-  "criticalLimit": 0.7,
+  "watchLimit": 0.6,
+  "criticalLimit": 0.8,
   "alerts": { "threshold": false, "limitReached": false, "reset": false },
-  "resetTimeFormat": "automatic"
+  "resetTimeFormat": "automatic",
+  "limitsRevision": 1
 }
 ```
+
+As faixas padrão são âmbar a partir de 60 por cento e vermelho a partir de 80, nos dois anéis, no percentual do card da sessão e na tela de contas. Até 18/10/2026 eram 50 e 70. `limitsRevision` marca a versão das faixas: um arquivo sem o campo é anterior a essa troca, e ao abrir quem ainda estava nos 50 e 70 antigos passa aos 60 e 80; quem escolheu outros valores fica com eles.
 
 ### Códigos que a interface traduz
 

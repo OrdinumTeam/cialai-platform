@@ -21,8 +21,9 @@ import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
   getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
-  setSessionColor, setSessionSubtitle, subscribe, togglePinned, viewMounted,
+  setSessionColor, setSessionIcon, setSessionSubtitle, subscribe, togglePinned, viewMounted,
 } from '../runtime.js';
+import { SESSION_ICONS } from '../session-icons.js';
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
 import { copyPort, openBrowserTab, reconcileBrowsers, stopBrowser } from '../browser/runtime.js';
 import { closeDocGraphPreview, docGraphTabId, openDocGraphPreview, openDocGraphTab } from '../docgraph/tab.js';
@@ -33,6 +34,9 @@ import { baseName, fs, isPreviewable, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import AgentProfiles from './AgentProfiles.jsx';
 import SessionsPane from './SessionsPane.jsx';
+import { accentStyle } from './SessionCard.jsx';
+import SessionIcon from './SessionIcon.jsx';
+import FolderArt from './FolderArt.jsx';
 import WorkArea, { ToolbarSlot } from './WorkArea.jsx';
 import ExplorerPane from './ExplorerPane.jsx';
 import Splitter from './Splitter.jsx';
@@ -138,7 +142,11 @@ export default function Workbench() {
     installEditorWatch();
     const unsubscribe = subscribe((event) => {
       if (event?.type === 'error') notify(event.message, 'warning');
-      if (event?.type === 'notify') notify(event.message, 'info');
+      if (event?.type === 'notify') {
+        // Aviso de uma sessao leva o icone e o tom dela, para dizer de onde veio.
+        const source = event.sessionId ? getSession(event.sessionId) : null;
+        notify(event.message, 'info', source ? { icon: <SessionIcon session={source} size={16} />, className: 'session-scope mac-toast--session', style: accentStyle(source) } : undefined);
+      }
     });
     const releaseNew = onNewTerminalRequest(() => openPickerRef.current?.());
     const releaseNewFile = onNewFileRequest(() => newFileRef.current?.());
@@ -234,13 +242,19 @@ export default function Workbench() {
     setCloseRequest({ id: session.id, name: session.name, running: busy ? (running?.text || translate('terminal.session.processFallback')) : null, dirtyTabs: dirty });
   }, []);
 
-  // Grade de amostras: com dezoito tons a lista vertical ficaria maior que
-  // a janela. Cada amostra continua sendo um item do menu para o teclado.
-  const colorMenu = useCallback((session, anchor) => {
+  // Cor e icone do card, num menu so. As duas grades seguem o mesmo desenho:
+  // com dezoito tons e trinta icones a lista vertical ficaria maior que a
+  // janela, e cada celula continua sendo um item do menu para o teclado. O
+  // menu fica aberto a cada escolha e se redesenha com a sessao atualizada,
+  // para trocar cor e icone de uma vez vendo o resultado no cabecalho dele.
+  const appearanceMenu = useCallback(function openAppearance(session, anchor) {
     const dark = isDark();
+    const again = () => openAppearance(session, anchor);
+    const current = translate('terminal.common.current');
     const items = [
-      { id: 'default', label: translate('terminal.menu.noColor'), icon: swatch('transparent'), hint: !session.color ? translate('terminal.common.current') : undefined, run: () => setSessionColor(session.id, null) },
-      { separator: true },
+      { id: 'preview', node: <div className="terminais-menu__preview"><SessionIcon session={session} size={16} /><span className="terminais-menu__preview-name">{session.name}</span></div> },
+      { heading: translate('terminal.menu.colorSection') },
+      { id: 'default', label: translate('terminal.menu.noColor'), icon: swatch('transparent'), hint: !session.color ? current : undefined, keepOpen: true, run: () => { setSessionColor(session.id, null); again(); } },
       {
         id: 'colors',
         swatches: SESSION_COLORS.map((color) => ({
@@ -248,11 +262,27 @@ export default function Workbench() {
           label: translate(`terminal.color.${color.id}`),
           color: dark ? color.dark : color.light,
           current: session.color === color.id,
-          run: () => setSessionColor(session.id, color.id),
+          keepOpen: true,
+          run: () => { setSessionColor(session.id, color.id); again(); },
+        })),
+      },
+      { separator: true },
+      { heading: translate('terminal.menu.iconSection') },
+      { id: 'icon-default', label: translate('terminal.menu.defaultIcon'), icon: SquareTerminal, hint: !session.icon ? current : undefined, keepOpen: true, run: () => { setSessionIcon(session.id, null); again(); } },
+      {
+        id: 'icons',
+        label: translate('terminal.common.icons'),
+        icons: SESSION_ICONS.map((entry) => ({
+          id: entry.id,
+          label: translate(entry.labelKey),
+          Icon: entry.Icon,
+          current: session.icon === entry.id,
+          keepOpen: true,
+          run: () => { setSessionIcon(session.id, entry.id); again(); },
         })),
       },
     ];
-    setMenu({ anchor, items });
+    setMenu({ anchor, items, style: accentStyle(session), className: 'session-scope', label: translate('terminal.menu.sessionAppearance') });
   }, []);
 
   // Submenu com as contas do agente. Um terminal ja aberto nao muda de
@@ -283,7 +313,7 @@ export default function Workbench() {
     const items = [
       { id: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput, run: () => setRenamingId(session.id) },
       { id: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: translate('terminal.menu.subtitleTitle'), description: translate('terminal.menu.subtitleDescription'), initial: session.subtitle, placeholder: translate('terminal.menu.subtitlePlaceholder'), confirmLabel: translate('terminal.common.save') }) },
-      { id: 'color', label: translate('terminal.menu.sessionColor'), icon: Palette, run: () => setTimeout(() => colorMenu(session, anchor), 0) },
+      { id: 'color', label: translate('terminal.menu.sessionAppearance'), icon: Palette, run: () => setTimeout(() => appearanceMenu(session, anchor), 0) },
       { id: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
       { id: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
       { id: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
@@ -316,8 +346,8 @@ export default function Workbench() {
         : null,
       { id: 'close', label: translate('terminal.menu.closeSession'), icon: Power, danger: true, run: () => requestCloseSession(session) },
     ];
-    setMenu({ anchor, items });
-  }, [notify, requestCloseSession, colorMenu, launchMenu]);
+    setMenu({ anchor, items, style: accentStyle(session), className: 'session-scope' });
+  }, [notify, requestCloseSession, appearanceMenu, launchMenu]);
 
   const onSelect = useCallback((id) => {
     selectSession(id);
@@ -548,7 +578,7 @@ export default function Workbench() {
     ];
     orderedSessions().forEach((session) => {
       const state = describe(session);
-      items.push({ id: `terminais:go:${session.id}`, kind: translate('terminal.palette.sessions'), label: translate(session.subtitle ? 'terminal.palette.goToSubtitle' : 'terminal.palette.goTo', { name: session.name, subtitle: session.subtitle }), hint: state.label, icon: SquareTerminal, run: () => { shell.navigate('terminais'); selectSession(session.id); setTimeout(focusSelected, 80); } });
+      items.push({ id: `terminais:go:${session.id}`, kind: translate('terminal.palette.sessions'), label: translate(session.subtitle ? 'terminal.palette.goToSubtitle' : 'terminal.palette.goTo', { name: session.name, subtitle: session.subtitle }), hint: state.label, icon: SquareTerminal, glyph: <SessionIcon session={session} size={15} />, className: 'session-scope', style: accentStyle(session), run: () => { shell.navigate('terminais'); selectSession(session.id); setTimeout(focusSelected, 80); } });
     });
     if (sessionsNeedingAttention().length) {
       items.push({ id: 'terminais:attention', kind: translate('terminal.palette.sessions'), label: translate('terminal.session.attentionNext'), icon: Bell, run: () => { shell.navigate('terminais'); selectNextAttention(); } });
@@ -639,9 +669,10 @@ export default function Workbench() {
   const pickerNode = picker ? (
     <NewSessionPopover
       anchor={picker}
+      customize
       onClose={() => setPicker(null)}
-      onPick={(path, name) => { setPicker(null); openSession(path, { name }); }}
-      onBrowse={(name) => { setPicker(null); pickAndOpen(undefined, { name }).catch((error) => notify(String(error?.message || error), 'warning')); }}
+      onPick={(path, name, look) => { setPicker(null); openSession(path, { name, ...look }); }}
+      onBrowse={(name, look) => { setPicker(null); pickAndOpen(undefined, { name, ...look }).catch((error) => notify(String(error?.message || error), 'warning')); }}
     />
   ) : null;
 
@@ -664,8 +695,10 @@ export default function Workbench() {
           {native && recent.length ? (
             <div className="terminais-empty__recent">
               {recent.map((path) => (
-                <button key={path} type="button" className="btn btn-ghost btn-sm" onClick={() => openSession(path)} title={shortPath(path)}>
-                  <FolderOpen size={13} /><span>{baseName(path)}</span>
+                <button key={path} type="button" className="terminais-empty__project" onClick={() => openSession(path)} title={shortPath(path)}>
+                  <span className="terminais-empty__cover"><FolderArt name={baseName(path)} width={92} /></span>
+                  <span className="terminais-empty__project-name">{baseName(path)}</span>
+                  <span className="terminais-empty__project-path">{shortPath(path)}</span>
                 </button>
               ))}
             </div>
@@ -785,7 +818,7 @@ export default function Workbench() {
         </button>
       )}
       {pickerNode}
-      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={translate('terminal.menu.sessionActions')} /> : null}
+      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={menu.label || translate('terminal.menu.sessionActions')} style={menu.style} className={menu.className} /> : null}
       {quickOpen && selected ? (
         <QuickOpen
           root={selected.explorer.root}

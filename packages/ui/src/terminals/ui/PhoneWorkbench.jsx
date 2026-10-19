@@ -1,14 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ArrowDown, ChevronLeft, ChevronUp, ClipboardPaste, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
+import { ArrowDown, ChevronLeft, ChevronUp, CornerDownLeft, Delete, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
 import { onNavigateBack, postProjectPicked, postView, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
 import { baseName } from '../files.js';
-import { applicationCursorKeys, blurTerminal, bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, launchAgentWhenReady, moveSessionBy, onTerminalFocus, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setInputTransform, setSessionColor, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalAttaching, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
+import { applicationCursorKeys, blurTerminal, bracketedPaste, changeDirectory, closeSession, describe, fitAndResize, focusTerminal, getSession, getState, hostTerminal, hydrate, isDemo, launchAgentWhenReady, moveSessionBy, onTerminalFocus, openSession, orderedSessions, pasteText, releaseTerminal, renameSession, reopen, requestTerminalControl, restart, scrollToBottom, selectSession, sendKey, setInputTransform, setSessionColor, setSessionIcon, setSessionSubtitle, submitText, subscribe, supportsPhoneTerminal, terminalAttaching, terminalHasFocus, togglePinned, viewMounted, watchTail } from '../runtime.js';
 import { phoneRoute, phoneRouteStorage, readPhoneRoute, writePhoneRoute } from '../phone-navigation.js';
 import { useRuntimeEvents } from '../hooks.js';
+import { sessionAccentStyle } from '../session-accent.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
+import SessionIcon from './SessionIcon.jsx';
 import PhoneComposer from './PhoneComposer.jsx';
 import PhoneKeyboardSheet, { keyHandlers, keyLabel, keyName } from './PhoneKeyboardSheet.jsx';
 import PhoneQuickCommands from './PhoneQuickCommands.jsx';
@@ -30,6 +32,16 @@ import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 const canVibrate = () => typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 const modifierLabels = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' };
 const ATTACH_WAIT_MS = 10000;
+const BAR_ICONS = { enter: CornerDownLeft, backspace: Delete };
+
+// O que a tecla mostra na barra: ícone, atalho empilhado ou o rótulo.
+function BarCap({ id }) {
+  const entry = KEY_CATALOG[id];
+  const Icon = BAR_ICONS[entry.icon];
+  if (Icon) return <Icon size={20} aria-hidden="true" />;
+  if (entry.bar) return <span className="phone-keybar__combo" aria-hidden="true"><small>{entry.bar[0]}</small>{entry.bar[1]}</span>;
+  return keyLabel(id);
+}
 
 function PhoneTerminal({ session, visible, onTakeControl, onPress }) {
   const host = useRef(null);
@@ -243,6 +255,10 @@ export default function PhoneWorkbench() {
   const status = pane === 'terminal' ? describe(selected) : null;
   const subtitle = pane === 'list' ? null : pane === 'terminal' ? status.label : selected.name;
   const subtitleTone = status?.tone === 'busy' ? ' is-busy' : status?.tone === 'bad' ? ' is-bad' : '';
+  // Com uma sessão aberta, o cabeçalho e o painel dela ficam no tom da sessão,
+  // como o cabeçalho do computador: botões, barra de teclas e indicador. A
+  // lista continua no rosa do Cialai.
+  const inSession = pane !== 'list' && Boolean(selected);
   // Cria a pasta do perfil e abre um terminal já nele, para o login ser feito
   // pelo próprio programa. Nenhuma credencial passa pelo Cialai.
   async function createProfile(request, name) {
@@ -264,6 +280,7 @@ export default function PhoneWorkbench() {
     if (kind === 'rename') { setNameRequest({ kind: 'rename', sessionId: session.id, title: translate('terminal.menu.renameSession'), initial: session.name, required: true, confirmLabel: translate('terminal.common.save') }); return; }
     if (kind === 'subtitle') { setNameRequest({ kind: 'subtitle', sessionId: session.id, title: translate('terminal.menu.subtitleTitle'), description: translate('terminal.menu.subtitleDescription'), initial: session.subtitle, placeholder: translate('terminal.menu.subtitlePlaceholder'), confirmLabel: translate('terminal.common.save') }); return; }
     if (kind === 'color') { setSessionColor(session.id, value); return; }
+    if (kind === 'icon') { setSessionIcon(session.id, value); return; }
     if (kind === 'pin') { togglePinned(session.id); return; }
     if (kind === 'up') { moveSessionBy(session.id, -1); return; }
     if (kind === 'down') { moveSessionBy(session.id, 1); return; }
@@ -300,9 +317,12 @@ export default function PhoneWorkbench() {
     finally { setClosing(false); }
   }
   return <div className={`view active phone-terminal phone-terminal--${pane}`} id="view-terminais">
+    {/* Embrulho sem caixa: os filhos seguem no fluxo da coluna, e as folhas e
+        telas cheias de baixo ficam fora do tom da sessão. */}
+    <div className={`phone-terminal__body${inSession ? ' session-scope' : ''}`} style={inSession ? sessionAccentStyle(selected) : undefined}>
     <div className="phone-terminal__toolbar">
       {pane !== 'list' && <button type="button" className="mac-tool phone-terminal__back" aria-label={translate(pane === 'terminal' ? 'terminal.phone.backSessions' : pane === 'files' ? 'terminal.phone.backTerminal' : 'terminal.phone.backFiles')} onClick={() => navigate({ type: 'back' })}><ChevronLeft size={26} /></button>}
-      <div className="phone-terminal__heading"><h1 tabIndex={-1} ref={heading}>{title}</h1>{subtitle ? <span className={subtitleTone.trim() || undefined}>{status ? <ActivityIndicator tone={status.tone} animated={status.animated} className="phone-terminal__activity" /> : null}{subtitle}</span> : null}</div>
+      <div className="phone-terminal__heading"><div className="phone-terminal__title">{pane === 'terminal' ? <SessionIcon session={selected} size={20} className="phone-terminal__icon" /> : null}<h1 tabIndex={-1} ref={heading}>{title}</h1></div>{subtitle ? <span className={subtitleTone.trim() || undefined}>{status ? <ActivityIndicator tone={status.tone} animated={status.animated} className="phone-terminal__activity" /> : <SessionIcon session={selected} size={14} className="phone-terminal__icon" />}{subtitle}</span> : null}</div>
       {pane === 'list' && <div className="phone-terminal__actions">
         <button type="button" className="mac-tool" disabled={!available} aria-label={translate('terminal.profiles.title')} title={translate('terminal.profiles.title')} onClick={() => setProfiles(true)}><UserRound size={22} /></button>
         <button type="button" className="mac-tool phone-terminal__new-icon" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker({ path: '' })}><Plus size={24} /></button>
@@ -374,8 +394,8 @@ export default function PhoneWorkbench() {
         </button>
         {keyboardPrefs.favorites.map((id) => (id === PASTE_KEY
           ? <button key={id} type="button" className="phone-keybar__key" disabled={!interactive} aria-label={keyName(id)} onPointerDown={press} onMouseDown={(event) => event.preventDefault()} onClick={paste}>{keyLabel(id)}</button>
-          : <button key={id} type="button" className={`phone-keybar__key${KEY_CATALOG[id].icon ? ' phone-keybar__key--icon' : ''}`} disabled={!interactive} aria-label={keyName(id)} {...keyHandlers(controller, KEY_CATALOG[id].key, KEY_CATALOG[id].mods, press)}>
-            {KEY_CATALOG[id].icon === 'paste' ? <ClipboardPaste size={20} aria-hidden="true" /> : keyLabel(id)}
+          : <button key={id} type="button" className={`phone-keybar__key${KEY_CATALOG[id].icon ? ' phone-keybar__key--icon' : ''}${KEY_CATALOG[id].bar ? ' phone-keybar__key--combo' : ''}`} disabled={!interactive} aria-label={keyName(id)} {...keyHandlers(controller, KEY_CATALOG[id].key, KEY_CATALOG[id].mods, press)}>
+            <BarCap id={id} />
           </button>))}
         <button type="button" className={`phone-keybar__keys${keyState.any ? ' is-armed' : ''}`} aria-expanded={keysOpen} aria-label={keyState.any ? translate('terminal.phone.keys.openArmed', { keys: armedLabel }) : translate('terminal.phone.keys.open')} onMouseDown={(event) => event.preventDefault()} onClick={openKeys}>
           <ChevronUp size={22} aria-hidden="true" />
@@ -391,6 +411,7 @@ export default function PhoneWorkbench() {
         onRun={(command) => deliverQuick(command, true)}
       />}
     </> : <PhoneFiles key={selected.id} session={selected} path={route.path} preview={pane === 'preview'} onPreview={path => navigate({ type: 'preview', path })} />}
+    </div>
     {picker && <NewSessionFlow initialPath={picker.path} onClose={() => setPicker(null)} onNotify={notify}
       onOpen={(id) => { setPicker(null); open(id); }} />}
     {pickProject && <DirectoryBrowser

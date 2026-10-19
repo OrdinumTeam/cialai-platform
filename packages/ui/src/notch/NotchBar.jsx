@@ -9,6 +9,9 @@
 //
 // Os dados chegam por evento do Rust. O hover e do DOM, e o detalhe abre num
 // popover ao lado da celula sob o ponteiro.
+//
+// A barra inteira fica no tom da sessao selecionada no estudio: aneis,
+// pontos da tira recolhida e popover. Sem cor na sessao, o rosa.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -17,12 +20,32 @@ import { useI18n } from '../desktop/i18n.js';
 import ProviderCell from './ProviderCell.jsx';
 import NotchCard from './NotchCard.jsx';
 import { BAR_WIDTH, cardPlacement, cellState, createHoverScheduler } from './model.js';
+import { accentVars, barAccent, resolveSessionAccent } from '../terminals/session-accent.js';
 import { demoScenario, demoState } from './fixtures.js';
 import './notch.css';
 
 /// Relogio dos textos de reset e de tempo decorrido.
 const CLOCK_MS = 10_000;
 const EMPTY = { prefs: null, profiles: [], sessions: {}, activity: {}, allProfiles: [] };
+
+/// Cor da sessao selecionada no estudio, ou null. O runtime chega por import
+/// dinamico, como na casca, para nao entrar no pacote de abertura; selecao e
+/// troca de cor chegam pelo evento `sessions`.
+function useBarAccent() {
+  const [accent, setAccent] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    let off = null;
+    import('../terminals/runtime.js').then((runtime) => {
+      if (!alive) return;
+      const update = () => setAccent(barAccent(runtime.getState().selected));
+      update();
+      off = runtime.subscribe((event) => { if (event?.type === 'sessions') update(); });
+    }).catch(() => {});
+    return () => { alive = false; if (off) off(); };
+  }, []);
+  return accent;
+}
 
 export default function NotchBar() {
   const { t, locale } = useI18n();
@@ -38,6 +61,7 @@ export default function NotchBar() {
   const bar = useRef(null);
   const cells = useRef([]);
   const hover = useMemo(() => createHoverScheduler(setHovered), []);
+  const accent = useBarAccent();
 
   const prefs = state.prefs;
 
@@ -120,7 +144,13 @@ export default function NotchBar() {
   const toggleLabel = collapsed ? t('desktop.notch.action.open') : t('desktop.notch.action.collapse');
 
   return (
-    <aside className={`notch-bar${collapsed ? ' is-collapsed' : ''}`} ref={bar} aria-label={t('desktop.notch.title')}>
+    <aside
+      className={`notch-bar${collapsed ? ' is-collapsed' : ''}${accent ? ' session-scope' : ''}`}
+      style={accent ? accentVars(resolveSessionAccent(accent)) : undefined}
+      data-accent={accent || undefined}
+      ref={bar}
+      aria-label={t('desktop.notch.title')}
+    >
       <div className="notch-bar__head">
         <button
           type="button"

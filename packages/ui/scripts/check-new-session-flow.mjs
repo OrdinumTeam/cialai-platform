@@ -158,3 +158,10 @@ test('o pedido do aplicativo e a criação seguem sem abrir nada sozinhos', () =
   assert.match(flow, /launchAgentWhenReady\(id, agent, account\.id\)/);
   assert.doesNotMatch(flow, /agent_profile_select/);
 });
+
+test('o símbolo de cada agente fica solto, sem placa, na mesma altura', () => {
+  const css = readFileSync(fileURLToPath(new URL('../src/views/Terminais.css', import.meta.url)), 'utf8');
+  const rule = css.split('\n').find((line) => line.startsWith('[data-form-factor="phone"] .phone-agent__icon {')) || '';
+  assert.match(rule, /width: 36px; height: 36px;/);
+  assert.doesNotMatch(rule, /background|border-radius/);
+});

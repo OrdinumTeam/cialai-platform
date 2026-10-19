@@ -1,19 +1,21 @@
 ## Cialai {{version}} preview
 
-A desktop stability preview of Cialai for macOS, Windows and Linux. This delivery does not publish new Android or iOS apps; the existing Android 0.2.12 APK remains on the website mirror.
+A preview of Cialai for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session gets its own colour and icon everywhere, and the phone tells you when a session needs you.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Tunnel recovery after reboot.** A process-lifetime operating system lock replaces PID existence as proof of ownership. Stale metadata is recovered without deleting pairing keys or devices.
-* **Recovery without restarting the app.** Generation-aware RPCs, bounded writes and retry cooldowns avoid duplicate sidecars and permanent reconnecting states. A responsive shutdown no longer waits for its own mutex.
-* **The correct saved conversation.** Codex and Claude Code resumes validate the exact session identifier, profile, working directory, CLI and supported arguments. Concurrent resumes are deduplicated and coordinated; `--last` is never substituted for a known identifier.
-* **Recoverable agent startup errors.** Bounded observation handles late transient failures. Manual retry preserves history and the identifier. Shared daemons are not restarted, and `--no-daemon` is not imposed globally. Windows compatibility probes collect their own descendants on timeout.
-* **One text paste per action.** Native paste and asynchronous clipboard reads share one owner. Text wins over image in mixed clipboard formats; Unicode, multiline and bracketed paste are preserved. Ctrl+C without selection still interrupts.
-* **Less redundant work and retained resources.** Metrics consumers share a short process sample; disposing WebGL pauses its cursor timer before releasing the terminal.
-
-The original production Codex `draining` cause is not claimed to be proven. Native CI passed on macOS, Linux and Windows, and AppImage smoke passed on Ubuntu and Arch. Physical clipboard and WebView acceptance remains separate from automated tests. Technical evidence and measured limits: https://github.com/OrdinumTeam/cialai-platform/blob/main/docs/engenharia/auditoria-estabilidade-2026-10.md
+* **The desktop speaks the phone's visual language.** Solid surfaces, rounded corners and separation by tone, with no gradients, glass or glow. The sidebar stays pink, light in the light theme and plum in the dark one. Buttons, fields, menus and colour changes share the same short animation.
+* **The session colour leads what belongs to the session.** The card bar, the icon, the agent name, the usage percentage, buttons, focus, the terminal cursor and selection, the palette entry, the on screen notice and the AI Bar follow the chosen colour. Without a colour everything stays Cialai pink. Warning and error colours, ANSI colours and the output of the CLIs never change.
+* **An icon per session.** Thirty icons, picked together with the colour when the session is created or from Colour and icon. The icon sits next to the name on the card and in the header, on the computer and on the phone. Without a choice it shows the agent running there or a terminal.
+* **The weekly limit in the AI Bar.** The outer ring is the 5 hour session and the inner ring is the weekly window, drawn with the same stroke. An account without a weekly limit and a reading that has not arrived yet look different from 0%. The tooltip and the screen reader name the window, the usage and the reset.
+* **New usage bands.** Amber from 60% and red from 80%, on the computer, on the phone page and in the app. Anyone still on the old 50 and 70 defaults moves to the new ones once.
+* **The official signature.** The brand with the website lettering appears in the sidebar, the splash and the loading screen. With the sidebar closed, the lettering shows small in the toolbar.
+* **Four keys always in sight on the phone.** The terminal bar shows Enter, Esc, Ctrl C and Ctrl V, and the arrow still opens the special keyboard. Anyone who had picked their own keys keeps them.
+* **Attention notices on the phone.** The terminal bell, a notice sent by the program, a finished command, an agent waiting for you or asking for permission and a finished answer become a notice with the session name and colour. Tapping it opens the session. Turn it on in Settings, under Sessions asking for attention. Notices are local: they go out while the app has the terminal open and shortly after it moves to the background.
+* **The native app keeps pace.** Home and the Agents tab show the weekly window, the sessions of a folder show their colour and icon, the official brand replaces the old symbol and icons lost their background plates.
+* **Update the computer and the phone together.** The phone page is served by the computer and carries the attention, colour and icon of each session; a new app with an older computer works, without attention notices.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
@@ -27,8 +29,9 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Debian, Ubuntu and derivatives | `Cialai_amd64.deb` |
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
+| Android 8 or newer | `Cialai_android_universal.apk` |
 
-The existing Android APK and store links remain available at https://cialai.com.br/downloads/. This release does not replace mobile apps.
+On iPhone the preview goes through TestFlight, so there is no file to download.
 
 ### Install
 
@@ -37,6 +40,8 @@ The existing Android APK and store links remain available at https://cialai.com.
 **Windows.** Run the setup or the MSI. On the SmartScreen warning click More info, then Run anyway.
 
 **Linux.** `sudo apt install ./Cialai_amd64.deb`, `sudo dnf install ./Cialai_x86_64.rpm`, or make the AppImage executable with `chmod +x` and run it. The app updates itself in all three formats.
+
+**Android.** Download the APK on the phone, allow installing unknown apps when Android asks, then open it.
 
 **macOS and Linux in one line.** `curl -fsSL https://cialai.com.br/install.sh | bash`
 

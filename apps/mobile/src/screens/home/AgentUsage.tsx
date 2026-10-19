@@ -1,13 +1,13 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import type { AgentId, DashboardMessage } from '../../bridge/messages';
-import { agentSummary, percentOf, type AgentSummary } from '../../dashboard/model';
+import { agentSummary, percentOf, weeklyView, type AgentSummary } from '../../dashboard/model';
 import { formatAge } from '../../desktops/format';
 import { useI18n } from '../../i18n';
 import { useTokens } from '../../theme';
 import { AgentGlyph } from '../../ui/AgentGlyph';
 import { BottomSheet, Card, ChoiceRow, Icon, PrimaryButton, SecondaryButton, SkeletonLoader, StatusBadge, radius, space, typography } from '../../ui';
-import { AGENT_NAME_KEYS, ReadingState, WindowRow, levelTone, readingKey } from '../agents/usage';
+import { AGENT_NAME_KEYS, ReadingState, WeeklyLine, WindowRow, levelTone, readingKey, weeklyText } from '../agents/usage';
 
 // Texto do estado do card do Início quando não há número para mostrar.
 function stateKey(summary: AgentSummary, hasSnapshot: boolean): string {
@@ -23,8 +23,10 @@ type CardProps = {
   onOpen: (agent: AgentId, accountId?: string) => void;
 };
 
-// Card de meia largura do Início: marca, nome, plano e só a janela principal
-// da conta, em formato compacto; as outras janelas ficam na folha de detalhes.
+// Card de meia largura do Início: marca, nome, plano, a janela principal da
+// conta em formato compacto e, embaixo, o semanal numa linha curta, nos três
+// estados da Barra de IA. As outras janelas ficam na folha de detalhes. Sem
+// número na principal, a frase do estado já diz tudo e o semanal não aparece.
 export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onOpen }: CardProps) {
   const { colors } = useTokens();
   const { t } = useI18n();
@@ -32,7 +34,7 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
   if (loading) {
     return (
       <Card style={styles.card}>
-        <View style={styles.head}><SkeletonLoader height={36} style={styles.glyphSkeleton} width={36} /><SkeletonLoader width="60%" /></View>
+        <View style={styles.head}><SkeletonLoader height={GLYPH} style={styles.glyphSkeleton} width={GLYPH} /><SkeletonLoader width="60%" /></View>
         <SkeletonLoader height={6} rounded style={styles.gap} />
         <SkeletonLoader height={12} width="70%" />
       </Card>
@@ -41,13 +43,16 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
   const summary = agentSummary(snapshot, agent, chosenId);
   const accountLabel = summary.accounts.length > 1 ? summary.account?.label : null;
   const headline = summary.readable ? summary.rows.find(window => window.headline) ?? summary.rows[0] : undefined;
+  // A semanal sozinha já é a principal do card; não se repete embaixo.
+  const weekly = headline && !headline.weekly ? weeklyView(summary.account) : null;
   return (
     <Card accessibilityHint={t('mobile.home.agent.details', { agent: name })} onPress={() => onOpen(agent, chosenId)} style={styles.card}
       accessibilityLabel={[name, accountLabel, summary.account?.plan,
-        headline ? `${headline.label} ${percentOf(headline.usedFraction)}%` : t(stateKey(summary, !!snapshot))]
+        headline ? `${headline.label} ${percentOf(headline.usedFraction)}%` : t(stateKey(summary, !!snapshot)),
+        weekly ? weeklyText(weekly, t) : null]
         .filter(Boolean).join(', ')}>
       <View style={styles.head}>
-        <AgentGlyph agent={agent} size={34} />
+        <AgentGlyph agent={agent} size={GLYPH} />
         <View style={styles.flex}>
           <Text numberOfLines={1} style={[typography.headline, { color: colors.text }]}>{name}</Text>
           {accountLabel ? (
@@ -60,6 +65,7 @@ export function AgentUsageSummary({ agent, snapshot, chosenId, loading, now, onO
       </View>
       {summary.account?.plan ? <View style={styles.plan}><StatusBadge label={summary.account.plan} tone="primary" variant="pill" /></View> : null}
       {headline ? <WindowRow now={now} variant="compact" window={headline} /> : <ReadingState label={t(stateKey(summary, !!snapshot))} />}
+      {weekly ? <WeeklyLine weekly={weekly} /> : null}
       {summary.account?.state === 'stale' ? <StatusBadge label={t('mobile.home.usage.stale')} tone="warning" /> : null}
     </Card>
   );
@@ -82,6 +88,8 @@ export function AgentUsageSheet({ agent, snapshot, chosenId, now, onChoose, onMa
   const summary = agent ? agentSummary(snapshot, agent, chosenId) : null;
   const name = agent ? t(AGENT_NAME_KEYS[agent]) : '';
   const account = summary?.account ?? null;
+  // A folha lista todas as janelas; sem semanal entre elas, diz por quê.
+  const weekly = summary?.readable ? weeklyView(account) : null;
   return (
     <BottomSheet onClose={onClose} title={name} visible={!!agent}>
       {account ? (
@@ -93,6 +101,7 @@ export function AgentUsageSheet({ agent, snapshot, chosenId, now, onChoose, onMa
       {summary?.readable && account ? account.windows.map(window => <WindowRow key={window.id} now={now} variant="detailed" window={window} />) : (
         summary ? <Text style={[typography.body, { color: colors.textSecondary }]}>{t(stateKey(summary, !!snapshot))}</Text> : null
       )}
+      {weekly && weekly.kind !== 'available' ? <WeeklyLine weekly={weekly} /> : null}
       {account?.fetchedAtMs || snapshot ? (
         <Text style={[typography.footnote, { color: colors.textTertiary }]}>
           {t('mobile.home.agent.updated', { age: formatAge(account?.fetchedAtMs ?? snapshot!.at, now, locale, t) })}
@@ -127,10 +136,13 @@ export function AgentUsageSheet({ agent, snapshot, chosenId, now, onChoose, onMa
   );
 }
 
+// Glifo solto, sem placa, na altura da linha do nome.
+const GLYPH = 22;
+
 const styles = StyleSheet.create({
   card: { flex: 1, minWidth: 0, gap: space.xs, padding: space.sm },
   head: { flexDirection: 'row', alignItems: 'center', gap: space.xs },
-  glyphSkeleton: { borderRadius: radius.md },
+  glyphSkeleton: { borderRadius: radius.sm },
   gap: { marginTop: space.xs },
   flex: { flex: 1, minWidth: 0 },
   flexShrink: { flexShrink: 1 },

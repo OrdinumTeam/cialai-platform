@@ -27,6 +27,8 @@ maiúsculo e o resto em minúsculas.
 | `logo/cialai-mantis-v4-1-head-4k-black.png` | Símbolo monocromático preto, para impressão de uma cor e fundos claros neutros | 4096 x 4096 |
 | `logo/cialai-lockup-1-4k.png` | Assinatura horizontal. Símbolo à esquerda e nome Cialai à direita | 5504 x 3072 |
 
+Derivadas para a interface do desktop, geradas por `tools/brand/build-ui-lockup.mjs` a partir da assinatura horizontal, sem redesenhar forma: `packages/ui/src/assets/cialai-lockup.png`, a assinatura recortada justo, e `packages/ui/src/assets/cialai-lockup-dark.png`, a mesma peça com só as letras em branco e a cabeça nas cores, para fundo escuro. O alfa de cada pixel é o do original, então os recortes entre os traços continuam os do lettering. O mesmo script grava `cialai-wordmark.png` e `cialai-wordmark-dark.png`, só o lettering recortado justo, sem a cabeça, nas cores e em branco: é a marca discreta da toolbar quando a lateral do desktop fecha, por decisão do usuário em 18/10/2026. O mesmo script copia as duas assinaturas para o app do celular e grava `apps/mobile/src/assets/cialai-head.png`, a cabeça sozinha num quadrado de 192 px. As assinaturas têm 480 px de largura, o bastante para a abertura de 220 px em telas 2x, e todas as peças passam pelo `pngquant` com parâmetros fixos: a diferença média fica abaixo de um nível em 255 e o peso cai a menos da metade. A interface carrega só a peça do tema atual.
+
 Todos os PNGs têm fundo transparente e margem interna generosa. Não existe
 SVG ainda.
 
@@ -44,7 +46,7 @@ SVG ainda.
 | Item | Estado |
 |------|--------|
 | SVG vetorizado | Pendente. Símbolo e letras precisam ser redesenhados como formas, com as cores ajustadas aos tokens |
-| Assinatura para fundo escuro | Pendente. Só o símbolo tem versão branca; a assinatura existe apenas em cores |
+| Assinatura para fundo escuro | Parcial. Em 18/10/2026 a interface do desktop passou a usar uma derivação para tela, com as letras em branco e a cabeça nas cores; a versão em vetor continua pendente |
 | Ícone de app | Aprovado em 13/09/2026: `logo/cialai-icon.png`, placa branca arredondada de 2048 px, fonte dos ícones de desktop, iOS e Android |
 | Assinatura empilhada | Pendente. Só existe a horizontal |
 | Tipografia de interface | Não definida. O lettering do nome é desenho, não fonte, e não serve para texto corrido |

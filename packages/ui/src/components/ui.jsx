@@ -113,8 +113,10 @@ const ToastContext = createContext(() => {});
 
 export function ToastProvider({ children }) {
   const [item, setItem] = useState(null);
-  const notify = useCallback((message, type = 'info') => {
-    setItem({ message, type: ['success', 'warning', 'danger', 'info'].includes(type) ? type : 'info', key: Date.now() });
+  // `options` e opcional: `icon` troca o icone da severidade, e `className`
+  // e `style` vao para o aviso, como os de uma sessao, no tom dela.
+  const notify = useCallback((message, type = 'info', options = null) => {
+    setItem({ message, type: ['success', 'warning', 'danger', 'info'].includes(type) ? type : 'info', key: Date.now(), icon: options?.icon || null, className: options?.className || '', style: options?.style || null });
   }, []);
   const severity = item?.type === 'danger' ? 'error' : item?.type || 'info';
   const anchor = isMacPlatform() ? { vertical: 'top', horizontal: 'right' } : { vertical: 'bottom', horizontal: 'right' };
@@ -122,7 +124,7 @@ export function ToastProvider({ children }) {
     <ToastContext.Provider value={notify}>
       {children}
       <Snackbar key={item?.key} open={Boolean(item)} autoHideDuration={3500} onClose={() => setItem(null)} anchorOrigin={anchor}>
-        {item ? <Alert severity={severity} variant="outlined" onClose={() => setItem(null)} sx={{ bgcolor: 'background.paper', borderColor: 'divider', color: 'text.primary', boxShadow: 'var(--mac-shadow-popover)' }}>{item.message}</Alert> : <span />}
+        {item ? <Alert severity={severity} variant="outlined" icon={item.icon || undefined} className={item.className || undefined} style={item.style || undefined} onClose={() => setItem(null)} sx={{ bgcolor: 'background.paper', borderColor: 'divider', color: 'text.primary', boxShadow: 'var(--mac-shadow-popover)' }}>{item.message}</Alert> : <span />}
       </Snackbar>
     </ToastContext.Provider>
   );

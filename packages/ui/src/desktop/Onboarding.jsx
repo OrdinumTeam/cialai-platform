@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Check, ChevronLeft, FolderOpen, FolderPlus, Globe, ShieldCheck, Smartphone, Terminal, Wifi } from 'lucide-react';
 import { chooseDirectory, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
-import logo from '../assets/cialai-mark-256.png';
+import BrandLockup from './BrandLockup.jsx';
 import { useTunnel } from './TunnelContext.jsx';
 import { translate } from './i18n.js';
 
@@ -84,7 +84,7 @@ function StepRail({ step }) {
 
 function Welcome({ next }) {
   return <div className="mac-onboarding__welcome mac-onboarding__screen">
-    <img className="mac-onboarding__mark" src={logo} alt="" draggable="false" />
+    <div className="mac-onboarding__mark"><BrandLockup className="mac-onboarding__lockup" /></div>
     <p className="mac-onboarding__eyebrow">{translate('desktop.onboarding.localStudio')}</p>
     <h1 id="onboarding-title">{translate('desktop.onboarding.welcome')}</h1>
     <p className="mac-onboarding__lead">{translate('desktop.onboarding.welcomeDescription')}</p>
@@ -269,7 +269,7 @@ export default function Onboarding({ onComplete }) {
   };
 
   return <div className="mac-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <aside className="mac-onboarding__rail"><div className="mac-onboarding__brand"><img src={logo} alt="" /><span>Cialai</span></div><StepRail step={step} /><p>{translate('desktop.onboarding.localConfiguration')}<br />{translate('desktop.onboarding.changeLater')}</p></aside>
+    <aside className="mac-onboarding__rail"><div className="mac-onboarding__brand"><BrandLockup className="mac-onboarding__rail-lockup" /></div><StepRail step={step} /><p>{translate('desktop.onboarding.localConfiguration')}<br />{translate('desktop.onboarding.changeLater')}</p></aside>
     <section className="mac-onboarding__canvas">
       <div className="mac-onboarding__content" key={step}>
         {loading ? <div className="mac-onboarding__loading" role="status">{translate('desktop.onboarding.preparingStudio')}</div> : null}

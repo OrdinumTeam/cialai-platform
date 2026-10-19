@@ -140,10 +140,13 @@ export function Settings({
 
         <Section title={t('mobile.settings.notifications')}>
           <Card style={styles.group}>
+            <Toggle icon="bell-ring" label={t('mobile.settings.notifications.attention')} onChange={value => onNotification?.('attention', value)}
+              value={notificationPrefs.attention && !blocked} />
+            <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <Toggle icon="circle-check" label={t('mobile.settings.notifications.sessions')} onChange={value => onNotification?.('sessions', value)}
               value={notificationPrefs.sessions && !blocked} />
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <Toggle icon="bell" label={t('mobile.settings.notifications.usage')} onChange={value => onNotification?.('usage', value)}
+            <Toggle icon="gauge" label={t('mobile.settings.notifications.usage')} onChange={value => onNotification?.('usage', value)}
               value={notificationPrefs.usage && !blocked} />
           </Card>
           {blocked ? (

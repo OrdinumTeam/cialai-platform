@@ -16,15 +16,18 @@
 import React, { memo, useEffect, useRef, useState } from 'react';
 import { Bell, CheckCircle2, MoreHorizontal, Pin, Power, Sparkles, XCircle } from 'lucide-react';
 import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, runningLabel, sessionAccent, sessionPlan, sessionProfileLabel, sessionUsage } from '../runtime.js';
+import { describe, runningLabel, sessionPlan, sessionProfileLabel, sessionUsage } from '../runtime.js';
+import { sessionAccentStyle } from '../session-accent.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
 import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
+import SessionIcon from './SessionIcon.jsx';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+import { DEFAULT_CRITICAL_LIMIT, DEFAULT_WATCH_LIMIT } from '../../notch/model.js';
 
 // Toque longo que abre o menu de acoes, sem disparar selecao nem rolagem.
 const LONG_PRESS_MS = 500;
@@ -85,9 +88,18 @@ function missingTitle(activity) {
   return undefined;
 }
 
-// Tom do numero de uso do plano: neutro ate 75 por cento, atencao ate 90 e
-// alarme acima disso. A tela de contas usa o mesmo.
+// Tom do numero de uso do plano, nas faixas padrao da Barra de IA: neutro
+// abaixo de 60 por cento, atencao de 60 a 79 e alarme de 80 em diante. A tela
+// de contas usa as mesmas.
 export function planTone(percent) {
+  if (percent >= DEFAULT_CRITICAL_LIMIT * 100) return 'bad';
+  if (percent >= DEFAULT_WATCH_LIMIT * 100) return 'warn';
+  return 'ok';
+}
+
+// Tom do contexto usado da conversa: nao e limite da conta, entao segue as
+// faixas proprias, atencao a partir de 75 por cento e alarme a partir de 90.
+function contextTone(percent) {
   if (percent >= 90) return 'bad';
   if (percent >= 75) return 'warn';
   return 'ok';
@@ -117,11 +129,11 @@ function InstallHook({ activity }) {
   </button>;
 }
 
-// Variaveis CSS com o tom atribuido a sessao.
+// Variaveis CSS com o tom da sessao: a cor escolhida, ou o rosa do Cialai.
+// Vao inline no card, no cabecalho, no explorador e no menu da sessao, que
+// levam a classe `session-scope`, entao cada sessao fica com o proprio tom.
 export function accentStyle(session) {
-  const accent = sessionAccent(session);
-  if (!accent) return undefined;
-  return { '--terminais-accent-light': accent.light, '--terminais-accent-dark': accent.dark };
+  return sessionAccentStyle(session);
 }
 
 function SessionCard({
@@ -176,7 +188,7 @@ function SessionCard({
   const elapsed = session.jobStartedAt && session.status === 'running' ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
   const attention = session.attention;
 
-  const classes = ['terminais-card'];
+  const classes = ['terminais-card', 'session-scope'];
   if (selected) classes.push('is-selected');
   if (dragging) classes.push('is-dragging');
   if (dropBefore) classes.push('is-drop-before');
@@ -219,7 +231,7 @@ function SessionCard({
       title={shortPath(session.cwd)}
     >
       <div className="terminais-card__row">
-        <ActivityIndicator tone={status.tone} animated={status.animated} />
+        <SessionIcon session={session} size={15} className="terminais-card__icon" />
         {renaming ? (
           <input
             ref={inputRef}
@@ -270,7 +282,7 @@ function SessionCard({
       {running?.agent && (model || context || cost || profileLabel) ? (
         <div className="terminais-card__agent-row">
           {model ? <span className="terminais-card__model" title={translate('terminal.session.model', { model })}>{model}</span> : null}
-          {context ? <span className={`terminais-card__chip terminais-card__chip--${planTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
+          {context ? <span className={`terminais-card__chip terminais-card__chip--${contextTone(detail.contextUsedPercent)}`} title={translate('terminal.session.contextTitle', { percent: context })}>{translate('terminal.session.context', { percent: context })}</span> : null}
           {cost ? <span className="terminais-card__chip" title={translate('terminal.session.costTitle', { amount: cost })}>{translate('terminal.session.cost', { amount: cost })}</span> : null}
           {profileLabel ? <span className="terminais-card__profile" title={translate(usage?.configDir ? 'terminal.session.profileWithPath' : 'terminal.session.profile', { profile: profileLabel, path: shortPath(usage?.configDir) })}>{profileLabel}</span> : null}
         </div>
@@ -279,6 +291,7 @@ function SessionCard({
         <Power size={12} strokeWidth={2} aria-hidden="true" />{translate('terminal.menu.closeSession')}
       </button> : null}
       <div className="terminais-card__state">
+        <ActivityIndicator tone={status.tone} animated={status.animated} />
         <span className={`terminais-card__status terminais-card__status--${status.tone}`} title={session.status === 'error' ? session.error : undefined}>{status.label}</span>
       </div>
       {attention && attention.kind !== 'exited' && attention.kind !== 'error' ? (

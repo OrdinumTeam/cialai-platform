@@ -68,7 +68,10 @@ jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: true })),
   requestPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: false })),
   scheduleNotificationAsync: jest.fn(async () => 'id'),
-  AndroidImportance: { DEFAULT: 3 }
+  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponse: jest.fn(() => null),
+  clearLastNotificationResponse: jest.fn(),
+  AndroidImportance: { DEFAULT: 3, HIGH: 4 }
 }));
 const mockSecure = new Map();
 jest.mock('expo-secure-store', () => ({

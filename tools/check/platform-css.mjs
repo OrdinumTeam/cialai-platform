@@ -39,9 +39,34 @@ const main = read('desktop/main.jsx');
 assert.deepEqual([...main.matchAll(/^import '([^']+\.css)';$/gm)].map((match) => match[1]), ['./desktop.css'], 'a entrada desktop importa só desktop.css');
 assert.deepEqual(
   [...read('desktop/desktop.css').matchAll(/^@import '([^']+)';$/gm)].map((match) => match[1]),
-  ['../styles.css', './shell.css', './platform.css', './brand.css', '../views/Terminais.css'],
-  'desktop.css precisa manter base, casca, sistema, marca e estúdio nessa ordem',
+  ['../styles.css', './shell.css', './platform.css', './brand.css', './solid.css', '../views/Terminais.css'],
+  'desktop.css precisa manter base, casca, sistema, marca, superfícies sólidas e estúdio nessa ordem',
 );
+
+// solid.css é a linguagem do celular levada ao desktop. Ela vale só sob a
+// casca desktop: a página do celular carrega shell.css e brand.css, marca
+// data-platform="macos" e nunca data-shell="desktop", então nada desta camada
+// pode depender do macOS sozinho nem escapar do escopo.
+const solid = read('desktop/solid.css').replace(/\/\*[\s\S]*?\*\//g, '');
+const solidSelectors = [...solid.matchAll(/(?:^|\})\s*([^{}@]+)\{/g)].map((match) => match[1].trim()).filter((selector) => !/^(from|to|\d+%)/.test(selector));
+assert.ok(solidSelectors.length > 40, 'solid.css sem regras');
+for (const selector of solidSelectors) {
+  for (const part of selector.split(/,(?![^(]*\))/)) {
+    // `:where(html[data-shell="desktop"])` e o mesmo escopo com peso zero,
+    // usado pela transicao base para nao vencer as transicoes proprias.
+    assert.match(part.trim(), /^(?::where\()?html\[data-shell="desktop"\]/, `regra fora da casca desktop em solid.css: ${part.trim()}`);
+  }
+}
+assert.deepEqual(bareMac(solid.replaceAll('html[data-shell="desktop"][data-platform="macos"]', '')), [], 'solid.css não pode depender só do macOS');
+// No desktop o fundo é sólido também no macOS: a página pinta por cima do
+// vibrancy, e a configuração da janela no Tauri não muda.
+assert.match(solid, /html\[data-shell="desktop"\],html\[data-shell="desktop"\] body\{background:var\(--mac-bg\)!important\}/);
+// A mesma Outfit do celular, com a monoespaçada de cada sistema no terminal.
+assert.match(solid, /@font-face\{font-family:"Cialai Outfit";font-style:normal;font-weight:100 900;font-display:swap;src:url\("\.\.\/fonts\/Outfit-Variable\.woff2"\) format\("woff2"\)\}/);
+assert.match(solid, /html\[data-shell="desktop"\]\[data-platform\]\{\s*--mac-font:"Cialai Outfit",/);
+assert.doesNotMatch(solid, /--mac-font-mono/, 'o terminal continua com a fonte monoespaçada de cada sistema');
+assert.doesNotMatch(solid, /(linear|radial|conic)-gradient\(/, 'solid.css não desenha gradiente');
+assert.doesNotMatch(solid, /backdrop-filter:blur/, 'solid.css não desenha vidro com desfoque');
 
 const terminals = read('views/Terminais.css');
 assert.deepEqual(bareMac(terminals), [], 'Terminais.css não pode depender só do macOS');

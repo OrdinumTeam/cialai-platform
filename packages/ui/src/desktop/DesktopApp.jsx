@@ -104,7 +104,7 @@ function DesktopShell() {
   const views = useMemo(desktopViews, [locale]);
   const appearance = useAppearance();
   const tunnel = useTunnel();
-  const theme = useMemo(() => buildMacTheme(appearance.resolved), [appearance.resolved]);
+  const theme = useMemo(() => buildMacTheme(appearance.resolved, { solid: true }), [appearance.resolved]);
   const { view, navigate } = useDesktopViewRoute();
   const viewRef = useRef(view);
   viewRef.current = view;

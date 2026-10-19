@@ -82,19 +82,19 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 
 /* ── cabecalhos de painel ──────────────────────────────────────────── */
 
-.terminais-pane__head{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:34px;padding:0 8px 0 14px}
+.terminais-pane__head{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:40px;padding:0 8px 0 14px}
 .terminais-pane__title{font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label)}
 .terminais-pane__count{font-size:11.5px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
 .terminais-pane__spacer{flex:1}
-.terminais-pane__tool{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-pane__tool{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-pane__tool:hover{background:var(--mac-hover);color:var(--mac-label)}
 .terminais-pane__tool:active{background:var(--mac-press)}
 .terminais-pane__tool.is-on{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
 .terminais-pane__tool:disabled{opacity:.4}
-.terminais-pane__chip{display:inline-flex;align-items:center;gap:3px;height:18px;padding:0 6px;border:0;border-radius:6px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-pane__chip{display:inline-flex;align-items:center;gap:3px;height:20px;padding:0 8px;border:0;border-radius:999px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-pane__chip:hover{background:var(--mac-accent-soft-hover)}
 
-.terminais-search{display:flex;align-items:center;gap:6px;flex:0 0 auto;height:26px;margin:0 10px 6px;padding:0 6px 0 8px;border-radius:7px;background:var(--mac-surface-2);color:var(--mac-label-3)}
+.terminais-search{display:flex;align-items:center;gap:7px;flex:0 0 auto;height:32px;margin:0 10px 8px;padding:0 8px 0 11px;border-radius:12px;background:var(--mac-surface-2);color:var(--mac-label-3)}
 .terminais-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
 .terminais-search input::placeholder{color:var(--mac-label-3)}
 :is([data-shell="desktop"],[data-platform="macos"]) .terminais-search input:focus-visible{box-shadow:none;outline:none}
@@ -104,66 +104,100 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-search--explorer{margin:0 10px 6px}
 
 /* ── tom da sessao ─────────────────────────────────────────────────── */
-/* Cada card e o cabecalho central podem receber uma cor propria. Sem cor,
-   caem no azul do app. As tintas suaves e o gradiente das barras saem do
-   proprio tom com color-mix, entao uma cor so serve ao claro e ao escuro. */
+/* O card, o cabecalho, o explorador e o menu de uma sessao levam a classe
+   `session-scope` e, inline, as variaveis `--session-*-light` e `-dark` que
+   `terminals/session-accent.js` resolve: a cor escolhida para o card, ou o
+   rosa do Cialai. Dentro do escopo os tokens de acento da casca apontam para
+   o tom da sessao, entao botao ativo, foco, selecao, aba, chip, percentual e
+   nome do agente acompanham a cor do card sem cada regra saber disso. Aviso,
+   erro e sucesso continuam nos tokens semanticos, e o xterm le o tema da
+   raiz, fora do escopo, entao a saida das CLIs nao muda de cor. */
 
-.terminais-card,.terminais-work{--terminais-accent:var(--terminais-accent-light,var(--mac-accent));--terminais-accent-text:var(--terminais-accent-light,var(--mac-accent-text))}
-[data-theme="dark"] .terminais-card,[data-theme="dark"] .terminais-work{--terminais-accent:var(--terminais-accent-dark,var(--mac-accent));--terminais-accent-text:var(--terminais-accent-dark,var(--mac-accent-text))}
+.session-scope{
+  --session-accent:var(--session-accent-light);
+  --session-accent-text:var(--session-accent-text-light);
+  --session-on-accent:var(--session-on-accent-light);
+  --session-accent-soft:var(--session-accent-soft-light);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-light);
+  --session-accent-ring:var(--session-accent-ring-light);
+  --session-accent-border:var(--session-accent-border-light);
+}
+[data-theme="dark"] .session-scope{
+  --session-accent:var(--session-accent-dark);
+  --session-accent-text:var(--session-accent-text-dark);
+  --session-on-accent:var(--session-on-accent-dark);
+  --session-accent-soft:var(--session-accent-soft-dark);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-dark);
+  --session-accent-ring:var(--session-accent-ring-dark);
+  --session-accent-border:var(--session-accent-border-dark);
+}
+.session-scope,[data-theme="dark"] .session-scope{
+  --mac-accent:var(--session-accent);
+  --mac-accent-hover:color-mix(in srgb,var(--session-accent) 86%,#000);
+  --mac-accent-text:var(--session-accent-text);
+  --mac-accent-soft:var(--session-accent-soft);
+  --mac-accent-soft-hover:var(--session-accent-soft-hover);
+  --mac-accent-row:var(--session-accent-soft);
+  --mac-accent-ring:var(--session-accent-ring);
+  --mac-on-accent:var(--session-on-accent);
+  --terminais-accent:var(--session-accent);
+  --terminais-accent-text:var(--session-accent-text);
+}
+
+/* Icone da sessao: o escolhido ou o padrao, sempre no tom da sessao. */
+.session-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--mac-accent-text)}
+.session-icon svg{display:block;width:100%;height:100%}
+.session-icon--agent svg{fill:currentColor}
 
 /* ── sessoes ───────────────────────────────────────────────────────── */
 
-.terminais-sessions__list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:0 8px 12px;display:flex;flex-direction:column;gap:4px}
+.terminais-sessions__list{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;padding:2px 10px 12px;display:flex;flex-direction:column;gap:8px}
 .terminais-sessions__empty{padding:18px 8px;font-size:12px;color:var(--mac-label-3);text-align:center}
 .terminais-sessions__dropend{flex:0 0 28px}
-.terminais-sessions__reopen{display:flex;align-items:center;gap:6px;margin:0 10px 8px;height:26px;padding:0 9px;border:0;border-radius:7px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11.5px;font-weight:500;text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-sessions__reopen{display:flex;align-items:center;gap:6px;margin:0 10px 8px;height:30px;padding:0 11px;border:0;border-radius:12px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:11.5px;font-weight:500;text-align:left;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-sessions__reopen svg{flex:0 0 auto}
 .terminais-sessions__reopen span{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-sessions__reopen:hover{background:var(--mac-accent-soft-hover)}
 
-.terminais-card{position:relative;display:flex;flex-direction:column;gap:3px;padding:8px 8px 8px 12px;border-radius:10px;background:transparent;cursor:default;transition:background var(--mac-fast) var(--mac-ease);animation:macRowIn 240ms var(--mac-ease) both}
-.terminais-card::before{content:'';position:absolute;left:4px;top:10px;bottom:10px;width:3px;border-radius:2px;background:linear-gradient(180deg,color-mix(in srgb,var(--terminais-accent) 62%,#fff) 0%,var(--terminais-accent) 100%);opacity:0;transition:opacity var(--mac-fast) var(--mac-ease)}
-.terminais-card:hover{background:var(--mac-hover)}
-.terminais-card:not(.has-color){--terminais-accent:var(--mac-label-3)}
-.terminais-card:not(.has-color).is-selected{background:transparent}
-.terminais-card:not(.has-color):hover{background:var(--mac-hover)}
-.terminais-card.is-selected::before{opacity:1}
+/* Card da sessao, na linguagem do celular: superficie solida e raio de 16,
+   com o icone solto ao lado do nome, sem placa. A cor do card fica numa
+   barra de 4 px na borda, sempre a vista, e a selecao e o fundo suave com o
+   fio no tom da sessao. Sem cor, o tom e o rosa padrao, inclusive na barra,
+   que todo card mostra. O indicador de atividade acompanha o estado escrito,
+   na linha dele. */
+.terminais-card{position:relative;display:flex;flex-direction:column;gap:3px;padding:11px 10px 11px 14px;border:1px solid var(--mac-separator);border-radius:16px;background:var(--mac-surface);box-shadow:var(--mac-shadow-card,none);cursor:default;transition:background var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease);animation:macRowIn 240ms var(--mac-ease) both}
+.terminais-card::before{content:'';position:absolute;left:-1px;top:14px;bottom:14px;width:4px;border-radius:0 3px 3px 0;background:var(--session-accent,var(--terminais-accent))}
+.terminais-card:hover{background:color-mix(in srgb,var(--mac-accent) 4%,var(--mac-surface));border-color:var(--mac-separator-strong)}
+.terminais-card.is-selected{background:color-mix(in srgb,var(--mac-accent) 9%,var(--mac-surface));border-color:var(--session-accent-border,var(--mac-accent))}
 .terminais-card.is-dragging{opacity:.4}
 .terminais-card.is-drop-before{box-shadow:0 -3px 0 -1px var(--mac-accent)}
 .terminais-card.is-drop-after{box-shadow:0 3px 0 -1px var(--mac-accent)}
 .terminais-card.is-drop{box-shadow:inset 0 0 0 2px var(--mac-accent);background:var(--mac-accent-soft)}
 .terminais-sessions__dropend.is-active{border-top:2px solid var(--mac-accent);border-radius:2px}
-.terminais-card:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring)}
-/* Card com cor propria: a tinta fica sempre, num degrade suave, selecionado
-   ou nao. O que marca o selecionado e a barra da esquerda e um tom mais
-   cheio. */
-.terminais-card.has-color{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 10%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 4%,transparent) 100%)}
-.terminais-card.has-color:hover{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 14%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 7%,transparent) 100%)}
-[data-theme="dark"] .terminais-card.has-color{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 15%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 6%,transparent) 100%)}
-[data-theme="dark"] .terminais-card.has-color:hover{background:linear-gradient(135deg,color-mix(in srgb,var(--terminais-accent) 20%,transparent) 0%,color-mix(in srgb,var(--terminais-accent) 10%,transparent) 100%)}
-.terminais-card__row{display:flex;align-items:center;gap:7px;min-width:0}
-.terminais-card__name{flex:1;min-width:0;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.terminais-card__rename{flex:1;min-width:0;height:22px;padding:0 6px;border:1px solid var(--mac-accent);border-radius:6px;background:var(--mac-field);font:inherit;font-size:13px;font-weight:600;color:var(--mac-label);outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-card:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-card__row{display:flex;align-items:center;gap:8px;min-width:0;min-height:26px}
+.terminais-card__name{flex:1;min-width:0;font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__rename{flex:1;min-width:0;height:26px;padding:0 8px;border:1px solid var(--mac-accent);border-radius:8px;background:var(--mac-field);font:inherit;font-size:13px;font-weight:600;color:var(--mac-label);outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
 .terminais-card__pin{flex:0 0 auto;color:var(--mac-label-3)}
-.terminais-card__menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;margin:-3px -3px -3px 0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-card__menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;margin:-2px -2px -2px 0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-card:hover .terminais-card__menu,.terminais-card.is-selected .terminais-card__menu,.terminais-card__menu:focus-visible{opacity:1}
-.terminais-card__menu:hover{background:var(--mac-press);color:var(--mac-label)}
-.terminais-card__subtitle{padding-left:17px;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.terminais-card__running-row{display:flex;align-items:baseline;gap:6px;min-width:0;padding-left:17px;font-size:12px;white-space:nowrap;overflow:hidden}
+.terminais-card__menu:hover{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.terminais-card__subtitle{font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-card__running-row{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden}
 .terminais-card__running{flex:0 1 auto;min-width:0;font-weight:500;color:var(--mac-label);overflow:hidden;text-overflow:ellipsis}
 .terminais-card__running.is-agent{color:var(--terminais-accent-text)}
 .terminais-card__running-note{font-size:11px;color:var(--mac-label-3)}
-.terminais-card__state{display:flex;align-items:baseline;gap:6px;min-width:0;padding-left:17px;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden}
+.terminais-card__state{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden}
 .terminais-card__status{overflow:hidden;text-overflow:ellipsis}
 .terminais-card__status--bad{color:var(--mac-bad)}
 .terminais-card__status--warn{color:var(--mac-warn)}
 .terminais-card__elapsed{margin-left:auto;flex:0 0 auto;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
-.terminais-card__attention{display:flex;align-items:center;gap:5px;margin:2px 0 0 17px;font-size:11.5px;font-weight:500;color:var(--mac-accent-text)}
+.terminais-card__attention{display:flex;align-items:center;gap:5px;margin:2px 0 0;font-size:11.5px;font-weight:500;color:var(--mac-accent-text)}
 .terminais-card__attention--finished{color:var(--mac-ok)}
 .terminais-card__attention--error{color:var(--mac-bad)}
 .terminais-card__attention--bell,.terminais-card__attention--notify{color:var(--mac-warn)}
 .terminais-card__attention span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.terminais-card__metrics{display:flex;flex-wrap:wrap;gap:2px 10px;padding-left:17px;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
+.terminais-card__metrics{display:flex;flex-wrap:wrap;gap:2px 10px;font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
 .terminais-card__metrics em{font-style:normal;color:var(--mac-label-4)}
 .terminais-card__metrics-off{font-style:italic}
 /* Uso do plano do agente, ao lado de CPU e memoria. O tom acompanha o
@@ -171,17 +205,18 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 /* Uso do plano colado no nome do agente, na mesma linha. O tom acompanha o
    quanto falta: discreto até 75%, atento depois, alarmado perto do teto. */
 .terminais-card__plan{flex:0 0 auto;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);font-variant-numeric:tabular-nums}
+.terminais-card__plan--ok{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
 .terminais-card__plan--warn{background:var(--mac-warn-bg);color:var(--mac-warn)}
 /* Leitura velha continua a vista, apagada: um numero antigo avisado vale
    mais que nenhum numero, e menos que um numero de agora. */
 .terminais-card__plan.is-stale{opacity:.55}
 /* Modelo e perfil da conta numa linha propria sob o agente, chips neutros;
    o percentual, na linha do agente, e o unico com tom de alerta. */
-.terminais-card__agent-row{display:flex;align-items:center;gap:4px;min-width:0;padding-left:17px;overflow:hidden;animation:macRowIn 180ms var(--mac-ease) both}
+.terminais-card__agent-row{display:flex;align-items:center;gap:4px;min-width:0;overflow:hidden;animation:macRowIn 180ms var(--mac-ease) both}
 .terminais-card__model{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-card__profile{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:transparent;box-shadow:inset 0 0 0 1px var(--mac-separator-strong);font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-card__agent-row{flex-wrap:wrap;row-gap:3px}
-.terminais-card__close{align-self:flex-start;margin-left:18px}
+.terminais-card__close{justify-self:start}
 /* Esforco, contexto usado e custo da sessao do agente: chips neutros, e o
    contexto sobe de tom quando a janela esta perto do fim. */
 .terminais-card__chip{flex:0 1 auto;min-width:0;padding:0 5px;border-radius:5px;background:var(--mac-surface-3,var(--mac-surface-2));font-size:10.5px;font-weight:500;line-height:15px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
@@ -210,7 +245,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 
 /* barras de atividade: tres traços que respiram */
 .terminais-activity{display:inline-flex;align-items:flex-end;gap:2px;width:11px;height:10px;flex:0 0 auto}
-.terminais-activity i{display:block;width:2px;height:4px;border-radius:1px;background:linear-gradient(180deg,color-mix(in srgb,var(--terminais-accent) 55%,#fff) 0%,var(--terminais-accent) 100%);animation:terminaisBars 1.1s ease-in-out infinite}
+.terminais-activity i{display:block;width:2px;height:4px;border-radius:1px;background:var(--terminais-accent);animation:terminaisBars 1.1s ease-in-out infinite}
 .terminais-activity i:nth-child(2){animation-delay:.18s}
 .terminais-activity i:nth-child(3){animation-delay:.36s}
 .terminais-activity--warn i{background:var(--mac-warn)}
@@ -311,7 +346,7 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 
 /* ── area de trabalho ──────────────────────────────────────────────── */
 
-.terminais-work__head{display:flex;align-items:center;gap:8px;flex:0 0 auto;height:34px;padding:0 8px 0 12px;min-width:0}
+.terminais-work__head{display:flex;align-items:center;gap:8px;flex:0 0 auto;height:44px;padding:0 10px 0 12px;min-width:0}
 .terminais-work__dot{width:7px;height:7px}
 .terminais-work__dot--ok{background:var(--mac-ok)}
 .terminais-work__dot--busy{background:var(--terminais-accent)}
@@ -319,9 +354,9 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-work__dot--warn{background:var(--mac-warn)}
 .terminais-work__dot--bad{background:var(--mac-bad)}
 .terminais-work__dot--muted{background:var(--mac-label-4)}
-.terminais-work__name{flex:0 1 auto;min-width:4ch;font-size:13px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-work__name{flex:0 1 auto;min-width:4ch;font-size:14px;font-weight:600;letter-spacing:-.01em;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-work__path{flex:0 2 auto;min-width:0;font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.terminais-work__branch{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:20px;padding:0 7px;border-radius:6px;background:var(--mac-surface-2);font-size:11.5px;font-weight:500;color:var(--mac-label-2);white-space:nowrap}
+.terminais-work__branch{display:inline-flex;align-items:center;gap:4px;flex:0 0 auto;height:22px;padding:0 9px;border-radius:999px;background:var(--mac-surface-2);font-size:11.5px;font-weight:500;color:var(--mac-label-2);white-space:nowrap}
 .terminais-work__branch em{font-style:normal;color:var(--mac-warn);font-variant-numeric:tabular-nums}
 .terminais-work__running{flex:0 0 auto;font-size:12px;color:var(--mac-label-2);white-space:nowrap}
 .terminais-work__running.is-agent{color:var(--terminais-accent-text);font-weight:500}
@@ -338,13 +373,19 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
    janela baixa e o corpo corta o que passar. Sem isso, com pouca altura os
    dois painéis somavam mais que 100% e o terminal subia por cima do texto
    do editor. */
-.terminais-work__body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0 6px 8px}
+.terminais-work__body{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding:0 10px 10px}
 .terminais-work__body.is-split .terminais-editor{flex:0 1 calc(var(--terminais-ratio,.55) * 100%);min-height:min(120px,35%);max-height:max(40%,calc(100% - 140px))}
 .terminais-work__body.is-split .terminais-terminal{flex:1 1 0;min-height:min(120px,30%)}
 .terminais-work__body.is-editor-only .terminais-editor{flex:1}
 
 /* terminal: superficie suave com raio de painel, o mesmo fundo do xterm */
-.terminais-terminal{position:relative;display:flex;flex:1;min-height:0;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface-2);transition:box-shadow var(--mac-fast) var(--mac-ease)}
+.terminais-terminal{position:relative;display:flex;flex:1;min-height:0;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface-2);box-shadow:inset 0 0 0 1px var(--mac-separator);transition:box-shadow var(--mac-fast) var(--mac-ease)}
+/* Terminal com o teclado: um fio no tom da sessao mostra onde a digitacao
+   vai cair. Sai quando o foco vai para o editor, a busca ou outro painel.
+   Fica numa camada por cima, porque o fundo do xterm cobre a sombra interna
+   do contenedor. */
+.terminais-terminal::after{content:'';position:absolute;inset:0;z-index:3;border-radius:inherit;box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--mac-accent) 75%,transparent);opacity:0;pointer-events:none;transition:opacity var(--mac-fast) var(--mac-ease)}
+.terminais-terminal:focus-within::after{opacity:1}
 .terminais-terminal.is-dropping{box-shadow:inset 0 0 0 2px var(--mac-accent)}
 /* O respiro fica no proprio .xterm, que o fit addon desconta. No host, com
    box-sizing border-box, ele entraria na altura lida e a ultima linha
@@ -361,7 +402,7 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 [data-theme="dark"] :is(.terminais-terminal__host,.phone-terminal__host){--terminais-terminal-bg:var(--mac-surface-2,#26262a);--terminais-terminal-ink:var(--mac-label,#f5f5f7)}
 :is(.terminais-terminal__host,.phone-terminal__host) .xterm .xterm-viewport{background-color:var(--terminais-terminal-bg)}
 :is(.terminais-terminal__host,.phone-terminal__host) .xterm .composition-view{background:var(--terminais-terminal-bg);color:var(--terminais-terminal-ink);text-decoration:underline}
-.terminais-terminal__tobottom{position:absolute;right:16px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:5px;height:26px;padding:0 10px;border:1px solid var(--mac-separator-strong);border-radius:7px;background:var(--mac-glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);color:var(--mac-label);font:inherit;font-size:11.5px;font-weight:500;box-shadow:var(--mac-shadow-popover);cursor:default;animation:macPop 160ms var(--mac-ease)}
+.terminais-terminal__tobottom{position:absolute;right:16px;bottom:12px;z-index:3;display:inline-flex;align-items:center;gap:5px;height:28px;padding:0 12px;border:1px solid var(--mac-separator-strong);border-radius:999px;background:var(--mac-glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);color:var(--mac-label);font:inherit;font-size:11.5px;font-weight:500;box-shadow:var(--mac-shadow-popover);cursor:default;animation:macPop 160ms var(--mac-ease)}
 .terminais-terminal__tobottom:hover{background:var(--mac-surface)}
 .terminais-terminal__drop{position:absolute;inset:0;z-index:2;display:flex;align-items:center;justify-content:center;background:var(--mac-accent-soft);color:var(--mac-accent-text);font-size:13px;font-weight:500;pointer-events:none}
 .terminais-terminal__end{position:absolute;left:0;right:0;bottom:0;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border-top:1px solid var(--mac-separator);background:var(--mac-glass);-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font-size:12.5px;line-height:1.4;color:var(--mac-label-2);animation:macFade var(--mac-normal) var(--mac-ease)}
@@ -371,14 +412,14 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-terminal__disconnected span{max-width:44ch;font-size:12.5px;color:var(--mac-label-2);text-wrap:balance}
 .terminais-terminal__disconnected .btn{margin-top:8px}
 
-.terminais-find{position:absolute;top:8px;right:14px;z-index:4;display:flex;align-items:center;gap:4px;height:30px;padding:0 4px 0 9px;border-radius:8px;background:var(--mac-glass);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:var(--mac-shadow-popover);color:var(--mac-label-3);animation:macPop 160ms var(--mac-ease)}
+.terminais-find{position:absolute;top:10px;right:14px;z-index:4;display:flex;align-items:center;gap:4px;height:34px;padding:0 5px 0 11px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(20px) saturate(160%);backdrop-filter:blur(20px) saturate(160%);box-shadow:var(--mac-shadow-popover);color:var(--mac-label-3);animation:macPop 160ms var(--mac-ease)}
 .terminais-find input{width:180px;border:0;outline:0;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);box-shadow:none}
 :is([data-shell="desktop"],[data-platform="macos"]) .terminais-find input:focus-visible{box-shadow:none}
 .terminais-find input::placeholder{color:var(--mac-label-3)}
 
 /* ── editor ────────────────────────────────────────────────────────── */
 
-.terminais-editor{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;margin-bottom:6px;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface);box-shadow:inset 0 0 0 1px var(--mac-separator)}
+.terminais-editor{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0;margin-bottom:8px;overflow:hidden;border-radius:var(--mac-radius-card);background:var(--mac-surface);box-shadow:inset 0 0 0 1px var(--mac-separator)}
 .terminais-editor.is-drop{box-shadow:inset 0 0 0 2px var(--mac-accent)}
 .terminais-tabs{display:flex;align-items:stretch;flex:0 0 auto;height:32px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--mac-separator);scrollbar-width:none}
 .terminais-tabs::-webkit-scrollbar{display:none}
@@ -515,7 +556,7 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-row.is-hidden .terminais-row__name,.terminais-row.is-hidden .terminais-row__icon{opacity:.6}
 /* Fantasma do arraste interno, que acompanha o cursor. O arraste do HTML
    nao chega a pagina dentro do app, entao a marca e desenhada aqui. */
-.terminais-ghost{position:fixed;top:0;left:0;z-index:9999;max-width:280px;padding:3px 9px;border-radius:7px;background:var(--mac-accent);color:#fff;font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:var(--mac-shadow-popover)}
+.terminais-ghost{position:fixed;top:0;left:0;z-index:9999;max-width:280px;padding:3px 9px;border-radius:10px;background:var(--mac-accent);color:var(--mac-on-accent,#fff);font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;box-shadow:var(--mac-shadow-popover)}
 body.is-dragging-path{cursor:grabbing}
 body.is-dragging-path *{cursor:grabbing !important}
 .terminais-tree.is-drop-root{box-shadow:inset 0 0 0 2px var(--mac-accent);border-radius:8px}
@@ -547,10 +588,11 @@ body.is-dragging-path *{cursor:grabbing !important}
 
 /* ── menu de acoes ─────────────────────────────────────────────────── */
 
-.terminais-menu{position:fixed;z-index:1300;min-width:220px;padding:5px;border-radius:10px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);box-shadow:var(--mac-shadow-popover);outline:none;animation:macPop 140ms var(--mac-ease);transform-origin:top left}
-.terminais-menu__item{display:flex;align-items:center;gap:8px;width:100%;height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12.5px;color:var(--mac-label);text-align:left;cursor:default}
-.terminais-menu__item.is-active{background:var(--mac-accent);color:#fff}
-.terminais-menu__item.is-active svg{color:rgba(255,255,255,.85)}
+.terminais-menu{position:fixed;z-index:1300;min-width:228px;max-width:min(320px,calc(100vw - 16px));padding:6px;border-radius:16px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);box-shadow:var(--mac-shadow-popover);outline:none;animation:macPop 140ms var(--mac-ease);transform-origin:top left}
+.terminais-menu:focus,.terminais-menu:focus-visible{outline:none;box-shadow:var(--mac-shadow-popover)}
+.terminais-menu__item{display:flex;align-items:center;gap:9px;width:100%;height:30px;padding:0 10px;border:0;border-radius:10px;background:transparent;font:inherit;font-size:13px;color:var(--mac-label);text-align:left;cursor:default}
+.terminais-menu__item.is-active{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.terminais-menu__item.is-active svg{color:var(--mac-accent-text)}
 .terminais-menu__item.is-danger{color:var(--mac-bad)}
 .terminais-menu__item.is-danger.is-active{background:var(--mac-bad);color:#fff}
 .terminais-menu__item:disabled{opacity:.45}
@@ -558,15 +600,24 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-menu__spacer{flex:0 0 14px}
 .terminais-menu__swatch{display:inline-block;width:12px;height:12px;border-radius:50%;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
 /* grade de amostras do menu de cor: seis por linha, a atual com anel */
-.terminais-menu__swatches{display:grid;grid-template-columns:repeat(6,28px);gap:2px;padding:4px 4px 2px}
-.terminais-menu__swatchbtn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:7px;background:transparent;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
-.terminais-menu__swatchbtn i{display:block;width:16px;height:16px;border-radius:50%;background:var(--swatch);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+.terminais-menu__swatches{display:grid;grid-template-columns:repeat(6,30px);gap:2px;padding:4px 4px 2px}
+.terminais-menu__swatchbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:10px;background:transparent;cursor:default;transition:background var(--mac-fast) var(--mac-ease)}
+.terminais-menu__swatchbtn i{display:block;width:18px;height:18px;border-radius:50%;background:var(--swatch);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
 .terminais-menu__swatchbtn:hover,.terminais-menu__swatchbtn.is-active{background:var(--mac-hover)}
-.terminais-menu__swatchbtn.is-current i{box-shadow:0 0 0 2px var(--mac-glass),0 0 0 3.5px var(--swatch)}
+.terminais-menu__swatchbtn.is-current i{box-shadow:0 0 0 2px var(--mac-surface),0 0 0 4px var(--swatch)}
 .terminais-menu__label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-menu__hint{font-size:11px;color:var(--mac-label-3)}
-.terminais-menu__item.is-active .terminais-menu__hint{color:rgba(255,255,255,.75)}
-.terminais-menu__sep{height:1px;margin:4px 6px;background:var(--mac-separator)}
+.terminais-menu__item.is-active .terminais-menu__hint{color:inherit;opacity:.75}
+.terminais-menu__sep{height:1px;margin:6px 8px;background:var(--mac-separator)}
+/* Titulo de secao, previa do card e grade de icones do menu "Cor e icone".
+   A grade de icones segue a de cores: mesma celula, mesmo foco, e o icone
+   escolhido fica no tom da sessao, que o menu herda dela. */
+.terminais-menu__heading{padding:8px 10px 4px;font-size:11px;font-weight:600;color:var(--mac-label-3)}
+.terminais-menu__preview{display:flex;align-items:center;gap:8px;min-width:0;padding:6px 10px 8px;margin:0 0 4px;border-bottom:1px solid var(--mac-separator)}
+.terminais-menu__preview-name{min-width:0;font-size:13.5px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-menu__iconbtn{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-menu__iconbtn:hover,.terminais-menu__iconbtn.is-active{background:var(--mac-hover);color:var(--mac-label)}
+.terminais-menu__iconbtn.is-current{background:var(--mac-accent-soft);color:var(--mac-accent-text);box-shadow:inset 0 0 0 1.5px var(--mac-accent)}
 
 /* ── seletor de pasta da sessao nova ───────────────────────────────── */
 
@@ -593,6 +644,30 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .terminais-pop__up{min-height:44px;font-size:15px;padding:0 12px}
 [data-form-factor="phone"] .terminais-pop__crumb{font-size:14px}
 .terminais-pop__foot{padding:8px;border-top:1px solid var(--mac-separator)}
+/* Cor e icone do card que vai nascer: uma faixa recolhida, com as mesmas
+   grades do menu da sessao e o icone mostrando o resultado. */
+.terminais-pop__customize{border-top:1px solid var(--mac-separator)}
+.terminais-pop__customize-head{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;border:0;background:transparent;color:var(--mac-label);font:inherit;text-align:left;cursor:default}
+.terminais-pop__customize-head:hover{background:var(--mac-hover)}
+.terminais-pop__customize-head:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-pop__customize-title{font-size:13px;font-weight:600}
+.terminais-pop__customize-hint{flex:1;min-width:0;font-size:12px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-pop__customize-chevron{flex:0 0 auto;color:var(--mac-label-3);transition:transform var(--mac-fast) var(--mac-ease)}
+.terminais-pop__customize-head.is-open .terminais-pop__customize-chevron{transform:rotate(180deg)}
+.terminais-pop__customize-body{display:flex;flex-direction:column;gap:10px;padding:2px 12px 12px}
+.terminais-pop__grid{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:4px}
+.terminais-pop__grid--icons{grid-template-columns:repeat(8,minmax(0,1fr))}
+.terminais-pop__swatch{display:grid;place-items:center;aspect-ratio:1;padding:0;border:0;border-radius:9px;background:transparent;cursor:default}
+.terminais-pop__swatch i{display:block;width:16px;height:16px;border-radius:50%;background:var(--organization-light);box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+[data-theme="dark"] .terminais-pop__swatch i{background:var(--organization-dark)}
+.terminais-pop__swatch.is-none i{background:transparent;box-shadow:inset 0 0 0 1.5px var(--mac-label-4)}
+.terminais-pop__swatch:hover{background:var(--mac-hover)}
+.terminais-pop__swatch.is-current i{box-shadow:0 0 0 2px var(--mac-surface),0 0 0 3.5px var(--mac-accent)}
+.terminais-pop__iconbtn{display:grid;place-items:center;aspect-ratio:1;padding:0;border:0;border-radius:9px;background:transparent;color:var(--mac-label-2);font:inherit;font-size:9.5px;font-weight:600;cursor:default}
+.terminais-pop__iconbtn.is-default{grid-column:span 2;aspect-ratio:auto;padding:0 6px;background:var(--mac-surface-2)}
+.terminais-pop__iconbtn:hover{background:var(--mac-hover);color:var(--mac-label)}
+.terminais-pop__iconbtn.is-current{background:var(--mac-accent-soft);color:var(--mac-accent-text);box-shadow:inset 0 0 0 1.5px var(--mac-accent)}
+:is(.terminais-pop__swatch,.terminais-pop__iconbtn):focus-visible{outline:none;box-shadow:0 0 0 2px var(--mac-accent-ring)}
 
 /* ── busca rapida e dialogos ───────────────────────────────────────── */
 
@@ -615,7 +690,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-sessions{animation:terminaisPaneL 220ms var(--mac-ease) both}
 .terminais-explorer{animation:terminaisPaneR 220ms var(--mac-ease) both}
 .terminais-card{animation-delay:calc(var(--i,0) * 24ms)}
-.terminais-card::before{transform:scaleY(.4);transition:opacity var(--mac-fast) var(--mac-ease),transform var(--mac-normal) var(--mac-ease)}
+.terminais-card::before{transform:scaleY(.4);transition:opacity var(--mac-fast) var(--mac-ease),transform var(--mac-normal) var(--mac-ease),background-color var(--mac-normal) var(--mac-ease)}
 .terminais-card.is-selected::before{transform:none}
 .terminais-card__running-row,.terminais-card__attention,.terminais-card__metrics{animation:macRowIn 180ms var(--mac-ease) both}
 .terminais-sessions__reopen{animation:macPop 160ms var(--mac-ease) both}
@@ -635,6 +710,9 @@ body.is-dragging-path *{cursor:grabbing !important}
    aqui em vez de depender do ajuste automatico de texto do WebKit, para o
    Android mostrar o mesmo resultado. */
 [data-form-factor="phone"] .phone-terminal { height: 100%; min-height: 0; min-width: 0; max-width: 100%; margin: 0; display: flex; flex-direction: column; padding: 0 max(12px, env(safe-area-inset-right)) calc(8px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); gap: 8px; overflow: hidden; }
+/* Embrulho do cabecalho e do painel, sem caixa propria: os filhos seguem no
+   fluxo da coluna e herdam o tom quando ha sessao aberta. */
+[data-form-factor="phone"] .phone-terminal__body { display: contents; }
 [data-form-factor="phone"] .phone-terminal__toolbar { display: flex; align-items: center; gap: 4px; flex: none; min-height: 52px; border-bottom: 1px solid var(--mac-separator); }
 [data-form-factor="phone"] .phone-terminal__toolbar select { flex: 1; min-width: 0; height: 44px; border: 1px solid var(--mac-separator); border-radius: 8px; background: var(--mac-field); color: var(--mac-label); padding: 8px; }
 [data-form-factor="phone"] .phone-terminal__toolbar .mac-tool { flex: none; }
@@ -643,6 +721,11 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal--list .phone-terminal__toolbar .mac-tool { margin-right: -8px; }
 [data-form-factor="phone"] .phone-terminal__state { flex: none; font-size: .75rem; color: var(--mac-label-2); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-terminal__heading { flex: 1; min-width: 0; padding: 6px 0; }
+/* Titulo e icone da sessao lado a lado; o icone e solto, no tom da sessao,
+   como no cabecalho do computador. */
+[data-form-factor="phone"] .phone-terminal__title { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-form-factor="phone"] .phone-terminal__title h1 { flex: 1 1 auto; min-width: 0; }
+[data-form-factor="phone"] .phone-terminal__heading .session-icon { display: inline-flex; margin: 0; color: var(--session-accent-text); }
 [data-form-factor="phone"] .phone-terminal__heading h1 { margin: 0; font-size: 20px; font-weight: 600; line-height: 25px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* O titulo recebe foco por script a cada troca de painel, para leitores de
    tela; sem anel, porque nao e um controle. A busca leva o anel no campo
@@ -680,19 +763,24 @@ body.is-dragging-path *{cursor:grabbing !important}
    os favoritos ficam ao lado, tres pontos abre os comandos rapidos e o botao
    rosa abre a caixa de texto. Alvos de 48 px; com o teclado do aparelho
    aberto a barra encolhe um pouco para nao roubar altura do terminal. */
-[data-form-factor="phone"] .phone-keybar { display: flex; flex: none; align-items: center; gap: 8px; padding-top: 2px; }
+[data-form-factor="phone"] .phone-keybar { display: flex; flex: none; align-items: center; gap: 6px; padding-top: 2px; }
 [data-form-factor="phone"] .phone-keybar button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 16px; font-weight: 600; white-space: nowrap; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
 [data-form-factor="phone"] .phone-keybar button:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-keybar button:not(:disabled):active { transform: scale(.95); }
 /* A barra reparte a largura: o teclado especial fica um pouco mais largo,
    enviar tem largura fixa e as teclas e o ⋯ dividem o resto por igual, para
-   caber de 320 px em diante com os três favoritos. */
-[data-form-factor="phone"] .phone-keybar__native { flex: 1.3 1 0; min-width: 0; padding: 0; background: var(--phone-primary-soft) !important; color: var(--phone-primary) !important; }
+   caber de 320 px em diante com os quatro favoritos. Atalho com modificador
+   empilha o Ctrl pequeno sobre a letra, como na tecla de verdade. */
+/* A barra so existe dentro da sessao aberta, que leva `session-scope`: o
+   teclado do aparelho, o modificador armado e enviar ficam no tom dela. */
+[data-form-factor="phone"] .phone-keybar__native { flex: 1.3 1 0; min-width: 0; padding: 0; background: var(--session-accent-soft, var(--phone-primary-soft)) !important; color: var(--session-accent-text, var(--phone-primary)) !important; }
 [data-form-factor="phone"] .phone-keybar__keys { flex: 1 1 0; min-width: 0; padding: 0; }
-[data-form-factor="phone"] .phone-keybar__keys.is-armed { background: var(--phone-primary) !important; color: var(--phone-on-primary) !important; }
-[data-form-factor="phone"] .phone-keybar__key { flex: 1 1 0; min-width: 0; padding: 0 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-form-factor="phone"] .phone-keybar__keys.is-armed { background: var(--session-accent, var(--phone-primary)) !important; color: var(--session-on-accent, var(--phone-on-primary)) !important; }
+[data-form-factor="phone"] .phone-keybar__key { flex: 1 1 0; min-width: 0; padding: 0 2px; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+[data-form-factor="phone"] .phone-keybar__combo { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+[data-form-factor="phone"] .phone-keybar__combo small { margin-bottom: 3px; font-size: 10px; font-weight: 600; letter-spacing: .02em; opacity: .62; }
 [data-form-factor="phone"] .phone-keybar__more { flex: 1 1 0; min-width: 0; }
-[data-form-factor="phone"] .phone-keybar__send { flex: 0 0 auto; width: 48px; border-radius: var(--phone-radius-control)!important; background: var(--phone-primary) !important; color: var(--phone-on-primary) !important; box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .phone-keybar__send { flex: 0 0 auto; width: 48px; border-radius: var(--phone-radius-control)!important; background: var(--session-accent, var(--phone-primary)) !important; color: var(--session-on-accent, var(--phone-on-primary)) !important; box-shadow: var(--mac-shadow-primary); }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-keybar { padding-top: 0; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-keybar button { min-height: 44px; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal { padding-bottom: 6px; }
@@ -789,8 +877,10 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-quick__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 2px; }
 [data-form-factor="phone"] .phone-quick__item { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 56px; padding: 8px 6px; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text); font: inherit; text-align: left; }
 [data-form-factor="phone"] .phone-quick__item:active { background: var(--phone-surface-muted); }
-[data-form-factor="phone"] .phone-quick__item-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: var(--phone-primary-soft); color: var(--phone-primary); }
-[data-form-factor="phone"] .phone-quick__item-icon.is-danger { background: var(--phone-danger-soft); color: var(--phone-danger); }
+/* Icone solto, sem placa, na largura de antes para os titulos continuarem
+   alinhados: o terminal no acento, o comando destrutivo no vermelho. */
+[data-form-factor="phone"] .phone-quick__item-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 36px; height: 36px; color: var(--mac-accent-text); }
+[data-form-factor="phone"] .phone-quick__item-icon.is-danger { color: var(--phone-danger); }
 [data-form-factor="phone"] .phone-quick__item-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 [data-form-factor="phone"] .phone-quick__item-title { font-family: var(--mac-font-mono); font-size: 15px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-quick__item-description { font-size: 13px; color: var(--phone-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -830,7 +920,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 
 /* Caixa de texto: folha inferior que respeita o teclado do aparelho e deixa o
    terminal visivel atras. Fonte de 16 px para o iOS nao ampliar a pagina. */
-[data-form-factor="phone"] .phone-composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: var(--mac-glass, var(--mac-surface)); -webkit-backdrop-filter: blur(24px) saturate(160%); backdrop-filter: blur(24px) saturate(160%); box-shadow: var(--mac-shadow-popover); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
+[data-form-factor="phone"] .phone-composer { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; background: var(--phone-surface); box-shadow: var(--mac-shadow-popover); animation: macSheet var(--mac-normal) var(--mac-ease) both; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-composer { bottom: calc(100dvh - var(--ios-viewport-top, 0px) - var(--ios-viewport-height, 100dvh)); padding-bottom: 12px; }
 [data-form-factor="phone"] .phone-composer__head { display: flex; align-items: center; gap: 10px; }
 [data-form-factor="phone"] .phone-composer__title { font-size: 15px; font-weight: 600; color: var(--mac-label); }
@@ -911,9 +1001,9 @@ body.is-dragging-path *{cursor:grabbing !important}
 @keyframes agentProfilesShimmer{from{background-position:100% 0}to{background-position:-100% 0}}
 @media (prefers-reduced-motion: reduce){.agent-profiles__shimmer{animation:none}}
 .agent-profiles__list{display:flex;flex-direction:column;gap:8px}
-/* Simbolo do agente na cor do texto, sem cor de marca: a mesma regra vale
-   para os dois agentes e para os que vierem. */
-.agent-profiles__glyph{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--mac-fill);color:var(--mac-label-2)}
+/* Simbolo do agente solto, sem placa, na cor do texto e sem cor de marca: a
+   mesma regra vale para os dois agentes e para os que vierem. */
+.agent-profiles__glyph{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;color:var(--mac-label-2)}
 .agent-profiles__glyph svg{width:15px;height:15px;fill:currentColor}
 .agent-profiles__actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .agent-profiles__create{display:inline-flex;align-items:center;gap:5px;min-height:28px;padding:0 10px;border:0;border-radius:8px;background:var(--mac-accent-soft);color:var(--mac-accent-text);font:inherit;font-size:13px;font-weight:600}
@@ -945,6 +1035,9 @@ body.is-dragging-path *{cursor:grabbing !important}
 .agent-profiles__window--bad strong,.agent-profiles__window--bad small{color:var(--mac-bad)}
 .agent-profiles__window--bad .agent-profiles__bar i{background:var(--mac-bad)}
 .agent-profiles__stale{align-self:center;font-size:10.5px;color:var(--mac-label-3)}
+/* Sem janela de sete dias para medir: uma linha discreta no lugar da barra,
+   que diz se a conta nao tem limite semanal ou se a leitura nao confirma. */
+.agent-profiles__weekly{align-self:center;max-width:150px;font-size:10.5px;line-height:1.35;color:var(--mac-label-3)}
 .agent-profiles__state{flex:0 0 auto;font-size:12px;color:var(--mac-label-3);white-space:nowrap}
 .agent-profiles__state--needsLogin{color:var(--mac-warn)}
 .agent-profiles__state--error{color:var(--mac-bad)}
@@ -961,8 +1054,8 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__note{font-size:15px;color:var(--phone-primary)}
 [data-form-factor="phone"] .agent-profiles__note--quiet{font-size:13px;font-weight:400;color:var(--phone-text-2)}
 [data-form-factor="phone"] .agent-profiles__skeleton{padding:16px;border:1px solid var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface)}
-[data-form-factor="phone"] .agent-profiles__glyph{width:32px;height:32px;border-radius:10px;background:var(--phone-surface-muted)}
-[data-form-factor="phone"] .agent-profiles__glyph svg{width:20px;height:20px}
+[data-form-factor="phone"] .agent-profiles__glyph{width:24px;height:24px;color:var(--phone-text-2)}
+[data-form-factor="phone"] .agent-profiles__glyph svg{width:22px;height:22px}
 /* Simbolo e nome na primeira linha; uso, estado e acao tomam a linha inteira. */
 [data-form-factor="phone"] .agent-profiles__row{grid-template-columns:auto minmax(0,1fr);align-items:stretch;gap:12px;padding:16px;min-height:0;border-color:var(--phone-border);border-radius:var(--phone-radius-card);background:var(--phone-surface);box-shadow:var(--phone-shadow-card)}
 [data-form-factor="phone"] .agent-profiles__usage,[data-form-factor="phone"] .agent-profiles__state,[data-form-factor="phone"] .agent-profiles__use,[data-form-factor="phone"] .agent-profiles__current{grid-column:1 / -1}
@@ -978,6 +1071,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__window small{align-self:flex-end;font-size:13px}
 [data-form-factor="phone"] .agent-profiles__bar{height:6px}
 [data-form-factor="phone"] .agent-profiles__stale{align-self:flex-start;font-size:13px}
+[data-form-factor="phone"] .agent-profiles__weekly{align-self:flex-start;max-width:none;font-size:13px;color:var(--phone-text-2)}
 [data-form-factor="phone"] .agent-profiles__use,
 [data-form-factor="phone"] .agent-profiles__current{justify-content:center;min-height:46px;border-radius:var(--phone-radius-control);font-size:17px}
 [data-form-factor="phone"] .agent-profiles__use{background:var(--phone-primary-soft);color:var(--phone-primary)}
@@ -1000,7 +1094,8 @@ body.is-dragging-path *{cursor:grabbing !important}
    do estado escrito, em vez de so mudar a cor do texto. */
 [data-form-factor="phone"] .phone-terminal__heading span { display: inline-flex; align-items: center; gap: 6px; }
 [data-form-factor="phone"] .phone-terminal__activity { width: 7px; height: 7px; }
-[data-form-factor="phone"] span.terminais-activity.phone-terminal__activity { width: 11px; height: 10px; }
+/* O vao de 6 px do subtitulo esmagava as tres barras de 2 px ate sumirem. */
+[data-form-factor="phone"] span.terminais-activity.phone-terminal__activity { width: 11px; height: 10px; gap: 2px; align-items: flex-end; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-activity { width: 13px; height: 12px; gap: 2px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-activity i { width: 3px; }
 [data-form-factor="phone"] .phone-terminal__sessions .terminais-card__attention svg { width: 14px; height: 14px; }
@@ -1032,9 +1127,12 @@ body.is-dragging-path *{cursor:grabbing !important}
 
 /* ── lista de terminais do celular, no visual das referencias ────────
    Cards brancos compactos sobre o fundo azulado, filtros em pilulas e um
-   botao de nova sessao preso ao rodape. A fase da sessao muda o card:
-   ativa com ponto verde ou barras, pausada em cinza, finalizada apagada e
-   erro com borda vermelha. A cor da sessao vira um filete na lateral. */
+   botao de nova sessao preso ao rodape. Como no computador, cada card leva
+   `session-scope`: a cor da sessao, ou o rosa do Cialai sem cor, pinta a
+   barra de 4 px na lateral, que todo card mostra, o icone solto antes do
+   nome, o nome do agente, as barras de atividade e o botao de abrir. A fase
+   muda o resto: ponto verde de pronto, pausada com o ponto cinza e a barra
+   no tom, finalizada apagada e erro com borda vermelha. */
 [data-form-factor="phone"] .phone-terminal--list .phone-terminal__toolbar { border-bottom: 0; min-height: 56px; }
 [data-form-factor="phone"] .phone-terminal--list .phone-terminal__heading h1 { font-size: 24px; line-height: 30px; font-weight: 700; }
 [data-form-factor="phone"] .phone-terminal__new-icon { color: var(--phone-primary); }
@@ -1044,24 +1142,32 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__filters .phone-segmented__option:not(.is-selected) { background: var(--phone-surface); }
 [data-form-factor="phone"] .phone-terminal__filters .phone-segmented__option.is-selected { border-color: var(--phone-primary); }
 [data-form-factor="phone"] .phone-terminal--list .phone-terminal__sessions { display: flex; flex-direction: column; gap: 10px; padding: 2px 0 12px; }
-[data-form-factor="phone"] .phone-session { --terminais-accent: var(--terminais-accent-light, var(--phone-success)); position: relative; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 11px 12px 8px 16px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); cursor: pointer; overflow: hidden; -webkit-tap-highlight-color: transparent; transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-normal) var(--mac-ease), border-color var(--mac-normal) var(--mac-ease); }
-[data-theme="dark"][data-form-factor="phone"] .phone-session { --terminais-accent: var(--terminais-accent-dark, var(--phone-success)); }
-[data-form-factor="phone"] .phone-session.has-color::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px; border-radius: 0 3px 3px 0; background: var(--terminais-accent); }
+[data-form-factor="phone"] .phone-session { position: relative; flex: none; display: flex; flex-direction: column; gap: 1px; padding: 11px 12px 8px 16px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); cursor: pointer; overflow: hidden; -webkit-tap-highlight-color: transparent; transition: transform var(--mac-fast) var(--phone-press-ease), opacity var(--mac-normal) var(--mac-ease), border-color var(--mac-normal) var(--mac-ease); }
+[data-form-factor="phone"] .phone-session.session-scope::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px; border-radius: 0 3px 3px 0; background: var(--session-accent); }
 [data-form-factor="phone"] .phone-session:active { transform: scale(.985); }
 [data-form-factor="phone"] .phone-session:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--mac-accent-ring); }
-[data-form-factor="phone"] .phone-session--paused { --terminais-accent: var(--phone-neutral); }
 [data-form-factor="phone"] .phone-session--finished { opacity: .72; background: var(--phone-surface-muted); box-shadow: none; }
 [data-form-factor="phone"] .phone-session--error { border-color: color-mix(in srgb, var(--phone-danger) 45%, var(--phone-border)); }
 [data-form-factor="phone"] .phone-session__head { display: flex; align-items: center; gap: 9px; min-width: 0; min-height: 24px; }
 [data-form-factor="phone"] .phone-session__head .terminais-card__dot { width: 9px; height: 9px; }
-[data-form-factor="phone"] .phone-session__head .terminais-card__dot--ok,
-[data-form-factor="phone"] .phone-session__head .terminais-card__dot--busy { background: var(--terminais-accent); }
+/* O `.dot` da casca pinta todo ponto de cinza; no card e no cabecalho o
+   ponto volta ao tom do estado. Pronto fica no verde semantico, como no
+   computador, e processando, ponto ou barras, no tom da sessao. */
+[data-form-factor="phone"] :is(.phone-session__head,.phone-terminal__heading) .terminais-card__dot--ok { background: var(--phone-success); }
+[data-form-factor="phone"] :is(.phone-session__head,.phone-terminal__heading) .terminais-card__dot--warn { background: var(--phone-warning); }
+[data-form-factor="phone"] :is(.phone-session__head,.phone-terminal__heading) .terminais-card__dot--bad { background: var(--phone-danger); }
+[data-form-factor="phone"] :is(.phone-session__head,.phone-terminal__heading) .terminais-card__dot--busy,
+[data-form-factor="phone"] :is(.phone-session,.phone-terminal__heading) .terminais-activity i { background: var(--session-accent); }
+[data-form-factor="phone"] :is(.phone-session,.phone-terminal__heading) .terminais-activity--warn i { background: var(--phone-warning); }
 [data-form-factor="phone"] .phone-session--paused .terminais-card__dot,
 [data-form-factor="phone"] .phone-session--finished .terminais-card__dot { background: var(--phone-neutral); }
 [data-form-factor="phone"] .phone-session--error .terminais-card__dot { background: var(--phone-danger); }
 [data-form-factor="phone"] .phone-session .terminais-activity { width: 13px; height: 12px; }
 [data-form-factor="phone"] .phone-session .terminais-activity i { width: 3px; }
 [data-form-factor="phone"] .phone-session__name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 17px; line-height: 22px; font-weight: 600; }
+/* Icone da sessao, o escolhido ou o padrao, solto e sem placa, no texto do
+   tom da sessao. */
+[data-form-factor="phone"] .phone-session__icon { flex: none; color: var(--session-accent-text); }
 [data-form-factor="phone"] .phone-session__pin { flex: none; color: var(--phone-text-3); }
 [data-form-factor="phone"] .phone-session__menu { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: -10px -8px -10px 0; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-session__menu:active { background: var(--phone-surface-muted); }
@@ -1071,6 +1177,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-session__state { padding-left: 18px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-session__subtitle { font-size: 14px; line-height: 19px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-session__agent { font-size: 15px; line-height: 20px; font-weight: 500; color: var(--phone-text); }
+[data-form-factor="phone"] .phone-session__agent.is-agent { color: var(--session-accent-text); }
 [data-form-factor="phone"] .phone-session__profile { display: flex; min-width: 0; padding-left: 18px; }
 [data-form-factor="phone"] .phone-session__close { align-self: flex-start; margin-left: 18px; min-height: 44px; }
 [data-form-factor="phone"] .phone-session__dir { display: flex; align-items: center; gap: 5px; font-size: 13px; line-height: 18px; color: var(--phone-text-3); }
@@ -1078,15 +1185,23 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-session__dir span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-session__state { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; line-height: 18px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-session__status { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-[data-form-factor="phone"] .phone-session__status--busy { color: var(--phone-success); }
+[data-form-factor="phone"] .phone-session__status--busy { color: var(--session-accent-text); }
 [data-form-factor="phone"] .phone-session__status--warn { color: var(--phone-warning); }
 [data-form-factor="phone"] .phone-session__status--bad { color: var(--phone-danger); }
 [data-form-factor="phone"] .phone-session__elapsed { flex: none; color: var(--phone-text-3); font-variant-numeric: tabular-nums; }
+/* Sinal de atencao do computador numa linha compacta: icone solto e a frase,
+   nos tons semanticos; o sino e o aviso pedem o ambar. */
+[data-form-factor="phone"] .phone-session__attention { display: flex; align-items: center; gap: 6px; min-width: 0; padding-left: 18px; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--session-accent-text); }
+[data-form-factor="phone"] .phone-session__attention svg { flex: none; }
+[data-form-factor="phone"] .phone-session__attention span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-form-factor="phone"] .phone-session__attention--finished { color: var(--phone-success); }
+[data-form-factor="phone"] .phone-session__attention--bell,
+[data-form-factor="phone"] .phone-session__attention--notify { color: var(--phone-warning); }
 [data-form-factor="phone"] .phone-session__foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--phone-border); min-height: 40px; }
 [data-form-factor="phone"] .phone-session__metrics { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; font-size: 13px; line-height: 18px; color: var(--phone-text-2); font-variant-numeric: tabular-nums; }
 [data-form-factor="phone"] .phone-session__metrics em { font-style: normal; color: var(--phone-text-3); margin-right: 2px; }
 [data-form-factor="phone"] .phone-session__metrics-off { color: var(--phone-text-3); }
-[data-form-factor="phone"] .phone-session__open { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 34px; margin: 0; border: 0; border-radius: 10px; background: var(--phone-primary-soft); color: var(--phone-primary); transition: transform var(--mac-fast) var(--phone-press-ease); }
+[data-form-factor="phone"] .phone-session__open { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; min-height: 34px; margin: 0; border: 0; border-radius: 10px; background: var(--session-accent-soft); color: var(--session-accent-text); transition: transform var(--mac-fast) var(--phone-press-ease); }
 /* O círculo fica com 34 px, como na referência; o toque vale nos 44 px em volta. */
 [data-form-factor="phone"] .phone-session__open::after { content: ""; position: absolute; inset: -5px; border-radius: 12px; }
 [data-form-factor="phone"] .phone-session__open:active { transform: scale(.92); }
@@ -1128,18 +1243,27 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-menu__swatch--small { width: 14px; height: 14px; border-radius: 50%; }
 [data-form-factor="phone"] .phone-menu__swatches { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 8px; padding: 8px 4px 4px; }
 [data-form-factor="phone"] .phone-menu__color { display: flex; flex-direction: column; align-items: center; gap: 6px; min-height: 64px; padding: 4px 0; border: 0; border-radius: 12px; background: transparent; color: var(--phone-text-2); font: inherit; font-size: 12px; }
+[data-form-factor="phone"] .phone-menu__heading { margin: 14px 4px 6px; font-size: 13px; font-weight: 600; color: var(--phone-text-2); }
+[data-form-factor="phone"] :is(.phone-menu__icons,.phone-icons) { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; padding: 0 4px 4px; }
+[data-form-factor="phone"] :is(.phone-menu__icon,.phone-icon-choice) { display: inline-flex; align-items: center; justify-content: center; aspect-ratio: 1; min-height: 44px; padding: 0; border: 0; border-radius: 12px; background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 12px; font-weight: 600; }
+[data-form-factor="phone"] :is(.phone-menu__icon,.phone-icon-choice).is-default { grid-column: span 2; aspect-ratio: auto; }
+/* No menu de uma sessao a folha leva o tom dela; na sessao nova, sem tom
+   ainda, vale o rosa. */
+[data-form-factor="phone"] :is(.phone-menu__icon,.phone-icon-choice).is-current { background: var(--session-accent-soft, var(--phone-primary-soft)); color: var(--session-accent-text, var(--phone-primary)); box-shadow: inset 0 0 0 1.5px var(--session-accent, var(--phone-primary)); }
 [data-form-factor="phone"] .phone-menu__color .phone-menu__swatch { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; }
 [data-form-factor="phone"][data-theme="dark"] .phone-menu__color .phone-menu__swatch { color: #1c1c1e; }
 [data-form-factor="phone"] .phone-menu__color .phone-menu__swatch--none { color: var(--phone-text-2); }
-[data-form-factor="phone"] .phone-menu__color[aria-checked="true"] .phone-menu__swatch { box-shadow: 0 0 0 2px var(--phone-surface), 0 0 0 4px var(--phone-primary); }
+[data-form-factor="phone"] .phone-menu__color[aria-checked="true"] .phone-menu__swatch { box-shadow: 0 0 0 2px var(--phone-surface), 0 0 0 4px var(--session-accent, var(--phone-primary)); }
 [data-form-factor="phone"] .phone-menu__color-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 [data-form-factor="phone"] .phone-menu__color:active { background: var(--phone-surface-muted); }
 
 /* Sessão nova e navegador de pastas no celular: tela cheia sobre a lista,
    com cabeçalho, indicador de etapas, corpo rolável e o botão rosa embaixo,
    como em docs/design-references. Os tons das pastas são os do aplicativo
-   nativo (apps/mobile/src/ui/tokens.ts, projectTints). */
-[data-form-factor="phone"] {
+   nativo (apps/mobile/src/ui/tokens.ts, projectTints). O estado vazio do
+   estúdio no computador usa as mesmas capas, então os tons valem também sob
+   a casca desktop. */
+:is([data-form-factor="phone"],[data-shell="desktop"]) {
   --phone-tint-paper: #FFFFFF; --phone-tint-ink: #DCE1EC;
   --phone-tint-pink-cover: #FDEFF5; --phone-tint-pink-back: #F7B3CF; --phone-tint-pink-front: #EF7FAE;
   --phone-tint-blue-cover: #EEF3FF; --phone-tint-blue-back: #AFC3F7; --phone-tint-blue-front: #7E9DEE;
@@ -1147,7 +1271,7 @@ body.is-dragging-path *{cursor:grabbing !important}
   --phone-tint-orange-cover: #FFF3E6; --phone-tint-orange-back: #FFCB8E; --phone-tint-orange-front: #FFA44A;
   --phone-tint-violet-cover: #F3EEFF; --phone-tint-violet-back: #C6B4F6; --phone-tint-violet-front: #9C82EE;
 }
-[data-form-factor="phone"][data-theme="dark"] {
+:is([data-form-factor="phone"],[data-shell="desktop"])[data-theme="dark"] {
   --phone-tint-paper: #3A3A40; --phone-tint-ink: #55555C;
   --phone-tint-pink-cover: rgba(255, 122, 178, .14); --phone-tint-pink-back: #A8577C; --phone-tint-pink-front: #E0679C;
   --phone-tint-blue-cover: rgba(126, 157, 238, .14); --phone-tint-blue-back: #55689E; --phone-tint-blue-front: #7E9DEE;
@@ -1155,16 +1279,16 @@ body.is-dragging-path *{cursor:grabbing !important}
   --phone-tint-orange-cover: rgba(255, 164, 74, .14); --phone-tint-orange-back: #99683A; --phone-tint-orange-front: #E99545;
   --phone-tint-violet-cover: rgba(156, 130, 238, .14); --phone-tint-violet-back: #66589C; --phone-tint-violet-front: #9C82EE;
 }
-[data-form-factor="phone"] .phone-folder-art { display: block; max-width: 100%; height: auto; }
-[data-form-factor="phone"] .phone-folder-art__paper { fill: var(--phone-tint-paper); }
-[data-form-factor="phone"] .phone-folder-art__ink { fill: var(--phone-tint-ink); }
-[data-form-factor="phone"] .phone-folder-art--pink { --tint-cover: var(--phone-tint-pink-cover); --tint-back: var(--phone-tint-pink-back); --tint-front: var(--phone-tint-pink-front); }
-[data-form-factor="phone"] .phone-folder-art--blue { --tint-cover: var(--phone-tint-blue-cover); --tint-back: var(--phone-tint-blue-back); --tint-front: var(--phone-tint-blue-front); }
-[data-form-factor="phone"] .phone-folder-art--green { --tint-cover: var(--phone-tint-green-cover); --tint-back: var(--phone-tint-green-back); --tint-front: var(--phone-tint-green-front); }
-[data-form-factor="phone"] .phone-folder-art--orange { --tint-cover: var(--phone-tint-orange-cover); --tint-back: var(--phone-tint-orange-back); --tint-front: var(--phone-tint-orange-front); }
-[data-form-factor="phone"] .phone-folder-art--violet { --tint-cover: var(--phone-tint-violet-cover); --tint-back: var(--phone-tint-violet-back); --tint-front: var(--phone-tint-violet-front); }
-[data-form-factor="phone"] .phone-folder-art__back { fill: var(--tint-back); }
-[data-form-factor="phone"] .phone-folder-art__front { fill: var(--tint-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art { display: block; max-width: 100%; height: auto; }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art__paper { fill: var(--phone-tint-paper); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art__ink { fill: var(--phone-tint-ink); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art--pink { --tint-cover: var(--phone-tint-pink-cover); --tint-back: var(--phone-tint-pink-back); --tint-front: var(--phone-tint-pink-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art--blue { --tint-cover: var(--phone-tint-blue-cover); --tint-back: var(--phone-tint-blue-back); --tint-front: var(--phone-tint-blue-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art--green { --tint-cover: var(--phone-tint-green-cover); --tint-back: var(--phone-tint-green-back); --tint-front: var(--phone-tint-green-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art--orange { --tint-cover: var(--phone-tint-orange-cover); --tint-back: var(--phone-tint-orange-back); --tint-front: var(--phone-tint-orange-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art--violet { --tint-cover: var(--phone-tint-violet-cover); --tint-back: var(--phone-tint-violet-back); --tint-front: var(--phone-tint-violet-front); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art__back { fill: var(--tint-back); }
+:is([data-form-factor="phone"],[data-shell="desktop"]) .phone-folder-art__front { fill: var(--tint-front); }
 
 [data-form-factor="phone"] .phone-flow { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--phone-bg); color: var(--phone-text); padding: env(safe-area-inset-top) max(16px, env(safe-area-inset-right)) 0 max(16px, env(safe-area-inset-left)); animation: macFade var(--mac-normal) var(--mac-ease) both; }
 [data-form-factor="phone"] .phone-flow__header { flex: none; min-height: 56px; display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; gap: 4px; }
@@ -1223,7 +1347,8 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-agent > span:last-child { font-size: 11px; line-height: 14px; color: var(--phone-text-2); }
 [data-form-factor="phone"] .phone-agent.is-selected { border: 2px solid var(--phone-primary); background: var(--phone-primary-soft); padding: 9px 7px; }
 [data-form-factor="phone"] .phone-agent:disabled { opacity: .5; }
-[data-form-factor="phone"] .phone-agent__icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; border-radius: 12px; background: var(--phone-surface-muted); }
+/* Simbolo solto, sem placa, na mesma altura para o nome nao subir. */
+[data-form-factor="phone"] .phone-agent__icon { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; color: var(--phone-text); }
 [data-form-factor="phone"] .phone-agent__glyph, [data-form-factor="phone"] .phone-agent__glyph svg { width: 22px; height: 22px; display: block; }
 [data-form-factor="phone"] .phone-account-list { display: grid; gap: 8px; }
 [data-form-factor="phone"] .phone-account { display: grid; gap: 10px; min-height: 44px; padding: 12px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-card); background: var(--phone-surface); box-shadow: var(--phone-shadow-card); color: var(--phone-text); font: inherit; text-align: left; }
@@ -1311,4 +1436,12 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-flow__header .phone-icon-btn:active { background: #C9317A; }
 [data-form-factor="phone"] .phone-terminal__toolbar .mac-tool svg,
 [data-form-factor="phone"] .phone-flow__header .phone-icon-btn svg { width: 20px; height: 20px; }
+/* Dentro de uma sessao os mesmos botoes ficam no tom dela, com a base forte
+   do claro nos dois temas, como o rosa acima. Sem cor, o tom e esse rosa. */
+[data-form-factor="phone"] .session-scope .phone-terminal__toolbar .mac-tool { background: var(--session-accent-light); color: var(--session-on-accent-light); }
+[data-form-factor="phone"] .session-scope .phone-terminal__toolbar .mac-tool:not(:disabled):active { background: color-mix(in srgb, var(--session-accent-light) 86%, #000); }
+/* O primario da casca e resolvido na raiz, entao dentro da sessao aberta ele
+   e declarado de novo no tom dela: teclado especial, comandos rapidos e caixa
+   de texto acompanham a cor do card, como os botoes acima. */
+[data-form-factor="phone"] .phone-terminal__body.session-scope { --phone-primary: var(--session-accent); --phone-primary-soft: var(--session-accent-soft); --phone-on-primary: var(--session-on-accent); }
 [data-form-factor="phone"] .phone-flow__header { grid-template-columns: 40px 1fr 40px; }

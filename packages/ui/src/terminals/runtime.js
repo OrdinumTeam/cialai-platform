@@ -57,7 +57,7 @@ import { translate } from '../shared/i18n.js';
 
 export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
-import { isPhone, onShellLock } from '../lib/shell.js';
+import { isMobileShell, isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
@@ -72,6 +72,8 @@ import { installImeInput } from './ime-input.js';
 // tom para o claro e outro para o escuro, como os tokens da camada macOS.
 import { ORGANIZATION_COLORS as SESSION_COLORS } from '../lib/organization-colors.js';
 import { demoParam } from '../lib/demo.js';
+import { validIcon } from './session-icons.js';
+import { resolveSessionAccent } from './session-accent.js';
 export { SESSION_COLORS };
 
 const STORAGE_KEY = isPhone() ? 'cialai_terminals_phone' : 'cialai_terminals';
@@ -255,6 +257,7 @@ function serializeSession(session) {
     customName: session.customName,
     subtitle: session.subtitle,
     color: session.color,
+    icon: session.icon,
     pinned: session.pinned,
     createdAt: session.createdAt,
     editor: {
@@ -297,7 +300,7 @@ export function persist() {
     if (hasBridge() && !state.demo) state.order.forEach((id, order) => {
       const session = state.sessions.get(id);
       if (session?.ptyId == null) return;
-      const presentation = { name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order };
+      const presentation = { name: session.name, subtitle: session.subtitle, color: session.color, icon: session.icon, pinned: session.pinned, order };
       const identity = terminalIdentity(session);
       const signature = JSON.stringify([identity, presentation]);
       if (session.publishedPresentation === signature) return;
@@ -465,7 +468,13 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
-function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
+// Tema do xterm da sessao: cursor e selecao no tom dela, o resto igual para
+// todas. Reaplicado quando a cor ou a aparencia mudam.
+function applySessionTheme(session) {
+  session.term.options.theme = buildTheme(resolveSessionAccent(session.color));
+}
+
+function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
   // Toda pasta guardada na sessao usa a forma portatil. O Rust ja devolve
   // assim; o que vem do armazenamento antigo ou de um caminho digitado pode
@@ -479,6 +488,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     customName: Boolean(customName),
     subtitle: typeof subtitle === 'string' ? subtitle : '',
     color: validColor(color),
+    icon: validIcon(icon),
     pinned: Boolean(pinned),
     createdAt: createdAt || Date.now(),
     term,
@@ -664,6 +674,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   });
   installWheelScroll(session);
   installTouchScroll(session);
+  applySessionTheme(session);
   state.sessions.set(session.id, session);
   return session;
 }
@@ -1189,7 +1200,7 @@ function watchPixelRatio() {
 
 /* ── atencao e atividade ──────────────────────────────────────────── */
 
-function isViewed(session) {
+export function isViewed(session) {
   return state.viewMounted && state.viewVisible && state.windowFocused && state.selectedId === session.id;
 }
 
@@ -1587,7 +1598,10 @@ function ensureMetrics() {
     state.metricsTimer = null;
     const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (![...state.sessions.values()].some(measurable)) return;
-    if (!hidden) await sampleMetrics();
+    // No aplicativo a amostra continua, devagar, com a pagina oculta: e ela
+    // que traz a vez do agente e o fim do processo, que viram aviso enquanto
+    // o sistema mantem o app vivo em segundo plano.
+    if (!hidden || isMobileShell()) await sampleMetrics();
     if (!hidden && Date.now() - state.usageAt > USAGE_MS) {
       if (await sampleUsage()) state.usageAt = Date.now();
     }
@@ -1600,7 +1614,7 @@ function ensureMetrics() {
 function ensureWatchers() {
   if (!state.themeWatcher) {
     state.themeWatcher = watchTheme(() => {
-      state.sessions.forEach((session) => { session.term.options.theme = buildTheme(); });
+      state.sessions.forEach(applySessionTheme);
       dispatch({ type: 'theme' });
     });
   }
@@ -1736,6 +1750,8 @@ async function syncSharedSessions() {
         if (typeof shared.name === 'string' && shared.name) session.name = shared.name;
         session.subtitle = typeof shared.subtitle === 'string' ? shared.subtitle : '';
         session.color = validColor(shared.color);
+        applySessionTheme(session);
+        session.icon = validIcon(shared.icon);
         session.pinned = Boolean(shared.pinned);
         session.remoteOrder = shared.order;
         adopted.push(session);
@@ -1758,7 +1774,7 @@ async function syncSharedSessions() {
       adopted.forEach((session) => {
         const order = state.order.indexOf(session.id);
         session.publishedPresentation = JSON.stringify([terminalIdentity(session), {
-          name: session.name, subtitle: session.subtitle, color: session.color, pinned: session.pinned, order,
+          name: session.name, subtitle: session.subtitle, color: session.color, icon: session.icon, pinned: session.pinned, order,
         }]);
       });
       persist();
@@ -1842,13 +1858,13 @@ export function hydrate() {
 
 // Cria a sessao e abre o shell na hora, mesmo sem ser exibida. Devolve o
 // identificador ou null quando recusou.
-export function openSession(cwd, { name, subtitle, color, select = true } = {}) {
+export function openSession(cwd, { name, subtitle, color, icon, select = true } = {}) {
   if (!hasBridge() && !state.demo) {
     dispatch({ type: 'error', message: translate('terminal.common.desktopOnly') });
     return null;
   }
   if (!cwd) return null;
-  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null });
+  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null });
   state.order.push(session.id);
   if (select || !state.selectedId) state.selectedId = session.id;
   persist();
@@ -2148,6 +2164,16 @@ export function setSessionColor(id, color) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.color = validColor(color);
+  applySessionTheme(session);
+  persist();
+  emitSessions();
+}
+
+// Icone do card. `null` volta ao padrao, que sai do que roda na sessao.
+export function setSessionIcon(id, icon) {
+  const session = state.sessions.get(id);
+  if (!session) return;
+  session.icon = validIcon(icon);
   persist();
   emitSessions();
 }
@@ -2644,7 +2670,7 @@ function seedDemo() {
   first.jobStartedAt = Date.now() - 154000;
   first.term.write(`\x1b[2m$ claude --resume\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.reading')}\r\n\x1b[2m  ⎿  Read 612 lines\x1b[0m\r\n\r\n\x1b[1m⏺\x1b[0m ${translate('terminal.demo.adjustCard')}\r\n`);
   first.explorer.git = { isRepo: true, branch: 'main', ahead: 2, behind: 0, changes: [{ path: 'packages/ui/src/terminals/runtime.js', status: 'modified', staged: false, worktree: true }, { path: 'packages/ui/src/views/Terminais.css', status: 'modified', staged: false, worktree: true }, { path: 'docs/arquitetura/04-desktop.md', status: 'untracked', staged: false, worktree: true }] };
-  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'verde', subtitle: translate('terminal.demo.devServer') });
+  const second = createSession({ cwd: `${home}/site-exemplo`, name: 'site-exemplo', pinned: true, color: 'azul', icon: 'globe', subtitle: translate('terminal.demo.devServer') });
   second.status = 'running';
   second.activity = { available: true, cpu: 0.6, memory: 96 * 1024 * 1024, processes: 2, foreground: { pid: 5100, name: 'node', command: 'npm', agent: null, stopped: false }, agent: null, shellCwd: `${home}/site-exemplo` };
   // Sem sinal proprio, com saida chegando agora: Em execucao.
@@ -2653,7 +2679,7 @@ function seedDemo() {
   second.metricsAt = Date.now();
   second.term.write('$ npm run dev\r\n\r\n  VITE v7.3.6  ready in 412 ms\r\n\r\n  ➜  Local:   http://127.0.0.1:5173/\r\n');
   second.jobStartedAt = Date.now() - 3600000;
-  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', subtitle: translate('terminal.demo.backendTests') });
+  const third = createSession({ cwd: `${home}/api-exemplo`, name: 'api-exemplo', color: 'roxo', icon: 'flask', subtitle: translate('terminal.demo.backendTests') });
   third.status = 'running';
   third.activity = { available: true, cpu: 0, memory: 14 * 1024 * 1024, processes: 1, foreground: null, agent: null, shellCwd: `${home}/api-exemplo` };
   // Shell em prompt: Pronto para comando, sem animacao.

@@ -1,0 +1,408 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* ============================================================
+   CIALAI, SUPERFICIES SOLIDAS DA CASCA DESKTOP
+   ------------------------------------------------------------
+   A linguagem do aplicativo do celular levada ao computador: fundos e
+   superficies solidos, formas arredondadas e componentes encorpados, com a
+   mesma fonte, os mesmos neutros e o mesmo rosa. Nada de gradiente, brilho
+   ou vidro com desfoque; areas se separam por tom, fio discreto e espaco.
+   A densidade continua a do computador: controles mais baixos que no
+   celular, colunas e atalhos preservados.
+
+   Tudo aqui vale so sob html[data-shell="desktop"]. A pagina web do celular
+   carrega shell.css, brand.css e Terminais.css, mas nunca marca a casca
+   desktop, entao nada desta camada chega a ela. Vem depois de brand.css e
+   antes do estudio.
+
+   Os tokens claros ficam em html[data-shell="desktop"] e os escuros em
+   html[data-shell="desktop"][data-theme="dark"]: todo token que muda entre
+   os temas e declarado nos dois, senao o [data-theme="dark"] de shell.css
+   e de brand.css venceria no escuro. As regras de componente usam o prefixo
+   html[data-shell="desktop"][data-theme], que o app sempre marca, para
+   passar das regras de tema escuro herdadas sem !important.
+
+   Fonte dos valores: apps/mobile/src/ui/tokens.ts.
+   Raios: 8 chip, 10 controle denso, 12 botao e campo, 16 card de lista,
+   20 painel e popover, 24 modal, 999 pilula.
+   ============================================================ */
+
+/* A Outfit do site e do celular, empacotada com o app. Sem ela carregada,
+   cai na fonte do sistema. O terminal continua com a monoespacada. */
+@font-face{font-family:"Cialai Outfit";font-style:normal;font-weight:100 900;font-display:swap;src:url("../fonts/Outfit-Variable.woff2") format("woff2")}
+
+/* ── tokens, claro ──────────────────────────────────────────────── */
+
+html[data-shell="desktop"]{
+  --ui-radius-chip:8px;
+  --ui-radius-control:12px;
+  --ui-radius-card:16px;
+  --ui-radius-panel:20px;
+  --ui-radius-modal:24px;
+  --ui-radius-pill:999px;
+
+  --mac-radius-control:10px;
+  --mac-radius-field:12px;
+  --mac-radius-card:16px;
+  --mac-radius-panel:20px;
+  --mac-radius-hero:24px;
+
+  --mac-label:#20232C;
+  --mac-label-2:#666D7C;
+  --mac-label-3:#9CA2B0;
+  --mac-label-4:#CDD2DC;
+
+  --mac-bg:#F8FAFF;
+  --mac-surface:#FFFFFF;
+  --mac-surface-2:#F2F4F9;
+  --mac-surface-3:#E8EBF2;
+  --mac-field:#F2F4F9;
+  --mac-separator:#E7EAF2;
+  --mac-separator-strong:#D9DEE9;
+  --mac-hover:rgba(32,35,44,.045);
+  --mac-press:rgba(32,35,44,.08);
+  --mac-neutral-bg:#ECEFF5;
+  /* Preenchimento neutro de trilhas, etiquetas e esqueletos. So o celular o
+     declarava, e no desktop a tela de contas ficava sem trilha nem etiqueta. */
+  --mac-fill:#E8EBF2;
+  --mac-toolbar-bg:#F8FAFF;
+  --mac-glass:#FFFFFF;
+
+  /* A lateral continua rosa, agora chapada: um rosa clarinho no claro e o
+     ameixa da marca no escuro. Texto e icones em ameixa, como antes. O item
+     ativo e os cards do rodape sao placas brancas, onde o magenta do texto
+     passa de 4,5:1; sobre o proprio rosa ele nao chegaria. */
+  --mac-sidebar-bg:#FCEBF3;
+  --mac-sidebar-text:rgba(58,27,51,.94);
+  --mac-sidebar-text-2:rgba(58,27,51,.58);
+  --mac-sidebar-icon:rgba(58,27,51,.68);
+  --mac-sidebar-hover:rgba(226,59,132,.08);
+  --mac-sidebar-press:rgba(226,59,132,.14);
+  --mac-sidebar-active:#FFFFFF;
+  --mac-sidebar-line:#F3D9E6;
+  --mac-sidebar-card:#FFFFFF;
+  --mac-sidebar-card-hover:#FFF6FA;
+  --mac-sidebar-card-line:rgba(58,27,51,.07);
+
+  /* O texto de destaque e o magenta escurecido ate 4,5:1, o mesmo que o
+     resolvedor de tom da sessao usa como padrao. Texto sobre o acento cheio
+     e branco no claro e ameixa no escuro, como no botao do celular. */
+  --mac-accent-text:#C73474;
+  --mac-on-accent:#FFFFFF;
+
+  /* Os gradientes da casca viram cor solida: o que ainda os usar fica chapado. */
+  --mac-gradient:var(--cialai-magenta);
+  --mac-gradient-text:var(--cialai-magenta);
+  --mac-gradient-button:var(--mac-accent);
+  --mac-gradient-line:var(--mac-accent);
+  --mac-aura:none;
+  --mac-hero:var(--cialai-magenta);
+  --mac-hero-glow:none;
+
+  --mac-shadow-button:none;
+  --mac-shadow-primary:none;
+  --mac-shadow-card:0 4px 14px rgba(27,35,64,.05);
+  --mac-shadow-popover:0 12px 32px rgba(27,35,64,.12),0 0 0 1px #E7EAF2;
+  --mac-shadow-sheet:0 24px 60px rgba(27,35,64,.18),0 0 0 1px #E7EAF2;
+}
+
+/* ── tokens, escuro ─────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme="dark"]{
+  --mac-label:#F5F5F7;
+  --mac-label-2:#AEAEB2;
+  --mac-label-3:#8E8E93;
+  --mac-label-4:#48484A;
+
+  --mac-bg:#0E0E10;
+  --mac-surface:#1C1C1E;
+  --mac-surface-2:#26262A;
+  --mac-surface-3:#2E2E33;
+  --mac-field:#26262A;
+  --mac-separator:rgba(84,84,88,.45);
+  --mac-separator-strong:rgba(110,110,116,.6);
+  --mac-hover:rgba(255,255,255,.06);
+  --mac-press:rgba(255,255,255,.10);
+  --mac-neutral-bg:#26262A;
+  --mac-fill:#2E2E33;
+  --mac-toolbar-bg:#0E0E10;
+  --mac-glass:#1C1C1E;
+
+  --mac-sidebar-bg:#31182C;
+  --mac-sidebar-text:rgba(255,214,230,.94);
+  --mac-sidebar-text-2:rgba(255,214,230,.56);
+  --mac-sidebar-icon:rgba(255,214,230,.66);
+  --mac-sidebar-hover:rgba(255,122,178,.10);
+  --mac-sidebar-press:rgba(255,122,178,.18);
+  --mac-sidebar-active:#4A2443;
+  --mac-sidebar-line:#3E2238;
+  --mac-sidebar-card:#3D2337;
+  --mac-sidebar-card-hover:#472C41;
+  --mac-sidebar-card-line:rgba(255,214,230,.10);
+
+  --mac-accent-text:#FF7AB2;
+  --mac-on-accent:#3A1B33;
+
+  --mac-gradient:var(--cialai-plum);
+  --mac-gradient-text:var(--cialai-pink);
+  --mac-gradient-button:var(--mac-accent);
+  --mac-gradient-line:var(--mac-accent);
+  --mac-aura:none;
+  --mac-hero:var(--cialai-plum);
+  --mac-hero-glow:none;
+
+  --mac-shadow-button:none;
+  --mac-shadow-primary:none;
+  --mac-shadow-card:none;
+  --mac-shadow-popover:0 16px 40px rgba(0,0,0,.55),0 0 0 1px rgba(84,84,88,.45);
+  --mac-shadow-sheet:0 24px 64px rgba(0,0,0,.6),0 0 0 1px rgba(84,84,88,.5);
+}
+
+/* A mesma familia em todos os sistemas, como no celular. O terminal segue
+   com a monoespacada de cada sistema, de platform.css. */
+html[data-shell="desktop"][data-platform]{
+  --mac-font:"Cialai Outfit",-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+}
+
+/* ── base ───────────────────────────────────────────────────────── */
+
+/* Fundo solido tambem no macOS. A janela continua transparente na
+   configuracao do Tauri; e a pagina que pinta por cima do vibrancy. */
+html[data-shell="desktop"],html[data-shell="desktop"] body{background:var(--mac-bg)!important}
+html[data-shell="desktop"][data-theme] body{font-size:13px;letter-spacing:.005em}
+
+@keyframes uiPulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+/* ── toolbar ────────────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-toolbar{background:var(--mac-toolbar-bg);-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom-color:var(--mac-separator)}
+html[data-shell="desktop"][data-theme] .mac-toolbar__title{font-size:15px;font-weight:600;letter-spacing:-.01em}
+html[data-shell="desktop"][data-theme] .mac-tool{height:30px;min-width:30px;padding:0 8px;border-radius:var(--ui-radius-control);font-weight:500;white-space:nowrap}
+html[data-shell="desktop"][data-theme] .mac-tunnel-status{border-radius:var(--ui-radius-control);white-space:nowrap}
+html[data-shell="desktop"][data-theme] .mac-tool--search{height:32px;min-width:210px;padding:0 8px 0 11px;border:0;border-radius:var(--ui-radius-control);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .mac-tool--search:hover{background:var(--mac-surface-3)}
+
+/* Marca na toolbar, so com a lateral fechada: o lettering sozinho, sem a
+   cabeca, pequeno e apagado para nao competir com o titulo, separado dele
+   por um fio. */
+html[data-shell="desktop"][data-theme] .mac-toolbar__brand{display:flex;align-items:center;flex:0 0 auto;gap:10px;margin:0 2px;animation:macFade var(--mac-normal) var(--mac-ease) both}
+html[data-shell="desktop"][data-theme] .mac-toolbar__brand::after{content:'';width:1px;height:16px;background:var(--mac-separator)}
+html[data-shell="desktop"][data-theme] .mac-toolbar__wordmark{display:block;width:auto;height:15px;flex:0 0 auto;opacity:.6;user-select:none;-webkit-user-drag:none;pointer-events:none}
+html[data-shell="desktop"][data-theme] .mac-toolbar__wordmark--dark{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-toolbar__wordmark--light{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-toolbar__wordmark--dark{display:block}
+html[data-shell="desktop"][data-theme] .mac-window.is-booting .mac-toolbar__brand{visibility:hidden}
+
+/* ── barra lateral ──────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-sidebar{background:var(--mac-sidebar-bg);box-shadow:inset -1px 0 0 var(--mac-sidebar-line)}
+html[data-shell="desktop"][data-theme] .mac-sidebar__brand{padding:4px 20px 20px}
+/* Sem semaforos, a marca comeca alinhada a toolbar, com respiro no topo. */
+html[data-shell="desktop"][data-theme]:is([data-platform="windows"],[data-platform="linux"]) .mac-sidebar__brand{padding-top:18px}
+/* A assinatura oficial: o lockup inteiro no claro e, no escuro, a mesma
+   peca com as letras em branco. 120 px de largura, o minimo da marca. */
+html[data-shell="desktop"][data-theme] .mac-sidebar__lockup{display:block;width:120px;height:auto;flex:0 0 auto;user-select:none;-webkit-user-drag:none}
+html[data-shell="desktop"][data-theme] .mac-sidebar__lockup--dark{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-sidebar__lockup--light{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-sidebar__lockup--dark{display:block}
+html[data-shell="desktop"][data-theme] .mac-sidebar__nav{padding:0 12px 16px;gap:2px}
+html[data-shell="desktop"][data-theme] .mac-nav-indicator{left:12px;right:12px;border-radius:var(--ui-radius-control);background:var(--mac-sidebar-active)}
+html[data-shell="desktop"][data-theme] .mac-nav-item{height:36px;gap:10px;padding:0 11px;border-radius:var(--ui-radius-control);font-size:13.5px;font-weight:500}
+html[data-shell="desktop"][data-theme] .mac-nav-item.is-active,html[data-shell="desktop"][data-theme] .mac-nav-item.is-active .mac-nav-item__icon{color:var(--mac-accent-text);font-weight:600}
+html[data-shell="desktop"][data-theme] .mac-nav-item__icon{width:17px;height:17px}
+html[data-shell="desktop"][data-theme] .mac-sidebar__footer{gap:6px;margin:0 12px 12px;padding-top:0;border-top:0}
+html[data-shell="desktop"][data-theme] .mac-sidebar__pair{padding:10px 12px;border-radius:var(--ui-radius-card);background:var(--mac-sidebar-card);box-shadow:inset 0 0 0 1px var(--mac-sidebar-card-line)}
+html[data-shell="desktop"][data-theme] .mac-sidebar__pair:hover{background:var(--mac-sidebar-card-hover)}
+html[data-shell="desktop"][data-theme] .mac-sidebar__pair>svg{color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .mac-sidebar__settings{width:40px;height:40px;border-radius:var(--ui-radius-control);background:var(--mac-sidebar-card);box-shadow:inset 0 0 0 1px var(--mac-sidebar-card-line)}
+html[data-shell="desktop"][data-theme] .mac-sidebar__settings:hover{background:var(--mac-sidebar-card-hover)}
+
+/* ── botoes ─────────────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .btn{height:32px;padding:0 14px;border-radius:var(--ui-radius-control);font-weight:600}
+html[data-shell="desktop"][data-theme] .btn-sm{height:28px;padding:0 11px;border-radius:var(--mac-radius-control)}
+html[data-shell="desktop"][data-theme] .btn-primary,html[data-shell="desktop"][data-theme] .btn-primary:hover{background:var(--mac-accent);color:var(--mac-on-accent);border:0;box-shadow:none;filter:none}
+html[data-shell="desktop"][data-theme] .btn-primary:hover{background:var(--mac-accent-hover)}
+html[data-shell="desktop"][data-theme] .btn-primary:disabled{background:var(--mac-surface-3);color:var(--mac-label-3)}
+html[data-shell="desktop"][data-theme] .btn-ghost,html[data-shell="desktop"][data-theme] .btn-secondary{background:var(--mac-surface-2);border:0;color:var(--mac-label);box-shadow:none}
+html[data-shell="desktop"][data-theme] .btn-ghost:hover,html[data-shell="desktop"][data-theme] .btn-secondary:hover{background:var(--mac-surface-3);color:var(--mac-label)}
+html[data-shell="desktop"][data-theme] .btn-icon{width:32px;height:32px;border:0;border-radius:var(--ui-radius-control);background:var(--mac-surface-2);box-shadow:none}
+html[data-shell="desktop"][data-theme] .btn-icon:hover{background:var(--mac-surface-3)}
+html[data-shell="desktop"][data-theme] .btn-icon.btn-sm{width:28px;height:28px;border-radius:var(--mac-radius-control)}
+html[data-shell="desktop"][data-theme] .btn-quiet:hover{background:var(--mac-hover)}
+
+/* ── campos e controles ─────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .field__control{height:34px;padding:0 11px;border:1px solid transparent;border-radius:var(--ui-radius-control);background:var(--mac-field);transition:background-color var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease),box-shadow var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+html[data-shell="desktop"][data-theme] .field__control:hover{border-color:transparent;background:var(--mac-surface-3)}
+html[data-shell="desktop"][data-theme] .field__control:focus{border-color:var(--mac-accent);background:var(--mac-surface);box-shadow:0 0 0 3px var(--mac-accent-ring)}
+html[data-shell="desktop"][data-theme] .field__control--area{height:auto;padding:9px 11px}
+html[data-shell="desktop"][data-theme] .mac-segmented,html[data-shell="desktop"][data-theme] .segmented{gap:2px;padding:3px;border-radius:var(--ui-radius-control);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .mac-segmented__option,html[data-shell="desktop"][data-theme] .segmented__option{height:28px;padding:0 12px;border-radius:9px;font-weight:600;white-space:nowrap}
+html[data-shell="desktop"][data-theme] .mac-segmented__option.is-selected,html[data-shell="desktop"][data-theme] .segmented__option.is-selected{background:var(--mac-accent);color:var(--mac-on-accent);box-shadow:none}
+html[data-shell="desktop"][data-theme] input[type=checkbox].mac-switch{width:38px;height:22px;box-shadow:none;background:var(--mac-surface-3)}
+html[data-shell="desktop"][data-theme] input[type=checkbox].mac-switch::after{top:3px;left:3px;width:16px;height:16px;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+html[data-shell="desktop"][data-theme] input[type=checkbox].mac-switch:checked{background:var(--mac-accent)}
+html[data-shell="desktop"][data-theme] input[type=checkbox].mac-switch:checked::after{transform:translateX(16px)}
+html[data-shell="desktop"][data-theme] input[type=checkbox].mac-switch:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring)}
+html[data-shell="desktop"][data-theme] .mac-chip,html[data-shell="desktop"][data-theme] .badge,html[data-shell="desktop"][data-theme] .pill{border-radius:var(--ui-radius-pill)}
+html[data-shell="desktop"][data-theme] .mac-progress{height:6px;border-radius:3px;background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .mac-progress>span{border-radius:3px;background:var(--mac-accent)}
+
+/* ── popovers, paleta e menus ───────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-stack-pop{border-radius:var(--ui-radius-panel);background:var(--mac-surface);-webkit-backdrop-filter:none;backdrop-filter:none}
+html[data-shell="desktop"][data-theme] .mac-palette{border-radius:var(--ui-radius-panel);background:var(--mac-surface);-webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid var(--mac-separator)}
+html[data-shell="desktop"][data-theme] .mac-palette__item{height:36px;padding:0 12px;border-radius:var(--ui-radius-control)}
+html[data-shell="desktop"][data-theme] .mac-palette__item.is-active{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .mac-palette__item.is-active .mac-palette__icon,html[data-shell="desktop"][data-theme] .mac-palette__item.is-active .mac-palette__kind{color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .mac-palette__item.is-active kbd{color:var(--mac-accent-text);background:var(--mac-surface);border-color:transparent}
+/* Sessoes na paleta: o icone da sessao no tom dela, e a linha ativa no
+   suave dela, porque cada linha leva o proprio `session-scope`. */
+html[data-shell="desktop"][data-theme] .mac-palette__glyph{display:inline-flex;width:15px;height:15px}
+
+/* Aviso de uma sessao: o icone dela e uma faixa de 4 px no tom dela na
+   borda, como a barra do card. */
+html[data-shell="desktop"][data-theme] .MuiAlert-root.mac-toast--session{box-shadow:inset 4px 0 0 var(--mac-accent),var(--mac-shadow-popover)}
+html[data-shell="desktop"][data-theme] .MuiAlert-root.mac-toast--session .MuiAlert-icon{color:var(--mac-accent-text);opacity:1}
+html[data-shell="desktop"][data-theme] .mac-palette-backdrop{background:rgba(14,14,16,.18)}
+
+/* Os overlays do estudio tinham vidro com desfoque; aqui ficam solidos. As
+   regras deles moram em Terminais.css, compartilhadas com o celular. */
+html[data-shell="desktop"][data-theme] :is(.terminais-menu,.terminais-pop,.terminais-find,.terminais-terminal__end,.terminais-terminal__tobottom,.terminais-docgraph__results,.terminais-docgraph__card,.terminais-docgraph__legend,.terminais-docgraph__tip,.terminais-docgraph__issues){-webkit-backdrop-filter:none;backdrop-filter:none}
+
+/* ── diálogos ───────────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .MuiDialog-paper{border-radius:var(--ui-radius-modal);border:1px solid var(--mac-separator);background:var(--mac-surface)}
+html[data-shell="desktop"][data-theme] .MuiDialog-paper[data-modal] .MuiDialogTitle-root{padding:20px 24px 10px;font-size:17px;font-weight:700;letter-spacing:-.01em}
+html[data-shell="desktop"][data-theme] .MuiDialog-paper[data-modal] .MuiDialogContent-root{padding:10px 24px 18px}
+html[data-shell="desktop"][data-theme] .MuiDialog-paper[data-modal] .MuiDialogActions-root{padding:14px 24px 20px;border-top:1px solid var(--mac-separator)}
+html[data-shell="desktop"][data-theme] .MuiDrawer-paper{background:var(--mac-surface)}
+
+/* ── preferencias: grupos em cards, como os Ajustes do celular ───── */
+
+html[data-shell="desktop"][data-theme] .mac-prefs{gap:14px}
+html[data-shell="desktop"][data-theme] .mac-prefs__section{padding:14px 16px 6px;border-bottom:0;border-radius:var(--ui-radius-panel);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .mac-prefs__heading{margin:0 0 6px;font-size:13px;font-weight:700;color:var(--mac-label)}
+html[data-shell="desktop"][data-theme] .mac-prefs__row{padding:11px 0}
+html[data-shell="desktop"][data-theme] .mac-prefs__row+.mac-prefs__row{border-top:1px solid var(--mac-separator)}
+/* O controle nunca encolhe abaixo do conteudo: quem dobra e o texto. */
+html[data-shell="desktop"][data-theme] .mac-prefs__row-control{flex:0 0 auto;max-width:100%}
+html[data-shell="desktop"][data-theme] .mac-prefs__section .field__control{background:var(--mac-surface)}
+html[data-shell="desktop"][data-theme] .mac-prefs__section .field__control:hover{background:var(--mac-surface)}
+html[data-shell="desktop"][data-theme] .mac-prefs__section :is(.segmented,.mac-segmented){background:var(--mac-surface)}
+html[data-shell="desktop"][data-theme] .mac-prefs__row-title{font-size:13.5px;font-weight:600}
+html[data-shell="desktop"][data-theme] .mac-prefs__row-desc{font-size:12px;color:var(--mac-label-2)}
+html[data-shell="desktop"][data-theme] .mac-prefs__note{color:var(--mac-label-2)}
+
+/* Aparencia em tres blocos, Sistema, Claro e Escuro, com o escolhido em
+   fio rosa e fundo suave. */
+html[data-shell="desktop"][data-theme] .mac-theme-tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;width:min(330px,52vw)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;height:72px;padding:0 8px;border:1.5px solid var(--mac-separator);border-radius:var(--ui-radius-card);background:var(--mac-surface);color:var(--mac-label);font:inherit;font-size:13px;font-weight:600;cursor:default;transition:border-color var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile:hover{border-color:var(--mac-separator-strong)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile svg{width:20px;height:20px;color:var(--mac-label-2)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile.is-selected{border-color:var(--mac-accent);background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile.is-selected svg{color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .mac-theme-tile:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+
+/* ── abertura ───────────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-splash{gap:14px;background:var(--mac-bg)}
+html[data-shell="desktop"][data-theme] .mac-splash__aura{display:none}
+html[data-shell="desktop"][data-theme] .mac-splash__lockup{position:relative;display:block;width:220px;height:auto;user-select:none;-webkit-user-drag:none}
+html[data-shell="desktop"][data-theme] .mac-splash__lockup--dark{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-splash__lockup--light{display:none}
+html[data-shell="desktop"][data-theme="dark"] .mac-splash__lockup--dark{display:block}
+html[data-shell="desktop"][data-theme] .mac-splash__status{font-size:13px}
+html[data-shell="desktop"][data-theme] .mac-splash__bar{left:50%;right:auto;bottom:48px;width:160px;height:6px;border-radius:3px;transform:translateX(-50%);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .mac-splash__bar span{border-radius:3px;background:var(--mac-accent)}
+
+/* ── carregando, vazio e erro ───────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-skeleton__line{border-radius:var(--ui-radius-chip);background:var(--mac-surface-2);animation:uiPulse 1.4s ease-in-out infinite}
+html[data-shell="desktop"][data-theme] .mac-state__glyph{width:auto;height:auto;border-radius:0;background:none;color:var(--mac-label-3)}
+html[data-shell="desktop"][data-theme] .mac-state__glyph svg{width:30px;height:30px}
+html[data-shell="desktop"][data-theme] .mac-state__glyph::before{display:none}
+html[data-shell="desktop"][data-theme] .mac-state--error .mac-state__glyph{background:none;color:var(--mac-bad)}
+@media (prefers-reduced-motion:reduce){html[data-shell="desktop"][data-theme] .mac-skeleton__line{animation:none}}
+html[data-shell="desktop"][data-motion="none"] .mac-skeleton__line{animation:none}
+
+/* Estudio sem sessao: o icone solto, sem placa, como nos cards, e os
+   projetos recentes em cards com capa, como na lista de projetos do celular. */
+html[data-shell="desktop"][data-theme] .terminais-empty>svg{width:34px;height:34px;padding:0;border-radius:0;background:none;color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .terminais-empty__recent{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;width:min(720px,100%);margin-top:24px}
+html[data-shell="desktop"][data-theme] .terminais-empty__project{display:flex;flex-direction:column;align-items:stretch;gap:2px;min-width:0;padding:8px 8px 12px;border:1px solid var(--mac-separator);border-radius:var(--ui-radius-panel);background:var(--mac-surface);box-shadow:var(--mac-shadow-card);color:var(--mac-label);font:inherit;text-align:left;cursor:default;transition:border-color var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease)}
+html[data-shell="desktop"][data-theme] .terminais-empty__project:hover{border-color:var(--mac-separator-strong);background:color-mix(in srgb,var(--mac-accent) 3%,var(--mac-surface))}
+html[data-shell="desktop"][data-theme] .terminais-empty__project:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+html[data-shell="desktop"][data-theme] .terminais-empty__cover{display:grid;place-items:center;height:84px;margin-bottom:8px;border-radius:14px;background:var(--mac-surface-2)}
+/* `.page-empty svg` fixa 24 px para o icone do estado vazio; a capa e maior. */
+html[data-shell="desktop"][data-theme] .terminais-empty__cover .phone-folder-art{width:92px;height:auto;color:inherit}
+html[data-shell="desktop"][data-theme] .terminais-empty__project-name{padding:0 6px;font-size:13.5px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html[data-shell="desktop"][data-theme] .terminais-empty__project-path{padding:0 6px;font-size:11.5px;color:var(--mac-label-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ── primeiro uso ───────────────────────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .mac-onboarding__rail{background:var(--mac-sidebar-bg)}
+html[data-shell="desktop"][data-theme] .mac-onboarding__brand{padding:0 2px}
+html[data-shell="desktop"][data-theme] .mac-onboarding__mark{width:auto;height:auto;margin:0 auto 26px}
+html[data-shell="desktop"][data-theme] :is(.mac-onboarding__lockup,.mac-onboarding__rail-lockup){display:block;height:auto;user-select:none;-webkit-user-drag:none}
+html[data-shell="desktop"][data-theme] .mac-onboarding__lockup{width:200px;margin:0 auto}
+html[data-shell="desktop"][data-theme] .mac-onboarding__rail-lockup{width:120px}
+html[data-shell="desktop"][data-theme] :is(.mac-onboarding__lockup--dark,.mac-onboarding__rail-lockup--dark){display:none}
+html[data-shell="desktop"][data-theme="dark"] :is(.mac-onboarding__lockup--light,.mac-onboarding__rail-lockup--light){display:none}
+html[data-shell="desktop"][data-theme="dark"] :is(.mac-onboarding__lockup--dark,.mac-onboarding__rail-lockup--dark){display:block}
+html[data-shell="desktop"][data-theme] .mac-onboarding__steps li{min-height:36px;border-radius:var(--ui-radius-control)}
+html[data-shell="desktop"][data-theme] .mac-onboarding__steps li.is-current .mac-onboarding__step-dot{color:var(--mac-on-accent)}
+
+/* ── seletor de pasta da sessao nova ────────────────────────────── */
+
+html[data-shell="desktop"][data-theme] .terminais-pop{width:360px;border-radius:var(--ui-radius-panel);background:var(--mac-surface)}
+html[data-shell="desktop"][data-theme] .terminais-pop__search{margin:10px 10px 4px;padding:0 11px;height:34px;border:0;border-radius:var(--ui-radius-control);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .terminais-pop__item{height:34px;padding:0 10px;border-radius:10px}
+html[data-shell="desktop"][data-theme] .terminais-pop__item:hover,html[data-shell="desktop"][data-theme] .terminais-pop__item.is-active{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .terminais-pop__item:hover svg,html[data-shell="desktop"][data-theme] .terminais-pop__item.is-active svg{color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] .terminais-pop__namefield{margin:4px 10px 10px;padding:0 11px;height:34px;border:0;border-radius:var(--ui-radius-control);background:var(--mac-surface-2)}
+html[data-shell="desktop"][data-theme] .terminais-pop__up{border-radius:10px}
+html[data-shell="desktop"][data-theme] .terminais-pop__foot{display:flex;gap:6px;padding:10px}
+
+/* ── movimento ──────────────────────────────────────────────────── */
+
+/* Tudo que se clica muda de cor, fundo, borda, foco e opacidade em 140 ms,
+   no ease da casca, como os cards. A regra base tem especificidade zero: quem
+   ja declara a propria transicao fica com ela, e o `data-motion` e o pedido
+   de menos movimento do sistema continuam desligando tudo. */
+:where(html[data-shell="desktop"]) :where(button,a[href],summary,select,textarea,input,[role="button"],[role="option"],[role="menuitem"],[role="tab"],.terminais-splitter):not(.xterm-helper-textarea){transition:color var(--mac-fast) var(--mac-ease),background-color var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease),box-shadow var(--mac-fast) var(--mac-ease),opacity var(--mac-fast) var(--mac-ease)}
+
+/* Estes animavam so o fundo, e o texto ou o icone trocavam de cor de uma vez
+   no hover e na selecao. */
+html[data-shell="desktop"][data-theme] :is(.mac-palette__item,.mac-sidebar__pair,.mac-sidebar__settings,.terminais-pane__chip,.terminais-sessions__reopen,.terminais-menu__swatchbtn,.mac-theme-tile,.terminais-pop__item){transition:color var(--mac-fast) var(--mac-ease),background-color var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease),box-shadow var(--mac-fast) var(--mac-ease)}
+html[data-shell="desktop"][data-theme] :is(.mac-palette__icon,.mac-palette__kind,.terminais-pop__item svg){transition:color var(--mac-fast) var(--mac-ease)}
+
+/* Troca de cor da sessao, de selecao e de banda: o que pinta com o tom da
+   sessao ou com a banda de uso passa de uma cor a outra em 220 ms, em vez de
+   saltar. */
+html[data-shell="desktop"][data-theme] :is(.session-icon,.terminais-card__running,.terminais-card__plan,.terminais-card__attention,.terminais-card__dot,.terminais-activity i,.notch-cell__percent,.notch-bar__dot,.notch-ring__glyph){transition:color var(--mac-normal) var(--mac-ease),background-color var(--mac-normal) var(--mac-ease),fill var(--mac-normal) var(--mac-ease)}
+html[data-shell="desktop"][data-theme] :is(.notch-ring__track,.notch-ring__weekly-track){transition:stroke var(--mac-normal) var(--mac-ease)}
+
+/* ── icones sem placa ───────────────────────────────────────────── */
+
+/* Nenhum icone de janela, modal ou estado vazio fica sobre uma placa de
+   fundo: o icone vai solto, na cor do que ele indica. A regra vale tambem
+   para as classes que hoje nenhum componente usa, para a placa nao voltar
+   com elas. */
+html[data-shell="desktop"][data-theme] :is(.mac-pair__device,.mac-pair__empty>span,.mac-pair__success>span,.mac-onboarding__icon,.mac-onboarding__ready-mark,.mac-access__icon,.mac-device-row__icon,.mac-gate__icon,.mac-gate__icon.is-failed,.agent-profiles__glyph){width:auto;height:auto;padding:0;border-radius:0;background:none;box-shadow:none}
+html[data-shell="desktop"][data-theme] :is(.mac-pair__device,.mac-onboarding__icon,.mac-access__icon,.mac-gate__icon){color:var(--mac-accent-text)}
+html[data-shell="desktop"][data-theme] :is(.mac-pair__device,.mac-onboarding__icon) svg{width:24px;height:24px}
+html[data-shell="desktop"][data-theme] .mac-pair__device{margin-bottom:14px}
+html[data-shell="desktop"][data-theme] .mac-access__icon svg{width:18px;height:18px}
+html[data-shell="desktop"][data-theme] :is(.mac-pair__success>span,.mac-onboarding__ready-mark){color:var(--mac-ok)}
+html[data-shell="desktop"][data-theme] :is(.mac-pair__success>span,.mac-onboarding__ready-mark) svg{width:30px;height:30px;stroke-width:2.25}
+html[data-shell="desktop"][data-theme] .mac-gate__icon.is-failed{color:var(--mac-bad)}
+html[data-shell="desktop"][data-theme] .mac-device-row{grid-template-columns:20px minmax(180px,1fr) minmax(100px,.5fr) minmax(110px,.5fr) 64px}
+html[data-shell="desktop"][data-theme] .mac-device-row__icon{color:var(--mac-label-2)}
+html[data-shell="desktop"][data-theme] .mac-device-row__icon svg{width:17px;height:17px}
+/* No passo concluido do primeiro uso fica so o check verde; os passos
+   numerados mantem o circulo, porque levam o numero. */
+html[data-shell="desktop"][data-theme] .mac-onboarding__steps li.is-done .mac-onboarding__step-dot{background:none}
+/* A instrucao do vinculo abre o texto, no lugar do titulo que repetia o da
+   janela. */
+html[data-shell="desktop"][data-theme] .mac-pair__copy>.mac-pair__lead{margin:6px 0 0;color:var(--mac-label);font-size:15px;line-height:1.45;font-weight:500}

@@ -39,7 +39,7 @@ const mocks = {
   files: 'export const baseName = p => String(p).split("/").at(-1); export const fs = {}; export const isInside=()=>false; export const shellQuote=p=>p;',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => fixture.remoteState; export const subscribeState = handler => {fixture.remoteListener=handler; return () => {};};',
-  shell: 'export const isPhone = () => fixture.phone; export const onShellLock = () => () => {};',
+  shell: 'export const isPhone = () => fixture.phone; export const onShellLock = () => () => {}; export const isMobileShell = () => false;',
 };
 
 const bundle = await build({

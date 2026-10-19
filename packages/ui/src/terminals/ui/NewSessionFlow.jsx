@@ -26,6 +26,7 @@ import { translate } from '../../shared/i18n.js';
 import { baseName, compactPath, shortPath } from '../files.js';
 import { sessionsInFolder } from '../project-tint.js';
 import { SESSION_COLORS, getRecent, getState, isDemo, launchAgentWhenReady, openSession } from '../runtime.js';
+import { SESSION_ICONS } from '../session-icons.js';
 import { AGENTS, groupProfiles, headlineWindow, readingState, usageTone, weeklyWindow } from './AgentProfiles.jsx';
 import DirectoryBrowser from './DirectoryBrowser.jsx';
 import FolderArt from './FolderArt.jsx';
@@ -119,7 +120,7 @@ export function AccountCard({ profile, selected, onPick }) {
 
 // Etapa 3: nome, subtítulo e cor, as opções que o menu da sessão já tem, e o
 // resumo do que vai abrir, com o atalho de volta a cada etapa.
-export function ConfigStep({ path, agent, agentName, account, name, subtitle, color, onName, onSubtitle, onColor, onStep }) {
+export function ConfigStep({ path, agent, agentName, account, name, subtitle, color, icon = null, onName, onSubtitle, onColor, onIcon, onStep }) {
   return <>
     <label className="phone-field">
       <span>{translate('terminal.session.name')}</span>
@@ -145,6 +146,22 @@ export function ConfigStep({ path, agent, agentName, account, name, subtitle, co
         ))}
       </div>
     </section>
+    {onIcon ? (
+      <section className="phone-flow__section">
+        <h2>{translate('terminal.newSession.icon')}</h2>
+        <div className="phone-icons" role="radiogroup" aria-label={translate('terminal.newSession.icon')}>
+          <button type="button" role="radio" aria-checked={!icon} aria-label={translate('terminal.menu.defaultIcon')} className={`phone-icon-choice is-default${!icon ? ' is-current' : ''}`} onClick={() => onIcon(null)}>{translate('terminal.icon.default')}</button>
+          {SESSION_ICONS.map((entry) => {
+            const { Icon } = entry;
+            return (
+              <button type="button" role="radio" aria-checked={icon === entry.id} key={entry.id} aria-label={translate(entry.labelKey)} className={`phone-icon-choice${icon === entry.id ? ' is-current' : ''}`} onClick={() => onIcon(entry.id)}>
+                <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    ) : null}
     <section className="phone-flow__section">
       <h2>{translate('terminal.newSession.summary')}</h2>
       <dl className="phone-summary">
@@ -180,6 +197,7 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
   const [name, setName] = useState('');
   const [subtitle, setSubtitle] = useState('');
   const [color, setColor] = useState(null);
+  const [icon, setIcon] = useState(null);
 
   useEffect(() => {
     if (!hasBridge() || isDemo()) { setRepos({ roots: [], repos: [] }); setProfiles([]); return; }
@@ -210,7 +228,7 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
   const back = () => (step > 0 ? setStep(step - 1) : onClose());
 
   function create() {
-    const id = openSession(path, { name, subtitle, color });
+    const id = openSession(path, { name, subtitle, color, icon });
     if (!id) return;
     onOpen(id);
     if (agent !== SHELL && account) {
@@ -295,7 +313,7 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
           </section> : null}
         </> : null}
 
-        {step === 2 ? <ConfigStep path={path} agent={agent} agentName={agentName} account={account} name={name} subtitle={subtitle} color={color}
+        {step === 2 ? <ConfigStep path={path} agent={agent} agentName={agentName} account={account} name={name} subtitle={subtitle} color={color} icon={icon} onIcon={setIcon}
           onName={setName} onSubtitle={setSubtitle} onColor={setColor} onStep={setStep} /> : null}
 
         {path && existing.length && step < 2 ? <section className="phone-flow__existing" aria-live="polite">

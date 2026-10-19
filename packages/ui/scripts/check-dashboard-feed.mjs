@@ -17,6 +17,7 @@ const mocks = {
   remote: `export const state=()=>fixture.remote;
     export const subscribeState=(listener)=>{ fixture.stateListeners.push(listener); return ()=>{ fixture.stateListeners.splice(fixture.stateListeners.indexOf(listener), 1); }; };`,
   runtime: `export const hydrate=async()=>{}, getState=()=>({ hydrated: true, sessions: fixture.sessions }), getRecent=()=>[], isDemo=()=>false;
+    export const isViewed=(session)=>fixture.viewed.has(session.id);
     export const subscribe=(listener)=>{ fixture.runtimeListeners.push(listener); return ()=>{ fixture.runtimeListeners.splice(fixture.runtimeListeners.indexOf(listener), 1); }; };`,
   shell: 'export const isMobileShell=()=>true, postDashboard=(snapshot)=>{ fixture.posted.push(snapshot); };',
   'agent-profiles-demo': 'export const demoProfiles=()=>[];export const demoProfilesEnabled=()=>false;',
@@ -45,7 +46,7 @@ const tick = (ms = 40) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function start({ status = 'disconnected', profiles = () => Promise.resolve(PROFILES) } = {}) {
   const fixture = {
-    remote: { status }, posted: [], calls: [], stateListeners: [], runtimeListeners: [],
+    remote: { status }, posted: [], calls: [], stateListeners: [], runtimeListeners: [], viewed: new Set(),
     sessions: [{ id: 's1', name: 'psicoapp', cwd: '/home/pessoa/Projects/psicoapp', status: 'running', activity: { agent: 'codex' } }],
     profiles,
     invoke(command) {
@@ -57,6 +58,7 @@ function start({ status = 'disconnected', profiles = () => Promise.resolve(PROFI
     connect() { fixture.remote = { status: 'connected' }; fixture.stateListeners.forEach((listener) => listener(fixture.remote)); },
     disconnect() { fixture.remote = { status: 'connecting' }; fixture.stateListeners.forEach((listener) => listener(fixture.remote)); },
     sessionsChanged() { fixture.runtimeListeners.forEach((listener) => listener({ type: 'sessions' })); },
+    activity() { fixture.runtimeListeners.forEach((listener) => listener({ type: 'activity', id: 's1' })); },
   };
   const context = vm.createContext({
     fixture, module: { exports: {} }, exports: {}, require, console,
@@ -142,5 +144,31 @@ test('a ponte caindo durante um envio pendente segura o retrato', async () => {
     await tick();
     assert.equal(fixture.posted.length, 1, 'a volta da ponte manda o retrato');
     assert.deepEqual(accountIds(fixture.posted[0]), ['codex', 'claude-casa']);
+  } finally { stop(); }
+});
+
+test('atividade so manda retrato quando muda o que vira aviso: sino, vez do agente ou sessao em vista', async () => {
+  const { fixture, stop } = start({ status: 'connected' });
+  try {
+    await tick();
+    assert.equal(fixture.posted.length, 1);
+    fixture.activity();
+    await tick();
+    assert.equal(fixture.posted.length, 1, 'CPU e saida do terminal nao mandam retrato');
+    fixture.sessions[0].agentTurn = { state: 'waiting', waitingFor: 'permission' };
+    fixture.activity();
+    await tick();
+    assert.equal(fixture.posted.length, 2, 'o agente pedindo permissao sai logo');
+    assert.deepEqual({ ...fixture.posted[1].sessions[0].turn }, { state: 'waiting', waitingFor: 'permission' });
+    fixture.sessions[0].attention = { kind: 'bell', message: 'Pediu atenção', at: 50 };
+    fixture.activity();
+    await tick();
+    assert.equal(fixture.posted.length, 3);
+    assert.equal(fixture.posted[2].sessions[0].attention.kind, 'bell');
+    fixture.viewed.add('s1');
+    fixture.activity();
+    await tick();
+    assert.equal(fixture.posted.length, 4, 'abrir a sessao no celular tambem muda o retrato');
+    assert.equal(fixture.posted[3].sessions[0].viewed, true);
   } finally { stop(); }
 });

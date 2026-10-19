@@ -9,13 +9,16 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { build } from 'esbuild';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 const source = (relative) => readFileSync(fileURLToPath(new URL(relative, import.meta.url)), 'utf8');
 
 const mocks = {
   runtime: `export const SESSION_COLORS=[{id:'azul',light:'#1a4fa0',dark:'#4a8ae6'},{id:'verde',light:'#1f9d5b',dark:'#3ccf76'}];
     export const canMoveSession=(id,delta)=>fixture.canMove(id,delta);`,
-  dialogs: `export const Sheet=()=>null;`,
+  // A folha mostra o conteúdo direto, sem o MUI, para o tom da sessão aparecer.
+  dialogs: `import React from 'react'; export const Sheet=({children})=>React.createElement('section',{className:'sheet'},children);`,
   ui: `export const useToast=()=>()=>{};`,
   files: `export const shortPath=(path)=>path;`,
 };
@@ -131,4 +134,17 @@ test('encerrar e reiniciar pedem confirmação na própria lista, sem abrir o te
   assert.doesNotMatch(action.slice(action.indexOf("kind === 'restart'")), /navigate\(|restart\(session|closeSession/);
   assert.match(workbench, /<AppModal open=\{Boolean\(closeFor\)\}/);
   assert.match(workbench, /<AppModal open=\{Boolean\(restartFor\)\}/);
+});
+
+test('a folha do menu leva o tom da sessão, e o seletor marca cor e ícone nesse tom', () => {
+  const { default: Menu } = load();
+  const render = (over) => renderToStaticMarkup(React.createElement(Menu, { session: { ...session, ...over }, open: true, onClose() {}, onAction() {} }));
+  const plain = render({ color: null });
+  assert.match(plain, /<div class="phone-menu__scope session-scope" style="--session-accent-light:#E23B84;/);
+  assert.match(render({ color: 'azul' }), /phone-menu__scope session-scope" style="--session-accent-light:#1A4FA0;/);
+  const css = source('../src/views/Terminais.css');
+  assert.match(css, /:is\(\.phone-menu__icon,\.phone-icon-choice\)\.is-current \{ background: var\(--session-accent-soft, var\(--phone-primary-soft\)\); color: var\(--session-accent-text, var\(--phone-primary\)\); box-shadow: inset 0 0 0 1\.5px var\(--session-accent, var\(--phone-primary\)\); \}/);
+  assert.match(css, /\.phone-menu__color\[aria-checked="true"\] \.phone-menu__swatch \{ box-shadow: 0 0 0 2px var\(--phone-surface\), 0 0 0 4px var\(--session-accent, var\(--phone-primary\)\); \}/);
+  // Sem ícone escolhido, o padrão aparece marcado, como na sessão nova.
+  assert.match(source('../src/terminals/ui/PhoneSessionMenu.jsx'), /phone-menu__icon is-default\$\{!session\.icon \? ' is-current' : ''\}/);
 });

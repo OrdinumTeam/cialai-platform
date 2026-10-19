@@ -2,7 +2,7 @@
 // Focused preference areas backed by the complete Rust snapshot.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, FolderPlus, RotateCcw, Trash2 } from 'lucide-react';
+import { FolderOpen, FolderPlus, Moon, RotateCcw, Sun, SunMoon, Trash2 } from 'lucide-react';
 import { AppModal, useToast } from '../components/ui.jsx';
 import { chooseDirectory, chooseFile, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
@@ -35,6 +35,18 @@ export const LANGUAGE_OPTIONS = () => [
   { value: 'en', label: translate('language.english') },
   { value: 'es', label: translate('language.spanish') },
 ];
+
+// Aparencia em tres blocos com icone, como nos Ajustes do celular. Continua
+// sendo um grupo de radios para o teclado e o leitor de tela.
+const THEME_ICONS = { system: SunMoon, light: Sun, dark: Moon };
+function ThemeTiles({ value, options, onChange, ariaLabel }) {
+  return <div className="mac-theme-tiles" role="radiogroup" aria-label={ariaLabel}>
+    {options.map((option) => {
+      const Icon = THEME_ICONS[option.value] || SunMoon;
+      return <button key={option.value} type="button" role="radio" aria-checked={value === option.value} className={`mac-theme-tile${value === option.value ? ' is-selected' : ''}`} onClick={() => onChange(option.value)}><Icon aria-hidden="true" strokeWidth={1.8} />{option.label}</button>;
+    })}
+  </div>;
+}
 
 function Segmented({ value, options, onChange, ariaLabel }) {
   return <div className="mac-segmented" role="radiogroup" aria-label={ariaLabel}>
@@ -275,7 +287,7 @@ export default function Preferences({ open, onClose, appearance, section = null 
     {!loading && !native ? <p className="mac-prefs__note">{translate('desktop.preferences.previewNote')}</p> : null}
     {draft ? <>
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.appearance')}</h3>
-        <Row title={translate('desktop.preferences.windowTheme')} description={translate('desktop.preferences.windowThemeDescription')}><Segmented value={draft.appearance} options={APPEARANCE_OPTIONS()} onChange={changeAppearance} ariaLabel={translate('desktop.preferences.windowTheme')} /></Row>
+        <Row title={translate('desktop.preferences.windowTheme')} description={translate('desktop.preferences.windowThemeDescription')} wide><ThemeTiles value={draft.appearance} options={APPEARANCE_OPTIONS()} onChange={changeAppearance} ariaLabel={translate('desktop.preferences.windowTheme')} /></Row>
         <Row title={translate('language.label')} description={translate('desktop.preferences.languageDescription')}><Segmented value={getLocale()} options={LANGUAGE_OPTIONS()} onChange={setLocale} ariaLabel={translate('language.label')} /></Row>
       </section>
 

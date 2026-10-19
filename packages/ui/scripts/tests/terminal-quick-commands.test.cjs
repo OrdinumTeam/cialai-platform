@@ -92,19 +92,32 @@ test('preferências do teclado: padrão, gravação e valores inválidos', async
   const { readKeyboardPrefs, writeKeyboardPrefs, defaultKeyboardPrefs, toggleFavorite, moveFavorite, KEYBOARD_PREFS_KEY, MAX_FAVORITES } = await loadPrefs();
   const storage = memoryStorage();
   assert.deepEqual(readKeyboardPrefs(storage), defaultKeyboardPrefs());
-  assert.deepEqual(defaultKeyboardPrefs().favorites, ['Escape', 'Tab', 'CtrlV'], 'Colar já vem na barra, depois do Tab');
+  assert.deepEqual(defaultKeyboardPrefs().favorites, ['Enter', 'Escape', 'CtrlC', 'CtrlV'], 'as quatro dos agentes ficam sempre à vista');
+  assert.equal(MAX_FAVORITES, 4);
   // Com a barra cheia, uma tecla nova só entra quando outra sai.
-  assert.deepEqual(toggleFavorite(readKeyboardPrefs(storage), 'CtrlC').favorites, ['Escape', 'Tab', 'CtrlV']);
-  let prefs = toggleFavorite(toggleFavorite(readKeyboardPrefs(storage), 'CtrlV'), 'CtrlC');
-  prefs = moveFavorite(prefs, 'CtrlC', -1);
+  assert.deepEqual(toggleFavorite(readKeyboardPrefs(storage), 'Tab').favorites, ['Enter', 'Escape', 'CtrlC', 'CtrlV']);
+  let prefs = toggleFavorite(toggleFavorite(readKeyboardPrefs(storage), 'CtrlV'), 'Tab');
+  prefs = moveFavorite(prefs, 'Tab', -1);
   prefs = writeKeyboardPrefs(storage, { ...prefs, modifierMode: 'sticky', haptics: true, autoOpen: true });
-  assert.deepEqual(readKeyboardPrefs(storage), { favorites: ['Escape', 'CtrlC', 'Tab'], modifierMode: 'sticky', haptics: true, autoOpen: true });
-  assert.equal(toggleFavorite(prefs, 'Enter').favorites.length, MAX_FAVORITES, 'a barra tem teto');
-  assert.deepEqual(toggleFavorite(prefs, 'Tab').favorites, ['Escape', 'CtrlC']);
+  assert.deepEqual(readKeyboardPrefs(storage), { favorites: ['Enter', 'Escape', 'Tab', 'CtrlC'], modifierMode: 'sticky', haptics: true, autoOpen: true });
+  assert.equal(toggleFavorite(prefs, 'Home').favorites.length, MAX_FAVORITES, 'a barra tem teto');
+  assert.deepEqual(toggleFavorite(prefs, 'Tab').favorites, ['Enter', 'Escape', 'CtrlC']);
   const broken = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ favorites: ['ArrowUp', 'Nope', 'Tab', 'Tab'], modifierMode: 'x', haptics: 'yes' }) });
   assert.deepEqual(readKeyboardPrefs(broken), { favorites: ['Tab'], modifierMode: 'oneShot', haptics: false, autoOpen: false });
   assert.deepEqual(readKeyboardPrefs(memoryStorage({ [KEYBOARD_PREFS_KEY]: '{' })), defaultKeyboardPrefs());
   assert.deepEqual(readKeyboardPrefs(null), defaultKeyboardPrefs());
+});
+
+test('teclado: a barra antiga, nunca mexida, vira a nova; a escolhida fica', async () => {
+  const { readKeyboardPrefs, writeKeyboardPrefs, defaultKeyboardPrefs, KEYBOARD_PREFS_KEY } = await loadPrefs();
+  const legacy = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ version: 1, favorites: ['Escape', 'Tab', 'CtrlV'], modifierMode: 'sticky', haptics: true, autoOpen: false }) });
+  assert.deepEqual(readKeyboardPrefs(legacy), { ...defaultKeyboardPrefs(), modifierMode: 'sticky', haptics: true });
+  const chosen = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ version: 1, favorites: ['CtrlC', 'Escape', 'Tab'] }) });
+  assert.deepEqual(readKeyboardPrefs(chosen).favorites, ['CtrlC', 'Escape', 'Tab']);
+  // Gravada na versão nova, a mesma escolha antiga é decisão da pessoa.
+  const storage = memoryStorage();
+  writeKeyboardPrefs(storage, { ...defaultKeyboardPrefs(), favorites: ['Escape', 'Tab', 'CtrlV'] });
+  assert.deepEqual(readKeyboardPrefs(storage).favorites, ['Escape', 'Tab', 'CtrlV']);
 });
 
 test('todas as teclas das abas existem no catálogo e geram sequência', async () => {

@@ -103,9 +103,9 @@ test('sem terminal interativo todas as teclas ficam desabilitadas, e fechar cont
 });
 
 test('preferências: favoritos em ordem, modo dos modificadores, abertura automática e vibração só se houver', () => {
-  const prefs = { ...defaultKeyboardPrefs(), favorites: ['CtrlC', 'Escape', 'Tab'], modifierMode: 'sticky' };
+  const prefs = { ...defaultKeyboardPrefs(), favorites: ['CtrlC', 'Escape', 'Tab', 'CtrlV'], modifierMode: 'sticky' };
   const without = renderToStaticMarkup(React.createElement(sheet.KeyboardPreferences, { prefs, onChange() {}, canVibrate: false }));
-  assert.deepEqual([...without.matchAll(/<li><span>([^<]+)<\/span>/g)].map((match) => match[1]), ['Ctrl C', 'Esc', 'Tab']);
+  assert.deepEqual([...without.matchAll(/<li><span>([^<]+)<\/span>/g)].map((match) => match[1]), ['Ctrl C', 'Esc', 'Tab', 'Colar']);
   assert.match(without, /checked="" value="sticky"/);
   assert.match(without, /Abrir ao entrar no terminal/);
   assert.doesNotMatch(without, /Vibrar ao tocar/);
@@ -227,4 +227,14 @@ test('a tecla com modificador próprio leva o modificador pelo botão', async ()
   key.handlers.onPointerUp();
   key.handlers.onClick();
   assert.deepEqual(key.sent, ['\x03']);
+});
+
+test('o ícone de cada comando rápido fica solto, sem placa, no acento ou no vermelho', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(fileURLToPath(new URL('../src/views/Terminais.css', import.meta.url)), 'utf8');
+  const rule = (selector) => css.split('\n').find((line) => line.startsWith(`[data-form-factor="phone"] ${selector} {`)) || '';
+  assert.match(rule('.phone-quick__item-icon'), /width: 36px; height: 36px; color: var\(--mac-accent-text\);/, 'a largura fica para os títulos não saírem do lugar');
+  assert.doesNotMatch(rule('.phone-quick__item-icon'), /background|border-radius/);
+  assert.match(rule('.phone-quick__item-icon.is-danger'), /color: var\(--phone-danger\)/);
+  assert.doesNotMatch(rule('.phone-quick__item-icon.is-danger'), /background/);
 });

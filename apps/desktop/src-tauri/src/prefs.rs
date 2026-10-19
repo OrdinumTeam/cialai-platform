@@ -261,9 +261,12 @@ impl Preferences {
         }
     }
 
-    /// Le o arquivo gravado; conteudo invalido volta ao padrao.
+    /// Le o arquivo gravado; conteudo invalido volta ao padrao. Faixas da
+    /// Barra de IA gravadas antes do padrao atual sobem de versao aqui.
     pub fn parse(raw: &str) -> Self {
-        serde_json::from_str(raw).unwrap_or_default()
+        let mut prefs: Self = serde_json::from_str(raw).unwrap_or_default();
+        prefs.notch.upgrade_limits();
+        prefs
     }
 
     pub fn save(&self, app: &AppHandle) -> Result<(), String> {
@@ -363,6 +366,20 @@ mod tests {
                 "campo removido persistido: {removed}"
             );
         }
+    }
+
+    #[test]
+    fn an_old_file_with_the_former_default_limits_moves_to_the_current_ones() {
+        let prefs = Preferences::parse(r#"{"notch":{"watchLimit":0.5,"criticalLimit":0.7}}"#);
+        assert_eq!(
+            (prefs.notch.watch_limit, prefs.notch.critical_limit),
+            (0.6, 0.8)
+        );
+        let kept = Preferences::parse(r#"{"notch":{"watchLimit":0.3,"criticalLimit":0.9}}"#);
+        assert_eq!(
+            (kept.notch.watch_limit, kept.notch.critical_limit),
+            (0.3, 0.9)
+        );
     }
 
     #[test]

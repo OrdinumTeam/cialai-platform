@@ -100,6 +100,29 @@ function states(t) {
   };
 }
 
+/// O anel semanal em cada caso que a integracao entrega: semanal em 0%,
+/// semanal alto, Codex com e sem janela semanal, janela longa mensal, janela
+/// longa sem duracao informada, conta ainda sem leitura e conta com erro.
+function weekly() {
+  const claude = (id, label, session, week) => profile(id, 'claude', label, session, {
+    windows: [window_('session', 'session', session, 2.4 * HOUR, 5 * HOUR), window_('weekly_all', 'weeklyAll', week, 70 * HOUR, 7 * 24 * HOUR)],
+  });
+  const codex = (id, label, windows, extra = {}) => profile(id, 'codex', label, 0, { windows, ...extra });
+  return {
+    profiles: [
+      claude('claude-zero', 'semana-zero', 0.12, 0),
+      claude('claude-alto', 'semana-alta', 0.2, 0.92),
+      codex('codex-semanal', 'semanal', [window_('primary', 'duration', 0.4, 3.1 * HOUR, 5 * HOUR), window_('secondary', 'duration', 0.68, 96 * HOUR, 7 * 24 * HOUR)]),
+      codex('codex-sem-semana', 'sem-semana', [window_('primary', 'duration', 0.33, 3.1 * HOUR, 5 * HOUR)], { weeklyId: null }),
+      codex('codex-mensal', 'mensal', [window_('primary', 'duration', 0.18, 3.1 * HOUR, 5 * HOUR), window_('secondary', 'duration', 0.4, 20 * 24 * HOUR, 30 * 24 * HOUR)]),
+      codex('codex-longa', 'janela-longa', [window_('primary', 'session', 0.27, 3.1 * HOUR, null), window_('secondary', 'longWindow', 0.6, 96 * HOUR, null)]),
+      codex('codex-lendo', 'lendo', [], { status: statusOf('ok'), fetchedAtMs: 0, source: null }),
+      codex('codex-erro', 'erro', [], { status: statusOf('error', { message: 'network' }), fetchedAtMs: 0, source: null }),
+    ],
+    sessions: {},
+  };
+}
+
 /// Uma unica celula, para conferir a forma sem a pilha.
 function single() {
   return { profiles: [profile('codex-amorim', 'codex', 'amorim', 0.28)], sessions: {} };
@@ -135,7 +158,7 @@ function many() {
   };
 }
 
-const SCENARIOS = { basic, states, single, many, collapsed: basic };
+const SCENARIOS = { basic, states, weekly, single, many, collapsed: basic };
 
 /// Cenario pedido na URL, ou `null` fora do modo de demonstracao.
 export function demoScenario(search = typeof window !== 'undefined' ? window.location.search : '') {
@@ -158,8 +181,8 @@ export function demoState(t = translate, name = 'basic') {
       profiles: {},
       order: [],
       hideDefaultWhenDuplicate: true,
-      watchLimit: 0.5,
-      criticalLimit: 0.7,
+      watchLimit: 0.6,
+      criticalLimit: 0.8,
       alerts: { threshold: false, limitReached: false, reset: false },
       resetTimeFormat: 'automatic',
       ...(extra || {}),

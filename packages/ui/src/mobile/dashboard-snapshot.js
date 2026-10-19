@@ -4,8 +4,17 @@
 // pagina manda a casca o que ela ja le: contas e uso dos agentes, pastas de
 // projeto e sessoes. A casca guarda o ultimo retrato por computador e mostra
 // a idade dele. O e-mail das contas nao sai da pagina.
+//
+// Cada sessao leva tambem o tom ja resolvido, o icone e o que pede atencao:
+// o sino, o aviso do terminal, o processo que terminou e a vez do agente. A
+// casca transforma a mudanca desses campos em aviso local, com o nome e a cor
+// da sessao. `viewed` diz que a pessoa esta olhando aquela sessao no celular,
+// e ai nao ha aviso.
 import { headlineWindow, readingState, weeklyWindow } from '../terminals/ui/AgentProfiles.jsx';
 import { windowLabel } from '../notch/copy.js';
+import { weeklyState } from '../notch/model.js';
+import { paletteEntry, resolveSessionAccent } from '../terminals/session-accent.js';
+import { validIcon } from '../terminals/session-icons.js';
 
 export const DASHBOARD_LIMITS = Object.freeze({ accounts: 20, windows: 8, projects: 400, sessions: 100, recent: 10, text: 512 });
 const AGENTS = new Set(['codex', 'claude']);
@@ -16,9 +25,43 @@ const sessionAgent = (activity) => SESSION_AGENTS[String(activity?.agent || acti
 
 const clip = (value) => (typeof value === 'string' ? value.slice(0, DASHBOARD_LIMITS.text) : '');
 const finite = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+// Sino, aviso do terminal e fim de processo. Encerramento e erro ja viram
+// aviso pelo estado da sessao.
+const ATTENTION_KINDS = new Set(['bell', 'notify', 'finished']);
+const TURN_STATES = new Set(['busy', 'waiting', 'done', 'idle']);
+export const ATTENTION_TEXT_MAX = 160;
+
+// Semanal de uma conta nos tres estados da Barra de IA. Sem leitura vira
+// `unknown`; conta sem medicao de limite, `none`. Nunca 0% por falta de dado.
+function weeklyKind(profile, state) {
+  if (state === 'unmetered') return 'none';
+  if (state !== 'ok' && state !== 'stale') return 'unknown';
+  return weeklyState({ ...profile.usage, status: { kind: state } }).kind;
+}
+
+function toneOf(color) {
+  const accent = resolveSessionAccent(color);
+  return {
+    light: { base: accent.light.base, text: accent.light.text },
+    dark: { base: accent.dark.base, text: accent.dark.text },
+  };
+}
+
+function attentionOf(session) {
+  const attention = session.attention;
+  if (!attention || !ATTENTION_KINDS.has(attention.kind) || finite(attention.at) === null) return null;
+  return { kind: attention.kind, at: attention.at, message: clip(attention.message || '').slice(0, ATTENTION_TEXT_MAX) };
+}
+
+function turnOf(session) {
+  const turn = session.agentTurn;
+  if (!turn || !TURN_STATES.has(turn.state)) return null;
+  return { state: turn.state, waitingFor: turn.waitingFor ? clip(String(turn.waitingFor)).slice(0, 40) : null };
+}
 
 function accountView(profile) {
   const usage = profile.usage || null;
+  const state = readingState(profile);
   const headline = headlineWindow(usage);
   const weekly = weeklyWindow(usage);
   const windows = (Array.isArray(usage?.windows) ? usage.windows : [])
@@ -39,15 +82,16 @@ function accountView(profile) {
     label: clip(profile.label || ''),
     plan: profile.plan ? clip(profile.plan) : null,
     active: Boolean(profile.active),
-    state: readingState(profile),
+    state,
     fetchedAtMs: finite(usage?.fetchedAtMs),
     windows,
+    weeklyState: weeklyKind(profile, state),
   };
 }
 
 // Monta o retrato a partir das respostas da ponte. Tudo o que falta vira
 // lista vazia: uma integracao fora do ar nao derruba as outras.
-export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now = Date.now() }) {
+export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now = Date.now(), viewed = () => false }) {
   return {
     type: 'dashboard',
     at: now,
@@ -68,6 +112,12 @@ export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now 
         cwd: clip(session.cwd),
         status: clip(session.status || ''),
         agent: sessionAgent(session.activity),
+        color: paletteEntry(session.color)?.id || null,
+        tone: toneOf(session.color),
+        icon: validIcon(session.icon),
+        attention: attentionOf(session),
+        turn: turnOf(session),
+        viewed: Boolean(viewed(session)),
       })),
     // Ultimas pastas em que o telefone abriu sessao, a mais nova primeiro.
     recent: (Array.isArray(recent) ? recent : [])

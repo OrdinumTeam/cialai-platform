@@ -306,8 +306,8 @@ const snapshot = (overrides = {}) => ({
     { id: 'codex', agent: 'codex', label: 'Codex', plan: 'Plus', active: true, state: 'ok', fetchedAtMs: NOW - 60_000, windows: [
       { id: 'session', label: 'Limite de 5 horas', usedFraction: 0.19, resetsAtMs: NOW + 2 * 3_600_000 + 10 * 60_000, durationMs: 18_000_000, headline: true, weekly: false },
       { id: 'weekly', label: 'Limite semanal', usedFraction: 0.62, resetsAtMs: NOW + 3 * 86_400_000, durationMs: 604_800_000, headline: false, weekly: true }
-    ] },
-    { id: 'claude', agent: 'claude', label: 'Pessoal', plan: null, active: true, state: 'needsLogin', fetchedAtMs: null, windows: [] }
+    ], weeklyState: 'available' },
+    { id: 'claude', agent: 'claude', label: 'Pessoal', plan: null, active: true, state: 'needsLogin', fetchedAtMs: null, windows: [], weeklyState: 'unknown' }
   ],
   projects: [
     { name: 'psicoapp', path: '/home/pessoa/Projects/psicoapp', root: '~/Projects' },
@@ -365,8 +365,12 @@ test('Home shows the logo, real agent usage and the connected computer first, wi
     'Computadores', 'Mac de Foco', 'Conectado', 'Direta', 'Uma sessão aberta', 'Abrir terminal', 'Desconectar', 'Seus projetos', 'Ações rápidas']) {
     expect(rendered).toContain(expected);
   }
-  // O card mostra só a janela principal; a semanal fica na folha e na aba Agentes.
-  expect(rendered).not.toMatch(/Limite semanal|62%|Renova em 3 d/);
+  // O card mostra a janela principal e o semanal numa linha curta, na cor da
+  // faixa: 62% já é âmbar. Rótulo longo e renovação da semanal ficam na folha.
+  expect(rendered).toContain('Semanal 62%');
+  expect(rendered).not.toMatch(/Limite semanal|Renova em 3 d/);
+  const weeklyPercent = tree.root.findAll(node => node.type === Text && node.props.children === '62%')[0];
+  expect(weeklyPercent.props.style).toContainEqual({ color: '#D38B17' });
   expect(rendered).not.toMatch(forbiddenOnMainScreens);
   expect(rendered).not.toMatch(forbiddenPunctuation);
   // O cabeçalho é o logo do site, sem saudação.
@@ -377,7 +381,7 @@ test('Home shows the logo, real agent usage and the connected computer first, wi
   expect(tree.root.findAll(node => node.props.accessibilityLabel === 'Conexão direta')).not.toHaveLength(0);
   // O leitor de tela ouve o uso, não só a ação do card.
   const usageCard = tree.root.findAll(node => node.props.accessibilityHint === 'Ver uso do Codex')[0];
-  expect(usageCard.props.accessibilityLabel).toBe('Codex, Plus, Limite de 5 horas 19%');
+  expect(usageCard.props.accessibilityLabel).toBe('Codex, Plus, Limite de 5 horas 19%, Semanal 62%');
   expect(tree.root.findAll(node => node.props.accessibilityHint === 'Ver uso do Claude Code')[0].props.accessibilityLabel)
     .toBe('Claude Code, Entre na conta no computador');
   await tap(tree, 'Abrir terminal em Mac de Foco');
@@ -486,14 +490,20 @@ test('Agents puts the accounts in use first, flags limits near the end and keeps
   const base = snapshot();
   const accounts = [
     { id: 'codex-trabalho', agent: 'codex', label: 'Trabalho', plan: 'Pro', active: false, state: 'ok', fetchedAtMs: NOW, windows: [
-      { id: 'session', label: 'Limite de 5 horas', usedFraction: 1, resetsAtMs: NOW + 40 * 60_000, durationMs: 18_000_000, headline: true, weekly: false }] },
+      { id: 'session', label: 'Limite de 5 horas', usedFraction: 1, resetsAtMs: NOW + 40 * 60_000, durationMs: 18_000_000, headline: true, weekly: false }],
+    weeklyState: 'none' },
     { id: 'codex-long', agent: 'codex', label: long, plan: null, active: false, state: 'ok', fetchedAtMs: NOW, windows: [
-      { id: 'weekly', label: 'Limite semanal', usedFraction: 0.8, resetsAtMs: NOW + 86_400_000, durationMs: 604_800_000, headline: false, weekly: true }] },
+      { id: 'weekly', label: 'Limite semanal', usedFraction: 0.8, resetsAtMs: NOW + 86_400_000, durationMs: 604_800_000, headline: false, weekly: true }],
+    weeklyState: 'available' },
     ...base.accounts,
     { id: 'claude-max', agent: 'claude', label: 'Max', plan: 'Max', active: false, state: 'ok', fetchedAtMs: NOW, windows: [
       { id: 'five', label: 'Sessão', usedFraction: 0.3, resetsAtMs: null, durationMs: null, headline: true, weekly: false },
       { id: 'opus', label: 'Opus semanal', usedFraction: 0.5, resetsAtMs: null, durationMs: null, headline: false, weekly: false },
-      { id: 'all', label: 'Todos os modelos', usedFraction: 0.2, resetsAtMs: null, durationMs: null, headline: false, weekly: true }] }
+      { id: 'all', label: 'Todos os modelos', usedFraction: 0.2, resetsAtMs: null, durationMs: null, headline: false, weekly: true }],
+    weeklyState: 'available' },
+    { id: 'claude-team', agent: 'claude', label: 'Equipe', plan: 'Team', active: false, state: 'ok', fetchedAtMs: NOW, windows: [
+      { id: 'five', label: 'Sessão', usedFraction: 0.65, resetsAtMs: null, durationMs: null, headline: true, weekly: false }],
+    weeklyState: 'unknown' }
   ];
   const { tree } = await renderAgents({}, { dashboard: { ...base, accounts } });
   const rendered = text(tree);
@@ -504,9 +514,18 @@ test('Agents puts the accounts in use first, flags limits near the end and keeps
   // A linha mostra a janela principal e a semanal; as outras ficam na folha.
   for (const label of ['Sessão', 'Todos os modelos']) expect(rendered).toContain(label);
   expect(rendered).not.toContain('Opus semanal');
+  // Sem número semanal, a linha diz se a conta não tem limite ou se falta a leitura, sem inventar 0%.
+  expect(rendered).toContain('Sem limite semanal');
+  expect(rendered).toContain('Sem leitura semanal');
+  expect(rendered).not.toMatch(/(?:^|\s)0%/);
+  // O selo vale de 80% em diante; a faixa de atenção, de 60% a 79%, só pinta a borda de âmbar.
+  expect(rendered.match(/Perto do limite/g)).toHaveLength(1);
+  const borders = tree.root.findAll(node => typeof node.props.onPress === 'function' && typeof node.props.accessibilityLabel === 'string' &&
+    node.props.accessibilityLabel.startsWith('Detalhes de Equipe')).map(node => JSON.stringify(node.props.style ?? ''));
+  expect(borders.some(style => style.includes('#D38B17'))).toBe(true);
   // As contas em uso vêm primeiro, com o selo; o resto segue a ordem do computador, sem agrupar por agente.
   const order = ['Detalhes de Codex no Codex', 'Detalhes de Pessoal no Claude Code', 'Detalhes de Trabalho no Codex',
-    `Detalhes de ${long} no Codex`, 'Detalhes de Max no Claude Code'];
+    `Detalhes de ${long} no Codex`, 'Detalhes de Max no Claude Code', 'Detalhes de Equipe no Claude Code'];
   const rows = tree.root.findAll(node => typeof node.props.onPress === 'function' && order.includes(node.props.accessibilityLabel))
     .map(node => node.props.accessibilityLabel);
   expect([...new Set(rows)]).toEqual(order);

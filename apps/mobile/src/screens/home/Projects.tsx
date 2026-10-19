@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { DashboardMessage, DashboardProject } from '../../bridge/messages';
-import { projectTint, sessionsIn, shortPath } from '../../dashboard/model';
+import type { DashboardMessage, DashboardProject, DashboardSession } from '../../bridge/messages';
+import { projectTint, sessionShade, sessionsIn, shortPath } from '../../dashboard/model';
 import { useI18n } from '../../i18n';
 import { useTokens } from '../../theme';
 import { BottomSheet, ChoiceRow, Icon, IconButton, PrimaryButton, SearchInput, SecondaryButton, SkeletonLoader, radius, space, typography } from '../../ui';
 import { FolderIllustration, tintCover } from '../../ui/Illustrations';
+import { SessionIcon } from '../../ui/SessionIcon';
 
 export type ProjectItem = DashboardProject & { favorite: boolean };
 
@@ -99,7 +100,7 @@ export function AddFavoritesCard({ onPress }: { onPress: () => void }) {
   return (
     <Pressable accessibilityRole="button" onPress={onPress}
       style={({ pressed }) => [styles.card, styles.add, { borderColor: colors.primary, backgroundColor: pressed ? colors.primarySoftPressed : colors.primarySoft }]}>
-      <View style={[styles.addIcon, { backgroundColor: colors.surface }]}><Icon color={colors.primary} name="star" size={22} /></View>
+      <Icon color={colors.primary} name="star" size={28} />
       <Text numberOfLines={2} style={[typography.headline, styles.center, { color: colors.primary }]}>{t('mobile.home.projects.addFavorites')}</Text>
       <Text numberOfLines={3} style={[typography.caption, styles.center, { color: colors.textSecondary }]}>{t('mobile.home.projects.addHint')}</Text>
     </Pressable>
@@ -113,6 +114,25 @@ export function ProjectSkeleton() {
       <SkeletonLoader height={92} style={styles.skeletonCover} />
       <View style={styles.foot}><SkeletonLoader width="70%" /></View>
     </View>
+  );
+}
+
+type SessionRowProps = { session: DashboardSession; label: string; onPress: () => void };
+
+// Sessão aberta na pasta, como o card do desktop e da página: barra de 4 px na
+// cor da sessão, o ícone solto no tom dela, sem placa, e a ação com o nome.
+// Sem cor, o rosa do Cialai.
+function SessionRow({ session, label, onPress }: SessionRowProps) {
+  const { colors, scheme } = useTokens();
+  const shade = sessionShade(session, scheme);
+  return (
+    <Pressable accessibilityLabel={label} accessibilityRole="button" onPress={onPress}
+      style={({ pressed }) => [styles.session, { backgroundColor: pressed ? colors.surfacePressed : colors.surface, borderColor: colors.border }]}>
+      <View style={[styles.sessionBar, { backgroundColor: shade.base }]} />
+      <SessionIcon color={shade.text} session={session} size={20} />
+      <Text numberOfLines={1} style={[typography.headline, styles.flex, { color: colors.text }]}>{label}</Text>
+      <Icon color={colors.textTertiary} name="chevron-right" size={18} />
+    </Pressable>
   );
 }
 
@@ -143,8 +163,8 @@ export function ProjectSheet({ project, snapshot, computerName, onContinue, onNe
         {computerName ? <Text numberOfLines={1} style={[typography.callout, { color: colors.text }]}>{computerName}</Text> : null}
         <Text numberOfLines={2} selectable style={[typography.footnote, { color: colors.textSecondary }]}>{project.path}</Text>
         {sessions.length ? sessions.map(session => (
-          <SecondaryButton icon="terminal" key={session.id} label={t('mobile.home.projects.continue', { name: session.name || project.name })}
-            onPress={run(() => onContinue(session.id))} variant="soft" />
+          <SessionRow key={session.id} label={t('mobile.home.projects.continue', { name: session.name || project.name })}
+            onPress={run(() => onContinue(session.id))} session={session} />
         )) : <Text style={[typography.callout, { color: colors.textSecondary }]}>{t('mobile.home.projects.noSessions')}</Text>}
         <PrimaryButton icon="plus" label={t('mobile.home.projects.newSession')} onPress={run(() => onNewSession(project.path))} />
         {project.favorite && onRemove ? <>
@@ -176,7 +196,7 @@ type FavoritesProps = {
 
 // Escolha dos favoritos entre as pastas que o computador listou.
 export function FavoritesSheet({ visible, projects, onToggle, onClose }: FavoritesProps) {
-  const { colors, scheme } = useTokens();
+  const { colors } = useTokens();
   const { t } = useI18n();
   const [query, setQuery] = useState('');
   const term = query.trim().toLocaleLowerCase();
@@ -187,11 +207,7 @@ export function FavoritesSheet({ visible, projects, onToggle, onClose }: Favorit
       {shown.map(project => (
         <ChoiceRow accessibilityLabel={t(project.favorite ? 'mobile.home.projects.unfavorite' : 'mobile.home.projects.favorite', { name: project.name })}
           accessibilityRole="checkbox" checked={project.favorite} detail={project.root || undefined} key={project.path}
-          leading={(
-            <View style={[styles.rowIcon, { backgroundColor: tintCover(scheme, projectTint(project.name)) }]}>
-              <Icon color={colors.primary} name="folder" size={18} />
-            </View>
-          )}
+          leading={<Icon color={colors.primary} name="folder" size={22} />}
           onPress={() => onToggle(project.path)} title={project.name}
           trailing={<Icon color={project.favorite ? colors.warning : colors.textTertiary} filled={project.favorite} name="star" size={22} />} />
       ))}
@@ -212,9 +228,12 @@ const styles = StyleSheet.create({
   rowCover: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
   rowStar: { position: 'absolute', top: -4, left: -4, width: 16, height: 16, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   add: { borderWidth: 1, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center', minHeight: 164, padding: space.sm },
-  addIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   center: { textAlign: 'center' },
   skeletonCover: { borderRadius: radius.md },
   moveRow: { flexDirection: 'row', gap: space.sm },
-  rowIcon: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' }
+  // Linha da sessão no tamanho dos botões da folha, com a barra de cor recuada
+  // e arredondada na borda esquerda.
+  session: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: space.sm, borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.control, paddingLeft: space.xs, paddingRight: space.sm, paddingVertical: space.xs },
+  sessionBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 }
 });

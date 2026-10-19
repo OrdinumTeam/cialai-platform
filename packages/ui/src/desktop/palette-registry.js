@@ -2,7 +2,9 @@
 // Provedores de itens da paleta de comandos. Uma view registra uma funcao
 // que devolve itens enquanto esta montada, como as sessoes do estudio de
 // terminais, e a paleta os junta aos itens fixos ao abrir. Cada item segue
-// o formato dos fixos: id, kind, label, hint, icon, shortcut e run.
+// o formato dos fixos: id, kind, label, hint, icon, shortcut e run. Um item
+// pode trazer `glyph`, um elemento pronto no lugar do icone, e `className` e
+// `style` para a linha, como as sessoes, que aparecem no proprio tom.
 
 const providers = new Set();
 

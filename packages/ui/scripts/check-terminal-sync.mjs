@@ -23,7 +23,7 @@ const mocks = {
   files: 'export const baseName = p => p.split("/").at(-1); export const fs = {}; export const isInside=()=>false; export const shellQuote=p=>p;',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => fixture.remoteState; export const subscribeState = handler => {fixture.remoteListener=handler; return () => {};};',
-  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {};',
+  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {}; export const isMobileShell = () => false;',
 };
 const bundle = (entry) => build({
   entryPoints: [entry], bundle: true, write: false, format: 'iife', globalName: 'runtime',
@@ -267,7 +267,38 @@ test('desktop publishes only card presentation with local metadata authoritative
   const call = s.fixture.calls.find(call => call.cmd === 'pty_presentation');
   assert.equal(call?.args.presentation.name, 'Meu terminal');
   assert.equal(call.args.presentation.subtitle, 'Revisão');
-  assert.deepEqual(Object.keys(call.args.presentation).sort(), ['color','name','order','pinned','subtitle']);
+  assert.deepEqual(Object.keys(call.args.presentation).sort(), ['color','icon','name','order','pinned','subtitle']);
+  // Loja antiga, sem o campo: o card publica o icone padrao, nulo.
+  assert.equal(call.args.presentation.icon, null);
+});
+
+test('o icone do card fica salvo, vai ao Rust e volta quando o celular o troca', async () => {
+  const s = scenario({
+    alive: [{...mac, presentation: {name:'Meu terminal', subtitle:'', color:'azul', icon:'rocket', pinned:false, order:0, revision:1}}],
+    saved: [{id:'mac-session', cwd:'/fixture/mac', name:'Meu terminal', subtitle:'', customName:true, color:'azul', icon:'rocket'}],
+  });
+  await s.runtime.hydrate(); await s.advance(150);
+  const session = s.runtime.getSession('mac-session');
+  assert.equal(session.icon, 'rocket', 'a loja local restaura o icone');
+
+  // Trocar no computador publica o icone novo e grava na loja.
+  s.runtime.setSessionIcon(session.id, 'database');
+  await s.advance(200); await settle();
+  const published = s.fixture.calls.filter(call => call.cmd === 'pty_presentation').at(-1);
+  assert.equal(published?.args.presentation.icon, 'database');
+  assert.equal(JSON.parse(s.storage.get('cialai_terminals')).sessions[0].icon, 'database');
+
+  // Um id fora do registro volta ao padrao.
+  s.runtime.setSessionIcon(session.id, 'nao-existe');
+  assert.equal(session.icon, null);
+
+  // O celular tira o icone: a revisao maior vence e o card volta ao padrao.
+  s.runtime.setSessionIcon(session.id, 'database');
+  await s.advance(200); await settle();
+  const revision = s.fixture.alive[0].presentation.revision;
+  s.fixture.alive[0].presentation = {...s.fixture.alive[0].presentation, icon:null, revision: revision + 1};
+  await s.advance(3200); await settle();
+  assert.equal(session.icon, null, 'o computador adota a remocao feita no celular');
 });
 
 test('a stale discovery response cannot mark a newly spawned local PTY as exited', async () => {

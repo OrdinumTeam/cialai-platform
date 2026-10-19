@@ -80,6 +80,18 @@ pub struct NotchPreferences {
     pub critical_limit: f64,
     pub alerts: AlertPreference,
     pub reset_time_format: ResetTimeFormat,
+    /// Versao das faixas. Arquivo sem o campo e de antes de 60 e 80 por cento
+    /// virarem o padrao; `upgrade_limits` troca os 50 e 70 antigos uma vez.
+    #[serde(default = "legacy_limits_revision")]
+    pub limits_revision: u32,
+}
+
+/// Faixas atuais: ambar a partir de 60 por cento, vermelho a partir de 80.
+pub const LIMITS_REVISION: u32 = 1;
+const LEGACY_LIMITS: (f64, f64) = (0.5, 0.7);
+
+fn legacy_limits_revision() -> u32 {
+    0
 }
 
 impl Default for NotchPreferences {
@@ -89,10 +101,11 @@ impl Default for NotchPreferences {
             profiles: BTreeMap::new(),
             order: Vec::new(),
             hide_default_when_duplicate: true,
-            watch_limit: 0.5,
-            critical_limit: 0.7,
+            watch_limit: 0.6,
+            critical_limit: 0.8,
             alerts: AlertPreference::default(),
             reset_time_format: ResetTimeFormat::default(),
+            limits_revision: LIMITS_REVISION,
         }
     }
 }
@@ -119,6 +132,21 @@ impl NotchPreferences {
             .get(id)
             .map(|value| value.muted)
             .unwrap_or(false)
+    }
+
+    /// Arquivo gravado antes das faixas atuais: quem ainda estava nos 50 e 70
+    /// por cento antigos, que eram o padrao, passa aos 60 e 80. Quem escolheu
+    /// outros valores fica com eles. Roda uma vez, e marca a versao.
+    pub fn upgrade_limits(&mut self) {
+        if self.limits_revision >= LIMITS_REVISION {
+            return;
+        }
+        if (self.watch_limit, self.critical_limit) == LEGACY_LIMITS {
+            let current = Self::default();
+            self.watch_limit = current.watch_limit;
+            self.critical_limit = current.critical_limit;
+        }
+        self.limits_revision = LIMITS_REVISION;
     }
 
     /// Limiares validados: a faixa de atencao sempre abaixo da critica.
@@ -164,8 +192,9 @@ mod tests {
         let value = serde_json::to_value(NotchPreferences::default()).unwrap();
         assert_eq!(value["visibility"], "open");
         assert_eq!(value["hideDefaultWhenDuplicate"], true);
-        assert_eq!(value["watchLimit"], 0.5);
-        assert_eq!(value["criticalLimit"], 0.7);
+        assert_eq!(value["watchLimit"], 0.6);
+        assert_eq!(value["criticalLimit"], 0.8);
+        assert_eq!(value["limitsRevision"], LIMITS_REVISION);
         assert_eq!(value["alerts"]["limitReached"], false);
         assert_eq!(value["resetTimeFormat"], "automatic");
         let parsed: NotchPreferences = serde_json::from_value(serde_json::json!({
@@ -177,6 +206,35 @@ mod tests {
         assert_eq!(parsed.visibility, NotchVisibility::Collapsed);
         assert_eq!(parsed.order, ["claude-ordinum", "codex-amorim"]);
         assert!(parsed.profile_enabled("codex-amorim"));
-        assert_eq!(parsed.watch_limit, 0.5, "campo ausente recebe o padrao");
+        assert_eq!(parsed.watch_limit, 0.6, "campo ausente recebe o padrao");
+    }
+
+    #[test]
+    fn old_default_limits_move_to_sixty_and_eighty_once() {
+        let mut old: NotchPreferences =
+            serde_json::from_value(serde_json::json!({ "watchLimit": 0.5, "criticalLimit": 0.7 }))
+                .unwrap();
+        assert_eq!(old.limits_revision, 0, "arquivo antigo nao traz a versao");
+        old.upgrade_limits();
+        assert_eq!((old.watch_limit, old.critical_limit), (0.6, 0.8));
+        assert_eq!(old.limits_revision, LIMITS_REVISION);
+
+        let mut chosen: NotchPreferences =
+            serde_json::from_value(serde_json::json!({ "watchLimit": 0.4, "criticalLimit": 0.9 }))
+                .unwrap();
+        chosen.upgrade_limits();
+        assert_eq!(
+            (chosen.watch_limit, chosen.critical_limit),
+            (0.4, 0.9),
+            "escolha propria fica"
+        );
+
+        // Depois da troca, 50 e 70 escolhidos de proposito ficam.
+        let mut current: NotchPreferences = serde_json::from_value(serde_json::json!({
+            "watchLimit": 0.5, "criticalLimit": 0.7, "limitsRevision": LIMITS_REVISION
+        }))
+        .unwrap();
+        current.upgrade_limits();
+        assert_eq!((current.watch_limit, current.critical_limit), (0.5, 0.7));
     }
 }

@@ -29,7 +29,7 @@ const mocks = {
   theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {};',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => ({status:"connected",features:[]}); export const subscribeState = () => () => {};',
-  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {};',
+  shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {}; export const isMobileShell = () => false;',
   hooks: 'export const useRuntimeEvents = () => {};',
   ui: 'export const useToast = () => () => {}; export const AppModal = () => null;',
   drag: 'export const wasDragged = () => false;',
@@ -39,6 +39,8 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/terminals/ui/SessionCard.jsx', import.meta.url))], bundle: true, write: false, format: 'cjs',
   external: ['react', 'react-dom', 'lucide-react'],
   plugins: [{ name: 'session-card-boundaries', setup(api) {
+    api.onResolve({ filter: /\.svg\?raw$/ }, ({ path }) => ({ path, namespace: 'glyph' }));
+    api.onLoad({ filter: /.*/, namespace: 'glyph' }, () => ({ contents: 'export default "<svg></svg>";', loader: 'js' }));
     api.onResolve({ filter: /./ }, ({ path }) => {
       if (path.startsWith('@xterm/')) return { path: 'renderer', namespace: 'fixture' };
       const key = path.split('/').at(-1)?.replace(/\.jsx?$/, '');

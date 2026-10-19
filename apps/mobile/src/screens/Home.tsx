@@ -58,17 +58,23 @@ const COMMUNITY_LABELS = {
   discord: { visible: 'Discord', spoken: 'mobile.home.discord' },
   whatsapp: { visible: 'WhatsApp', spoken: 'mobile.home.whatsapp' },
 } as const;
-// Logo do cabeçalho, o mesmo do site: símbolo e nome numa arte só, recortada
-// de brand/logo/cialai-lockup-1-4k.png.
-const LOCKUP = require('../assets/cialai-lockup.png');
-const LOCKUP_HEIGHT = 40;
-const LOCKUP_WIDTH = Math.round(LOCKUP_HEIGHT * 238 / 120);
+// Logo do cabeçalho: a assinatura oficial, as mesmas peças da lateral do
+// desktop, que tools/brand/build-ui-lockup.mjs recorta justo de
+// brand/logo/cialai-lockup-1-4k.png. Nas cores no claro; no escuro, a cabeça
+// nas cores e as letras em branco. Os 120 de largura são o mínimo da marca,
+// como na lateral do desktop, na proporção de 480 por 161 das peças.
+const LOCKUP = {
+  light: require('../assets/cialai-lockup.png'),
+  dark: require('../assets/cialai-lockup-dark.png')
+};
+const LOCKUP_WIDTH = 120;
+const LOCKUP_HEIGHT = Math.round(LOCKUP_WIDTH * 161 / 480);
 
 // Início: logo fixo no topo, uso dos agentes, computadores, projetos e atalhos. Os
 // dados do computador vêm do último retrato que a página mandou; cada parte
 // cai no próprio estado vazio sem bloquear as outras.
 export function Home({ store, storeState, onRetryStore, notice, describe, keptDesktopId, onContinue, onIntent, onDisconnect, onDesktops, onPair, onTerminal, onProjects }: Props) {
-  const { colors } = useTokens();
+  const { colors, scheme } = useTokens();
   const { locale, t } = useI18n();
   const dashboard = useDashboard();
   const now = useNow();
@@ -127,7 +133,7 @@ export function Home({ store, storeState, onRetryStore, notice, describe, keptDe
       {/* O cabeçalho fica fora da rolagem, como nas outras telas. */}
       <View style={styles.brand}>
         <Image accessibilityIgnoresInvertColors accessibilityLabel="Cialai" accessibilityRole="header" accessible resizeMode="contain"
-          source={LOCKUP} style={styles.lockup} />
+          source={LOCKUP[scheme]} style={styles.lockup} />
       </View>
       <ScrollView contentContainerStyle={styles.content}>
 

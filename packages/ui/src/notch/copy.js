@@ -16,6 +16,7 @@
 // proprio, como o de um modelo, e vai para a tela como veio.
 
 import { getLocale, translate } from '../shared/i18n.js';
+import { headlineWindow, weeklyState } from './model.js';
 
 export const DASH = '—';
 
@@ -263,4 +264,42 @@ export function moreSessionsCopy(count, t = translate) {
 /// Linha do plano no cabecalho do card.
 export function planCopy(plan, t = translate) {
   return plan ? t('desktop.notch.card.plan', { plan }) : '';
+}
+
+const WEEKLY_REASON_KEYS = Object.freeze({
+  loading: 'desktop.notch.ring.weeklyLoading',
+  auth: 'desktop.notch.ring.weeklyError',
+  error: 'desktop.notch.ring.weeklyError',
+  unconfirmed: 'desktop.notch.ring.weeklyUnconfirmed',
+});
+
+/// O que se diz do limite semanal quando nao ha janela de sete dias para
+/// medir: a conta sem limite semanal, ou o motivo de a leitura ainda nao
+/// confirmar. Vazio com a janela disponivel, que se descreve sozinha. O anel
+/// interno da barra e a tela de contas usam a mesma frase.
+export function weeklyStateCopy(weekly, t = translate) {
+  if (!weekly || weekly.kind === 'available') return '';
+  if (weekly.kind === 'none') return t('desktop.notch.ring.weeklyNone');
+  return t(WEEKLY_REASON_KEYS[weekly.reason] || WEEKLY_REASON_KEYS.loading);
+}
+
+function ringLine(ring, limit, now, format, t, locale) {
+  const fraction = isNumber(limit?.usedFraction) ? limit.usedFraction : null;
+  if (!limit || fraction === null) return t('desktop.notch.ring.noReading', { ring });
+  const line = t('desktop.notch.ring.reading', { ring, window: windowLabel(limit, t), used: percentText(fraction, locale) });
+  const reset = resetCopy(limit.resetsAtMs, now, format, t, locale);
+  return reset ? `${line}. ${reset}` : line;
+}
+
+/// Descricao dos dois aneis para leitor de tela e dica: qual janela cada um
+/// mede, quanto ja foi usado e quando renova. Sem janela semanal, diz se a
+/// conta nao tem limite semanal ou se a leitura ainda nao chegou.
+export function ringsCopy(snapshot, prefs = {}, now = Date.now(), t = translate, locale = getLocale()) {
+  const format = prefs.resetTimeFormat || 'automatic';
+  const outer = ringLine(t('desktop.notch.ring.outer'), headlineWindow(snapshot), now, format, t, locale);
+  const weekly = weeklyState(snapshot, prefs);
+  let inner;
+  if (weekly.kind === 'available') inner = ringLine(t('desktop.notch.ring.inner'), weekly.window, now, format, t, locale);
+  else inner = weeklyStateCopy(weekly, t);
+  return `${outer}. ${inner}.`;
 }

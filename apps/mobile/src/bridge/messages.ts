@@ -16,12 +16,31 @@ export type ReadingState = 'ok' | 'stale' | 'needsLogin' | 'error' | 'unmetered'
 export type UsageWindow = {
   id: string; label: string; usedFraction: number; resetsAtMs: number | null; durationMs: number | null; headline: boolean; weekly: boolean;
 };
+// Semanal da conta nos três estados da Barra de IA: com número, conta sem
+// limite semanal e sem leitura. Falta de dado nunca vira 0%.
+export type WeeklyState = 'available' | 'none' | 'unknown';
 export type AgentAccount = {
   id: string; agent: AgentId; label: string; plan: string | null; active: boolean; state: ReadingState;
-  fetchedAtMs: number | null; windows: UsageWindow[];
+  fetchedAtMs: number | null; windows: UsageWindow[]; weeklyState: WeeklyState;
 };
 export type DashboardProject = { name: string; path: string; root: string };
-export type DashboardSession = { id: string; name: string; cwd: string; status: string; agent: AgentId | null };
+// Tom da sessão já resolvido pela página: `base` pinta barra e destaque,
+// `text` é a versão legível sobre a superfície do tema. Sem cor, o rosa.
+export type ToneShade = { base: string; text: string };
+export type SessionTone = { light: ToneShade; dark: ToneShade };
+// O que pede atenção: o sino do terminal, o aviso que o programa mandou e o
+// processo que terminou fora da tela.
+export type AttentionKind = 'bell' | 'notify' | 'finished';
+export type SessionAttention = { kind: AttentionKind; at: number; message: string };
+export type TurnState = 'busy' | 'waiting' | 'done' | 'idle';
+export type SessionTurn = { state: TurnState; waitingFor: string | null };
+// Os campos depois de `agent` vieram com os avisos de atenção. Página antiga
+// não manda e eles ficam nulos; fora do formato também, sem recusar o retrato.
+export type DashboardSession = {
+  id: string; name: string; cwd: string; status: string; agent: AgentId | null;
+  color: string | null; tone: SessionTone | null; icon: string | null;
+  attention: SessionAttention | null; turn: SessionTurn | null; viewed: boolean;
+};
 // Retrato que a página manda para o Início: o formato sai de
 // packages/ui/src/mobile/dashboard-snapshot.js.
 // `recent` são as últimas pastas em que o telefone abriu sessão; páginas
@@ -59,6 +78,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const DASHBOARD_LIMITS = { accounts: 20, windows: 8, projects: 400, sessions: 100, recent: 10, text: 512 } as const;
 const READING_STATES: readonly ReadingState[] = ['ok', 'stale', 'needsLogin', 'error', 'unmetered', 'unavailable', 'reading'];
+const WEEKLY_STATES: readonly WeeklyState[] = ['available', 'none', 'unknown'];
+const ATTENTION_KINDS: readonly AttentionKind[] = ['bell', 'notify', 'finished'];
+const TURN_STATES: readonly TurnState[] = ['busy', 'waiting', 'done', 'idle'];
+const ATTENTION_TEXT_MAX = 160;
+const HEX = /^#[0-9a-fA-F]{6}$/;
+const SLUG = /^[a-z0-9-]{1,32}$/;
 const VIEW_PANES: readonly ViewPane[] = ['list', 'terminal', 'files'];
 
 const text = (value: unknown, required = false): string | null => {
@@ -105,7 +130,39 @@ function parseAccount(value: unknown): AgentAccount | null {
   const windows = list(value.windows, DASHBOARD_LIMITS.windows, parseWindow);
   if (id === null || !agent || label === null || (value.plan != null && plan === null) || fetchedAtMs === undefined ||
       !windows || !READING_STATES.includes(value.state as ReadingState)) return null;
-  return { id, agent, label, plan, active: value.active === true, state: value.state as ReadingState, fetchedAtMs, windows };
+  // Página antiga não manda o estado semanal: a janela marcada vale como
+  // semanal, e sem ela não dá para saber.
+  const weeklyState = WEEKLY_STATES.includes(value.weeklyState as WeeklyState) ? value.weeklyState as WeeklyState
+    : windows.some(window => window.weekly) ? 'available' : 'unknown';
+  return { id, agent, label, plan, active: value.active === true, state: value.state as ReadingState, fetchedAtMs, windows, weeklyState };
+}
+
+const slug = (value: unknown): string | null => (typeof value === 'string' && SLUG.test(value) ? value : null);
+
+function shadeOf(value: unknown): ToneShade | null {
+  if (!isRecord(value) || typeof value.base !== 'string' || typeof value.text !== 'string') return null;
+  return HEX.test(value.base) && HEX.test(value.text) ? { base: value.base, text: value.text } : null;
+}
+
+function toneOf(value: unknown): SessionTone | null {
+  if (!isRecord(value)) return null;
+  const light = shadeOf(value.light);
+  const dark = shadeOf(value.dark);
+  return light && dark ? { light, dark } : null;
+}
+
+function attentionOf(value: unknown): SessionAttention | null {
+  if (!isRecord(value) || !ATTENTION_KINDS.includes(value.kind as AttentionKind)) return null;
+  const at = time(value.at);
+  if (!at) return null;
+  const message = typeof value.message === 'string' ? value.message.slice(0, ATTENTION_TEXT_MAX) : '';
+  return { kind: value.kind as AttentionKind, at, message };
+}
+
+function turnOf(value: unknown): SessionTurn | null {
+  if (!isRecord(value) || !TURN_STATES.includes(value.state as TurnState)) return null;
+  const waitingFor = typeof value.waitingFor === 'string' && value.waitingFor.length <= 40 ? value.waitingFor : null;
+  return { state: value.state as TurnState, waitingFor };
 }
 
 function parseProject(value: unknown): DashboardProject | null {
@@ -123,7 +180,11 @@ function parseSession(value: unknown): DashboardSession | null {
   const cwd = text(value.cwd);
   const status = text(value.status);
   if (id === null || name === null || cwd === null || status === null || (value.agent !== null && !agentOf(value.agent))) return null;
-  return { id, name, cwd, status, agent: agentOf(value.agent) };
+  return {
+    id, name, cwd, status, agent: agentOf(value.agent),
+    color: slug(value.color), tone: toneOf(value.tone), icon: slug(value.icon),
+    attention: attentionOf(value.attention), turn: turnOf(value.turn), viewed: value.viewed === true
+  };
 }
 
 // O retrato inteiro é recusado se qualquer parte vier fora do formato.

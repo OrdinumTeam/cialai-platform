@@ -68,7 +68,49 @@ test('o retrato leva contas, janelas, projetos e sessoes sem o e-mail', () => {
   assert.deepEqual(codex.windows.map((window) => [window.id, window.usedFraction, window.headline, window.weekly]),
     [['session', 0.19, true, false], ['weekly', 1, false, true]]);
   assert.deepEqual(result.projects, [{ name: 'psicoapp', path: '/home/pessoa/Projects/psicoapp', root: '~/Projects' }]);
-  assert.deepEqual(result.sessions, [{ id: 's1', name: 'psicoapp', cwd: '/home/pessoa/Projects/psicoapp', status: 'running', agent: 'codex' }]);
+  const pink = { light: { base: '#E23B84' }, dark: { base: '#FF7AB2' } };
+  assert.deepEqual(result.sessions.map(({ tone, ...session }) => session), [{ id: 's1', name: 'psicoapp', cwd: '/home/pessoa/Projects/psicoapp', status: 'running', agent: 'codex',
+    color: null, icon: null, attention: null, turn: null, viewed: false }]);
+  assert.deepEqual([result.sessions[0].tone.light.base, result.sessions[0].tone.dark.base], [pink.light.base, pink.dark.base], 'sem cor o tom e o rosa');
+  assert.equal(codex.weeklyState, 'available');
+  assert.equal(result.accounts[1].weeklyState, 'unknown', 'login pendente nao vira 0% nem sem limite');
+});
+
+test('cada sessao leva cor, icone, atencao e a vez do agente; so o que a casca usa', () => {
+  const result = JSON.parse(JSON.stringify(snapshot.buildDashboardSnapshot({
+    sessions: [
+      { id: 'a', name: 'site', cwd: '/p', status: 'running', color: 'verde', icon: 'rocket',
+        attention: { kind: 'bell', message: 'Pediu atenção', at: 77 }, agentTurn: { state: 'waiting', waitingFor: 'permission', sinceMs: 5 } },
+      { id: 'b', cwd: '/p', status: 'running', color: 'inexistente', icon: '../x', attention: { kind: 'exited', message: 'saiu', at: 9 }, agentTurn: { state: 'pensando' } },
+      { id: 'c', cwd: '/p', status: 'running', attention: { kind: 'notify', message: 'x'.repeat(400), at: 10 } },
+    ],
+    viewed: (session) => session.id === 'b',
+  })));
+  const [site, other, long] = result.sessions;
+  assert.equal(site.color, 'verde');
+  assert.equal(site.tone.light.base.toLowerCase(), '#1f9d5b');
+  assert.match(site.tone.light.text, /^#[0-9a-f]{6}$/i);
+  assert.equal(site.icon, 'rocket');
+  assert.deepEqual(site.attention, { kind: 'bell', at: 77, message: 'Pediu atenção' });
+  assert.deepEqual(site.turn, { state: 'waiting', waitingFor: 'permission' });
+  assert.equal(site.viewed, false);
+  assert.deepEqual([other.color, other.icon, other.attention, other.turn, other.viewed], [null, null, null, null, true],
+    'cor e icone desconhecidos, saida do processo e estado estranho ficam de fora');
+  assert.equal(long.attention.message.length, snapshot.ATTENTION_TEXT_MAX);
+});
+
+test('o semanal de cada conta vem nos tres estados da Barra de IA', () => {
+  const usage = (windows, weeklyId = 'weekly', status = 'ok') => ({ status: { kind: status }, fetchedAtMs: 1, headlineId: 'session', weeklyId, windows });
+  const session = { id: 'session', label: 'session', usedFraction: 0.2, durationMs: 18_000_000 };
+  const states = snapshot.buildDashboardSnapshot({ accounts: [
+    { id: 'zero', agent: 'claude', usage: usage([session, { id: 'weekly', label: 'weeklyAll', usedFraction: 0 }]) },
+    { id: 'mensal', agent: 'codex', usage: usage([session, { id: 'weekly', label: 'duration', usedFraction: 0.4, durationMs: 30 * 86_400_000 }]) },
+    { id: 'sem', agent: 'codex', usage: usage([session], null) },
+    { id: 'erro', agent: 'codex', usage: { status: { kind: 'error' } } },
+    { id: 'lendo', agent: 'claude', usage: { status: { kind: 'ok' } } },
+    { id: 'livre', agent: 'claude', usage: { status: { kind: 'unsupported' }, windows: [] } },
+  ] }).accounts.map((account) => [account.id, account.weeklyState]);
+  assert.deepEqual(states, [['zero', 'available'], ['mensal', 'none'], ['sem', 'none'], ['erro', 'unknown'], ['lendo', 'unknown'], ['livre', 'none']]);
 });
 
 test('o agente da sessao chega pelo nome que o computador mostra e o projeto do Windows tem nome', () => {

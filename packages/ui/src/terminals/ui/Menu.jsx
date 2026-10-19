@@ -1,10 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
-// Menu de acoes em popover, por portal, no vidro da casca. Serve ao menu de
-// cada card de sessao e ao menu de contexto do explorador. Navegacao por
-// teclado: setas, Enter e Esc. Fecha ao clicar fora ou ao rolar.
+// Menu de acoes em popover, por portal, numa superficie solida. Serve ao
+// menu de cada card de sessao e ao menu de contexto do explorador. Navegacao
+// por teclado: setas, Enter e Esc. Fecha ao clicar fora ou ao rolar.
 //
-// Um item pode ser uma grade de amostras de cor, `{ swatches: [...] }`: cada
-// amostra continua sendo um item para o teclado, so o desenho muda.
+// Um item pode ser uma grade de amostras de cor, `{ swatches: [...] }`, ou
+// de icones, `{ icons: [...] }`, com o mesmo desenho: cada celula continua
+// sendo um item para o teclado. `{ heading }` e um titulo de secao e
+// `{ node }` um bloco solto, nenhum dos dois focavel. Um item com
+// `keepOpen` roda sem fechar o menu, para escolher cor e icone de uma vez.
+// `style` e `className` deixam o menu de uma sessao herdar o tom dela.
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -15,19 +19,21 @@ const SWATCH_COLUMNS = 6;
 function flatten(items) {
   const flat = [];
   items.forEach((item) => {
-    if (!item || item.separator) return;
+    if (!item || item.separator || item.heading || item.node) return;
     if (item.swatches) item.swatches.forEach((option) => flat.push(option));
+    else if (item.icons) item.icons.forEach((option) => flat.push({ ...option, cell: true }));
     else flat.push(item);
   });
   return flat;
 }
 
-export default function Menu({ anchor, items, onClose, label }) {
+export default function Menu({ anchor, items, onClose, label, style, className = '' }) {
   useI18n();
   const boxRef = useRef(null);
   const activated = useRef(false);
   const activate = (item) => {
     if (activated.current || !item || item.disabled) return;
+    if (item.keepOpen) { item.run(); return; }
     activated.current = true;
     onClose(); item.run();
   };
@@ -90,15 +96,43 @@ export default function Menu({ anchor, items, onClose, label }) {
   return createPortal(
     <div
       ref={boxRef}
-      className="terminais-menu"
+      className={`terminais-menu${className ? ` ${className}` : ''}`}
       role="menu"
       aria-label={label || translate('terminal.common.actions')}
       tabIndex={-1}
-      style={{ top: position.top, left: position.left, visibility: position.ready ? 'visible' : 'hidden' }}
+      style={{ ...style, top: position.top, left: position.left, visibility: position.ready ? 'visible' : 'hidden' }}
     >
       {items.map((item, order) => {
         if (!item) return null;
         if (item.separator) return <div key={`sep-${order}`} className="terminais-menu__sep" role="separator" />;
+        if (item.heading) return <div key={`heading-${order}`} className="terminais-menu__heading" role="presentation">{item.heading}</div>;
+        if (item.node) return <div key={item.id || `node-${order}`} role="presentation">{item.node}</div>;
+        if (item.icons) {
+          return (
+            <div key={item.id || `icons-${order}`} className="terminais-menu__swatches terminais-menu__icons" role="group" aria-label={item.label || translate('terminal.common.icons')}>
+              {item.icons.map((option) => {
+                runningIndex += 1;
+                const active = runningIndex === index;
+                const { Icon } = option;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={Boolean(option.current)}
+                    aria-label={option.label}
+                    title={option.current ? `${option.label}, ${translate('terminal.common.current')}` : option.label}
+                    className={`terminais-menu__iconbtn${active ? ' is-active' : ''}${option.current ? ' is-current' : ''}`}
+                    onMouseEnter={() => setIndex(enabled.findIndex((entry) => entry.cell && entry.id === option.id))}
+                    onClick={() => activate(option)}
+                  >
+                    <Icon size={15} strokeWidth={1.9} aria-hidden="true" />
+                  </button>
+                );
+              })}
+            </div>
+          );
+        }
         if (item.swatches) {
           return (
             <div key={item.id || `swatches-${order}`} className="terminais-menu__swatches" role="group" aria-label={item.label || translate('terminal.common.colors')}>
@@ -149,13 +183,14 @@ export default function Menu({ anchor, items, onClose, label }) {
   );
 }
 
-// Proximo indice para uma seta. Numa amostra de cor, cima e baixo pulam uma
-// linha da grade enquanto houver grade naquela direcao; direita e esquerda
-// andam uma casa. Fora da grade, direita e esquerda nao fazem nada.
+// Proximo indice para uma seta. Numa celula de grade, de cor ou de icone,
+// cima e baixo pulam uma linha enquanto houver grade naquela direcao;
+// direita e esquerda andam uma casa. Fora da grade, direita e esquerda nao
+// fazem nada.
 function moveIndex(enabled, value, direction) {
   const current = Math.max(0, value);
   const item = enabled[current];
-  const isSwatch = (entry) => Boolean(entry && entry.color !== undefined);
+  const isSwatch = (entry) => Boolean(entry && (entry.color !== undefined || entry.cell));
   if (direction === 'right') return isSwatch(item) && isSwatch(enabled[current + 1]) ? current + 1 : current;
   if (direction === 'left') return isSwatch(item) && isSwatch(enabled[current - 1]) ? current - 1 : current;
   const delta = direction === 'down' ? 1 : -1;

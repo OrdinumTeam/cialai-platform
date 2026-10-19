@@ -1,14 +1,23 @@
-import type { AgentAccount, AgentId, DashboardMessage, DashboardProject, DashboardSession, UsageWindow } from '../bridge/messages';
+import type { AgentAccount, AgentId, DashboardMessage, DashboardProject, DashboardSession, SessionTone, ToneShade, UsageWindow } from '../bridge/messages';
 import type { DesktopEntry } from '../desktops/store';
 import type { DesktopConnection } from '../state/machine';
 
-export type UsageLevel = 'normal' | 'near' | 'exhausted' | 'unavailable';
+// `near` é a faixa de atenção, em âmbar; `critical` e `exhausted` ficam no
+// vermelho, e só o esgotado ganha a palavra.
+export type UsageLevel = 'normal' | 'near' | 'critical' | 'exhausted' | 'unavailable';
 
-// Mesmos limiares do card de sessão da página: aviso a partir de 75%.
+// Faixas padrão da Barra de IA do desktop, `bandOf` em
+// packages/ui/src/notch/model.js: âmbar a partir de 60%, vermelho a partir de
+// 80% e esgotado em 100%. No desktop os limiares são preferência; o retrato
+// não os traz, então aqui valem os padrões.
+export const NEAR_LIMIT = 0.6;
+export const CRITICAL_LIMIT = 0.8;
+
 export function usageLevel(fraction: number | null | undefined): UsageLevel {
   if (typeof fraction !== 'number' || !Number.isFinite(fraction)) return 'unavailable';
   if (fraction >= 1) return 'exhausted';
-  if (fraction >= 0.75) return 'near';
+  if (fraction >= CRITICAL_LIMIT) return 'critical';
+  if (fraction >= NEAR_LIMIT) return 'near';
   return 'normal';
 }
 
@@ -82,7 +91,24 @@ export function accountLevel(account: AgentAccount): UsageLevel {
   return windows.reduce<UsageLevel>((worst, window) => worse(worst, usageLevel(window.usedFraction)), 'normal');
 }
 
-const LEVEL_ORDER: readonly UsageLevel[] = ['normal', 'near', 'exhausted'];
+export type WeeklyView =
+  | { kind: 'available'; window: UsageWindow; level: UsageLevel }
+  | { kind: 'none' }
+  | { kind: 'unknown' };
+
+// Semanal da conta nos três estados da Barra de IA: com número, conta sem
+// limite semanal e sem leitura. O número sai da janela marcada como semanal;
+// estado com número sem essa janela, ou numa conta sem leitura válida, vira
+// sem leitura. Falta de dado nunca vira 0% nem conta sem limite.
+export function weeklyView(account: AgentAccount | null): WeeklyView {
+  if (!account) return { kind: 'unknown' };
+  if (account.weeklyState === 'none') return { kind: 'none' };
+  if (account.weeklyState !== 'available' || (account.state !== 'ok' && account.state !== 'stale')) return { kind: 'unknown' };
+  const window = account.windows.find(item => item.weekly);
+  return window ? { kind: 'available', window, level: usageLevel(window.usedFraction) } : { kind: 'unknown' };
+}
+
+const LEVEL_ORDER: readonly UsageLevel[] = ['normal', 'near', 'critical', 'exhausted'];
 function worse(a: UsageLevel, b: UsageLevel): UsageLevel {
   return LEVEL_ORDER.indexOf(b) > LEVEL_ORDER.indexOf(a) ? b : a;
 }
@@ -157,6 +183,22 @@ export function sessionsIn(snapshot: DashboardMessage | null, path: string): Das
 
 export function liveSessions(snapshot: DashboardMessage | null): DashboardSession[] {
   return (snapshot?.sessions ?? []).filter(session => session.status === 'running' || session.status === 'starting');
+}
+
+// Rosa do Cialai, o tom da sessão sem cor: os valores de `DEFAULT_ACCENT` em
+// packages/ui/src/terminals/session-accent.js. A página resolve o tom de
+// cada sessão e manda pronto; página antiga não manda, e aí base e texto
+// ficam no rosa do tema, com o texto claro já escurecido para o contraste
+// de 4,5:1 que a página calcula.
+export const DEFAULT_SESSION_TONE: SessionTone = {
+  light: { base: '#E23B84', text: '#C73474' },
+  dark: { base: '#FF7AB2', text: '#FF7AB2' }
+};
+
+// `base` pinta a barra lateral do card; `text` é a versão legível sobre a
+// superfície do tema, para o ícone.
+export function sessionShade(session: Pick<DashboardSession, 'tone'>, scheme: 'light' | 'dark'): ToneShade {
+  return (session.tone ?? DEFAULT_SESSION_TONE)[scheme];
 }
 
 // Fundo da capa de cada projeto, estável pelo nome.

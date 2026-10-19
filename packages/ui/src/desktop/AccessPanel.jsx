@@ -3,7 +3,7 @@
 // e atalhos, sem nenhum campo. Usado em Preferências e em Dispositivos.
 
 import React from 'react';
-import { Activity, Link2, Smartphone } from 'lucide-react';
+import { Activity, Link2, Monitor } from 'lucide-react';
 import { useTunnel } from './TunnelContext.jsx';
 import { connectedCount, reserveLabel, reserveStatus } from './tunnel-model.js';
 import { translate } from './i18n.js';
@@ -37,7 +37,7 @@ export default function AccessPanel({ onPair, onDiagnostics, heading = true }) {
 
   return <section className="mac-access" aria-labelledby={heading ? 'access-title' : undefined} aria-label={heading ? undefined : translate('desktop.access.title')}>
     <div className="mac-access__head">
-      <span className="mac-access__icon" aria-hidden="true"><Smartphone /></span>
+      <span className="mac-access__icon" aria-hidden="true"><Monitor /></span>
       <div className="mac-access__identity">
         {heading ? <h3 id="access-title">{translate('desktop.access.title')}</h3> : null}
         <p>{tunnel.desktopName || translate('desktop.access.thisComputer')}</p>

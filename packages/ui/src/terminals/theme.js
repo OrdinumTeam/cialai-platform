@@ -58,9 +58,15 @@ const DARK_ANSI = {
 
 // Objeto novo a cada chamada: o xterm so reaplica o tema quando a referencia
 // muda.
-export function buildTheme() {
+//
+// `accent` e o tom resolvido da sessao, de `session-accent.js`: no computador
+// o cursor e a selecao saem nele, o cursor no tom de texto legivel e a
+// selecao no suave. Texto, fundo e cores ANSI nao mudam, entao a saida das
+// CLIs fica como elas a escreveram. O celular mantem o terminal dele.
+export function buildTheme(accent = null) {
   const phone = isPhoneTerminal();
   const dark = phone || isDarkTheme();
+  const tone = !phone && accent ? accent[dark ? 'dark' : 'light'] : null;
   const surface = phone ? PHONE_TERMINAL.background : token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
   const ink = phone ? PHONE_TERMINAL.foreground : token('--mac-label', dark ? '#f5f5f7' : '#1d1d1f');
   const ok = phone ? PHONE_TERMINAL.ok : token('--mac-ok', '#1f9d5b');
@@ -69,9 +75,9 @@ export function buildTheme() {
   return {
     background: surface,
     foreground: ink,
-    cursor: ink,
+    cursor: tone ? tone.text : ink,
     cursorAccent: surface,
-    selectionBackground: phone ? PHONE_TERMINAL.selection : token('--mac-accent-soft-hover', 'rgba(26,79,160,.14)'),
+    selectionBackground: tone ? tone.softHover : phone ? PHONE_TERMINAL.selection : token('--mac-accent-soft-hover', 'rgba(26,79,160,.14)'),
     selectionInactiveBackground: phone ? PHONE_TERMINAL.inactiveSelection : token('--mac-neutral-bg', 'rgba(0,0,0,.05)'),
     red: bad,
     green: ok,

@@ -13,6 +13,8 @@ import {
 } from 'lucide-react';
 import { Sheet } from './dialogs.jsx';
 import { SESSION_COLORS, canMoveSession } from '../runtime.js';
+import { SESSION_ICONS } from '../session-icons.js';
+import { sessionAccentStyle } from '../session-accent.js';
 import { shortPath } from '../files.js';
 import { translate } from '../../shared/i18n.js';
 
@@ -27,7 +29,7 @@ export function menuGroups(session) {
     { id: 'identity', items: [
       { kind: 'rename', label: translate('terminal.menu.renameSession'), icon: TextCursorInput },
       { kind: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag },
-      { kind: 'color', label: translate('terminal.menu.sessionColor'), icon: Palette },
+      { kind: 'color', label: translate('terminal.menu.sessionAppearance'), icon: Palette },
     ] },
     { id: 'order', items: [
       { kind: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin },
@@ -71,6 +73,7 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
     onAction(kind, session);
   };
   const pick = (color) => { close(); onAction('color', session, color); };
+  const pickIcon = (icon) => { close(); onAction('icon', session, icon); };
   const current = SESSION_COLORS.find((color) => color.id === session.color) || null;
   return (
     <Sheet
@@ -79,6 +82,9 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
       onClose={close}
       actions={<button type="button" className="btn btn-ghost" onClick={close}>{translate('terminal.common.cancel')}</button>}
     >
+      {/* A folha abre fora do card, então leva o tom da própria sessão: a cor e o
+          ícone marcados no seletor ficam na cor dela, não no rosa da lista. */}
+      <div className="phone-menu__scope session-scope" style={sessionAccentStyle(session)}>
       {session.cwd ? <p className="phone-menu__path">{shortPath(session.cwd)}</p> : null}
       {colors ? (
         <div className="phone-menu phone-menu--colors">
@@ -106,6 +112,18 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
               </button>
             ))}
           </div>
+          <p className="phone-menu__heading">{translate('terminal.menu.iconSection')}</p>
+          <div className="phone-menu__icons" role="menu" aria-label={translate('terminal.newSession.icon')}>
+            <button type="button" role="menuitemradio" aria-checked={!session.icon} className={`phone-menu__icon is-default${!session.icon ? ' is-current' : ''}`} aria-label={translate('terminal.menu.defaultIcon')} onClick={() => pickIcon(null)}>{translate('terminal.icon.default')}</button>
+            {SESSION_ICONS.map((entry) => {
+              const { Icon } = entry;
+              return (
+                <button type="button" key={entry.id} role="menuitemradio" aria-checked={session.icon === entry.id} className={`phone-menu__icon${session.icon === entry.id ? ' is-current' : ''}`} aria-label={translate(entry.labelKey)} onClick={() => pickIcon(entry.id)}>
+                  <Icon size={20} strokeWidth={1.8} aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
         </div>
       ) : (
         <div className="phone-menu" role="menu" aria-label={translate('terminal.session.actionsFor', { name: session.name })}>
@@ -131,6 +149,7 @@ export default function PhoneSessionMenu({ session, open, onClose, onAction }) {
           ))}
         </div>
       )}
+      </div>
     </Sheet>
   );
 }

@@ -17,6 +17,7 @@ import { openDocGraphTab } from '../docgraph/tab.js';
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import Splitter from './Splitter.jsx';
 import { accentStyle } from './SessionCard.jsx';
+import SessionIcon from './SessionIcon.jsx';
 import { describe, fitAndResize, hostTerminal, insertPaths, releaseTerminal, reopen, runningLabel, setEditorRatio, setMaximized } from '../runtime.js';
 import { swapIn } from '../motion.js';
 import { searchDecorations } from '../theme.js';
@@ -282,7 +283,7 @@ export default function WorkArea({
   const docgraphActive = activeTab?.kind === 'docgraph';
 
   return (
-    <section className="terminais-work" ref={sectionRef} aria-label={translate('terminal.work.sessionLabel', { name: session.name })} style={accentStyle(session)}>
+    <section className="terminais-work session-scope" ref={sectionRef} aria-label={translate('terminal.work.sessionLabel', { name: session.name })} style={accentStyle(session)}>
       <header className="terminais-work__head">
         {panels ? (
           <button
@@ -298,6 +299,7 @@ export default function WorkArea({
           </button>
         ) : null}
         <span className={`dot terminais-work__dot terminais-work__dot--${status.tone}${status.animated ? ' is-working' : ''}`} aria-hidden="true" />
+        <SessionIcon session={session} size={15} className="terminais-work__icon" />
         <span className="terminais-work__name">{session.name}</span>
         {session.subtitle ? <span className="terminais-work__subtitle">{session.subtitle}</span> : null}
         <span className="terminais-work__path" title={session.cwd}>{shortPath(session.activity?.shellCwd || session.cwd)}</span>

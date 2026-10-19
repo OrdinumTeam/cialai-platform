@@ -4,6 +4,7 @@
 // nada aqui pode mexer nela.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
@@ -65,6 +66,9 @@ const bundle = await build({
   entryPoints: [fileURLToPath(new URL('../src/terminals/ui/PhoneSessionCard.jsx', import.meta.url))],
   bundle: true, write: false, format: 'cjs', external: ['react', 'lucide-react'],
   plugins: [{ name: 'card-boundaries', setup(api) {
+    // O ícone padrão da sessão traz o glifo do agente como texto SVG.
+    api.onResolve({ filter: /\.svg\?raw$/ }, ({ path }) => ({ path, namespace: 'glyph' }));
+    api.onLoad({ filter: /.*/, namespace: 'glyph' }, () => ({ contents: 'export default "<svg></svg>";', loader: 'js' }));
     api.onResolve({ filter: /\.(js|jsx)$/ }, ({ path }) => {
       const key = path.split('/').at(-1).replace(/\.jsx?$/, '');
       if (boundaries[key]) return { path: key, namespace: 'fixture' };
@@ -115,7 +119,7 @@ test('a falha no celular oferece encerrar acima do estado', () => {
 
 test('o card ativo mostra agente, pasta, estado, tempo, CPU, memória e o botão redondo', () => {
   const html = card({ ...base, id: 'busy', name: 'psicoapp', jobStartedAt: 1, activity: { available: true, cpu: 21, memory: 1363148800 } });
-  assert.match(html, /phone-session phone-session--active/);
+  assert.match(html, /phone-session session-scope phone-session--active/);
   assert.match(html, /phone-session__agent is-agent">Codex/);
   assert.match(html, /~\/psicoapp/);
   assert.match(html, /Processando/);
@@ -157,4 +161,63 @@ test('nome longo fica inteiro no texto e o corte é feito pelo estilo', () => {
   assert.match(html, /has-color is-pinned/);
   assert.match(html, /aria-label="Fixada"/);
   assert.match(html, /Medindo/);
+});
+
+const css = readFileSync(fileURLToPath(new URL('../src/views/Terminais.css', import.meta.url)), 'utf8');
+const phoneRule = (selector) => css.split('\n').find((line) => line.startsWith(`[data-form-factor="phone"] ${selector} {`)) || '';
+
+test('o card leva o tom da sessão como no computador, e sem cor o tom é o rosa', () => {
+  const plain = card({ ...base, id: 'busy', name: 'psicoapp', activity: { agent: 'Codex', available: true, cpu: 1, memory: 0 } });
+  assert.match(plain, /class="phone-session session-scope phone-session--active"/);
+  assert.match(plain, /--session-accent-light:#E23B84/);
+  assert.match(plain, /--session-accent-dark:#FF7AB2/);
+  assert.match(plain, /--session-accent-text-light:/);
+  const blue = card({ ...base, id: 'busy', name: 'psicoapp', color: 'azul', activity: null });
+  assert.match(blue, /--session-accent-light:#1A4FA0/);
+  assert.match(blue, /phone-session session-scope phone-session--active has-color/);
+  // O runtime antigo devolvia nulo sem cor; o card não depende mais dele.
+  const source = readFileSync(fileURLToPath(new URL('../src/terminals/ui/PhoneSessionCard.jsx', import.meta.url)), 'utf8');
+  assert.doesNotMatch(source, /sessionAccent\b|--terminais-accent-light/);
+  assert.match(source, /style=\{sessionAccentStyle\(session\)\}/);
+});
+
+test('todo card mostra o ícone da sessão antes do nome, solto e no tom dela', () => {
+  const agent = card({ ...base, id: 'busy', name: 'psicoapp', activity: { agent: 'Codex', available: true, cpu: 1, memory: 0 } });
+  assert.match(agent, /session-icon session-icon--agent phone-session__icon[^>]*>[\s\S]*?<\/span><span class="phone-session__name">psicoapp</);
+  const shell = card({ ...base, id: 'done', name: 'docs', status: 'exited', activity: null });
+  assert.match(shell, /session-icon session-icon--default phone-session__icon/);
+  const chosen = card({ ...base, id: 'busy', name: 'site', icon: 'globe', activity: null });
+  assert.match(chosen, /session-icon session-icon--custom phone-session__icon/);
+  assert.match(phoneRule('.phone-session__icon'), /color: var\(--session-accent-text\)/);
+  assert.doesNotMatch(phoneRule('.phone-session__icon'), /background/);
+});
+
+test('a atenção aparece como no computador, numa linha compacta e no tom semântico', () => {
+  const finished = card({ ...base, id: 'busy', name: 'api', activity: null, attention: { kind: 'finished', message: 'pytest concluído' } });
+  assert.match(finished, /has-attention has-attention--finished/);
+  assert.match(finished, /phone-session__attention phone-session__attention--finished"><svg[\s\S]*?<span>pytest concluído<\/span>/);
+  const bell = card({ ...base, id: 'busy', name: 'api', activity: null, attention: { kind: 'bell', message: 'Sinal do terminal' } });
+  assert.match(bell, /phone-session__attention--bell/);
+  // Encerramento e falha já estão no estado escrito.
+  for (const kind of ['exited', 'error']) {
+    assert.doesNotMatch(card({ ...base, id: 'done', name: 'x', status: 'exited', activity: null, attention: { kind, message: 'fim' } }), /phone-session__attention/);
+  }
+  assert.match(phoneRule('.phone-session__attention--finished'), /var\(--phone-success\)/);
+  assert.match(css, /\.phone-session__attention--bell,\n\[data-form-factor="phone"\] \.phone-session__attention--notify \{ color: var\(--phone-warning\); \}/);
+});
+
+test('a barra lateral aparece em todo card, no tom da sessão, também pausada', () => {
+  assert.match(phoneRule('.phone-session.session-scope::before'), /width: 4px;[^}]*background: var\(--session-accent\)/);
+  assert.doesNotMatch(css, /\.phone-session\.has-color::before/, 'a barra não depende mais de cor escolhida');
+  assert.doesNotMatch(phoneRule('.phone-session'), /--phone-success|--terminais-accent/, 'o tom padrão é o rosa, nunca o verde');
+  assert.doesNotMatch(css, /\.phone-session--paused \{ --terminais-accent/, 'pausada só apaga o ponto');
+  assert.match(css, /\.phone-session--paused \.terminais-card__dot,\n\[data-form-factor="phone"\] \.phone-session--finished \.terminais-card__dot \{ background: var\(--phone-neutral\); \}/);
+});
+
+test('agente, atividade e botão de abrir seguem o tom da sessão; pronto fica no verde', () => {
+  assert.match(phoneRule('.phone-session__agent.is-agent'), /color: var\(--session-accent-text\)/);
+  assert.match(phoneRule('.phone-session__open'), /background: var\(--session-accent-soft\); color: var\(--session-accent-text\)/);
+  assert.doesNotMatch(phoneRule('.phone-session__open'), /--phone-primary/);
+  assert.match(css, /:is\(\.phone-session__head,\.phone-terminal__heading\) \.terminais-card__dot--busy,\n\[data-form-factor="phone"\] :is\(\.phone-session,\.phone-terminal__heading\) \.terminais-activity i \{ background: var\(--session-accent\); \}/);
+  assert.match(css, /:is\(\.phone-session__head,\.phone-terminal__heading\) \.terminais-card__dot--ok \{ background: var\(--phone-success\); \}/);
 });

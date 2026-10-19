@@ -136,7 +136,7 @@ pub struct TerminalView {
     pub revision: u64,
 }
 
-/// Nome, subtitulo, cor, fixacao e ordem de um card. O Rust e a fonte de
+/// Nome, subtitulo, cor, icone, fixacao e ordem de um card. O Rust e a fonte de
 /// verdade: computador e celular publicam e leem daqui, e `revision` resolve a
 /// disputa. Quem grava recebe a revisao nova; quem le adota a apresentacao
 /// quando a revisao recebida e maior que a conhecida.
@@ -146,6 +146,12 @@ pub struct TerminalPresentation {
     pub name: String,
     pub subtitle: String,
     pub color: Option<String>,
+    /// Icone escolhido para o card, um id do registro da interface. Ausente
+    /// nos clientes anteriores ao campo, e por isso opcional na entrada; na
+    /// saida vai sempre, `null` quando o card usa o icone padrao, para quem
+    /// le distinguir "sem icone" de "nao informado".
+    #[serde(default)]
+    pub icon: Option<String>,
     pub pinned: bool,
     pub order: u32,
     /// Contador que so cresce, atribuido pelo Rust a cada gravacao. O cliente
@@ -1360,6 +1366,13 @@ impl TerminalManager {
                 !color
                     .chars()
                     .all(|c| c.is_ascii_alphanumeric() || c == '#' || c == '-')
+            })
+            || presentation.icon.as_ref().is_some_and(|icon| {
+                icon.is_empty()
+                    || icon.len() > 32
+                    || !icon
+                        .chars()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
             })
         {
             return Err(t("native.error.presentationInvalid"));
@@ -2992,9 +3005,25 @@ echo 'recovered-fixture'
             malformed[field] = wrong;
             assert!(serde_json::from_value::<TerminalPresentation>(malformed).is_err());
         }
-        let mut extra = value;
+        let mut extra = value.clone();
         extra["owner"] = serde_json::json!("remote");
         assert!(serde_json::from_value::<TerminalPresentation>(extra).is_err());
+
+        // O icone e opcional na entrada, para clientes anteriores ao campo, e
+        // sai sempre, `null` quando o card usa o icone padrao.
+        let old = serde_json::from_value::<TerminalPresentation>(value.clone()).unwrap();
+        assert_eq!(old.icon, None);
+        assert_eq!(
+            serde_json::to_value(&old).unwrap()["icon"],
+            serde_json::Value::Null
+        );
+        let mut with_icon = value.clone();
+        with_icon["icon"] = serde_json::json!("git-branch");
+        let parsed = serde_json::from_value::<TerminalPresentation>(with_icon).unwrap();
+        assert_eq!(parsed.icon.as_deref(), Some("git-branch"));
+        let mut wrong_icon = value;
+        wrong_icon["icon"] = serde_json::json!(7);
+        assert!(serde_json::from_value::<TerminalPresentation>(wrong_icon).is_err());
     }
 
     #[test]
@@ -4027,6 +4056,7 @@ echo 'recovered-fixture'
             name: name.to_string(),
             subtitle: String::new(),
             color: None,
+            icon: None,
             pinned: false,
             order: 0,
             // O cliente nunca escolhe a revisao; o valor enviado e ignorado.
@@ -4056,6 +4086,31 @@ echo 'recovered-fixture'
         };
         assert!(manager.presentation(info.id, invalid).is_err());
         assert_eq!(manager.presentation(info.id, card("quarto")), Ok(4));
+
+        // Icone do registro grava; fora do formato nao grava e nao consome
+        // revisao.
+        let with_icon = TerminalPresentation {
+            icon: Some("rocket".to_string()),
+            ..card("quinto")
+        };
+        assert_eq!(manager.presentation(info.id, with_icon), Ok(5));
+        for wrong in ["", "Rocket", "rocket!", &"a".repeat(33)] {
+            let invalid = TerminalPresentation {
+                icon: Some(wrong.to_string()),
+                ..card("x")
+            };
+            assert!(manager.presentation(info.id, invalid).is_err(), "{wrong}");
+        }
+        let listed = manager
+            .list()
+            .into_iter()
+            .find(|item| item.tag == "t_presentation")
+            .expect("sessao na lista");
+        assert_eq!(
+            listed.presentation.and_then(|value| value.icon).as_deref(),
+            Some("rocket")
+        );
+        assert_eq!(manager.presentation(info.id, card("sexto")), Ok(6));
 
         manager.kill(info.id).ok();
         let _ = rx;

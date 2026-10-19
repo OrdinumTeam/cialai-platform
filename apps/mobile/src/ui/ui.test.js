@@ -1,11 +1,15 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { act, create } from 'react-test-renderer';
-import { Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { setLocale } from '../i18n';
 import { Agents } from '../screens/Agents';
+import { ProjectSheet } from '../screens/home/Projects';
 import { Projects } from '../screens/Projects';
+import { AgentGlyph } from './AgentGlyph';
+import { SessionIcon } from './SessionIcon';
+import { SESSION_ICONS } from './session-icons';
 import { lockedTabs, tabForScreen } from '../state/tabs';
 import { dashboardFor, recordSnapshot, resetDashboardForTests, toggleFavorite } from '../dashboard/store';
 import {
@@ -207,6 +211,36 @@ test('Projetos alterna para lista e mantém as ações', async () => {
   expect(labelled(tree, 'Ver em grade')).toBeUndefined();
   await act(async () => { labelled(tree, 'Ver em lista').props.onPress(); });
   expect(onView).toHaveBeenLastCalledWith('list');
+  await act(async () => tree.unmount());
+});
+
+test('ProjectSheet shows each open session with its icon loose in the session tone and a color bar', async () => {
+  const tone = { light: { base: '#0EA5E9', text: '#0369A1' }, dark: { base: '#7DD3FC', text: '#BAE6FD' } };
+  const base = { status: 'running', attention: null, turn: null, viewed: false };
+  const snapshot = { type: 'dashboard', at: 1, accounts: [], projects: [], recent: [], sessions: [
+    { ...base, id: 's1', name: 'api', cwd: '/p/alfa', agent: 'claude', color: 'azul', tone, icon: 'rocket' },
+    { ...base, id: 's2', name: 'web', cwd: '/p/alfa', agent: 'codex', color: null, tone: null, icon: null },
+    { ...base, id: 's3', name: '', cwd: '/p/alfa/docs', agent: null, color: null, tone: null, icon: 'nao-existe' }] };
+  const onContinue = jest.fn();
+  const tree = await render(<SafeAreaProvider initialMetrics={metrics}>
+    <ProjectSheet onClose={jest.fn()} onContinue={onContinue} onNewSession={jest.fn()} onToggleFavorite={jest.fn()}
+      project={{ name: 'alfa', path: '/p/alfa', root: '', favorite: false }} snapshot={snapshot} />
+  </SafeAreaProvider>);
+  for (const label of ['Continuar api', 'Continuar web', 'Continuar alfa']) expect(text(tree)).toContain(label);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  // O ícone usa o texto legível do tom; sem tom, o rosa. O escolhido vence o
+  // agente, o agente vence o terminal e um id desconhecido cai no padrão.
+  const icons = tree.root.findAllByType(SessionIcon);
+  expect(icons.map(icon => icon.props.color)).toEqual(['#0369A1', '#C73474', '#C73474']);
+  expect(tree.root.findAll(node => node.type === SESSION_ICONS.rocket)).toHaveLength(1);
+  expect(tree.root.findAllByType(AgentGlyph).map(glyph => [glyph.props.agent, glyph.props.color])).toEqual([['codex', '#C73474']]);
+  expect(tree.root.findAll(node => node.type === SESSION_ICONS.terminal)).toHaveLength(1);
+  // A barra de 4 px usa a base do tom, também rosa sem tom.
+  const bars = tree.root.findAll(node => node.type === View && StyleSheet.flatten(node.props.style)?.width === 4)
+    .map(node => StyleSheet.flatten(node.props.style).backgroundColor);
+  expect(bars).toEqual(['#0EA5E9', '#E23B84', '#E23B84']);
+  await act(async () => { labelled(tree, 'Continuar api').props.onPress(); });
+  expect(onContinue).toHaveBeenCalledWith('s1');
   await act(async () => tree.unmount());
 });
 
