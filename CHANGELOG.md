@@ -97,6 +97,16 @@ Preview dated 2026-10-19 for macOS, Windows, Linux, Android and iOS. The desktop
 
 * The terminal presentation gained the optional `icon` field and the Rust side rejects unknown fields, so the desktop front end and the Rust core ship in the same build. New dashboard snapshot fields are optional for the app: an older computer sends none and the app shows no attention notices
 
+### Fixed
+
+* Tapping an attention notice with the terminal already open now opens the session. The shell intent used to reach the page only through the bootstrap at load time; the app now also sends it as an `intent` message to the loaded page, and each intent id is still used once
+
+### Verification
+
+* The `v0.3.0` tag points at `9926eda`, the commit the packages were tested from. The full `npm test` passed with Node 22, plus 41 and 426 UI tests, 372 mobile tests, 5 browser scenarios and the performance budget at 729 KB and 853 ms. CI runs 39196103132 and 39192265156 passed on macOS, Linux and Windows
+* Windows and both Mac packages came from runs 39192267839 and 39196105711, Linux from 39192270260, and AppImage smoke run 39192273255 opened the app on Ubuntu 24.04 and Arch. On the Windows 11 VM the installer exited 0 and colour, icon, theme and history survived a restart. Both DMGs passed Developer ID, stapled notarization and Gatekeeper checks
+* On an Android 35 emulator paired with the VM desktop over the Tor backup, versionCode 37 showed the session colour and icon, raised the attention notice with the session dot, colour and computer name, and the tap opened the session. The iOS Release simulator build launched; build 18 is in internal TestFlight and in App Store and external beta review. No physical device was used
+
 ## 0.2.16 desktop website distribution
 
 ### Fixed
