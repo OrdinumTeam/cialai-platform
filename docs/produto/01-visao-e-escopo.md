@@ -73,6 +73,14 @@ Estes princípios estão implementados no Ordinum Control e definem a experiênc
 | iPad como layout próprio | O celular recebe a casca de telefone; o iPad recebe a mesma casca, como hoje |
 | Dev Browser no celular | A ponte recusa `browser_*` no remoto, como hoje |
 
+## Cialai Pro
+
+O Cialai Pro é a modalidade premium planejada, pela decisão 053. O escopo
+inicial é composto exclusivamente por Multi-Device Sessions e Agents Manager,
+as duas sem código. Tudo descrito acima continua na edição aberta, e o Pro usa a
+mesma conectividade. Objetivos, requisitos e dependências estão no
+[documento 17](./17-cialai-pro.md).
+
 ## Decisões confirmadas pelo usuário em 12/09/2026
 
 | Decisão | Valor |

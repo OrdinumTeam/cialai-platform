@@ -55,6 +55,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 047 | Preparado | Projetos com atalhos por computador e sessão nova em três etapas na página, com agente e conta escolhidos para a sessão; testes e capturas passam, fluxo completo em aparelho pendente de novo build nativo |
 | 048 | Preparado | Teclado especial e comandos rápidos na página do terminal, com sequências conferidas contra o xterm e em PTY local com bash, less, vim, Claude Code e Codex; conferência em aparelho pendente |
 | 051 | Preparado | Primeiro acesso no início com convite ilustrado e as abas que dependem de computador travadas por uma guarda única na navegação; testes passam, conferência em aparelho pendente |
+| 053 | Pendente | Escopo inicial do Cialai Pro registrado no documento 17; Multi-Device Sessions e Agents Manager sem código |
 
 ## 001 Nome Cialai
 
@@ -398,3 +399,13 @@ Decisão: o glifo do agente usa a tinta de texto para os dois, no app e na pági
 Alternativa rejeitada: manter os dois cabeçalhos e só encolher o nativo. O usuário escolheu o da sessão, que já tem o voltar e o nome da sessão; o nome do computador continua na lista, onde a troca de computador faz sentido. Também ficou fora reordenar a lista de Agentes a cada troca de conta em uso: a ordem muda só quando o retrato muda.
 
 Consequência: `mobile.agents.default`, `switch`, `switchFor` e `count` saem dos três dicionários e `mobile.agents.inUse`, `mobile.projects.viewList` e `mobile.projects.viewGrid` entram. A ponte ganha a mensagem `view`, só da página para a casca; páginas antigas não a mandam e a barra fica sempre visível, como antes. Testes cobrem a ordem da lista, a conta do card do Início, a mensagem `view`, a barra escondida e a lista de Projetos; a conferência no aparelho fica pendente de novo build.
+
+## 053 Escopo inicial do Cialai Pro
+
+Data: 13/10/2026. Contexto: a Ordinum quer uma modalidade premium do Cialai que dê mais funções ao estúdio de terminais e ao app, sem mudar a proposta original de ambiente de desenvolvimento remoto, open source e com conectividade que não depende de servidor da pessoa, da Ordinum ou do projeto. Era preciso fixar o que entra nessa modalidade antes de qualquer desenvolvimento.
+
+Decisão: o escopo inicial planejado do Cialai Pro é composto exclusivamente por Multi-Device Sessions e Agents Manager, descritos no documento 17. Multi-Device Sessions leva uma mesma sessão a vários computadores e celulares, com troca de aparelho sem perder o contexto. Agents Manager é um painel dentro do espaço do terminal, que a pessoa expande ou recolhe, com os agentes, subagentes e processos paralelos da sessão. As duas funções ficam como planejadas. O layout visual do Agents Manager não é definido agora.
+
+Alternativa rejeitada: um Pro feito de serviços hospedados pela Ordinum, como push remoto e relé próprio. Ele exigiria servidor e conta, contrariando a conectividade sem servidor do produto. Também ficou fora antecipar outras funções Pro sem definição.
+
+Consequência: tudo que a edição aberta faz hoje continua nela, e o Pro usa a mesma conectividade direta e pelo Tor. Preço, licenciamento e regras comerciais ficam fora da documentação do produto neste momento. Uma função nova no Pro exige decisão nova neste registro e atualiza a tabela de escopo do documento 17. As tarefas de desenvolvimento entram no documento 11 só quando o desenvolvimento for aprovado.

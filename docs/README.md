@@ -31,6 +31,7 @@ Os números dos documentos são identificadores estáveis, como os das tarefas: 
 | 08 | [Design e marca](./produto/08-design-e-marca.md) | Identidade Cialai aplicada, tokens mantidos, paleta das sessões e tema do terminal |
 | 11 | [Roadmap de execução](./produto/11-roadmap-de-execucao.md) | Fases, tarefas numeradas, critérios de aceite, dependências e riscos |
 | 12 | [Decisões](./produto/12-decisoes.md) | Registro das decisões, com contexto, alternativas e consequências |
+| 17 | [Cialai Pro](./produto/17-cialai-pro.md) | A modalidade premium planejada: escopo inicial com Multi-Device Sessions e Agents Manager, requisitos e dependências |
 
 ## Arquitetura
 
