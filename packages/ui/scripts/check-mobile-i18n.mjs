@@ -112,7 +112,7 @@ export function collectRustKeyUsage(source) {
 export function unusedKeys(keys, usages) {
   return keys.filter((key) => !usages.some((usage) => usage.literals.has(key) || [...usage.families].some((prefix) => key.startsWith(prefix))));
 }
-const allowedLiterals = new Set(['Cialai', 'Codex', 'Dev Browser', 'Material Mica', 'Promise', 'Shell', 'hskey-api']);
+const allowedLiterals = new Set(['Cialai', 'Claude Code', 'Codex', 'Dev Browser', 'Material Mica', 'PowerShell', 'Promise', 'Shell', 'hskey-api']);
 const accessibleProperties = new Set(['aria-label', 'title', 'placeholder', 'accessibilityLabel', 'accessibilityHint']);
 const configurationProperties = new Set(['label', 'message', 'description', 'emptyText', 'buttonText', 'headerTitle', 'promptMessage', 'cancelLabel', 'fallbackLabel', 'title', 'placeholder', 'hint', 'subtitle', 'kind', 'confirmLabel', 'dialogTitle']);
 const visibleProperties = new Set([...configurationProperties, 'alt', 'ariaLabel', 'helperText']);

@@ -109,7 +109,7 @@ const views = [{ id: 'terminais', label: 'Terminais' }, { id: 'dispositivos', la
 const items = appMenuItems(actions, views, { label: (combo) => `[${combo}]` });
 const runnable = items.filter((item) => item && !item.separator);
 const byLabel = Object.fromEntries(runnable.map((item) => [item.label, item]));
-for (const label of ['Novo terminal', 'Novo arquivo', 'Fechar', 'Recarregar navegador', 'Buscar comandos', 'Mostrar ou ocultar barra lateral', 'Aparência do sistema', 'Aparência clara', 'Aparência escura', 'Terminais', 'Dispositivos', 'Preferências', 'Fechar janela', 'Sair do Cialai']) {
+for (const label of ['Novo terminal', 'Novo arquivo', 'Fechar', 'Recarregar navegador', 'Buscar comandos', 'Mostrar ou ocultar barra lateral', 'Aparência do sistema', 'Aparência clara', 'Aparência escura', 'Terminais', 'Dispositivos', 'Preferências', 'Perfis de agentes', 'Fechar janela', 'Sair do Cialai']) {
   assert.ok(byLabel[label], `item ausente no menu da toolbar: ${label}`);
 }
 assert.equal(byLabel['Novo terminal'].hint, '[Mod+T]');
@@ -117,7 +117,8 @@ assert.equal(byLabel.Dispositivos.hint, '[Mod+2]');
 byLabel['Aparência escura'].run();
 byLabel.Dispositivos.run();
 byLabel['Sair do Cialai'].run();
-assert.deepEqual(calls, [['setAppearance', 'dark'], ['navigate', 'dispositivos'], ['quitApp']]);
+byLabel['Perfis de agentes'].run();
+assert.deepEqual(calls, [['setAppearance', 'dark'], ['navigate', 'dispositivos'], ['quitApp'], ['openAgentProfiles']]);
 for (const item of runnable) {
   assert.doesNotMatch(item.label, /[()–—]| - /, `texto do menu com separador proibido: ${item.label}`);
 }

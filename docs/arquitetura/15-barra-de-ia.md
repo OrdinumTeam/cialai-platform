@@ -87,8 +87,15 @@ horas de fato zerou; a semana dela continua no detalhe.
 Uma sessão só aparece como aguardando quando a própria ferramenta grava isso.
 No Claude Code é o campo `status` do registro da sessão, que só a interface de
 terminal escreve; o transcript distingue apenas trabalhando de parado e nunca
-afirma espera. O Codex nunca aparece como aguardando: não existe evento que
-diga isso. É a mesma regra do estúdio, e agora é literalmente o mesmo código.
+afirma espera. Na Barra de IA o Codex nunca aparece como aguardando, porque
+o rollout não tem evento que diga isso. No estúdio ele aparece: lá o turno vem
+da sequência `OSC 7501` que o Codex escreve no próprio terminal, que tem
+`state=blocked` com o motivo. É a mesma regra nos dois, e o leitor é o mesmo
+código.
+
+Cada conversa viva do Codex é uma sessão. Desde a 0.163 várias abas do mesmo
+perfil trabalham juntas, cada uma no próprio rollout, então o arquivo escrito
+por último não responde pelas outras.
 
 ### O leitor é um só
 
@@ -201,8 +208,9 @@ nunca lê o conteúdo de arquivo de credencial nenhum.
 | --- | --- | --- |
 | `agent_profiles` | Lista as contas de cada agente com rótulo, plano, marca de ativo, marca de padrão, estado de login e as janelas de uso. Nunca inclui `accountKey`, token nem conteúdo de credencial | `read` |
 | `agent_profile_select` | Grava a conta que as sessões novas vão usar e emite `agents://profiles` | `session` |
-| `agent_profile_create` | Cria `~/.claude-<nome>` ou `~/.codex-<nome>` vazia e com permissão 0700, recusando pasta existente e nome fora de letras minúsculas, dígitos e hífen | `session` |
-| `pty_launch_agent` | Abre o agente numa conta escolhida no terminal já aberto, digitando a linha montada no Rust, só com o shell no prompt | `terminal` |
+| `agent_profile_create` | Cria `~/.claude-<nome>` ou `~/.codex-<nome>` com permissão 0700, as instruções do perfil padrão por link e a configuração dele por cópia, recusando pasta existente e nome fora de letras minúsculas, dígitos, hífen e sublinhado | `session` |
+| `pty_launch_agent` | Abre o agente numa conta escolhida no terminal já aberto, digitando a linha montada no Rust, só com o shell no prompt. Com `login`, digita o login da conta no lugar do agente | `terminal` |
+| `agent_menu_publish` | Grava em `~/.cialai/agents` as contas de um agente com a cota traduzida, para o menu de contas do shell, descrito no documento 04 | fora da ponte |
 
 Terminal novo nasce com as variáveis da conta ativa, aplicadas em
 `spawn_for_with_spec` depois da limpeza de marcadores de sessão herdados. Conta

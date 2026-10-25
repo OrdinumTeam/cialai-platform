@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.4.0](0.4.0.md) | 25/10/2026 | `v0.4.0` | `OrdinumTeam/cialai-platform`, perfis de agentes, explorador perto do VS Code e estado próprio em cada card |
 | [0.3.0](0.3.0.md) | 19/10/2026 | `v0.3.0` | `OrdinumTeam/cialai-platform`, visual novo, cor e ícone por sessão e avisos de atenção no celular |
 | [0.2.16](0.2.16.md) | 17/10/2026 | Sem tag | Site e curl, apelidos dos perfis e ação para sessões com falha |
 | [0.2.15](0.2.15.md) | 16/10/2026 | Sem tag | Site e curl, associação das conversas nos três desktops |

@@ -61,6 +61,7 @@ import { isMobileShell, isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
+import { untaggedOwner } from './pty-adoption.js';
 import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { installTerminalClipboard } from './clipboard.js';
 import { currentOs } from '../lib/keys.js';
@@ -1576,8 +1577,12 @@ async function sampleMetrics() {
   if (state.metricsBusy || !hasBridge() || state.demo) return;
   if (![...state.sessions.values()].some(measurable)) return;
   state.metricsBusy = true;
+  // Uma resposta que volta depois de uma queda da ponte e da conexao velha: o
+  // carimbo de agora a faria passar por nova e sobrescrever o estado atual.
+  const epoch = state.connectionEpoch;
   try {
     const list = await invoke('pty_metrics');
+    if (epoch !== state.connectionEpoch) return;
     if (Array.isArray(list)) applyMetrics(list);
   } catch (_error) {
     // Kernel recusou a leitura: os cards mostram o dado como indisponivel.
@@ -1728,7 +1733,8 @@ async function syncSharedSessions() {
     for (const info of alive) {
       let session = [...state.sessions.values()].find((entry) => entry.ptyId === info.id);
       if (!session && info.tag) session = state.sessions.get(info.tag);
-      if (!session && !info.tag) session = [...state.sessions.values()].find((entry) => entry.ptyId == null && !entry.spawning && entry.cwd === info.cwd);
+      // Sem tag, a pasta so identifica a dona quando aponta uma sessao so.
+      if (!session && !info.tag) session = untaggedOwner([...state.sessions.values()], info);
       // A spawn result can arrive after pty_list observed its tag.
       if (session?.spawning) continue;
       if (!session) {
@@ -1881,9 +1887,10 @@ export function openSession(cwd, { name, subtitle, color, icon, select = true } 
 
 // Abre o agente na conta escolhida assim que o shell da sessao nova subir. O
 // computador recusa se houver processo em primeiro plano; a conta ativa dele
-// para os proximos shells continua a mesma.
+// para os proximos shells continua a mesma. Com `login`, digita o login da
+// conta no lugar do agente.
 const LAUNCH_WAIT_MS = 30_000;
-export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WAIT_MS } = {}) {
+export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WAIT_MS, login = false } = {}) {
   return new Promise((resolve, reject) => {
     let off = () => {};
     let timer = null;
@@ -1904,7 +1911,7 @@ export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WA
       done = true;
       off();
       clearTimeout(timer);
-      invoke('pty_launch_agent', { id: session.ptyId, agent, profile }).then(() => resolve(), reject);
+      invoke('pty_launch_agent', { id: session.ptyId, agent, profile, ...(login ? { login: true } : {}) }).then(() => resolve(), reject);
     };
     off = subscribe((event) => { if (event.type === 'sessions') check(); });
     timer = setTimeout(() => finish(new Error(translate('terminal.session.launchTimeout'))), timeoutMs);

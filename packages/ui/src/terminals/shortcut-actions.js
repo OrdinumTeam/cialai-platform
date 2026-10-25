@@ -54,3 +54,17 @@ export function isExplorerDeleteShortcut(event, os = currentOs()) {
   return isShortcut(event, 'Delete', os)
     || isShortcut(event, terminalSafe('Mod+Backspace', os), os);
 }
+
+// Edição no explorador, no padrão do VS Code. A árvore tem foco próprio e não
+// é o terminal, então Mod+C, Mod+X e Mod+V valem sem Shift em todo sistema.
+// Refazer vem antes de desfazer porque só o Shift os separa.
+export function explorerEditAction(event, os = currentOs()) {
+  if (isShortcut(event, 'Mod+X', os)) return 'cut';
+  if (isShortcut(event, 'Mod+C', os)) return 'copy';
+  if (isShortcut(event, 'Mod+V', os)) return 'paste';
+  if (isShortcut(event, 'Mod+A', os)) return 'select-all';
+  if (isShortcut(event, 'Mod+Shift+Z', os) || isShortcut(event, 'Mod+Y', os)) return 'redo';
+  if (isShortcut(event, 'Mod+Z', os)) return 'undo';
+  if (isShortcut(event, 'F2', os)) return 'rename';
+  return null;
+}

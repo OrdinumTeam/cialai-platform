@@ -27,6 +27,9 @@
 //!   arquivo.
 //! - **Observador** em [`watch`]: kqueue nas pastas expandidas e nos arquivos
 //!   abertos, avisando pelo evento [`watch::EVENT_FS_CHANGE`].
+//! - **Contas dos agentes** em [`agent_profiles`]: as pastas do Codex e do
+//!   Claude Code com login proprio, e o menu de contas em [`agent_menu`], que
+//!   pergunta qual conta usar ao digitar `codex` ou `claude` numa sessao.
 //! - **Uso do plano dos agentes** em [`ai`]: o quanto da cota de Claude Code e
 //!   Codex ja foi gasto, lido de onde cada um publica.
 //! - **Visualizacao de HTML** em [`preview`]: o protocolo `preview://` serve
@@ -44,6 +47,7 @@
 //!   de cada terminal em disco e a conversa do Claude Code ou do Codex em
 //!   uso, para reabrir depois que o app fecha ou cai.
 
+pub mod agent_menu;
 pub mod agent_profiles;
 pub mod agent_state;
 pub mod ai;

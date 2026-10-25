@@ -10,6 +10,8 @@ import ContentArea from '../components/ContentArea.jsx';
 import { closeCurrentWindow, invoke, isTauri, watchFullscreen } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
+import { startAgentMenuPublisher } from './agent-menu.js';
+import AgentProfilesDialog from './AgentProfilesDialog.jsx';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
 import NotchBar from '../notch/NotchBar.jsx';
@@ -116,6 +118,10 @@ function DesktopShell() {
     return section && section !== '1' ? section : null;
   });
   const [pairOpen, setPairOpen] = useState(() => queryFlag('pair') === '1');
+  // Perfis de agentes: `agent` escolhe a ferramenta que o formulário abre
+  // marcada, quando quem abre já sabe, como o botão de perfil novo do Codex.
+  const [agentsOpen, setAgentsOpen] = useState(() => Boolean(queryFlag('agents')));
+  const [agentsAgent, setAgentsAgent] = useState(() => queryFlag('agents'));
   const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();
@@ -139,6 +145,10 @@ function DesktopShell() {
     setPrefsOpen(true);
   }, []);
   const openPair = useCallback(() => setPairOpen(true), []);
+  const openAgentProfiles = useCallback((agent) => {
+    setAgentsAgent(typeof agent === 'string' ? agent : null);
+    setAgentsOpen(true);
+  }, []);
   const newTerminal = useCallback(() => {
     navigate('terminais');
     import('../terminals/runtime.js').then((runtime) => runtime.requestNewTerminal()).catch(() => {});
@@ -168,11 +178,11 @@ function DesktopShell() {
   }, [navigate]);
 
   const actions = useMemo(() => ({
-    navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair,
+    navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, openAgentProfiles,
     setAppearance: appearance.setMode, newTerminal, newFile,
     closeActiveTerminalOrWindow, closeWindow, quitApp,
     showNotch, hideNotch, toggleNotch,
-  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp, showNotch, hideNotch, toggleNotch]);
+  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, openAgentProfiles, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp, showNotch, hideNotch, toggleNotch]);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
@@ -187,6 +197,8 @@ function DesktopShell() {
   useEffect(() => {
     installShellBridge({ setSidebarHidden: setSidebarHiddenTransient, openPalette, navigate }, { sidebarHidden });
   }, [setSidebarHiddenTransient, openPalette, navigate, sidebarHidden]);
+  // Contas do menu que o shell das sessões mostra ao digitar codex ou claude.
+  useEffect(() => startAgentMenuPublisher(), []);
   useEffect(() => {
     let disposed = false;
     let off = null;
@@ -215,10 +227,17 @@ function DesktopShell() {
     const pair = () => setPairOpen(true);
     // Preferências e o painel de acesso levam ao diagnóstico avançado em Dispositivos.
     const diagnostics = () => { setPrefsOpen(false); navigate('dispositivos'); setAdvancedOpen(true); };
+    // Os botões de perfil novo das telas de contas abrem o modal Perfis de agentes.
+    const agents = (event) => { setPrefsOpen(false); openAgentProfiles(event?.detail?.agent); };
     window.addEventListener('cialai:pair-device', pair);
     window.addEventListener('cialai:network-diagnostics', diagnostics);
-    return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-diagnostics', diagnostics); };
-  }, [navigate, setAdvancedOpen]);
+    window.addEventListener('cialai:agent-profiles', agents);
+    return () => {
+      window.removeEventListener('cialai:pair-device', pair);
+      window.removeEventListener('cialai:network-diagnostics', diagnostics);
+      window.removeEventListener('cialai:agent-profiles', agents);
+    };
+  }, [navigate, setAdvancedOpen, openAgentProfiles]);
 
   const active = getDesktopView(view, views);
   const ViewComponent = DESKTOP_VIEW_COMPONENTS[active.id];
@@ -238,6 +257,7 @@ function DesktopShell() {
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={views} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} section={prefsSection} onClose={() => setPrefsOpen(false)} appearance={appearance} />
+            <AgentProfilesDialog open={agentsOpen} agent={agentsAgent} onClose={() => setAgentsOpen(false)} onOpenTerminals={() => navigate('terminais')} />
             <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}

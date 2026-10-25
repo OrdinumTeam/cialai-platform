@@ -41,8 +41,9 @@ use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
 use super::EVENT_PTY_EXIT;
+use super::agent_menu;
 use super::agent_profiles;
-use super::agent_state::{self, AgentTurn};
+use super::agent_state::{self, AgentTurn, CodexOsc};
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, CommandLine, ProcSource, ProcState, SystemProcs};
 use super::pty::{self, CursorPosition, ShellFlavor};
@@ -264,6 +265,9 @@ struct OutputState {
     /// Ate onde o historico ja foi limpo de consultas; o resto pode terminar
     /// num comeco de consulta cortado entre dois trechos.
     clean: usize,
+    /// Turno que o Codex anunciou na saida deste terminal. E o estado desta
+    /// sessao e de nenhuma outra, mesmo com o daemon compartilhado.
+    codex_osc: CodexOsc,
 }
 
 /// Troca por NUL as consultas do historico a partir de `from` e devolve ate
@@ -334,6 +338,7 @@ impl OutputLink {
             let bytes = if let InvokeResponseBody::Raw(data) = &body {
                 state.sequence += data.len() as u64;
                 state.last_output = Some(Instant::now());
+                state.codex_osc.feed(data, super::ai::now_ms());
                 state.history.extend(data);
                 let overflow = state.history.len().saturating_sub(SCROLLBACK_LIMIT);
                 state.history.drain(..overflow);
@@ -362,6 +367,16 @@ impl OutputLink {
     /// Instante do ultimo lote de saida desta sessao.
     fn last_output(&self) -> Option<Instant> {
         lock(&self.state).last_output
+    }
+
+    /// Turno que o Codex anunciou neste terminal.
+    fn codex_turn(&self) -> Option<AgentTurn> {
+        lock(&self.state).codex_osc.turn()
+    }
+
+    /// Esquece o turno anunciado, quando o Codex ja nao roda nesta sessao.
+    fn clear_codex_turn(&self) {
+        lock(&self.state).codex_osc.clear();
     }
 
     /// Espera haver espaco para mais `bytes`. Devolve false se o canal foi
@@ -623,6 +638,9 @@ pub struct TerminalManager {
     closing: Arc<AtomicBool>,
     prefs: PrefsState,
     home: PathBuf,
+    /// Shells com o menu de contas do Codex e do Claude Code. So o app liga:
+    /// os testes nascem sem tocar em `~/.cialai`.
+    agent_menu: bool,
 }
 
 struct MetricsCache {
@@ -644,7 +662,7 @@ impl TerminalManager {
             .app_data_dir()
             .ok()
             .map(|dir| dir.join("terminals"));
-        let manager = Self::with_environment(
+        let mut manager = Self::with_environment(
             Arc::new(move |exit| {
                 let _ = app.emit(EVENT_PTY_EXIT, exit);
             }),
@@ -655,6 +673,7 @@ impl TerminalManager {
             home,
             Arc::new(SystemProcs::default()),
         );
+        manager.agent_menu = true;
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
             None => manager,
@@ -748,6 +767,7 @@ impl TerminalManager {
             closing: Arc::new(AtomicBool::new(false)),
             prefs,
             home,
+            agent_menu: false,
         };
         // Weak ownership prevents this watchdog from keeping a manager alive.
         let weak = Arc::downgrade(&manager.inner);
@@ -882,8 +902,14 @@ impl TerminalManager {
         let cols = cols.max(2);
         let rows = rows.max(1);
 
+        // Menu de contas ao digitar `codex` ou `claude`: o shell nasce com os
+        // arquivos de inicializacao do Cialai, que carregam os do usuario antes.
+        let menu = self
+            .agent_menu
+            .then(|| agent_menu::for_session(shell, prefs.terminal.args.is_empty(), &self.home))
+            .flatten();
         let mut command = CommandBuilder::new(&shell.path);
-        for arg in &shell.args {
+        for arg in menu.as_ref().map_or(&shell.args, |menu| &menu.args) {
             command.arg(arg);
         }
         command.cwd(&dir);
@@ -933,6 +959,9 @@ impl TerminalManager {
             }
         }
         platform::child_env::sanitize(&mut command);
+        for (name, value) in menu.iter().flat_map(|menu| menu.env.iter()) {
+            command.env(name, value);
+        }
 
         let spawned = pty::spawn_shell(
             command,
@@ -1217,13 +1246,29 @@ impl TerminalManager {
     /// a linha com as variaveis na frente. So escreve com o shell no prompt e
     /// sem processo em primeiro plano: no meio de um agente rodando, a linha
     /// viraria texto na conversa dele.
-    pub fn launch_agent(&self, id: u32, agent: &str, profile_id: &str) -> Result<(), String> {
+    ///
+    /// Com `login`, a linha faz o login da conta em vez de abrir o agente. Um
+    /// perfil recem-criado ainda pode nao ter marcador nenhum, e por isso o
+    /// login so exige que a pasta exista.
+    pub fn launch_agent(
+        &self,
+        id: u32,
+        agent: &str,
+        profile_id: &str,
+        login: bool,
+    ) -> Result<(), String> {
         let kind =
             agent_profiles::Agent::parse(agent).ok_or_else(|| t("native.error.agentUnknown"))?;
         let slug = agent_profiles::slug_of(kind, profile_id)
             .ok_or_else(|| t("native.error.profileUnknown"))?;
         let dir = agent_profiles::dir_of(&self.home, kind, profile_id)
-            .filter(|dir| agent_profiles::is_profile_dir(dir, kind))
+            .filter(|dir| {
+                if login {
+                    dir.is_dir()
+                } else {
+                    agent_profiles::is_profile_dir(dir, kind)
+                }
+            })
             .ok_or_else(|| t("native.error.profileUnknown"))?;
         let (flavor, busy) = {
             let guard = self.lock();
@@ -1242,6 +1287,14 @@ impl TerminalManager {
         // O perfil padrao abre o agente sem variavel nenhuma, para ele cair no
         // proprio padrao; um nomeado leva caminho e nome, citados.
         let portable = crate::platform::to_portable(&dir);
+        if login {
+            let line = agent_profiles::login_line(
+                kind,
+                slug.map(|name| (portable.as_str(), name)),
+                flavor,
+            );
+            return self.write(id, format!("{line}\r").as_bytes());
+        }
         let line = match slug {
             None => resume::launch_command(
                 if kind == agent_profiles::Agent::Claude {
@@ -1657,6 +1710,7 @@ impl TerminalManager {
                         self.procs.as_ref(),
                     ),
                     last_output: session.link.last_output(),
+                    link: session.link.clone(),
                 })
                 .collect()
         };
@@ -1673,6 +1727,7 @@ impl TerminalManager {
             pid,
             foreground_pgid,
             last_output,
+            link,
         } in targets
         {
             let output_age_ms = last_output.map(|at| {
@@ -1703,6 +1758,11 @@ impl TerminalManager {
             };
             let mut tree = vec![pid];
             tree.extend(source.descendants(pid));
+            // O daemon `codex app-server` e compartilhado: nasce filho da aba
+            // que abriu o Codex primeiro e atende todas. O que ele segura,
+            // gasta ou executa pode ser de qualquer aba, entao fica fora da
+            // arvore desta sessao.
+            exclude_shared_servers(source, &mut tree, &mut commands);
             alive.extend_from_slice(&tree);
 
             let mut cpu = 0f64;
@@ -1764,7 +1824,21 @@ impl TerminalManager {
                 .is_some()
                 .then(|| resume::detect_from(source, pid, &tree, &mut commands, &home))
                 .flatten();
-            let (agent_turn, agent_session_id) = agent_fields(detected);
+            let (file_turn, agent_session_id) = agent_fields(detected);
+            // O Codex anuncia o turno na saida do proprio terminal, e so esse
+            // anuncio e desta sessao com certeza. Vale o agente que o card
+            // mostra: o do primeiro plano, senao o da arvore. Sem Codex aqui o
+            // anuncio de uma execucao anterior e esquecido.
+            let shown_agent = foreground
+                .as_ref()
+                .and_then(|found| found.agent.as_deref())
+                .or(agent.as_deref());
+            let agent_turn = if shown_agent == Some(resume::CODEX) {
+                link.codex_turn().or(file_turn)
+            } else {
+                link.clear_codex_turn();
+                file_turn
+            };
 
             result.push(SessionMetrics {
                 id,
@@ -2128,6 +2202,33 @@ struct MetricsTarget {
     pid: Option<u32>,
     foreground_pgid: Option<u32>,
     last_output: Option<Instant>,
+    link: Arc<OutputLink>,
+}
+
+/// Tira da arvore o servidor compartilhado do Codex e tudo abaixo dele.
+fn exclude_shared_servers(
+    source: &dyn ProcSource,
+    tree: &mut Vec<u32>,
+    commands: &mut CommandCache,
+) {
+    let servers: Vec<u32> = tree
+        .iter()
+        .copied()
+        .filter(|&member| {
+            source
+                .info(member)
+                .and_then(|info| commands.get_from(source, member, info.start_sec))
+                .is_some_and(|command| resume::is_codex_app_server(&command))
+        })
+        .collect();
+    if servers.is_empty() {
+        return;
+    }
+    let mut excluded: HashSet<u32> = servers.iter().copied().collect();
+    for server in servers {
+        excluded.extend(source.descendants(server));
+    }
+    tree.retain(|member| !excluded.contains(member));
 }
 
 /// Turno do agente pelo arquivo que a deteccao apontou.
@@ -3794,6 +3895,286 @@ echo 'recovered-fixture'
         assert!(turn_of(&AgentEvidence::ClaudeRecord(mute)).is_none());
 
         let _ = std::fs::remove_dir_all(dir);
+    }
+
+    /// Processo falso na arvore de uma sessao, com o perfil do Codex no
+    /// ambiente, como o `agent_profile` le.
+    fn fake_codex(
+        source: &procs::FakeProcs,
+        pid: u32,
+        ppid: u32,
+        argv: &[&str],
+        home: &Path,
+        cwd: &Path,
+    ) {
+        source.set_info(procs::ProcInfo {
+            pid,
+            ppid,
+            pgid: pid,
+            state: ProcState::Sleeping,
+            comm: "codex".into(),
+            name: "codex".into(),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            pid,
+            CommandLine {
+                exe: "/usr/local/bin/codex".into(),
+                argv: argv.iter().map(|arg| arg.to_string()).collect(),
+                env: HashMap::from([(
+                    "CODEX_HOME".to_string(),
+                    home.to_string_lossy().into_owned(),
+                )]),
+            },
+        );
+        source.set_cwd(pid, cwd.to_string_lossy());
+    }
+
+    /// Escreve no terminal o que o Codex escreve a cada mudanca de turno.
+    fn announce(manager: &TerminalManager, id: u32, body: &str) {
+        let line = format!("printf '\\033]7501;{body}\\007'\n");
+        manager.write(id, line.as_bytes()).unwrap();
+    }
+
+    fn turn_by_tag(
+        manager: &TerminalManager,
+        tag: &str,
+    ) -> Option<(agent_state::TurnState, Option<String>)> {
+        manager
+            .sample_metrics()
+            .into_iter()
+            .find(|metrics| metrics.tag == tag)
+            .and_then(|metrics| metrics.agent_turn)
+            .map(|turn| (turn.state, turn.waiting_for))
+    }
+
+    fn wait_turn(
+        manager: &TerminalManager,
+        tag: &str,
+        expected: agent_state::TurnState,
+    ) -> Option<(agent_state::TurnState, Option<String>)> {
+        for _ in 0..200 {
+            let turn = turn_by_tag(manager, tag);
+            if turn.as_ref().map(|(state, _)| *state) == Some(expected) {
+                return turn;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        turn_by_tag(manager, tag)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn three_codex_cards_in_one_folder_keep_their_own_turn_with_the_shared_daemon() {
+        use agent_state::TurnState::{Busy, Done, Idle, Waiting};
+        let dir = scratch("tres-codex");
+        let home = dir.join("perfil");
+        let project = dir.join("projeto");
+        std::fs::create_dir_all(&project).unwrap();
+        // O rollout que o daemon segura e da conversa da aba 3, ja entregue.
+        let theirs = rollout_at(
+            &home,
+            "rollout-2026-10-25T19-52-59-01a17544-6756-7161-b57f-f833f529b0e6.jsonl",
+            &["task_started", "task_complete"],
+        );
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), source.clone());
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), dir.clone());
+        let shell = pty::TestShell::isolated();
+        let tabs: Vec<TerminalInfo> = ["aba1", "aba2", "aba3"]
+            .iter()
+            .map(|tag| {
+                spawn_test_shell(
+                    &manager,
+                    &shell,
+                    tag,
+                    SubscriberKey::Webview,
+                    Channel::new(|_| Ok(())),
+                )
+            })
+            .collect();
+        // Cada aba roda o proprio Codex na mesma pasta e no mesmo perfil.
+        for (index, tab) in tabs.iter().enumerate() {
+            let cli = 40_001 + index as u32;
+            source.set_children(tab.pid.unwrap(), vec![cli]);
+            fake_codex(&source, cli, tab.pid.unwrap(), &["codex"], &home, &project);
+        }
+        // O daemon nasceu filho do Codex da aba 1 e segura o rollout da aba 3.
+        source.set_children(40_001, vec![40_900]);
+        fake_codex(
+            &source,
+            40_900,
+            40_001,
+            &["codex", "app-server", "--listen", "unix:/tmp/x.sock"],
+            &home,
+            &project,
+        );
+        source.set_open_files(40_900, vec![theirs.to_string_lossy().into_owned()]);
+
+        // Antes de qualquer anuncio a aba 1 nao herda a conversa do daemon.
+        let first = manager
+            .sample_metrics()
+            .into_iter()
+            .find(|metrics| metrics.tag == "aba1")
+            .unwrap();
+        assert!(
+            first.agent_turn.is_none(),
+            "a aba 1 nao pode ler o rollout de outra aba"
+        );
+        assert!(
+            first.agent_session_id.is_none(),
+            "o id da conversa da aba 3 nao pode ir para a aba 1"
+        );
+        assert_eq!(
+            first.processes, 2,
+            "o daemon compartilhado fica fora da arvore da aba 1"
+        );
+
+        // Uma executando, uma com resposta entregue, uma aguardando voce.
+        announce(&manager, tabs[0].id, "state=working:app=codex");
+        announce(&manager, tabs[1].id, "state=done:app=codex");
+        announce(
+            &manager,
+            tabs[2].id,
+            "state=blocked:app=codex:kind=permission",
+        );
+        assert_eq!(wait_turn(&manager, "aba1", Busy), Some((Busy, None)));
+        assert_eq!(wait_turn(&manager, "aba2", Done), Some((Done, None)));
+        assert_eq!(
+            wait_turn(&manager, "aba3", Waiting),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // Uma mensagem nova so na aba 2 muda so o card dela.
+        announce(&manager, tabs[1].id, "state=working:app=codex");
+        assert_eq!(wait_turn(&manager, "aba2", Busy), Some((Busy, None)));
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // Encerrar a aba 2 nao mexe nas outras.
+        manager.kill(tabs[1].id).unwrap();
+        for _ in 0..200 {
+            if manager
+                .sample_metrics()
+                .iter()
+                .all(|metrics| metrics.tag != "aba2")
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // O Codex da aba 3 sai: o anuncio da execucao anterior e esquecido e
+        // nao volta quando outro Codex abre na mesma aba.
+        source.set_children(tabs[2].pid.unwrap(), Vec::new());
+        assert_eq!(turn_by_tag(&manager, "aba3"), None);
+        source.set_children(tabs[2].pid.unwrap(), vec![40_003]);
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            None,
+            "o estado antigo nao pode voltar sozinho"
+        );
+        announce(&manager, tabs[2].id, "state=idle:app=codex");
+        assert_eq!(wait_turn(&manager, "aba3", Idle), Some((Idle, None)));
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn another_agent_in_the_same_folder_ignores_what_a_codex_announced() {
+        let dir = scratch("provedores");
+        let home = dir.join("perfil");
+        let project = dir.join("projeto");
+        std::fs::create_dir_all(&project).unwrap();
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), source.clone());
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), dir.clone());
+        let shell = pty::TestShell::isolated();
+        let codex = spawn_test_shell(
+            &manager,
+            &shell,
+            "codex",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        let other = spawn_test_shell(
+            &manager,
+            &shell,
+            "outro",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        source.set_children(codex.pid.unwrap(), vec![41_001]);
+        fake_codex(
+            &source,
+            41_001,
+            codex.pid.unwrap(),
+            &["codex"],
+            &home,
+            &project,
+        );
+        // A aba vizinha roda outro agente na mesma pasta, e um Codex antigo
+        // deixou um anuncio na saida dela.
+        announce(&manager, other.id, "state=done:app=codex");
+        announce(&manager, codex.id, "state=working:app=codex");
+        assert_eq!(
+            wait_turn(&manager, "codex", agent_state::TurnState::Busy),
+            Some((agent_state::TurnState::Busy, None))
+        );
+        source.set_children(other.pid.unwrap(), vec![41_002]);
+        source.set_info(procs::ProcInfo {
+            pid: 41_002,
+            ppid: other.pid.unwrap(),
+            pgid: 41_002,
+            state: ProcState::Sleeping,
+            comm: "claude".into(),
+            name: "claude".into(),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            41_002,
+            CommandLine {
+                exe: "/usr/local/bin/claude".into(),
+                argv: vec!["claude".into()],
+                env: HashMap::from([(
+                    "CLAUDE_CONFIG_DIR".to_string(),
+                    home.to_string_lossy().into_owned(),
+                )]),
+            },
+        );
+        // A espera garante que o anuncio velho ja passou pela saida.
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            turn_by_tag(&manager, "outro"),
+            None,
+            "o Claude Code nao herda o anuncio do Codex"
+        );
+        assert_eq!(
+            turn_by_tag(&manager, "codex"),
+            Some((agent_state::TurnState::Busy, None))
+        );
     }
 
     #[test]

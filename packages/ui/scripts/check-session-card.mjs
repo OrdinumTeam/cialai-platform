@@ -95,6 +95,39 @@ function render({ touch = false, session = sample(), menu = true, close = true }
   }));
 }
 
+// Varios cards no mesmo runtime, como na lista de sessoes: um modulo so,
+// carregado uma vez, para provar que um card nao le o estado de outro.
+function renderMany(sessions) {
+  const fixture = { desktop: true };
+  const context = vm.createContext({
+    fixture, console, URLSearchParams, Uint8Array, ArrayBuffer,
+    setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    localStorage: { getItem: () => null, setItem: () => {} },
+    window: { location: { search: '' }, addEventListener() {}, devicePixelRatio: 1, matchMedia: () => ({ addEventListener() {}, removeEventListener() {} }) },
+    document: { hasFocus: () => true, visibilityState: 'visible', addEventListener() {}, body: { appendChild() {} }, createElement: () => ({ isConnected: true, setAttribute() {}, appendChild() {} }) },
+    module: { exports: {} }, exports: {}, require: createRequire(import.meta.url),
+  });
+  vm.runInContext(bundle.outputFiles[0].text, context);
+  const Card = context.module.exports.default;
+  return sessions.map((session) => renderToStaticMarkup(React.createElement(Card, {
+    session, touch: false, selected: false, dragging: false, renaming: false,
+    onSelect() {}, onMenu() {}, onClose() {}, onRename() {}, onRenameDone() {},
+  })));
+}
+
+// Sessao Codex na pasta de sempre, com o turno que o Rust publicou para ela.
+function codexSession(id, agentTurn) {
+  const base = sample({ agentTurn, agentSessionId: null, sessions: [] });
+  return {
+    ...base, id, name: id,
+    activity: {
+      ...base.activity, agent: 'Codex', profile: 'codex', profileName: 'codex', configDir: '/fixture/.codex',
+      foreground: { pid: 5000, agent: 'Codex', command: 'codex', stopped: false, cwd: CWD, profile: 'codex' },
+      agentSessionId: null, usage: null,
+    },
+  };
+}
+
 const EFFORT_WORDS = /Esforço|Esfuerzo|effort|reasoning/i;
 
 test('o erro oferece encerrar acima da falha e mostra o motivo na dica', () => {
@@ -179,6 +212,23 @@ test('com a resposta entregue o card para de animar', () => {
   assert.doesNotMatch(html, /terminais-activity/, 'nenhuma barra depois que o turno fechou');
   assert.match(html, /terminais-card__dot--ok/);
   assert.match(html, /Resposta entregue/);
+});
+
+test('tres cards Codex na mesma pasta mostram cada um o turno da propria sessao', () => {
+  const [busy, done, waiting] = renderMany([
+    codexSession('aba1', { state: 'busy', sinceMs: NOW - 4000 }),
+    codexSession('aba2', { state: 'done', sinceMs: NOW - 9000 }),
+    codexSession('aba3', { state: 'waiting', sinceMs: NOW - 1000, waitingFor: 'permission' }),
+  ]);
+  assert.match(busy, /Processando/);
+  assert.doesNotMatch(busy, /Resposta entregue|Aguardando você/);
+  assert.match(done, /Resposta entregue/);
+  assert.doesNotMatch(done, /Processando|Aguardando você/);
+  assert.match(waiting, /Aguardando você/);
+  assert.doesNotMatch(waiting, /Processando|Resposta entregue/);
+  // Sem turno publicado, o card nao empresta o de um vizinho na mesma pasta.
+  const [quiet] = renderMany([codexSession('aba4', null)]);
+  assert.doesNotMatch(quiet, /Processando|Resposta entregue|Aguardando você/);
 });
 
 test('o agente que parou para perguntar nao anima e sobe de tom', () => {

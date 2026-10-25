@@ -27,47 +27,48 @@ const RECENT_DAYS: usize = 3;
 /// Codigo de onde a sessao roda, para o detalhe do card.
 const SURFACE: &str = "rollout";
 
-/// Sessao viva do perfil, se houver. No maximo uma por perfil: o Codex grava
-/// um arquivo por conversa e so a mais recente esta em curso.
+/// Sessoes vivas do perfil, uma por conversa. Varias abas do Codex no mesmo
+/// perfil trabalham ao mesmo tempo, cada uma no proprio rollout, entao o
+/// arquivo mais recente nao fala pelas outras.
 pub fn scan(
     profile_id: &str,
     config_dir: &Path,
     display_name: &str,
     now_ms: u64,
 ) -> Vec<AgentSession> {
-    let Some((path, modified)) = newest_rollout(config_dir) else {
-        return Vec::new();
-    };
-    if now_ms.saturating_sub(modified) > STALE_MS {
-        return Vec::new();
-    }
-    let state = state_of(&path).unwrap_or(SessionState::Busy);
-    let file_name = path
-        .file_name()
-        .map(|value| value.to_string_lossy().to_string())
-        .unwrap_or_else(|| "rollout".to_string());
-    vec![AgentSession {
-        id: format!("{profile_id}.{file_name}"),
-        profile_id: profile_id.to_string(),
-        name: display_name.to_string(),
-        detail: SURFACE.to_string(),
-        state,
-        waiting_for: None,
-        since_ms: modified,
-        // O Codex nao publica pid: nao da para trazer a janela dele para a
-        // frente.
-        pid: None,
-        cwd: None,
-        pty_tag: None,
-    }]
+    live_rollouts(config_dir, now_ms)
+        .into_iter()
+        .map(|(path, modified)| {
+            let state = state_of(&path).unwrap_or(SessionState::Busy);
+            let file_name = path
+                .file_name()
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_else(|| "rollout".to_string());
+            AgentSession {
+                id: format!("{profile_id}.{file_name}"),
+                profile_id: profile_id.to_string(),
+                name: display_name.to_string(),
+                detail: SURFACE.to_string(),
+                state,
+                waiting_for: None,
+                since_ms: modified,
+                // O Codex nao publica pid: nao da para trazer a janela dele
+                // para a frente.
+                pid: None,
+                cwd: None,
+                pty_tag: None,
+            }
+        })
+        .collect()
 }
 
-fn newest_rollout(config_dir: &Path) -> Option<(PathBuf, u64)> {
+/// Rollouts escritos ha menos de [`STALE_MS`], do mais novo ao mais antigo.
+fn live_rollouts(config_dir: &Path, now_ms: u64) -> Vec<(PathBuf, u64)> {
     let sessions = config_dir.join("sessions");
     if !sessions.is_dir() {
-        return None;
+        return Vec::new();
     }
-    let mut newest: Option<(u64, PathBuf)> = None;
+    let mut live: Vec<(u64, PathBuf)> = Vec::new();
     for day in recent_days(&sessions) {
         let Ok(read) = std::fs::read_dir(&day) else {
             continue;
@@ -84,12 +85,15 @@ fn newest_rollout(config_dir: &Path) -> Option<(PathBuf, u64)> {
                 .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
                 .map(|value| value.as_millis() as u64)
                 .unwrap_or(0);
-            if newest.as_ref().is_none_or(|(time, _)| modified > *time) {
-                newest = Some((modified, path));
+            if now_ms.saturating_sub(modified) <= STALE_MS {
+                live.push((modified, path));
             }
         }
     }
-    newest.map(|(modified, path)| (path, modified))
+    live.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    live.into_iter()
+        .map(|(modified, path)| (path, modified))
+        .collect()
 }
 
 fn recent_days(sessions: &Path) -> Vec<PathBuf> {
@@ -180,6 +184,47 @@ mod tests {
 
         let later = scan("codex-amorim", &dir, "amorim", now + STALE_MS + 1);
         assert!(later.is_empty(), "silencio tira a sessao da lista");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn concurrent_conversations_of_one_profile_each_keep_their_state() {
+        let dir =
+            std::env::temp_dir().join(format!("cialai-notch-codex-many-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let day = dir.join("sessions/2026/10/25");
+        std::fs::create_dir_all(&day).unwrap();
+        let line = |kind: &str| {
+            format!("{{\"type\":\"event_msg\",\"payload\":{{\"type\":\"{kind}\"}}}}\n")
+        };
+        std::fs::write(
+            day.join("rollout-2026-10-25-aaa.jsonl"),
+            line("task_started"),
+        )
+        .unwrap();
+        std::fs::write(
+            day.join("rollout-2026-10-25-bbb.jsonl"),
+            format!("{}{}", line("task_started"), line("task_complete")),
+        )
+        .unwrap();
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+        let mut live = scan("codex", &dir, "codex", now);
+        live.sort_by(|a, b| a.id.cmp(&b.id));
+        let states: Vec<_> = live
+            .iter()
+            .map(|session| (session.id.as_str(), session.state))
+            .collect();
+        assert_eq!(
+            states,
+            vec![
+                ("codex.rollout-2026-10-25-aaa.jsonl", SessionState::Busy),
+                ("codex.rollout-2026-10-25-bbb.jsonl", SessionState::Success),
+            ],
+            "a conversa mais recente nao responde pela outra"
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -101,20 +101,10 @@ export default function Preferences({ open, onClose, appearance, section = null 
   const [workingCommand, setWorkingCommand] = useState(false);
   const [error, setError] = useState('');
 
-  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
-  // proprio programa, num terminal aberto ja naquele perfil. O Cialai nunca
-  // toca em credencial.
-  const createProfile = async (agent) => {
-    const name = typeof window !== 'undefined'
-      ? window.prompt(translate('terminal.profiles.createDescription'), '')
-      : null;
-    if (!name) return;
-    try {
-      await invoke('agent_profile_create', { agent, name: name.trim() });
-      notify(translate('terminal.profiles.created', { name: name.trim() }), 'success');
-    } catch (createError) {
-      notify(createError?.message || String(createError), 'warning');
-    }
+  // Conta nova de um agente: o modal Perfis de agentes cria a pasta e abre o
+  // login numa sessao nova. O Cialai nunca toca em credencial.
+  const createProfile = (agent) => {
+    window.dispatchEvent(new CustomEvent('cialai:agent-profiles', { detail: { agent } }));
   };
 
   // Linha de estado do Claude Code: copia o hook para ~/.cialai e aponta o

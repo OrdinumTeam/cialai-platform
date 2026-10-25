@@ -76,7 +76,7 @@ export default Object.freeze({
   'native.error.pathEmpty': 'Ruta vacía',
   'native.error.pathNotAbsolute': 'La ruta debe ser absoluta: {path}',
   'native.error.pathRelative': 'Ruta relativa',
-  'native.error.profileNameInvalid': 'Nombre de perfil inválido. Usa letras minúsculas, dígitos y guion, hasta 32 caracteres.',
+  'native.error.profileNameInvalid': 'Nombre de perfil inválido. Usa letras minúsculas, dígitos, guion y guion bajo, hasta 32 caracteres.',
   'native.error.profileExists': 'Ya existe una carpeta con ese nombre.',
   'native.error.profileUnknown': 'Perfil desconocido.',
   'native.error.agentUnknown': 'Agente desconocido.',

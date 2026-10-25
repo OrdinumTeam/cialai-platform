@@ -256,6 +256,7 @@ pub(super) fn dispatch(
             arg(&args, "id")?,
             arg(&args, "agent")?,
             arg(&args, "profile")?,
+            arg(&args, "login")?,
         )?),
         "pty_presentation" => value(commands::pty_presentation(
             app.state(),

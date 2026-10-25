@@ -151,6 +151,7 @@ pub fn run() {
             commands::agent_profile_create,
             commands::agent_profiles_refresh,
             commands::pty_launch_agent,
+            commands::agent_menu_publish,
             commands::doc_preview_window,
             commands::doc_preview_path,
             commands::detect_project_roots,

@@ -30,7 +30,7 @@ import { closeDocGraphPreview, docGraphTabId, openDocGraphPreview, openDocGraphT
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
 import { INITIAL_PANELS, choosePanel, panelCollapsed, resizePanels } from '../panels.js';
-import { baseName, fs, isPreviewable, shortPath } from '../files.js';
+import { baseName, fs, isInside, isPreviewable, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import AgentProfiles from './AgentProfiles.jsx';
 import SessionsPane from './SessionsPane.jsx';
@@ -111,6 +111,16 @@ export default function Workbench() {
   const selectedId = selected?.id || null;
   const tabs = selected ? selected.editor.tabs : [];
   const activeTab = selected ? tabs.find((tab) => tab.id === selected.editor.activeId) || null : null;
+
+  // Revelar automático, como o autoReveal do VS Code: o arquivo que fica ativo
+  // no editor aparece e é destacado na árvore. Não força o painel a abrir; se
+  // ele estiver oculto, a árvore já fica revelada para quando for mostrada.
+  const activePath = activeTab?.path || null;
+  useEffect(() => {
+    if (!selected || !activePath) return;
+    if (!isInside(selected.explorer.root, activePath)) return;
+    setRevealRequest({ sessionId: selected.id, path: activePath, at: Date.now() });
+  }, [activePath, selectedId]);
 
   /* ── ciclo de vida ───────────────────────────────────────────────── */
 
@@ -459,20 +469,13 @@ export default function Workbench() {
   }, [selected, activeTab, requestCloseTab, requestCloseSession]);
   closeShortcutRef.current = closeShortcut;
 
-  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
-  // proprio programa, num terminal ja aberto naquele perfil. O Cialai nunca
-  // toca em credencial. E o mesmo caminho do celular.
-  const createAgentProfile = useCallback(async (request, name) => {
-    try {
-      const id = await invoke('agent_profile_create', { agent: request.agent, name });
-      request.reload?.();
-      notify(translate('terminal.profiles.created', { name }), 'success');
-      const current = getState().selected;
-      if (current?.ptyId != null) await invoke('pty_launch_agent', { id: current.ptyId, agent: request.agent, profile: id });
-    } catch (error) {
-      notify(error?.message || String(error), 'warning');
-    }
-  }, [notify]);
+  // Conta nova de um agente: o modal Perfis de agentes cria a pasta e abre o
+  // login numa sessao nova, com o tutorial do menu de contas ao lado. O
+  // Cialai nunca toca em credencial.
+  const createAgentProfile = useCallback((agent) => {
+    setAccountsOpen(false);
+    window.dispatchEvent(new CustomEvent('cialai:agent-profiles', { detail: { agent } }));
+  }, []);
 
   const openInEditor = useCallback((path) => {
     const current = getState().selected;
@@ -644,12 +647,19 @@ export default function Workbench() {
     const request = deleteRequest;
     setDeleteRequest(null);
     if (!request) return;
+    const paths = request.paths || [request.path];
     try {
-      await fs.trash(request.path);
-      orderedSessions().forEach((session) => {
-        session.editor.tabs.filter((tab) => tab.path && (tab.path === request.path || tab.path.startsWith(`${request.path}/`))).forEach((tab) => closeTab(session.id, tab));
-      });
-      notify(translate('terminal.session.trashed', { name: request.name }), 'success');
+      for (const path of paths) {
+        // eslint-disable-next-line no-await-in-loop
+        await fs.trash(path);
+        orderedSessions().forEach((session) => {
+          session.editor.tabs.filter((tab) => tab.path && (tab.path === path || tab.path.startsWith(`${path}/`))).forEach((tab) => closeTab(session.id, tab));
+        });
+      }
+      const message = paths.length > 1
+        ? translate('terminal.session.trashedMany', { count: paths.length.toLocaleString(getLocale()) })
+        : translate('terminal.session.trashed', { name: request.name });
+      notify(message, 'success');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
     }
@@ -851,8 +861,7 @@ export default function Workbench() {
         onConfirm={(value) => {
           const request = nameRequest;
           setNameRequest(null);
-          if (request?.kind === 'subtitle') { setSessionSubtitle(request.sessionId, value); return; }
-          if (request?.kind === 'profile') createAgentProfile(request, value);
+          if (request?.kind === 'subtitle') setSessionSubtitle(request.sessionId, value);
         }}
       />
       <AppModal
@@ -862,17 +871,7 @@ export default function Workbench() {
         maxWidth="md"
         footer={<button type="button" className="btn btn-quiet" onClick={() => setAccountsOpen(false)}>{translate('terminal.common.close')}</button>}
       >
-        <AgentProfiles
-          onCreate={(agent, reload) => setNameRequest({
-            kind: 'profile',
-            agent,
-            reload,
-            title: translate('terminal.profiles.createTitle'),
-            description: translate('terminal.profiles.createDescription'),
-            required: true,
-            confirmLabel: translate('terminal.profiles.create'),
-          })}
-        />
+        <AgentProfiles onCreate={createAgentProfile} />
       </AppModal>
     </div>
   );

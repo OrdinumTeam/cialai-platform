@@ -552,7 +552,8 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-tree:focus-visible .terminais-row.is-focused{box-shadow:0 0 0 2px var(--mac-accent-ring) inset}
 .terminais-row{display:flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 calc(6px + var(--depth,0) * 14px);border-radius:6px;font-size:12.5px;color:var(--mac-label);cursor:default;user-select:none;-webkit-user-select:none;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-row:hover{background:var(--mac-hover)}
-.terminais-row.is-focused{background:var(--mac-accent-soft)}
+.terminais-row.is-focused,.terminais-row.is-selected{background:var(--mac-accent-soft)}
+.terminais-row.is-cut .terminais-row__name,.terminais-row.is-cut .terminais-row__icon{opacity:.45}
 .terminais-row.is-hidden .terminais-row__name,.terminais-row.is-hidden .terminais-row__icon{opacity:.6}
 /* Fantasma do arraste interno, que acompanha o cursor. O arraste do HTML
    nao chega a pagina dentro do app, entao a marca e desenhada aqui. */
@@ -677,6 +678,11 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* ── estado vazio ──────────────────────────────────────────────────── */
 
 .terminais-empty{min-height:calc(100vh - 220px)}
+/* Os botões são inline-flex: soltos num bloco, alinham pela linha de base, e a
+   do botão com ícone sai da borda de baixo do ícone, não do texto. Em flex o
+   alinhamento é pelo centro, com espaço entre eles e entre as linhas quando
+   a janela estreita os quebra. */
+.terminais-empty__actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
 .terminais-empty__recent{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;max-width:560px}
 .terminais-empty__recent .btn{max-width:260px}
 .terminais-empty__recent .btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

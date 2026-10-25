@@ -76,7 +76,7 @@ export default Object.freeze({
   'native.error.pathEmpty': 'Empty path',
   'native.error.pathNotAbsolute': 'The path must be absolute: {path}',
   'native.error.pathRelative': 'Relative path',
-  'native.error.profileNameInvalid': 'Invalid profile name. Use lowercase letters, digits and hyphen, up to 32 characters.',
+  'native.error.profileNameInvalid': 'Invalid profile name. Use lowercase letters, digits, hyphen and underscore, up to 32 characters.',
   'native.error.profileExists': 'A folder with that name already exists.',
   'native.error.profileUnknown': 'Unknown profile.',
   'native.error.agentUnknown': 'Unknown agent.',

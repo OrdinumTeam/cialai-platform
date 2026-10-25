@@ -303,6 +303,11 @@ fn codex_session_from(
     _start_sec: u64,
     home: &Path,
 ) -> Option<Detected> {
+    // O servidor compartilhado segura os rollouts de todas as abas que falam
+    // com ele; o que ele tem aberto nao diz de quem e a conversa.
+    if is_codex_app_server(command) {
+        return None;
+    }
     let profile = procs::agent_profile(command, CODEX, home)?;
     let sessions = dunce::canonicalize(Path::new(&profile.config_dir).join("sessions")).ok()?;
     let cwd = source.cwd(pid);
@@ -459,6 +464,22 @@ fn valid_value(value: &str) -> bool {
 
 /// Argumentos depois do programa: pula o executavel e, quando ele e um
 /// interpretador como o node do `cli-wrapper.cjs`, tambem o script.
+/// O daemon `codex app-server`, que desde o Codex 0.163 atende todas as abas
+/// do mesmo perfil. Ele nasce filho do Codex da primeira aba e fica na arvore
+/// dela, mas a conversa que ele grava pode ser de qualquer uma.
+pub(crate) fn is_codex_app_server(command: &CommandLine) -> bool {
+    let program = command
+        .argv
+        .first()
+        .map(|value| procs::basename(value).to_ascii_lowercase())
+        .unwrap_or_default();
+    let program = program.strip_suffix(".exe").unwrap_or(&program);
+    (program == "codex" || procs::agent_of(command) == Some(CODEX))
+        && program_args(&command.argv)
+            .first()
+            .is_some_and(|arg| arg == "app-server")
+}
+
 fn program_args(argv: &[String]) -> &[String] {
     let first = argv
         .first()
@@ -736,7 +757,7 @@ pub fn shell_quote(value: &str, flavor: ShellFlavor) -> String {
     }
 }
 
-fn shell_quote_always(value: &str, flavor: ShellFlavor) -> String {
+pub(crate) fn shell_quote_always(value: &str, flavor: ShellFlavor) -> String {
     match flavor {
         ShellFlavor::Posix => format!("'{}'", value.replace('\'', "'\\''")),
         ShellFlavor::Powershell => format!("'{}'", value.replace('\'', "''")),
@@ -744,7 +765,7 @@ fn shell_quote_always(value: &str, flavor: ShellFlavor) -> String {
     }
 }
 
-fn cmd_inner(value: &str) -> String {
+pub(crate) fn cmd_inner(value: &str) -> String {
     value.replace('"', "\"\"")
 }
 

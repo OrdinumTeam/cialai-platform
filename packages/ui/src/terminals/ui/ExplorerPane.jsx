@@ -24,7 +24,8 @@ import { useRuntimeEvents, useRuntimeValue } from '../hooks.js';
 import { copyToClipboard } from '../../lib/helpers.js';
 import { onNativeDragDrop } from '../../lib/native.js';
 import { altKeyLabel, shortcutLabel } from '../../lib/keys.js';
-import { isExplorerDeleteShortcut } from '../shortcut-actions.js';
+import { explorerEditAction, isExplorerDeleteShortcut } from '../shortcut-actions.js';
+import { actionPaths, clickSelection } from '../explorer-select.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 import { sessionAccentStyle } from '../session-accent.js';
 
@@ -71,6 +72,15 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const sessionId = session.id;
   // Troca de sessao: a arvore surge de novo.
   useEffect(() => { swapIn(treeRef.current, { x: 6, y: 0 }); }, [sessionId]);
+  // Trocar de sessão ou de raiz zera a seleção, o recortar ou copiar pendente
+  // e o histórico de desfazer, que falam de caminhos que saíram de vista.
+  useEffect(() => {
+    setSelection(new Set());
+    anchorRef.current = null;
+    setClip(null);
+    undoRef.current = [];
+    redoRef.current = [];
+  }, [sessionId, root]);
   useRuntimeEvents(['explorer'], sessionId);
   const readCwd = useCallback(() => session.activity?.shellCwd || null, [session]);
   const shellCwd = useRuntimeValue(['activity'], sessionId, readCwd);
@@ -82,9 +92,21 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const [query, setQuery] = useState('');
   const [results, setResults] = useState(null);
   const [focused, setFocused] = useState(null);
+  // Seleção múltipla: o conjunto de caminhos marcados e a âncora da faixa do
+  // Shift. A área de transferência guarda o recortar ou copiar pendente.
+  const [selection, setSelection] = useState(() => new Set());
+  const anchorRef = useRef(null);
+  const [clip, setClip] = useState(null);
+  // Operações reversíveis para desfazer e refazer. Mover para a Lixeira fica
+  // de fora porque o sistema não devolve o item pelo caminho de origem.
+  const undoRef = useRef([]);
+  const redoRef = useRef([]);
   // Pasta destacada durante um arraste, e o efeito que o soltar vai ter.
   const [drop, setDrop] = useState(null);
   const treeRef = useRef(null);
+  // Ordem achatada dos caminhos visíveis, atualizada a cada render. Serve à
+  // faixa do Shift e ao selecionar tudo.
+  const orderRef = useRef([]);
   const hoverExpand = useRef({ path: null, timer: null });
   const reloadTimers = useRef(new Map());
   const gitTimer = useRef(null);
@@ -214,6 +236,8 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     while (isInside(root, cursor) && cursor !== root) { ancestors.push(cursor); cursor = dirName(cursor); }
     ancestors.forEach((path) => explorer.expanded.add(path));
     setFocused(target);
+    setSelection(new Set([target]));
+    anchorRef.current = target;
     markExplorerChanged(sessionId);
     setTimeout(() => {
       treeRef.current?.querySelector(`[data-path="${CSS.escape(target)}"]`)?.scrollIntoView({ block: 'center' });
@@ -274,8 +298,11 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         const target = joinPath(dirName(current.path), name);
         if (target === current.path) return;
         await fs.rename(current.path, target);
+        retargetTabs(current.path, target);
+        remapExpanded(current.path, target);
         await loadDir(dirName(current.path), { quiet: true });
         setFocused(target);
+        remember({ type: 'rename', from: current.path, to: target });
       } else {
         const target = joinPath(current.parent, name);
         if (current.kind === 'new-dir') await fs.createDir(target);
@@ -283,6 +310,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
         await loadDir(current.parent, { quiet: true });
         setFocused(target);
         if (current.kind === 'new-file') onOpenFile(target);
+        remember({ type: 'create', kind: current.kind === 'new-dir' ? 'dir' : 'file', path: target });
       }
       scheduleGit();
     } catch (error) {
@@ -295,10 +323,12 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     const dir = dirName(path);
     try {
       const nome = await freeName(dir, baseName(path));
-      await fs.copy(path, joinPath(dir, nome));
+      const target = joinPath(dir, nome);
+      await fs.copy(path, target);
       await loadDir(dir, { quiet: true });
-      setFocused(joinPath(dir, nome));
+      setFocused(target);
       scheduleGit();
+      remember({ type: 'copy', source: path, path: target });
       notify(translate('terminal.explorer.duplicatedAs', { name: nome }), 'success');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
@@ -311,17 +341,172 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     notify(ok ? translate('terminal.common.pathCopied') : translate('terminal.common.copyFailed'), ok ? 'success' : 'warning');
   };
 
+  // Recarrega as pastas tocadas por uma operação, sem repetir.
+  const reloadDirs = async (dirs) => {
+    const unique = [...new Set(dirs.filter(Boolean))];
+    await Promise.all(unique.map((dir) => loadDir(dir, { quiet: true })));
+  };
+
+  // Guarda uma operação reversível e limpa o caminho de refazer. A pilha tem
+  // teto para não crescer sem fim numa sessão longa.
+  const remember = (op) => {
+    undoRef.current.push(op);
+    if (undoRef.current.length > 50) undoRef.current.shift();
+    redoRef.current = [];
+  };
+
+  // Mantém abertas, no destino, as pastas que estavam abertas na origem.
+  const remapExpanded = (source, target) => {
+    [...explorer.expanded]
+      .filter((path) => path === source || path.startsWith(`${source}/`))
+      .forEach((path) => {
+        explorer.expanded.delete(path);
+        explorer.expanded.add(`${target}${path.slice(source.length)}`);
+      });
+  };
+
+  // Caminhos de uma ação iniciada numa entrada: a seleção inteira quando a
+  // entrada faz parte de uma seleção múltipla, só a entrada caso contrário.
+  const targetsFrom = (path) => {
+    if (path && selection.has(path) && selection.size > 1) return orderRef.current.filter((item) => selection.has(item));
+    if (path) return [path];
+    return [...selection];
+  };
+
+  const cutOrCopy = (mode, path) => {
+    const paths = targetsFrom(path).filter((item) => item && item !== root);
+    if (!paths.length) return;
+    setClip({ mode, paths });
+  };
+
+  // Cola na pasta de destino. Copiar sempre procura um nome livre; mover para
+  // outra pasta também, para nunca sobrescrever um arquivo existente.
+  const pasteInto = async (dir) => {
+    if (!clip || !clip.paths.length || !dir) return;
+    const done = [];
+    const touched = new Set([dir]);
+    for (const source of clip.paths) {
+      if (source === root) continue;
+      if (clip.mode === 'cut' && dirName(source) === dir) continue;
+      if (isInside(source, dir)) { notify(translate('terminal.explorer.folderCannotContainItself'), 'warning'); continue; }
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const finalName = await freeName(dir, baseName(source));
+        const target = joinPath(dir, finalName);
+        if (clip.mode === 'copy') {
+          // eslint-disable-next-line no-await-in-loop
+          await fs.copy(source, target);
+          done.push({ type: 'copy', source, path: target });
+        } else {
+          // eslint-disable-next-line no-await-in-loop
+          await fs.rename(source, target);
+          retargetTabs(source, target);
+          remapExpanded(source, target);
+          touched.add(dirName(source));
+          done.push({ type: 'move', from: source, to: target });
+        }
+      } catch (error) {
+        notify(error?.message || String(error), 'warning');
+      }
+    }
+    if (!done.length) return;
+    explorer.expanded.add(dir);
+    await reloadDirs([...touched]);
+    if (clip.mode === 'cut') setClip(null);
+    const created = done.map((op) => op.to || op.path);
+    setSelection(new Set(created));
+    anchorRef.current = created[created.length - 1];
+    setFocused(created[created.length - 1]);
+    markExplorerChanged(sessionId);
+    scheduleGit();
+    remember({ type: 'group', ops: done });
+  };
+
+  // Aplica uma operação para frente ou ao contrário. Mover volta pelo caminho
+  // inverso, copiar e criar vão para a Lixeira, e o inverso de cada um refaz.
+  const runOp = async (op, back, touched) => {
+    const move = async (from, to) => {
+      await fs.rename(from, to);
+      retargetTabs(from, to);
+      remapExpanded(from, to);
+      touched.add(dirName(from));
+      touched.add(dirName(to));
+    };
+    if (op.type === 'rename' || op.type === 'move') { await move(back ? op.to : op.from, back ? op.from : op.to); return; }
+    if (op.type === 'copy') {
+      if (back) { await fs.trash(op.path); touched.add(dirName(op.path)); return; }
+      await fs.copy(op.source, op.path); touched.add(dirName(op.path)); return;
+    }
+    if (op.type === 'create') {
+      if (back) { await fs.trash(op.path); touched.add(dirName(op.path)); return; }
+      if (op.kind === 'dir') await fs.createDir(op.path); else await fs.createFile(op.path);
+      touched.add(dirName(op.path));
+    }
+  };
+
+  const step = async (from, to, back) => {
+    const op = from.current.pop();
+    if (!op) return;
+    const touched = new Set();
+    const list = op.type === 'group' ? (back ? [...op.ops].reverse() : op.ops) : [op];
+    try {
+      for (const sub of list) {
+        // eslint-disable-next-line no-await-in-loop
+        await runOp(sub, back, touched);
+      }
+      to.current.push(op);
+      await reloadDirs([...touched]);
+      markExplorerChanged(sessionId);
+      scheduleGit();
+    } catch (error) {
+      from.current.push(op);
+      notify(error?.message || String(error), 'warning');
+    }
+  };
+
+  const undo = () => step(undoRef, redoRef, true);
+  const redo = () => step(redoRef, undoRef, false);
+
   const openEntry = (entry) => {
     if (isDirEntry(entry)) toggleDir(entry.path);
     else onOpenFile(entry.path);
   };
 
+  // Apaga a seleção inteira quando a entrada faz parte dela, senão só a
+  // entrada. O diálogo de confirmação mostra a contagem no caso do lote.
+  const requestDelete = (entry) => {
+    const paths = targetsFrom(entry.path);
+    if (paths.length > 1) onDeleteRequest({ paths, count: paths.length, kind: 'many', name: String(paths.length) });
+    else onDeleteRequest({ path: entry.path, name: entry.name, kind: isDirEntry(entry) ? 'dir' : 'file', parent: dirName(entry.path) });
+  };
+
+  // Clique na linha: Mod alterna o item, Shift estende a faixa, clique simples
+  // seleciona só um e abre.
+  const onRowClick = (event, entry) => {
+    if (wasDragged()) return;
+    const next = clickSelection(selection, orderRef.current, entry.path, { meta: event.metaKey || event.ctrlKey, shift: event.shiftKey, anchor: anchorRef.current });
+    setSelection(next.selection);
+    anchorRef.current = next.anchor;
+    setFocused(entry.path);
+    if (next.open) openEntry(entry);
+  };
+
+  // Menu de contexto numa entrada fora da seleção passa a mirar só ela.
+  const onRowContext = (entry) => {
+    setFocused(entry.path);
+    if (!(selection.has(entry.path) && selection.size > 1)) { setSelection(new Set([entry.path])); anchorRef.current = entry.path; }
+  };
+
   // O arraste comeca no mousedown e so passa a valer depois de alguns
-  // pixels, entao um clique continua abrindo o arquivo.
+  // pixels, entao um clique continua abrindo o arquivo. Arrastar um item da
+  // seleção múltipla leva todos, inclusive para fora do app.
   const startDrag = (event, path, dir = false) => {
     if (editing) return;
-    setFocused(path);
-    beginDrag(event, { path, label: baseName(path), dir });
+    const multi = selection.has(path) && selection.size > 1;
+    const paths = multi ? targetsFrom(path) : [path];
+    if (!multi) setFocused(path);
+    const label = paths.length > 1 ? translate('terminal.explorer.dragCount', { count: paths.length.toLocaleString(getLocale()) }) : baseName(path);
+    beginDrag(event, { path, paths, label, dir });
   };
 
   /* ── arrastar e soltar na arvore ─────────────────────────────────── */
@@ -389,6 +574,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       setFocused(target);
       markExplorerChanged(sessionId);
       scheduleGit();
+      remember(copy ? { type: 'copy', source, path: target } : { type: 'move', from: source, to: target });
       if (copy && finalName !== name) notify(translate('terminal.explorer.copiedAs', { name: finalName }), 'info');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
@@ -423,7 +609,13 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     }
     if (event.type === 'drop') {
       clearDrop();
-      dropInto(event.path, dir, { copy: event.alt });
+      const sources = event.paths && event.paths.length ? event.paths : [event.path];
+      (async () => {
+        for (const source of sources) {
+          // eslint-disable-next-line no-await-in-loop
+          await dropInto(source, dir, { copy: event.alt });
+        }
+      })();
     }
   }), [dropDirAt, clearDrop, scheduleHoverExpand, dropInto]);
 
@@ -463,6 +655,28 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   const menuFor = (entry, anchor) => {
     const dir = isDirEntry(entry);
     const change = gitIndex.files.get(entry.path);
+    const targets = targetsFrom(entry.path);
+    const many = targets.length > 1;
+    const pasteTarget = dir ? entry.path : dirName(entry.path);
+    const copyManyPaths = async () => {
+      const ok = await copyToClipboard(targets.join('\n'));
+      notify(ok ? translate('terminal.common.pathCopied') : translate('terminal.common.copyFailed'), ok ? 'success' : 'warning');
+    };
+    const clipboard = [
+      { id: 'cut', label: translate('terminal.explorer.cut'), run: () => cutOrCopy('cut', entry.path) },
+      { id: 'copy-clip', label: translate('terminal.explorer.copy'), run: () => cutOrCopy('copy', entry.path) },
+      clip ? { id: 'paste', label: translate('terminal.explorer.paste'), run: () => pasteInto(pasteTarget) } : null,
+    ];
+    if (many) {
+      setMenu({ anchor, items: [
+        ...clipboard,
+        { separator: true },
+        { id: 'copy-path', label: translate('terminal.explorer.copyPath'), run: copyManyPaths },
+        { separator: true },
+        { id: 'delete', label: translate('terminal.explorer.moveTrash'), danger: true, run: () => requestDelete(entry) },
+      ] });
+      return;
+    }
     const items = [
       dir
         ? { id: 'toggle', label: translate(explorer.expanded.has(entry.path) ? 'terminal.explorer.collapse' : 'terminal.explorer.expand'), run: () => toggleDir(entry.path) }
@@ -477,11 +691,13 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       { id: 'copy', label: translate('terminal.explorer.copyPath'), run: () => copyPath(entry.path, false) },
       { id: 'copy-rel', label: translate('terminal.explorer.copyRelativePath'), run: () => copyPath(entry.path, true) },
       { separator: true },
+      ...clipboard,
+      { separator: true },
       { id: 'duplicate', label: translate('terminal.explorer.duplicate'), run: () => duplicate(entry.path) },
       dir ? { id: 'new-file', label: translate('terminal.explorer.newFile'), run: () => startCreate(entry.path, 'file') } : null,
       dir ? { id: 'new-dir', label: translate('terminal.explorer.newFolder'), run: () => startCreate(entry.path, 'dir') } : null,
       { id: 'rename', label: translate('terminal.explorer.rename'), run: () => setEditing({ kind: 'rename', path: entry.path, value: entry.name }) },
-      { id: 'delete', label: translate('terminal.explorer.moveTrash'), danger: true, run: () => onDeleteRequest({ path: entry.path, name: entry.name, kind: dir ? 'dir' : 'file', parent: dirName(entry.path) }) },
+      { id: 'delete', label: translate('terminal.explorer.moveTrash'), danger: true, run: () => requestDelete(entry) },
     ];
     setMenu({ anchor, items });
   };
@@ -539,6 +755,9 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
   useEffect(() => {
     seenPathsRef.current = new Set(rows.map((row) => (row.entry ? row.entry.path : row.path)));
   }, [rows]);
+  // Ordem visível para a faixa do Shift e o selecionar tudo.
+  const order = useMemo(() => rows.filter((row) => row.type === 'entry').map((row) => row.path), [rows]);
+  orderRef.current = order;
   let freshIndex = 0;
 
   const onTreeKeyDown = (event) => {
@@ -549,8 +768,21 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     const current = entries[index];
     const focusRow = (row) => {
       setFocused(row.path);
+      anchorRef.current = row.path;
+      setSelection(new Set([row.path]));
       treeRef.current?.querySelector(`[data-path="${CSS.escape(row.path)}"]`)?.scrollIntoView({ block: 'nearest' });
     };
+    const edit = explorerEditAction(event);
+    if (edit) {
+      event.preventDefault();
+      if (edit === 'cut' || edit === 'copy') cutOrCopy(edit, current?.path);
+      else if (edit === 'paste') pasteInto(current ? (current.dir ? current.path : dirName(current.path)) : root);
+      else if (edit === 'undo') undo();
+      else if (edit === 'redo') redo();
+      else if (edit === 'select-all') { setSelection(new Set(order)); anchorRef.current = order[0] || null; }
+      else if (edit === 'rename' && current) setEditing({ kind: 'rename', path: current.path, value: current.entry.name });
+      return;
+    }
     if (event.key === 'ArrowDown') { event.preventDefault(); focusRow(entries[Math.min(entries.length - 1, index + 1)]); }
     else if (event.key === 'ArrowUp') { event.preventDefault(); focusRow(entries[Math.max(0, index - 1)]); }
     else if (event.key === 'ArrowRight' && current?.dir) { event.preventDefault(); if (!current.expanded) toggleDir(current.path); }
@@ -561,7 +793,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
     } else if (event.key === 'Enter' && current) { event.preventDefault(); openEntry(current.entry); }
     else if (isExplorerDeleteShortcut(event) && current) {
       event.preventDefault();
-      onDeleteRequest({ path: current.path, name: current.entry.name, kind: current.dir ? 'dir' : 'file', parent: dirName(current.path) });
+      requestDelete(current.entry);
     }
   };
 
@@ -668,21 +900,23 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
           const dirChanged = row.dir && gitIndex.dirs.has(entry.path);
           const renaming = editing?.kind === 'rename' && editing.path === entry.path;
           const isFocused = focused === entry.path;
+          const isSelected = selection.has(entry.path);
+          const isCut = clip?.mode === 'cut' && clip.paths.includes(entry.path);
           const fresh = freshPaths.has(entry.path);
-          const order = fresh ? freshIndex++ : 0;
+          const appearOrder = fresh ? freshIndex++ : 0;
           return (
             <div
               key={entry.path}
               role="treeitem"
               aria-expanded={row.dir ? row.expanded : undefined}
-              aria-selected={isFocused}
+              aria-selected={isSelected || isFocused}
               data-path={entry.path}
               data-kind={row.dir ? 'dir' : 'file'}
-              className={`terminais-row${fresh ? ' is-new' : ''}${isFocused ? ' is-focused' : ''}${entry.hidden ? ' is-hidden' : ''}${change ? ` is-git is-git--${change.status}` : ''}${dirChanged ? ' is-git-dir' : ''}${drop && drop.dir === entry.path ? ' is-drop' : ''}`}
-              style={{ '--depth': row.depth, '--i': order }}
+              className={`terminais-row${fresh ? ' is-new' : ''}${isFocused ? ' is-focused' : ''}${isSelected ? ' is-selected' : ''}${isCut ? ' is-cut' : ''}${entry.hidden ? ' is-hidden' : ''}${change ? ` is-git is-git--${change.status}` : ''}${dirChanged ? ' is-git-dir' : ''}${drop && drop.dir === entry.path ? ' is-drop' : ''}`}
+              style={{ '--depth': row.depth, '--i': appearOrder }}
               onMouseDown={(event) => { if (!renaming) startDrag(event, entry.path, row.dir); }}
-              onClick={() => { if (wasDragged()) return; setFocused(entry.path); openEntry(entry); }}
-              onContextMenu={(event) => { event.preventDefault(); setFocused(entry.path); menuFor(entry, anchorFromEvent(event)); }}
+              onClick={(event) => onRowClick(event, entry)}
+              onContextMenu={(event) => { event.preventDefault(); onRowContext(entry); menuFor(entry, anchorFromEvent(event)); }}
               title={translate('terminal.explorer.dragTitle', { path: change ? `${entry.name}: ${statusLabel(change.status)}` : entry.name, modifier: altKeyLabel() })}
             >
               <span className={`terminais-row__chevron${row.dir ? '' : ' is-blank'}${row.expanded ? ' is-open' : ''}`} aria-hidden="true">

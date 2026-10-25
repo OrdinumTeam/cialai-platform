@@ -1083,15 +1083,31 @@ pub fn agent_profile_create(app: AppHandle, agent: String, name: String) -> Resu
 }
 
 /// Abre o agente numa conta escolhida, no terminal já aberto. Só escreve com o
-/// shell no prompt e sem processo em primeiro plano.
+/// shell no prompt e sem processo em primeiro plano. Com `login`, digita o
+/// login da conta no lugar do agente.
 #[tauri::command(async)]
 pub fn pty_launch_agent(
     terminals: State<'_, TerminalManager>,
     id: u32,
     agent: String,
     profile: String,
+    login: Option<bool>,
 ) -> Result<(), String> {
-    terminals.launch_agent(id, &agent, &profile)
+    terminals.launch_agent(id, &agent, &profile, login.unwrap_or(false))
+}
+
+/// Contas de um agente com a cota já traduzida, para o menu que o shell das
+/// sessões mostra ao digitar `codex` ou `claude`. A interface manda o id de
+/// cada conta; a pasta sai da pasta pessoal.
+#[tauri::command(async)]
+pub fn agent_menu_publish(
+    app: AppHandle,
+    agent: String,
+    entries: Vec<crate::workspace::agent_menu::MenuEntry>,
+    strings: crate::workspace::agent_menu::MenuStrings,
+) -> Result<(), String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    crate::workspace::agent_menu::publish(&home, &agent, &entries, &strings)
 }
 
 /// Instala a linha de estado do Claude Code nos perfis da pasta pessoal. E

@@ -66,7 +66,7 @@ Valores de `auth` em `welcome`: `device` quando o segredo da borda validou e há
 
 | Campo | Conteúdo |
 | --- | --- |
-| `agentTurn` | `state` com `busy`, `waiting`, `done` ou `idle`, mais `sinceMs` e `waitingFor`. Vem do arquivo que o próprio agente grava: `<perfil>/sessions/<pid>.json` no Claude Code e o rollout da conversa no Codex, achados por `workspace::resume::detect` e lidos por `workspace::agent_state`. Ausente quando não há agente na árvore ou quando o arquivo não diz nada que se entenda |
+| `agentTurn` | `state` com `busy`, `waiting`, `done` ou `idle`, mais `sinceMs` e `waitingFor`. No Codex vem do estado que ele escreve no próprio terminal, a sequência `OSC 7501` com `state=working`, `done`, `idle` ou `blocked` e `kind`, lida da saída do PTY da sessão por `workspace::agent_state::CodexOsc`; sem ela, do rollout que o próprio processo mantém aberto ou que a retomada nomeia. No Claude Code vem de `<perfil>/sessions/<pid>.json`. A conversa é achada por `workspace::resume::detect`, que nunca aceita o que o daemon compartilhado `codex app-server` segura, e o daemon fica fora da árvore da sessão. Ausente quando não há agente na árvore ou quando a fonte não diz nada que se entenda |
 | `agentSessionId` | Id da conversa do agente, só o UUID, sem caminho. Sai da mesma detecção de `workspace::resume::detect` e é o mesmo `sessionId` que o hook da linha de estado publica em `sessions[]`: é por ele que o card casa modelo, contexto e custo com a própria conversa, e não com outra na mesma pasta. Ausente quando não há agente na árvore ou quando a conversa não foi encontrada |
 | `outputAgeMs` | Milissegundos desde a última saída do PTY, medidos no relógio do computador. Ausente enquanto a sessão não produziu nada |
 
@@ -90,8 +90,8 @@ Os três existem para que todo cliente concorde sobre o mesmo estado e sobre qua
 | `pty_presentation` | Permitido; a apresentação é do card e não toca no processo | Sessão |
 | `agent_profiles` | Permitido, só o que a pessoa vê para escolher; nunca chave de conta, token ou conteúdo de credencial | Livre |
 | `agent_profile_select` | Permitido, grava a conta que as sessões novas vão usar | Sessão |
-| `agent_profile_create` | Permitido, cria a pasta vazia com permissão restrita | Sessão |
-| `pty_launch_agent` | Permitido, digita a linha montada no servidor, só com o shell no prompt | Autorização por terminal, a mesma da digitação |
+| `agent_profile_create` | Permitido, cria a pasta com permissão restrita, sem credencial, levando do perfil padrão só instruções e configuração | Sessão |
+| `pty_launch_agent` | Permitido, digita a linha montada no servidor, só com o shell no prompt, inclusive a de login | Autorização por terminal, a mesma da digitação |
 | `pty_resize` | Recusado; o celular usa a concessão de largura | |
 | `fs_*`, `git_*`, `fs_watch`, `fs_unwatch`, `preview_register`, `office_convert`, `browser_*` | Recusados com `Disponível só no computador.` | |
 | Comandos de janela, preferências e ciclo de vida | Recusados | |

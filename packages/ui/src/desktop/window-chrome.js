@@ -52,6 +52,7 @@ export function appMenuItems(actions, views = [], { label = () => '', t = transl
     ...views.slice(0, 9).map((view, index) => item(`view-${view.id}`, view.label, `Mod+${index + 1}`, 'navigate', view.id)),
     { separator: true },
     item('preferences', t('desktop.preferences.title'), 'Mod+Comma', 'openPreferences'),
+    item('agent-profiles', t('agentProfiles.title'), '', 'openAgentProfiles'),
     item('close-window', t('desktop.action.closeWindow'), '', 'closeWindow'),
     item('quit', t('desktop.action.quit'), '', 'quitApp'),
   ];

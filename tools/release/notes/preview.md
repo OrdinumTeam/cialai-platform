@@ -1,21 +1,20 @@
 ## Cialai {{version}} preview
 
-A preview of Cialai for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session gets its own colour and icon everywhere, and the phone tells you when a session needs you.
+A preview of Cialai for macOS, Windows and Linux. Agent profiles get their own window and the terminal asks which account to use, the file explorer moves close to the VS Code one, and every agent card shows only the state of its own session. The phone apps are unchanged: the phone page comes from the computer, so updating the computer is enough.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **The desktop speaks the phone's visual language.** Solid surfaces, rounded corners and separation by tone, with no gradients, glass or glow. The sidebar stays pink, light in the light theme and plum in the dark one. Buttons, fields, menus and colour changes share the same short animation.
-* **The session colour leads what belongs to the session.** The card bar, the icon, the agent name, the usage percentage, buttons, focus, the terminal cursor and selection, the palette entry, the on screen notice and the AI Bar follow the chosen colour. Without a colour everything stays Cialai pink. Warning and error colours, ANSI colours and the output of the CLIs never change.
-* **An icon per session.** Thirty icons, picked together with the colour when the session is created or from Colour and icon. The icon sits next to the name on the card and in the header, on the computer and on the phone. Without a choice it shows the agent running there or a terminal.
-* **The weekly limit in the AI Bar.** The outer ring is the 5 hour session and the inner ring is the weekly window, drawn with the same stroke. An account without a weekly limit and a reading that has not arrived yet look different from 0%. The tooltip and the screen reader name the window, the usage and the reset.
-* **New usage bands.** Amber from 60% and red from 80%, on the computer, on the phone page and in the app. Anyone still on the old 50 and 70 defaults moves to the new ones once.
-* **The official signature.** The brand with the website lettering appears in the sidebar, the splash and the loading screen. With the sidebar closed, the lettering shows small in the toolbar.
-* **Four keys always in sight on the phone.** The terminal bar shows Enter, Esc, Ctrl C and Ctrl V, and the arrow still opens the special keyboard. Anyone who had picked their own keys keeps them.
-* **Attention notices on the phone.** The terminal bell, a notice sent by the program, a finished command, an agent waiting for you or asking for permission and a finished answer become a notice with the session name and colour. Tapping it opens the session. Turn it on in Settings, under Sessions asking for attention. Notices are local: they go out while the app has the terminal open and shortly after it moves to the background.
-* **The native app keeps pace.** Home and the Agents tab show the weekly window, the sessions of a folder show their colour and icon, the official brand replaces the old symbol and icons lost their background plates.
-* **Update the computer and the phone together.** The phone page is served by the computer and carries the attention, colour and icon of each session; a new app with an older computer works, without attention notices.
+* **Agent profiles.** One window gathers the Codex and Claude Code accounts with the quota of each one and, beside them, an animated tutorial of how to switch accounts. A new account copies the instructions and the configuration of the default one and opens the login in a new session. It opens from the command palette, the app menu, Preferences and the terminal accounts.
+* **The right account when you open the agent.** In sessions opened by Cialai, typing `codex` or `claude` with more than one account lists them with their quota. Enter repeats the last account used in that folder, a number switches, an exhausted account is skipped and `codex +name` goes straight to one. It works in zsh, bash and PowerShell.
+* **Cut, copy and paste in the explorer.** From the menu and the keyboard, as in VS Code. Pasting into a folder with a file of the same name picks a free name and never overwrites.
+* **Multiple selection.** Cmd or Ctrl adds one file at a time, Shift selects a range and Cmd A selects everything. Cut, copy, copy path and move to Trash work on the whole selection, with the count in the dialog.
+* **Undo and redo.** Cmd Z undoes rename, move, copy and create, and Cmd Shift Z redoes. Moving to Trash still goes to the system Trash. F2 renames.
+* **Several files out of the app.** Dragging a selection hands every file to Finder, a folder or WhatsApp.
+* **The open file shows in the tree.** Opening a file in the editor reveals and highlights where it is in the explorer.
+* **Each card with the state of its own session.** With several Codex sessions in the same folder the cards used to show the same state, such as Answer delivered. Now each one reads what Codex writes in its own terminal, and the card shows Waiting for you when Codex asks for permission. The AI Bar lists every Codex conversation in progress.
+* **Aligned buttons on the empty screen.** New session and Pair phone sit on the same line with space between them, also when a narrow window wraps them.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
@@ -29,9 +28,8 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Debian, Ubuntu and derivatives | `Cialai_amd64.deb` |
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
-| Android 8 or newer | `Cialai_android_universal.apk` |
 
-On iPhone the preview goes through TestFlight, so there is no file to download.
+The Android and iPhone apps are unchanged in this preview and keep working with it. Android still gets `Cialai_android_universal.apk` from the site and iPhone the TestFlight build.
 
 ### Install
 
@@ -40,8 +38,6 @@ On iPhone the preview goes through TestFlight, so there is no file to download.
 **Windows.** Run the setup or the MSI. On the SmartScreen warning click More info, then Run anyway.
 
 **Linux.** `sudo apt install ./Cialai_amd64.deb`, `sudo dnf install ./Cialai_x86_64.rpm`, or make the AppImage executable with `chmod +x` and run it. The app updates itself in all three formats.
-
-**Android.** Download the APK on the phone, allow installing unknown apps when Android asks, then open it.
 
 **macOS and Linux in one line.** `curl -fsSL https://cialai.com.br/install.sh | bash`
 

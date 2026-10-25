@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FilePlus2, Monitor, Moon, PanelLeft, PanelRight, PanelRightClose, RefreshCw, Search, Settings, SquareTerminal, Sun } from 'lucide-react';
+import { FilePlus2, Monitor, Moon, PanelLeft, PanelRight, PanelRightClose, RefreshCw, Search, Settings, SquareTerminal, Sun, UsersRound } from 'lucide-react';
 import { collectPaletteItems } from './palette-registry.js';
 import { currentOs, shortcutLabel } from '../lib/keys.js';
 import { toggleShortcut } from '../notch/model.js';
@@ -33,6 +33,7 @@ export default function CommandPalette({ open, onClose, views, actions, appearan
     { id: 'notch-toggle', kind: translate('desktop.palette.action'), label: translate('desktop.notch.action.toggle'), shortcut: shortcutLabel(toggleShortcut(currentOs())), icon: PanelRight, run: actions.toggleNotch },
     { id: 'notch-hide', kind: translate('desktop.palette.action'), label: translate('desktop.notch.action.hide'), icon: PanelRightClose, run: actions.hideNotch },
     { id: 'prefs', kind: translate('desktop.palette.action'), label: translate('desktop.preferences.title'), shortcut: shortcutLabel('Mod+Comma'), icon: Settings, run: actions.openPreferences },
+    { id: 'agent-profiles', kind: translate('desktop.palette.action'), label: translate('agentProfiles.title'), icon: UsersRound, run: () => actions.openAgentProfiles() },
     { id: 'new-terminal', kind: translate('view.terminais.label'), label: translate('desktop.action.newTerminal'), shortcut: shortcutLabel('Mod+T'), icon: SquareTerminal, run: actions.newTerminal },
     { id: 'new-file', kind: translate('view.terminais.label'), label: translate('desktop.action.newTemporaryFile'), shortcut: shortcutLabel('Mod+N'), icon: FilePlus2, run: actions.newFile },
     { id: 'ap-system', kind: translate('desktop.preferences.appearance'), label: translate('desktop.appearance.system'), icon: Monitor, run: () => appearance.setMode('system') },

@@ -1,0 +1,197 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Modal Perfis de agentes no estilo da marca: cor chapada, sem gradiente,
+   sem sombra e sem borda. Blocos se separam por superficie e gap, com os
+   raios de petala 8, 12, 20 e 32. Agentes ficam com 60% e o tutorial com 40%. */
+
+.cialai-agents{
+  --agents-sheet:#FFFFFF;
+  --agents-surface:#FBF3F7;
+  --agents-surface-hi:#FFD6E6;
+  --agents-field:#FFFFFF;
+  --agents-text:#3A1B33;
+  --agents-text-2:rgba(58,27,51,.66);
+  --agents-text-3:rgba(58,27,51,.42);
+  --agents-track:rgba(58,27,51,.10);
+  --agents-hover:rgba(226,59,132,.07);
+  --agents-error:#C8102E;
+  --agents-tutorial:#FFD6E6;
+  --agents-tutorial-control:rgba(58,27,51,.08);
+  --agents-step:rgba(58,27,51,.14);
+  --agents-step-fill:#3A1B33;
+  --agents-term:#3A1B33;
+  --agents-term-hi:#53284A;
+  --agents-term-text:#FBE9F2;
+  --agents-term-dim:rgba(255,214,230,.58);
+  --agents-term-ok:#8FE0B4;
+  --agents-term-out:#FF9AAE;
+  --agents-key:#FFFFFF;
+}
+:root[data-theme="dark"] .cialai-agents{
+  --agents-sheet:#1F121C;
+  --agents-surface:#2A1926;
+  --agents-surface-hi:#3A1B33;
+  --agents-field:#341F2F;
+  --agents-text:#FBE9F2;
+  --agents-text-2:rgba(255,214,230,.68);
+  --agents-text-3:rgba(255,214,230,.42);
+  --agents-track:rgba(255,214,230,.12);
+  --agents-hover:rgba(255,122,178,.10);
+  --agents-error:#FF7A8E;
+  --agents-tutorial:#2A1926;
+  --agents-tutorial-control:rgba(255,214,230,.08);
+  --agents-step:rgba(255,214,230,.14);
+  --agents-step-fill:#FF7AB2;
+  --agents-term:#140B12;
+  --agents-term-hi:#3A1B33;
+  --agents-key:#FFD6E6;
+}
+
+.MuiPaper-root.cialai-agents{
+  width:min(1060px,calc(100vw - 32px));
+  height:min(680px,calc(100vh - 32px));
+  max-width:none;
+  max-height:calc(100vh - 32px);
+  margin:16px;
+  border:0;
+  border-radius:32px;
+  box-shadow:none;
+  background:var(--agents-sheet);
+  color:var(--agents-text);
+  display:grid;
+  grid-template-columns:3fr 2fr;
+  overflow:hidden;
+}
+/* Reset com a especificidade de uma classe: as regras de cada peca, mais
+   abaixo, vencem pela ordem. */
+.cialai-agents :where(button,input){font:inherit;color:inherit}
+.cialai-agents :where(button){cursor:pointer;border:0;background:none;padding:0}
+.cialai-agents :where(button:disabled){cursor:default}
+.cialai-agents :focus-visible{outline:2px solid var(--cialai-magenta);outline-offset:2px}
+
+/* Agentes, 60% */
+.cialai-agents__main{display:flex;flex-direction:column;min-width:0;min-height:0}
+.cialai-agents__head{display:flex;align-items:center;justify-content:space-between;padding:26px 28px 18px}
+.cialai-agents__head h2{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+.cialai-agents__icon{width:32px;height:32px;border-radius:12px;display:grid;place-items:center;color:var(--agents-text-2);transition:background 240ms ease-in-out,color 240ms ease-in-out}
+.cialai-agents__icon:hover{background:var(--agents-hover);color:var(--agents-text)}
+.cialai-agents__scroll{flex:1;min-height:0;overflow:auto;padding:0 28px 28px;display:flex;flex-direction:column;gap:22px}
+
+.cialai-agents__create{margin:0;background:var(--agents-surface);border-radius:20px;padding:16px;display:grid;gap:10px}
+.cialai-agents__label{font-size:12px;font-weight:650;color:var(--agents-text-2)}
+.cialai-agents__fields{display:flex;gap:8px;align-items:center}
+.cialai-agents__input{flex:1;min-width:0;height:34px;border:0;border-radius:12px;background:var(--agents-field);padding:0 12px;transition:box-shadow 240ms ease-in-out}
+.cialai-agents__input::placeholder{color:var(--agents-text-3)}
+.cialai-agents__input:focus{outline:none;box-shadow:0 0 0 2px var(--cialai-pink)}
+.cialai-agents__input.is-error{box-shadow:0 0 0 2px var(--agents-error)}
+.cialai-agents__segmented{display:inline-flex;padding:3px;gap:2px;border-radius:12px;background:var(--agents-field)}
+.cialai-agents__segmented button{height:28px;padding:0 12px;border-radius:9px;display:flex;align-items:center;gap:6px;font-weight:600;white-space:nowrap;color:var(--agents-text-2);transition:background 240ms ease-in-out,color 240ms ease-in-out}
+.cialai-agents__segmented button:hover{color:var(--agents-text)}
+.cialai-agents__segmented button.is-selected{background:var(--cialai-blush);color:var(--cialai-plum)}
+.cialai-agents__glyph{display:inline-flex;width:14px;height:14px}
+.cialai-agents__glyph svg{width:14px;height:14px;fill:currentColor}
+.cialai-agents__primary{height:34px;padding:0 16px;border-radius:12px;background:var(--cialai-pink);color:var(--cialai-plum);font-weight:700;white-space:nowrap;transition:background 240ms ease-in-out,color 240ms ease-in-out}
+.cialai-agents__primary:hover:not(:disabled){background:var(--cialai-magenta);color:#FFFFFF}
+.cialai-agents__primary:disabled{background:var(--agents-surface-hi);color:var(--agents-text-2)}
+.cialai-agents__hint{margin:0;min-height:17px;padding-left:2px;font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:11.5px;color:var(--agents-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cialai-agents__hint.is-error{font-family:inherit;font-size:12px;color:var(--agents-error);white-space:normal}
+
+.cialai-agents__empty{margin:0;color:var(--agents-text-3)}
+.cialai-agents__group-head{display:flex;align-items:baseline;gap:8px;margin:0 4px 8px}
+.cialai-agents__group-head h4{margin:0;font-size:13px;font-weight:700}
+.cialai-agents__group-head span{font-size:12px;color:var(--agents-text-3)}
+.cialai-agents__list{display:grid;gap:6px}
+.cialai-agents__row{display:grid;grid-template-columns:36px minmax(0,1fr) 140px;gap:12px;align-items:center;padding:12px 14px;border-radius:20px;background:var(--agents-surface);transition:background 240ms ease-in-out}
+.cialai-agents__row:hover{background:var(--agents-hover)}
+.cialai-agents__avatar{width:36px;height:36px;border-radius:12px;background:var(--cialai-blush);color:var(--cialai-plum);display:grid;place-items:center;font-weight:700;font-size:14px;text-transform:uppercase}
+.cialai-agents__who{display:flex;flex-direction:column;min-width:0}
+.cialai-agents__name{font-weight:650;font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cialai-agents__path{margin-top:1px;font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:11px;color:var(--agents-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cialai-agents__quota{display:grid;gap:5px;justify-items:end;text-align:right}
+.cialai-agents__value{font-size:12.5px;font-weight:700}
+.cialai-agents__value.is-out{color:var(--agents-error)}
+.cialai-agents__value.is-muted{color:var(--agents-text-2);font-weight:600}
+.cialai-agents__bar{width:100%;height:4px;border-radius:2px;background:var(--agents-track);overflow:hidden}
+.cialai-agents__bar i{display:block;height:100%;background:var(--cialai-magenta)}
+.cialai-agents__detail{font-size:11px;color:var(--agents-text-3)}
+.cialai-agents__login{height:26px;padding:0 12px;border-radius:8px;background:var(--cialai-blush);color:var(--cialai-plum);font-size:12px;font-weight:700;transition:background 240ms ease-in-out}
+.cialai-agents__login:hover:not(:disabled){background:var(--cialai-pink)}
+
+/* Tutorial, 40% */
+.cialai-agents__tutorial{background:var(--agents-tutorial);min-width:0;min-height:0;display:flex}
+.cialai-agents-tutorial{flex:1;min-width:0;display:flex;flex-direction:column;padding:26px 24px 20px}
+.cialai-agents-tutorial__top{display:flex;align-items:center;justify-content:space-between}
+.cialai-agents-tutorial__label{font-size:13px;font-weight:700}
+.cialai-agents-tutorial__controls{display:flex;gap:2px}
+.cialai-agents-tutorial__controls .cialai-agents__icon:hover{background:var(--agents-tutorial-control)}
+.cialai-agents-tutorial__caption{margin-top:14px;min-height:64px;animation:cialai-agents-enter 400ms ease-in-out both}
+.cialai-agents-tutorial__caption h3{margin:0;font-size:19px;font-weight:750;letter-spacing:-.015em}
+.cialai-agents-tutorial__caption p{margin:4px 0 0;color:var(--agents-text-2)}
+.cialai-agents-tutorial__caption code{font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:12px;font-weight:600;color:var(--agents-text)}
+
+.cialai-agents-term{position:relative;margin-top:14px;flex:1;min-height:250px;display:flex;flex-direction:column;overflow:hidden;border-radius:20px;background:var(--agents-term)}
+.cialai-agents-term__title{padding:12px 16px 0;font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:11px;color:var(--agents-term-dim)}
+.cialai-agents-term__body{flex:1;overflow:hidden;padding:10px 16px 16px;font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:12px;line-height:1.65;color:var(--agents-term-text)}
+.cialai-agents-term__line{min-height:20px;white-space:pre;overflow:hidden;text-overflow:ellipsis;animation:cialai-agents-enter 240ms ease-in-out both}
+.cialai-agents-term .is-dir{color:var(--cialai-blush)}
+.cialai-agents-term .is-dim{color:var(--agents-term-dim)}
+.cialai-agents-term .is-ok{color:var(--agents-term-ok)}
+.cialai-agents-term .is-out{color:var(--agents-term-out)}
+.cialai-agents-term .is-hl{color:#FFFFFF;font-weight:700}
+.cialai-agents-term__caret{display:inline-block;width:7px;height:14px;margin-left:2px;vertical-align:-2px;background:var(--cialai-pink)}
+.cialai-agents-term__menu{margin:6px 0 2px;display:grid;gap:2px;animation:cialai-agents-enter 240ms ease-in-out both}
+.cialai-agents-term__question{margin-bottom:4px;font-weight:700;color:#FFFFFF}
+.cialai-agents-term__row{display:grid;grid-template-columns:12px 16px minmax(58px,auto) minmax(0,1fr);column-gap:8px;margin:0 -8px;padding:2px 8px;border-radius:8px;transition:background 240ms ease-in-out;animation:cialai-agents-enter 240ms ease-in-out both}
+.cialai-agents-term__arrow{color:var(--cialai-pink);opacity:0;transition:opacity 240ms ease-in-out}
+.cialai-agents-term__num{color:var(--agents-term-dim)}
+.cialai-agents-term__meta{display:flex;gap:10px;min-width:0;overflow:hidden;white-space:nowrap;color:var(--agents-term-dim)}
+.cialai-agents-term__meta b{font-weight:500}
+.cialai-agents-term__row.is-out .cialai-agents-term__name{color:var(--agents-term-dim)}
+.cialai-agents-term__row.is-on{background:var(--agents-term-hi)}
+.cialai-agents-term__row.is-on .cialai-agents-term__arrow{opacity:1}
+.cialai-agents-term__row.is-on .cialai-agents-term__name{color:#FFFFFF;font-weight:700}
+.cialai-agents-term__row.is-picked{background:var(--cialai-pink)}
+.cialai-agents-term .cialai-agents-term__row.is-picked *{color:var(--cialai-plum)}
+.cialai-agents-term__foot{margin-top:6px;color:var(--agents-term-dim)}
+.cialai-agents-term__opened{margin-top:8px;display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:12px;background:var(--agents-term-hi);white-space:pre;animation:cialai-agents-enter 300ms ease-in-out both}
+.cialai-agents-term__opened i{width:8px;height:8px;border-radius:3px;background:var(--cialai-pink);flex-shrink:0;margin-right:2px}
+.cialai-agents-term__opened span{color:var(--agents-term-dim)}
+.cialai-agents-term__opened span.is-hl{color:#FFFFFF}
+.cialai-agents-term__login{margin:8px 0 4px;width:min(240px,100%);display:grid;gap:8px;padding:10px 12px;border-radius:12px;background:#FFFFFF;color:var(--cialai-plum);font-family:var(--mac-font,system-ui,sans-serif);animation:cialai-agents-enter 300ms ease-in-out both}
+.cialai-agents-term__host{font-family:var(--mac-font-mono,ui-monospace,monospace);font-size:10.5px;color:rgba(58,27,51,.5)}
+.cialai-agents-term__who{font-size:12.5px;font-weight:650}
+.cialai-agents-term__continue{padding:6px;border-radius:8px;background:var(--cialai-plum);color:#FFFFFF;text-align:center;font-size:12px;font-weight:700;transition:background 240ms ease-in-out}
+.cialai-agents-term__continue.is-down{background:var(--cialai-magenta)}
+.cialai-agents-term__key{position:absolute;right:14px;bottom:14px;min-width:38px;height:32px;padding:0 12px;border-radius:8px;display:grid;place-items:center;font-family:var(--mac-font,system-ui,sans-serif);font-size:12px;font-weight:700;background:var(--agents-key);color:var(--cialai-plum);opacity:0;transform:translateX(-4px);transition:opacity 240ms ease-in-out,transform 240ms ease-in-out,background 120ms ease-in-out}
+.cialai-agents-term__key.is-shown,.cialai-agents-term__key.is-down{opacity:1;transform:none}
+.cialai-agents-term__key.is-down{background:var(--cialai-pink);transform:translateY(2px)}
+
+.cialai-agents-tutorial__steps{display:flex;gap:6px;margin-top:16px}
+.cialai-agents-tutorial__steps button{flex:1;height:20px;display:flex;align-items:center;padding:0}
+.cialai-agents-tutorial__steps span{display:block;width:100%;height:4px;border-radius:2px;background:var(--agents-step);overflow:hidden}
+.cialai-agents-tutorial__steps i{display:block;width:0;height:100%;background:var(--agents-step-fill)}
+.cialai-agents-tutorial__steps button.is-done i{width:100%}
+.cialai-agents-tutorial__steps button.is-active i{animation-name:cialai-agents-fill;animation-timing-function:linear;animation-fill-mode:forwards}
+
+@keyframes cialai-agents-enter{from{opacity:0;transform:translateX(-4px)}to{opacity:1;transform:none}}
+@keyframes cialai-agents-fill{from{width:0}to{width:100%}}
+
+@media (max-width:860px){
+  .MuiPaper-root.cialai-agents{grid-template-columns:1fr;height:auto;overflow:auto}
+  .cialai-agents__scroll{overflow:visible}
+  .cialai-agents__tutorial{min-height:540px}
+}
+@media (max-width:560px){
+  .cialai-agents__head{padding:22px 20px 14px}
+  .cialai-agents__scroll{padding:0 16px 20px}
+  .cialai-agents__fields{flex-wrap:wrap}
+  .cialai-agents__input{flex-basis:100%}
+  .cialai-agents__primary{flex:1}
+  .cialai-agents__row{grid-template-columns:36px minmax(0,1fr);row-gap:10px}
+  .cialai-agents__quota{grid-column:2;justify-items:start;text-align:left}
+  .cialai-agents-tutorial{padding:22px 16px 16px}
+  .cialai-agents-term__body{font-size:11px}
+}
+@media (prefers-reduced-motion:reduce){
+  .cialai-agents *,.cialai-agents *::before,.cialai-agents *::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .cialai-agents-tutorial__steps button.is-active i{width:100%}
+}

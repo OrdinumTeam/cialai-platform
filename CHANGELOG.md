@@ -73,6 +73,37 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.4.0 preview
+
+Preview dated 2026-10-25 for macOS, Windows and Linux. Agent profiles get their own window and a shell menu to pick the account, the file explorer moves close to the VS Code one, and every agent card shows only the state of its own session. The phone apps are unchanged and receive the new page from the updated computer.
+
+### Added
+
+* An Agent profiles window with the Codex and Claude Code accounts, the quota of each one and an animated tutorial of the account menu, in a 60 and 40 split. A new profile links the instructions and copies the configuration of the default one, and the login runs in a new session typed by the computer. It opens from the command palette, the app menu, Preferences and the terminal accounts
+* An account menu in the shells opened by Cialai. Typing `codex` or `claude` with more than one account lists them with their quota; Enter repeats the last account of the folder, a number switches, an exhausted account is skipped and `codex +name` goes straight to one. It covers zsh, bash and PowerShell, only with default arguments, and `CIALAI_AGENT_MENU=0` turns it off
+* Cut, copy and paste in the explorer, from the menu and the keyboard. Pasting over an existing name picks a free one and never overwrites
+* Multiple selection in the explorer with Cmd or Ctrl, Shift and Cmd A, with batch cut, copy, copy path and move to Trash, the count shown in the dialog
+* Undo and redo of rename, move, copy and create in the explorer. Moving to Trash stays out, because the system does not give the item back by its original path. F2 renames
+* Dragging a multiple selection out of the app hands every file to the system, for Finder, a folder or WhatsApp
+* The file that becomes active in the editor is revealed and selected in the explorer
+
+### Changed
+
+* The Codex turn comes from the `OSC 7501` sequence Codex writes in its own terminal, read from the PTY output of each session, so Codex can show as waiting when it asks for permission
+* The shared `codex app-server` daemon never proves who owns a conversation and stays out of the session process tree, together with what it spends and runs
+* The AI Bar lists every live Codex conversation of a profile instead of only the most recent file
+* Profile names accept underscore, so existing profile folders with it can be selected
+
+### Fixed
+
+* Several Codex cards in the same folder no longer show the same state. Since Codex 0.163 one daemon serves every tab of a profile and is born in the tree of the first one; its open rollout gave that tab the conversation of another, and the wrong id reached the resume record
+* Metrics that arrive after a reconnection are discarded instead of passing for fresh, and a live PTY without a tag is adopted by folder only when the folder points to a single session
+* The New session and Pair phone buttons of the empty screen were misaligned by 7 px and touching; they now share the centre line with space between them and between wrapped lines
+
+### Compatibility
+
+* New commands `agent_menu_publish`, outside the bridge, and the `login` field of `pty_launch_agent`, so the desktop front end and the Rust core ship in the same build. A Codex session served by the daemon has no conversation id and therefore no automatic resume until Codex exposes that link
+
 ## 0.3.0 preview
 
 Preview dated 2026-10-19 for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session carries its own colour and icon, the AI Bar shows the weekly limit and the phone raises attention notices.
