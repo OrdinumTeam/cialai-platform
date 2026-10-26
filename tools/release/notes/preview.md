@@ -1,20 +1,14 @@
 ## Cialai {{version}} preview
 
-A preview of Cialai for macOS, Windows and Linux. Agent profiles get their own window and the terminal asks which account to use, the file explorer moves close to the VS Code one, and every agent card shows only the state of its own session. The phone apps are unchanged: the phone page comes from the computer, so updating the computer is enough.
+A quiet fix of Cialai for macOS, Windows and Linux, on top of 0.4.0. The account menu is picked with the arrow keys, and the session card shows the agent and the account again instead of the shell. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
-### What is new
+### What is fixed
 
-* **Agent profiles.** One window gathers the Codex and Claude Code accounts with the quota of each one and, beside them, an animated tutorial of how to switch accounts. A new account copies the instructions and the configuration of the default one and opens the login in a new session. It opens from the command palette, the app menu, Preferences and the terminal accounts.
-* **The right account when you open the agent.** In sessions opened by Cialai, typing `codex` or `claude` with more than one account lists them with their quota. Enter repeats the last account used in that folder, a number switches, an exhausted account is skipped and `codex +name` goes straight to one. It works in zsh, bash and PowerShell.
-* **Cut, copy and paste in the explorer.** From the menu and the keyboard, as in VS Code. Pasting into a folder with a file of the same name picks a free name and never overwrites.
-* **Multiple selection.** Cmd or Ctrl adds one file at a time, Shift selects a range and Cmd A selects everything. Cut, copy, copy path and move to Trash work on the whole selection, with the count in the dialog.
-* **Undo and redo.** Cmd Z undoes rename, move, copy and create, and Cmd Shift Z redoes. Moving to Trash still goes to the system Trash. F2 renames.
-* **Several files out of the app.** Dragging a selection hands every file to Finder, a folder or WhatsApp.
-* **The open file shows in the tree.** Opening a file in the editor reveals and highlights where it is in the explorer.
-* **Each card with the state of its own session.** With several Codex sessions in the same folder the cards used to show the same state, such as Answer delivered. Now each one reads what Codex writes in its own terminal, and the card shows Waiting for you when Codex asks for permission. The AI Bar lists every Codex conversation in progress.
-* **Aligned buttons on the empty screen.** New session and Pair phone sit on the same line with space between them, also when a narrow window wraps them.
+* **Pick the account with the arrow keys.** Typing `codex` or `claude` with more than one account lists them; use the up and down arrows, or j and k, with the chosen one highlighted, and Enter opens it. A number from 1 to 9 still opens its account directly, and Esc cancels. Before only a number worked.
+* **The card shows the agent and the account again.** After you pick the account, the session card shows Codex or Claude Code and the profile instead of the shell. The agent now runs in the shell itself, never in a subshell, and the card finds the agent even when a shell or a launcher leads the foreground group.
+* **The tutorial teaches the arrows.** The account menu tutorial in the Agent profiles window shows the arrow keys instead of the number.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

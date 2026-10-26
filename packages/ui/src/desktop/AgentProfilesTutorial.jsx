@@ -15,7 +15,7 @@ const SCENES = [
   { id: 'create', duration: 7400 },
   { id: 'type', duration: 5200 },
   { id: 'enter', duration: 5200 },
-  { id: 'number', duration: 5400 },
+  { id: 'arrows', duration: 6400 },
   { id: 'skip', duration: 6000 },
   { id: 'shortcut', duration: 5000 },
 ];
@@ -88,15 +88,23 @@ const SCRIPTS = {
     opened(api, context, context.accounts[last].name);
     await api.sleep(2100);
   },
-  async number(api, context) {
+  // As setas sobem uma conta por vez, inclusive pela esgotada, e o Enter abre.
+  async arrows(api, context) {
     api.add({ kind: 'prompt', cmd: context.tool.command, caret: false });
-    const menu = await showMenu(api, context, context.accounts.length - 1);
-    await api.sleep(900);
-    await api.press('1');
-    menu.set(0, toned(richText(context.t, 'agentProfiles.tutorial.opening', { name: context.accounts[0].name }, ['name']), 'hl'));
+    const last = context.accounts.length - 1;
+    const menu = await showMenu(api, context, last);
+    await api.sleep(700);
+    for (let index = last - 1; index >= 0; index -= 1) {
+      const pressing = api.press('↑');
+      await api.sleep(440);
+      menu.set(index);
+      await pressing;
+    }
+    await api.sleep(250);
+    await api.press('Enter');
     await menu.pick(0);
     opened(api, context, context.accounts[0].name);
-    await api.sleep(2100);
+    await api.sleep(1800);
   },
   async skip(api, context) {
     api.add({ kind: 'prompt', cmd: context.tool.command, caret: false });

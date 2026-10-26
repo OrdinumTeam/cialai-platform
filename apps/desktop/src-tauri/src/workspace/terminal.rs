@@ -2278,6 +2278,7 @@ fn describe_foreground(
                 .unwrap_or(false)
         })
     }?;
+    let candidate = agent_in_group(source, candidate, pgid, tree, commands).unwrap_or(candidate);
     let info = source.info(candidate)?;
     if info.state == ProcState::Zombie {
         return None;
@@ -2309,6 +2310,35 @@ fn describe_foreground(
         config_dir: profile.as_ref().map(|value| value.config_dir.clone()),
         profile: profile.as_ref().map(|value| value.slug.clone()),
         profile_name: profile.as_ref().and_then(|value| value.name.clone()),
+    })
+}
+
+/// Agente que roda no grupo em primeiro plano quando o lider dele nao e um.
+/// Um subshell, como `( export X; claude )`, um script que abre o agente ou
+/// `make` com um agente dentro deixam o shell ou o lancador na frente do
+/// grupo; o card mostra o agente, que e o que a pessoa esta usando. Vale o
+/// primeiro achado na ordem da arvore, o mais perto do shell da sessao.
+fn agent_in_group(
+    source: &dyn ProcSource,
+    leader: u32,
+    pgid: u32,
+    tree: &[u32],
+    commands: &mut CommandCache,
+) -> Option<u32> {
+    let is_agent = |pid: u32, commands: &mut CommandCache| {
+        source
+            .info(pid)
+            .filter(|info| info.state != ProcState::Zombie)
+            .and_then(|info| commands.get_from(source, pid, info.start_sec))
+            .is_some_and(|line| procs::agent_of(&line).is_some())
+    };
+    if is_agent(leader, commands) {
+        return None;
+    }
+    tree.iter().copied().find(|&member| {
+        member != leader
+            && source.info(member).is_some_and(|info| info.pgid == pgid)
+            && is_agent(member, commands)
     })
 }
 
@@ -3897,8 +3927,324 @@ echo 'recovered-fixture'
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// Processo falso para o primeiro plano: pid, pai, grupo, executavel,
+    /// argumentos e ambiente.
+    fn fake_proc(
+        source: &procs::FakeProcs,
+        pid: u32,
+        ppid: u32,
+        pgid: u32,
+        exe: &str,
+        argv: &[&str],
+        env: &[(&str, &str)],
+    ) {
+        source.set_info(procs::ProcInfo {
+            pid,
+            ppid,
+            pgid,
+            state: ProcState::Sleeping,
+            comm: procs::basename(exe),
+            name: procs::basename(exe),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            pid,
+            CommandLine {
+                exe: exe.into(),
+                argv: argv.iter().map(|arg| arg.to_string()).collect(),
+                env: env
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect(),
+            },
+        );
+    }
+
+    /// De ponta a ponta, pelo mesmo caminho do app: a sessao nasce com o menu
+    /// de contas injetado no zsh, a pessoa digita `codex`, escolhe a conta com
+    /// a seta e Enter, e as metricas que o card le trazem o agente e a conta
+    /// em primeiro plano. Na 0.4.0 o card mostrava `zsh` e nenhum perfil.
+    #[cfg(unix)]
+    #[test]
+    fn the_card_reads_the_agent_and_the_account_picked_in_the_menu() {
+        use std::os::unix::fs::PermissionsExt;
+        let Ok(real_zsh) = which::which("zsh") else {
+            eprintln!("sem zsh neste sistema; o teste nao rodou");
+            return;
+        };
+        let home = scratch("menu-card");
+        let home = home.canonicalize().unwrap();
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // O shell da sessao e um zsh de mentira que fixa o HOME da pasta de
+        // teste e vira o zsh de verdade, no mesmo pid, com o menu injetado.
+        let zsh = bin.join("zsh");
+        std::fs::write(
+            &zsh,
+            format!(
+                "#!/bin/sh\nHOME='{}'; export HOME\nunset CIALAI_USER_ZDOTDIR\nexec '{}' \"$@\"\n",
+                home.display(),
+                real_zsh.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&zsh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // O agente e o proprio binario de teste dormindo, com o nome do Codex no
+        // argv, que e por onde o app o reconhece. Binario do sistema nao serve:
+        // o macOS mata a copia dele e esconde o ambiente do original.
+        let Ok(bash) = which::which("bash") else {
+            return;
+        };
+        let fake = bin.join("codex");
+        std::fs::write(
+            &fake,
+            format!(
+                "#!{}\nexport CIALAI_FAKE_AGENT_SECS=30\nexec -a codex '{}' --ignored --exact workspace::terminal::tests::fake_agent_sleeps --test-threads 1 -q\n",
+                bash.display(),
+                std::env::current_exe().unwrap().display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        for folder in [".codex", ".codex-time_b"] {
+            std::fs::create_dir_all(home.join(folder)).unwrap();
+            std::fs::write(home.join(folder).join("config.toml"), "").unwrap();
+        }
+        let entry = |id: &str, label: &str| agent_menu::MenuEntry {
+            id: id.into(),
+            label: label.into(),
+            state: "free".into(),
+            ..agent_menu::MenuEntry::default()
+        };
+        agent_menu::publish(
+            &home,
+            "codex",
+            &[entry("codex", "padrão"), entry("codex-time_b", "time_b")],
+            &agent_menu::MenuStrings {
+                question: "Qual conta?".into(),
+                enter: "↑ ↓, Enter usa {name}".into(),
+                missing: "Nenhuma conta {name}".into(),
+            },
+        )
+        .unwrap();
+
+        let mut prefs = Preferences::default();
+        prefs.terminal.path_prefix = vec![bin.to_string_lossy().into_owned()];
+        let mut manager = TerminalManager::with_environment(
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+            PrefsState::new(prefs.clone()),
+            home.clone(),
+            Arc::new(SystemProcs::default()),
+        );
+        manager.agent_menu = true;
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), home.clone());
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let spec = ShellSpec::new(zsh.to_string_lossy().into_owned(), Vec::new());
+        let info = manager
+            .spawn_for_with_spec(
+                home.to_str().unwrap(),
+                120,
+                30,
+                CursorPosition::default(),
+                "menu_card",
+                SubscriberKey::Webview,
+                sink,
+                &spec,
+                &prefs,
+            )
+            .expect("spawn");
+        let mut queries = LaterCursorQueries::new("menu-card", &manager, info.id);
+        let mut output = Vec::new();
+        manager.write(info.id, b"echo READY$((40+2))\r").unwrap();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "READY42"),
+            "o zsh com o menu abriu"
+        );
+        manager.write(info.id, b"codex 30\r").unwrap();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "Qual conta?"),
+            "o menu apareceu"
+        );
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "↑ ↓, Enter usa padrão"),
+            "a dica apareceu"
+        );
+        std::thread::sleep(Duration::from_millis(150));
+        manager.write(info.id, b"\x1b[B").unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        manager.write(info.id, b"\r").unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let foreground = loop {
+            let found = manager
+                .sample_metrics()
+                .into_iter()
+                .find(|metrics| metrics.tag == "menu_card")
+                .and_then(|metrics| metrics.foreground);
+            if found.as_ref().is_some_and(|found| found.agent.is_some()) {
+                break found.unwrap();
+            }
+            if Instant::now() >= deadline {
+                let _ = collect_until_printed(&rx, &mut queries, &mut output, "nunca-aparece-xyz");
+                panic!(
+                    "o agente nao apareceu em primeiro plano: {found:?}\nsaida:\n{}",
+                    String::from_utf8_lossy(&output)
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        assert_eq!(
+            foreground.agent.as_deref(),
+            Some("Codex"),
+            "o card mostra o agente, nao o zsh"
+        );
+        assert_eq!(foreground.command, "codex");
+        assert_eq!(
+            foreground.profile.as_deref(),
+            Some("codex-time_b"),
+            "a conta escolhida com a seta"
+        );
+        assert_eq!(
+            foreground.config_dir.as_deref(),
+            Some(crate::platform::to_portable(home.join(".codex-time_b")).as_str())
+        );
+        assert_eq!(foreground.profile_name.as_deref(), Some("time_b"));
+    }
+
+    /// Agente de mentira dos testes de ponta a ponta: o binario de teste
+    /// dorme enquanto a variavel pede e sai na hora fora deles.
+    #[test]
+    #[ignore]
+    fn fake_agent_sleeps() {
+        if let Ok(secs) = std::env::var("CIALAI_FAKE_AGENT_SECS") {
+            std::thread::sleep(Duration::from_secs(secs.parse().unwrap_or(30)));
+        }
+    }
+
+    #[test]
+    fn an_agent_under_a_subshell_in_the_foreground_group_is_what_the_card_shows() {
+        // O caso da 0.4.0: o menu de contas rodava o agente num `( ... )`, e o
+        // grupo em primeiro plano tinha um zsh na frente, com o node do Claude
+        // Code e o binario dele no mesmo grupo.
+        let home = Path::new("/home/fixture");
+        let env = [
+            ("CLAUDE_CONFIG_DIR", "/home/fixture/.claude-felipe"),
+            ("CLAUDE_PROFILE", "felipe"),
+        ];
+        let source = procs::FakeProcs::default();
+        fake_proc(&source, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(&source, 200, 100, 200, "/bin/zsh", &["-zsh"], &env);
+        fake_proc(
+            &source,
+            300,
+            200,
+            200,
+            "/usr/local/bin/node",
+            &["node", "/home/fixture/.npm-global/bin/claude"],
+            &env,
+        );
+        fake_proc(
+            &source,
+            400,
+            300,
+            200,
+            "/home/fixture/.npm-global/lib/claude",
+            &["claude"],
+            &env,
+        );
+        let tree = [100, 200, 300, 400];
+        let mut commands = CommandCache::default();
+        let found =
+            describe_foreground(&source, 200, &tree, &mut commands, home).expect("primeiro plano");
+        assert_eq!(
+            found.agent.as_deref(),
+            Some("Claude Code"),
+            "o card mostra o agente, nao o zsh"
+        );
+        assert_eq!(found.pid, 300);
+        assert_eq!(
+            found.config_dir.as_deref(),
+            Some("/home/fixture/.claude-felipe")
+        );
+        assert_eq!(found.profile.as_deref(), Some("claude-felipe"));
+        assert_eq!(found.profile_name.as_deref(), Some("felipe"));
+
+        // Um agente que roda direto continua sendo o lider, sem desvio.
+        let direct = procs::FakeProcs::default();
+        fake_proc(&direct, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(
+            &direct,
+            300,
+            100,
+            300,
+            "/usr/local/bin/node",
+            &["node", "/home/fixture/.npm-global/bin/claude"],
+            &env,
+        );
+        let found = describe_foreground(
+            &direct,
+            300,
+            &[100, 300],
+            &mut CommandCache::default(),
+            home,
+        )
+        .unwrap();
+        assert_eq!(
+            (found.pid, found.agent.as_deref()),
+            (300, Some("Claude Code"))
+        );
+
+        // Um agente fora do grupo em primeiro plano, como um que ficou em
+        // segundo plano com &, nao toma o lugar do que esta na frente.
+        let background = procs::FakeProcs::default();
+        fake_proc(&background, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(
+            &background,
+            300,
+            100,
+            300,
+            "/usr/local/bin/node",
+            &["node", "/x/bin/claude"],
+            &env,
+        );
+        fake_proc(
+            &background,
+            500,
+            100,
+            500,
+            "/usr/bin/vim",
+            &["vim", "notas.md"],
+            &[],
+        );
+        let found = describe_foreground(
+            &background,
+            500,
+            &[100, 300, 500],
+            &mut CommandCache::default(),
+            home,
+        )
+        .unwrap();
+        assert_eq!(
+            (found.pid, found.agent.as_deref(), found.command.as_str()),
+            (500, None, "vim")
+        );
+    }
+
     /// Processo falso na arvore de uma sessao, com o perfil do Codex no
     /// ambiente, como o `agent_profile` le.
+    #[cfg(unix)]
     fn fake_codex(
         source: &procs::FakeProcs,
         pid: u32,
@@ -3931,11 +4277,13 @@ echo 'recovered-fixture'
     }
 
     /// Escreve no terminal o que o Codex escreve a cada mudanca de turno.
+    #[cfg(unix)]
     fn announce(manager: &TerminalManager, id: u32, body: &str) {
         let line = format!("printf '\\033]7501;{body}\\007'\n");
         manager.write(id, line.as_bytes()).unwrap();
     }
 
+    #[cfg(unix)]
     fn turn_by_tag(
         manager: &TerminalManager,
         tag: &str,
@@ -3948,6 +4296,7 @@ echo 'recovered-fixture'
             .map(|turn| (turn.state, turn.waiting_for))
     }
 
+    #[cfg(unix)]
     fn wait_turn(
         manager: &TerminalManager,
         tag: &str,

@@ -73,6 +73,20 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.4.1 preview
+
+Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet fix for the account menu and the session card shipped in 0.4.0. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* The account menu picks the account with the arrow keys, or j and k, with the chosen one highlighted; Enter opens it. A number from 1 to 9 still opens its account directly, and Esc cancels. Before only a number worked
+* The session card shows the agent and the account again instead of the shell. The agent now runs in the shell itself, never in a subshell that became the foreground group, and the card finds the agent even when a shell or a launcher leads the foreground group
+* A process whose executable changes through an `exec`, like a script that turns into the agent, has its command line read again instead of staying cached
+
+### Changed
+
+* The account menu tutorial in the Agent profiles window teaches the arrow keys instead of the number
+
 ## 0.4.0 preview
 
 Preview dated 2026-10-25 for macOS, Windows and Linux. Agent profiles get their own window and a shell menu to pick the account, the file explorer moves close to the VS Code one, and every agent card shows only the state of its own session. The phone apps are unchanged and receive the new page from the updated computer.

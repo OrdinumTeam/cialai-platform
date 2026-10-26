@@ -8,6 +8,9 @@
 # pasta "-" e o perfil padrao, que roda sem a variavel. Sem o arquivo ou com
 # uma conta so, o comando roda como sempre.
 #
+# A conta se escolhe com as setas, ou com j e k, e Enter abre. Um numero de
+# 1 a 9 abre a conta dele direto, e Esc, q ou Ctrl+C desistem.
+#
 # O menu fica de fora quando a pasta ja vem no ambiente, quando a entrada ou
 # a saida de erro nao e um terminal, com CIALAI_AGENT_MENU=0, em --version e
 # --help, no login e na retomada com id, que o app digita ao reabrir uma
@@ -27,7 +30,7 @@ _cialai_agents_text() {
   if [[ -z $text ]]; then
     case $1 in
       question) text='?' ;;
-      enter) text='Enter: {name}' ;;
+      enter) text='↑ ↓, Enter: {name}' ;;
       *) text='{name}?' ;;
     esac
   fi
@@ -39,6 +42,64 @@ _cialai_agents_pad() {
   local text=$1 pad=$(( $2 - ${#1} ))
   (( pad > 0 )) || pad=0
   print -rn -- "$text${(l:pad:)}"
+}
+
+# Desenha as contas e a dica, com a escolhida em destaque. Le os vetores e a
+# escolha de _cialai_agents_pick, que o zsh deixa ver por escopo dinamico.
+# Termina sem quebra de linha, na linha da dica, para o redesenho subir
+# exatamente o numero de contas.
+_cialai_agents_draw() {
+  emulate -L zsh
+  local esc=$'\e' index mark tone label
+  for index in {1..$count}; do
+    label=$(_cialai_agents_pad "${labels[index]}" $width)
+    if (( index == choice )); then
+      mark="${esc}[38;5;205m›${esc}[0m"
+      label="${esc}[1;38;5;205m$label${esc}[0m"
+    else
+      mark=' '
+    fi
+    case ${states[index]} in
+      out) tone="${esc}[31m" ;;
+      free) tone="${esc}[32m" ;;
+      *) tone="${esc}[2m" ;;
+    esac
+    print -r -- "${esc}[2K$mark ${esc}[2m$index${esc}[0m  $label  $tone${values[index]}${esc}[0m  ${esc}[2m${details[index]}${esc}[0m"
+  done
+  print -rn -- "${esc}[2K${esc}[2m$(_cialai_agents_text enter "${labels[choice]}")${esc}[0m"
+}
+
+# Le uma tecla do terminal e devolve em REPLY: up, down, enter, cancel, um
+# numero ou vazio para o que nao interessa. As setas chegam como ESC [ A ou,
+# no modo de aplicacao do cursor, ESC O A; o resto da sequencia e consumido
+# para um Ctrl+seta nao virar numero.
+_cialai_agents_key() {
+  emulate -L zsh
+  local key="" rest="" seq=""
+  REPLY=''
+  read -s -k 1 key < /dev/tty || { REPLY=cancel; return 0 }
+  case $key in
+    ($'\n'|$'\r') REPLY=enter ;;
+    ($'\e')
+      read -s -k 1 -t 0.1 rest < /dev/tty
+      if [[ $rest == ('['|O) ]]; then
+        while read -s -k 1 -t 0.1 key < /dev/tty; do
+          seq+=$key
+          [[ $key == [A-Za-z~] || ${#seq} -ge 8 ]] && break
+        done
+        case $seq in
+          (*A) REPLY=up ;;
+          (*B) REPLY=down ;;
+        esac
+      else
+        REPLY=cancel
+      fi ;;
+    (k) REPLY=up ;;
+    (j) REPLY=down ;;
+    ([1-9]) REPLY=$key ;;
+    ($'\x03'|$'\x04'|q) REPLY=cancel ;;
+  esac
+  return 0
 }
 
 # Devolve 0 com reply=(nome pasta), 1 para seguir sem menu, 2 quando a conta
@@ -66,6 +127,7 @@ _cialai_agents_pick() {
   fi
   (( count >= 2 )) || return 1
 
+  # Comeca na ultima conta usada nesta pasta, ou na seguinte com cota.
   local last="" key start=1 choice=1 step
   if [[ -r $_cialai_agents_dir/$agent.last ]]; then
     while IFS=$'\t' read -r key name; do
@@ -81,35 +143,26 @@ _cialai_agents_pick() {
     if [[ ${states[index]} != (out|none) ]]; then choice=$index; break; fi
   done
 
-  local esc=$'\e' width=0 mark tone
+  local width=0
   for label in $labels; do (( ${#label} > width )) && width=${#label}; done
-  {
-    print -r -- "${esc}[1m$(_cialai_agents_text question)${esc}[0m"
-    for index in {1..$count}; do
-      mark=' '; (( index == choice )) && mark="${esc}[38;5;211m›${esc}[0m"
-      case ${states[index]} in
-        out) tone="${esc}[31m" ;;
-        free) tone="${esc}[32m" ;;
-        *) tone="${esc}[2m" ;;
-      esac
-      print -r -- "$mark $index  $(_cialai_agents_pad "${labels[index]}" $width)  $tone${values[index]}${esc}[0m  ${esc}[2m${details[index]}${esc}[0m"
-    done
-    print -r -- "${esc}[2m$(_cialai_agents_text enter "${labels[choice]}")${esc}[0m"
-  } >&2
-
-  local answer=""
-  if (( count > 9 )); then
-    read -r answer < /dev/tty || return 130
-  else
-    read -s -k 1 answer < /dev/tty || return 130
-  fi
-  case $answer in
-    ($'\n'|$'\r'|'') ;;
-    (<1-99>)
-      (( answer <= count )) || return 130
-      choice=$answer ;;
-    (*) return 130 ;;
-  esac
+  print -u2 -r -- $'\e[1m'"$(_cialai_agents_text question)"$'\e[0m'
+  _cialai_agents_draw >&2
+  local REPLY
+  while true; do
+    _cialai_agents_key
+    case $REPLY in
+      (enter) break ;;
+      (cancel) print -u2; return 130 ;;
+      (up) (( choice = choice > 1 ? choice - 1 : count )) ;;
+      (down) (( choice = choice < count ? choice + 1 : 1 )) ;;
+      (<1-9>) (( REPLY <= count )) || continue; choice=$REPLY ;;
+      (*) continue ;;
+    esac
+    print -rn -- $'\r'$'\e'"[${count}A" >&2
+    _cialai_agents_draw >&2
+    [[ $REPLY == <1-9> ]] && break
+  done
+  print -u2
   reply=("${names[choice]}" "${dirs[choice]}")
   return 0
 }
@@ -132,6 +185,23 @@ _cialai_agents_call() {
   else
     command $agent "$@"
   fi
+}
+
+# Roda o agente no proprio shell, nunca num subshell: um `( ... )` vira o
+# grupo em primeiro plano do terminal, e o card do Cialai passa a ler o shell
+# no lugar do agente e perde o perfil. A pasta da conta vai numa variavel
+# local exportada, que vale ate o agente sair; na conta padrao as duas
+# variaveis ficam locais e sem valor, o que tambem as tira do ambiente dele.
+_cialai_agents_launch() {
+  local agent=$1 dir_key=$2 name_key=$3 folder=$4 name=$5
+  shift 5
+  if [[ $folder == - ]]; then
+    local $dir_key $name_key
+    unset $dir_key $name_key
+  else
+    local -x "$dir_key=$folder" "$name_key=$name"
+  fi
+  _cialai_agents_call $agent "$@"
 }
 
 _cialai_agents_skip() {
@@ -170,14 +240,10 @@ _cialai_agents_run() {
     0) ;;
     1) _cialai_agents_call $agent "$@"; return ;;
     2) print -u2 -r -- "$(_cialai_agents_text missing "$wanted")"; return 2 ;;
-    *) print -u2; return $result ;;
+    *) return $result ;;
   esac
   _cialai_agents_remember $agent "${reply[1]}"
-  if [[ ${reply[2]} == - ]]; then
-    ( unset $dir_key $name_key; _cialai_agents_call $agent "$@" )
-  else
-    ( export "$dir_key=${reply[2]}" "$name_key=${reply[1]}"; _cialai_agents_call $agent "$@" )
-  fi
+  _cialai_agents_launch $agent $dir_key $name_key "${reply[2]}" "${reply[1]}" "$@"
 }
 
 # Uma funcao do usuario com o mesmo nome, como um claude() do .zshrc que

@@ -3,6 +3,9 @@
 # O app grava este arquivo em ~/.cialai/shell e o reescreve quando muda.
 # Mesmo contrato de agents.zsh, escrito para o bash 3.2 do macOS: sem
 # arrays associativos, sem mapfile e sem expansoes de caixa.
+#
+# A conta se escolhe com as setas, ou com j e k, e Enter abre. Um numero de
+# 1 a 9 abre a conta dele direto, e Esc, q ou Ctrl+C desistem.
 
 _cialai_agents_dir="${CIALAI_AGENTS_DIR:-$HOME/.cialai/agents}"
 
@@ -16,7 +19,7 @@ _cialai_agents_text() {
   if [ -z "$text" ]; then
     case $1 in
       question) text='?' ;;
-      enter) text='Enter: {name}' ;;
+      enter) text='↑ ↓, Enter: {name}' ;;
       *) text='{name}?' ;;
     esac
   fi
@@ -27,6 +30,65 @@ _cialai_agents_pad() {
   local text=$1 pad=$(( $2 - ${#1} ))
   printf '%s' "$text"
   while [ "$pad" -gt 0 ]; do printf ' '; pad=$(( pad - 1 )); done
+}
+
+# Desenha as contas e a dica, com a escolhida em destaque. Le os vetores e a
+# escolha de _cialai_agents_pick, que o bash deixa ver por escopo dinamico.
+# Termina sem quebra de linha, na linha da dica, para o redesenho subir
+# exatamente o numero de contas.
+_cialai_agents_draw() {
+  local esc=$'\e' index mark tone label
+  for (( index = 0; index < count; index++ )); do
+    label=$(_cialai_agents_pad "${labels[index]}" "$width")
+    if [ "$index" -eq "$choice" ]; then
+      mark="${esc}[38;5;205m›${esc}[0m"
+      label="${esc}[1;38;5;205m${label}${esc}[0m"
+    else
+      mark=' '
+    fi
+    case ${states[index]} in
+      out) tone="${esc}[31m" ;;
+      free) tone="${esc}[32m" ;;
+      *) tone="${esc}[2m" ;;
+    esac
+    printf '%s\n' "${esc}[2K${mark} ${esc}[2m$(( index + 1 ))${esc}[0m  ${label}  ${tone}${values[index]}${esc}[0m  ${esc}[2m${details[index]}${esc}[0m"
+  done
+  printf '%s' "${esc}[2K${esc}[2m$(_cialai_agents_text enter "${labels[choice]}")${esc}[0m"
+}
+
+# Le uma tecla do terminal e devolve em _cialai_agents_key_read: up, down,
+# enter, cancel, um numero ou vazio para o que nao interessa. As setas chegam
+# como ESC [ A ou, no modo de aplicacao do cursor, ESC O A; o resto da
+# sequencia e consumido para um Ctrl+seta nao virar numero. O bash 3.2 so
+# aceita espera inteira no read.
+_cialai_agents_key() {
+  local key="" rest="" seq="" wait=1
+  [ "${BASH_VERSINFO[0]:-3}" -ge 4 ] && wait=0.1
+  _cialai_agents_key_read=''
+  IFS= read -r -s -n 1 key < /dev/tty || { _cialai_agents_key_read=cancel; return 0; }
+  case $key in
+    '') _cialai_agents_key_read=enter ;;
+    $'\e')
+      IFS= read -r -s -n 1 -t "$wait" rest < /dev/tty
+      case $rest in
+        '['|O)
+          while IFS= read -r -s -n 1 -t "$wait" key < /dev/tty; do
+            seq=$seq$key
+            case $key in [A-Za-z~]) break ;; esac
+            [ "${#seq}" -ge 8 ] && break
+          done
+          case $seq in
+            *A) _cialai_agents_key_read=up ;;
+            *B) _cialai_agents_key_read=down ;;
+          esac ;;
+        *) _cialai_agents_key_read=cancel ;;
+      esac ;;
+    k) _cialai_agents_key_read=up ;;
+    j) _cialai_agents_key_read=down ;;
+    [1-9]) _cialai_agents_key_read=$key ;;
+    q|$'\x03'|$'\x04') _cialai_agents_key_read=cancel ;;
+  esac
+  return 0
 }
 
 # Devolve 0 com _cialai_agents_name e _cialai_agents_folder, 1 para seguir
@@ -59,6 +121,7 @@ _cialai_agents_pick() {
   fi
   [ "$count" -ge 2 ] || return 1
 
+  # Comeca na ultima conta usada nesta pasta, ou na seguinte com cota.
   local last="" key start=0 choice=0 step
   if [ -r "$_cialai_agents_dir/$agent.last" ]; then
     while IFS=$'\t' read -r key name; do
@@ -74,35 +137,28 @@ _cialai_agents_pick() {
     case ${states[index]} in out|none) ;; *) choice=$index; break ;; esac
   done
 
-  local esc=$'\e' width=0 mark tone
+  local width=0
   for label in "${labels[@]}"; do [ "${#label}" -gt "$width" ] && width=${#label}; done
-  {
-    printf '%s\n' "${esc}[1m$(_cialai_agents_text question)${esc}[0m"
-    for (( index = 0; index < count; index++ )); do
-      mark=' '; [ "$index" -eq "$choice" ] && mark="${esc}[38;5;211m›${esc}[0m"
-      case ${states[index]} in
-        out) tone="${esc}[31m" ;;
-        free) tone="${esc}[32m" ;;
-        *) tone="${esc}[2m" ;;
-      esac
-      printf '%s %d  %s  %s  %s\n' "$mark" $(( index + 1 )) "$(_cialai_agents_pad "${labels[index]}" "$width")" "$tone${values[index]}${esc}[0m" "${esc}[2m${details[index]}${esc}[0m"
-    done
-    printf '%s\n' "${esc}[2m$(_cialai_agents_text enter "${labels[choice]}")${esc}[0m"
-  } >&2
-
-  local answer=""
-  if [ "$count" -gt 9 ]; then
-    IFS= read -r answer < /dev/tty || return 130
-  else
-    IFS= read -r -s -n 1 answer < /dev/tty || return 130
-  fi
-  case $answer in
-    '') ;;
-    *[!0-9]*) return 130 ;;
-    *)
-      [ "$answer" -ge 1 ] && [ "$answer" -le "$count" ] || return 130
-      choice=$(( answer - 1 )) ;;
-  esac
+  printf '%s\n' $'\e[1m'"$(_cialai_agents_text question)"$'\e[0m' >&2
+  _cialai_agents_draw >&2
+  local _cialai_agents_key_read=''
+  while :; do
+    _cialai_agents_key
+    case $_cialai_agents_key_read in
+      enter) break ;;
+      cancel) printf '\n' >&2; return 130 ;;
+      up) choice=$(( choice > 0 ? choice - 1 : count - 1 )) ;;
+      down) choice=$(( choice < count - 1 ? choice + 1 : 0 )) ;;
+      [1-9])
+        [ "$_cialai_agents_key_read" -le "$count" ] || continue
+        choice=$(( _cialai_agents_key_read - 1 )) ;;
+      *) continue ;;
+    esac
+    printf '\r\033[%dA' "$count" >&2
+    _cialai_agents_draw >&2
+    case $_cialai_agents_key_read in [1-9]) break ;; esac
+  done
+  printf '\n' >&2
   _cialai_agents_name=${names[choice]}
   _cialai_agents_folder=${dirs[choice]}
   return 0
@@ -125,6 +181,51 @@ _cialai_agents_call() {
   else
     command "$agent" "$@"
   fi
+}
+
+# Tira uma variavel do ambiente e grava em _cialai_agents_saved como volta-la:
+# vazio quando ela nao existia, x e o valor quando era exportada, - e o valor
+# quando era so do shell. No bash, local seguido de unset ainda deixa o valor
+# de fora no ambiente do filho.
+_cialai_agents_unset() {
+  _cialai_agents_saved=''
+  if [ -n "${!1+set}" ]; then
+    case $(declare -p "$1" 2>/dev/null) in
+      "declare -"*x*" $1="*|"declare -"*x*" $1") _cialai_agents_saved="x${!1}" ;;
+      *) _cialai_agents_saved="-${!1}" ;;
+    esac
+  fi
+  unset "$1"
+}
+
+_cialai_agents_restore() {
+  case $2 in
+    '') ;;
+    x*) export "$1=${2#x}" ;;
+    *) eval "$1=\${2#-}" ;;
+  esac
+}
+
+# Roda o agente no proprio shell, nunca num subshell: um `( ... )` vira o
+# grupo em primeiro plano do terminal, e o card do Cialai passa a ler o shell
+# no lugar do agente e perde o perfil. A pasta da conta vai numa variavel
+# local exportada, que vale ate o agente sair.
+_cialai_agents_launch() {
+  local agent=$1 dir_key=$2 name_key=$3 folder=$4 name=$5 status
+  shift 5
+  if [ "$folder" != - ]; then
+    local -x "$dir_key=$folder" "$name_key=$name"
+    _cialai_agents_call "$agent" "$@"
+    return
+  fi
+  local _cialai_agents_saved saved_dir saved_name
+  _cialai_agents_unset "$dir_key"; saved_dir=$_cialai_agents_saved
+  _cialai_agents_unset "$name_key"; saved_name=$_cialai_agents_saved
+  _cialai_agents_call "$agent" "$@"
+  status=$?
+  _cialai_agents_restore "$dir_key" "$saved_dir"
+  _cialai_agents_restore "$name_key" "$saved_name"
+  return "$status"
 }
 
 _cialai_agents_skip() {
@@ -165,14 +266,10 @@ _cialai_agents_run() {
     0) ;;
     1) _cialai_agents_call "$agent" "$@"; return ;;
     2) _cialai_agents_text missing "$wanted" >&2; return 2 ;;
-    *) printf '\n' >&2; return "$result" ;;
+    *) return "$result" ;;
   esac
   _cialai_agents_remember "$agent" "$_cialai_agents_name"
-  if [ "$_cialai_agents_folder" = - ]; then
-    ( unset "$dir_key" "$name_key"; _cialai_agents_call "$agent" "$@" )
-  else
-    ( export "$dir_key=$_cialai_agents_folder" "$name_key=$_cialai_agents_name"; _cialai_agents_call "$agent" "$@" )
-  fi
+  _cialai_agents_launch "$agent" "$dir_key" "$name_key" "$_cialai_agents_folder" "$_cialai_agents_name" "$@"
 }
 
 # Uma funcao do usuario com o mesmo nome continua valendo: ela passa a

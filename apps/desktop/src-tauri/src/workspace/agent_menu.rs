@@ -99,9 +99,22 @@ fn shell_name(path: &str) -> String {
     name.strip_suffix(".exe").unwrap_or(&name).to_string()
 }
 
+/// O script do PowerShell sem as linhas de comentario e sem recuo. A linha de
+/// comando do Windows tem limite de 32 mil caracteres, e o base64 do UTF-16
+/// quase triplica o texto. O script nao tem texto de varias linhas, entao
+/// tirar o recuo nao muda o que ele faz.
+fn compact_powershell() -> String {
+    AGENTS_PS1
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// O script do PowerShell em UTF-16LE e base64, como `-EncodedCommand` pede.
 fn encoded_powershell() -> String {
-    let bytes: Vec<u8> = AGENTS_PS1
+    let bytes: Vec<u8> = compact_powershell()
         .encode_utf16()
         .flat_map(|unit| unit.to_le_bytes())
         .collect();
@@ -294,7 +307,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("oc-agent-menu-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        dir.canonicalize().unwrap()
+        dunce::canonicalize(&dir).unwrap()
     }
 
     fn spec(path: &str, args: &[&str]) -> ShellSpec {
@@ -368,7 +381,11 @@ mod tests {
             .chunks(2)
             .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
             .collect();
-        assert_eq!(String::from_utf16(&units).unwrap(), AGENTS_PS1);
+        assert_eq!(String::from_utf16(&units).unwrap(), compact_powershell());
+        assert!(
+            !AGENTS_PS1.contains("@'") && !AGENTS_PS1.contains("@\""),
+            "texto de varias linhas perderia o recuo"
+        );
 
         for other in [
             "/usr/bin/fish",
@@ -577,5 +594,557 @@ mod tests {
             );
         }
         fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// Terminal de verdade para dirigir o menu: um PTY com o shell, a saida
+    /// lida numa thread e as teclas escritas como o xterm do app escreve.
+    struct Tty {
+        writer: std::sync::Arc<std::sync::Mutex<Box<dyn std::io::Write + Send>>>,
+        output: std::sync::Arc<std::sync::Mutex<String>>,
+        child: Box<dyn portable_pty::Child + Send + Sync>,
+        _master: Box<dyn portable_pty::MasterPty + Send>,
+        seen: usize,
+        /// Fim do prompt que o shell mostra antes de aceitar a proxima linha.
+        /// O PSReadLine so trata o Enter como Enter depois de abrir o prompt;
+        /// antes disso o terminal ainda converte o Enter em quebra de linha. O
+        /// espaco depois do `>` do PowerShell e um `ESC[1C`, nao um espaco, por
+        /// isso o fim do prompt e o nome da pasta da sessao mais `>`.
+        prompt: Option<String>,
+    }
+
+    /// Tira as sequencias de controle, que o ConPTY do Windows espalha pela
+    /// saida ao redesenhar a tela.
+    fn plain(text: &str) -> String {
+        let mut out = String::new();
+        let mut chars = text.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c != '\u{1b}' {
+                if c != '\r' {
+                    out.push(c);
+                }
+                continue;
+            }
+            match chars.next() {
+                Some('[') => {
+                    for c in chars.by_ref() {
+                        if ('@'..='~').contains(&c) {
+                            break;
+                        }
+                    }
+                }
+                Some(']') => {
+                    while let Some(c) = chars.next() {
+                        if c == '\u{7}' || (c == '\u{1b}' && chars.peek() == Some(&'\\')) {
+                            chars.next();
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        out
+    }
+
+    impl Tty {
+        fn open(program: &str, args: &[&str], home: &Path, path: &str) -> Option<Self> {
+            use std::io::Read;
+            let pair = portable_pty::native_pty_system()
+                .openpty(portable_pty::PtySize {
+                    rows: 40,
+                    cols: 140,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .ok()?;
+            let mut command = portable_pty::CommandBuilder::new(program);
+            command.args(args);
+            command.env_clear();
+            command.env("HOME", home);
+            command.env("USERPROFILE", home);
+            command.env("PATH", path);
+            command.env("TERM", "xterm-256color");
+            command.env("CIALAI_AGENTS_DIR", home.join(".cialai").join("agents"));
+            let locale = if cfg!(target_os = "macos") {
+                "en_US.UTF-8"
+            } else {
+                "C.UTF-8"
+            };
+            command.env("LANG", locale);
+            command.env("LC_ALL", locale);
+            for key in [
+                "SystemRoot",
+                "SYSTEMROOT",
+                "windir",
+                "ComSpec",
+                "PATHEXT",
+                "TEMP",
+                "TMP",
+                "LOCALAPPDATA",
+                "APPDATA",
+            ] {
+                if let Ok(value) = std::env::var(key) {
+                    command.env(key, value);
+                }
+            }
+            command.cwd(home);
+            let child = pair.slave.spawn_command(command).ok()?;
+            drop(pair.slave);
+            let mut reader = pair.master.try_clone_reader().ok()?;
+            let writer =
+                std::sync::Arc::new(std::sync::Mutex::new(pair.master.take_writer().ok()?));
+            let output = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+            let sink = output.clone();
+            let answer = writer.clone();
+            std::thread::spawn(move || {
+                // O PSReadLine e o ConPTY perguntam onde esta o cursor e esperam
+                // a resposta; o xterm do app responde, e aqui o leitor responde.
+                let mut buffer = [0u8; 8192];
+                let mut tail: Vec<u8> = Vec::new();
+                while let Ok(read) = reader.read(&mut buffer) {
+                    if read == 0 {
+                        break;
+                    }
+                    let mut window = std::mem::take(&mut tail);
+                    window.extend_from_slice(&buffer[..read]);
+                    let asked = window.windows(4).filter(|part| *part == b"\x1b[6n").count();
+                    for _ in 0..asked {
+                        let mut writer = answer.lock().unwrap();
+                        let _ = writer.write_all(b"\x1b[1;1R");
+                        let _ = writer.flush();
+                    }
+                    tail = window[window.len().saturating_sub(3)..].to_vec();
+                    sink.lock()
+                        .unwrap()
+                        .push_str(&String::from_utf8_lossy(&buffer[..read]));
+                }
+            });
+            Some(Self {
+                writer,
+                output,
+                child,
+                _master: pair.master,
+                seen: 0,
+                prompt: None,
+            })
+        }
+
+        /// Digita uma linha de comando, depois do prompt quando o shell pede.
+        fn command(&mut self, line: &str) {
+            if let Some(prompt) = self.prompt.clone() {
+                self.wait(&prompt);
+            }
+            self.send(format!("{line}\r").as_bytes());
+        }
+
+        fn send(&mut self, bytes: &[u8]) {
+            let mut writer = self.writer.lock().unwrap();
+            writer.write_all(bytes).unwrap();
+            writer.flush().unwrap();
+        }
+
+        /// Espera `needle` depois do ultimo ponto lido e devolve o que veio ate
+        /// ele, ja sem as sequencias de controle.
+        fn wait(&mut self, needle: &str) -> String {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+            loop {
+                {
+                    let text = plain(&self.output.lock().unwrap());
+                    if let Some(at) = text.get(self.seen..).and_then(|rest| rest.find(needle)) {
+                        let end = self.seen + at + needle.len();
+                        let chunk = text[self.seen..end].to_string();
+                        self.seen = end;
+                        return chunk;
+                    }
+                    if std::time::Instant::now() > deadline {
+                        panic!(
+                            "esperando {needle:?}; veio:\n{}",
+                            text.get(self.seen..).unwrap_or("")
+                        );
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+        }
+
+        /// O resto da linha depois de `marker`.
+        fn value(&mut self, marker: &str) -> String {
+            self.wait(marker);
+            self.wait("\n").trim().to_string()
+        }
+    }
+
+    impl Drop for Tty {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+        }
+    }
+
+    /// Resultado de uma rodada do `codex` falso: campo por campo.
+    fn fields(line: &str) -> std::collections::HashMap<String, String> {
+        line.split_whitespace()
+            .filter_map(|pair| pair.split_once('='))
+            .map(|(key, value)| (key.to_string(), value.to_string()))
+            .collect()
+    }
+
+    /// Tres contas do Codex, a padrao esgotada, publicadas como o app publica.
+    fn three_accounts(home: &Path) {
+        codex_profile(home, ".codex");
+        codex_profile(home, ".codex-felipe");
+        codex_profile(home, ".codex-time_b");
+        let entry = |id: &str, label: &str, state: &str| MenuEntry {
+            id: id.into(),
+            label: label.into(),
+            state: state.into(),
+            ..MenuEntry::default()
+        };
+        let strings = MenuStrings {
+            question: "Qual conta?".into(),
+            enter: "↑ ↓, Enter usa {name}".into(),
+            missing: "Nenhuma conta {name}".into(),
+        };
+        publish(
+            home,
+            "codex",
+            &[
+                entry("codex", "padrão", "out"),
+                entry("codex-felipe", "felipe", "free"),
+                entry("codex-time_b", "time_b", "free"),
+            ],
+            &strings,
+        )
+        .unwrap();
+    }
+
+    /// Uma rodada: digita `codex`, espera o menu, aperta as teclas e devolve o
+    /// que o agente falso recebeu.
+    fn round(
+        tty: &mut Tty,
+        enter: &str,
+        keys: &[&[u8]],
+    ) -> Option<std::collections::HashMap<String, String>> {
+        let _ = enter;
+        tty.command("codex marca");
+        tty.wait("Qual conta?");
+        tty.wait("Enter usa");
+        for key in keys {
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            tty.send(key);
+        }
+        Some(fields(&tty.value("RESULT ")))
+    }
+
+    /// O menu de verdade no zsh e no bash, num terminal de verdade: setas,
+    /// j e k, numero, Enter, Esc, a conta esgotada pulada, a ultima conta da
+    /// pasta lembrada e o agente rodando no proprio shell, como lider do
+    /// proprio grupo, que e o que o card do Cialai le.
+    #[cfg(unix)]
+    #[test]
+    fn the_account_menu_is_driven_by_arrows_in_a_real_terminal() {
+        use std::os::unix::fs::PermissionsExt;
+        let home = scratch("tty");
+        let bin = home.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        let fake = bin.join("codex");
+        fs::write(
+            &fake,
+            "#!/bin/sh\nprintf 'RESULT home=%s profile=%s args=%s ppid=%s pgid=%s pid=%s\\n' \"${CODEX_HOME-unset}\" \"${CODEX_PROFILE-unset}\" \"$(echo $* | tr ' ' ,)\" \"$PPID\" \"$(ps -o pgid= -p $$ | tr -d ' ')\" \"$$\"\n",
+        )
+        .unwrap();
+        fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        three_accounts(&home);
+        let dir = install(&home).unwrap();
+        let folder = |name: &str| crate::platform::to_portable(home.join(name));
+        let path = format!("{}:/usr/bin:/bin", bin.display());
+        let mut ran = Vec::new();
+        for (shell, args, script) in [
+            ("zsh", vec!["-f", "-i"], "agents.zsh"),
+            ("bash", vec!["--norc", "--noprofile", "-i"], "agents.bash"),
+        ] {
+            if Command::new(shell).arg("-c").arg("true").output().is_err() {
+                continue;
+            }
+            let mut tty = Tty::open(shell, &args, &home, &path).expect(shell);
+            tty.send(
+                format!(
+                    "source '{}'; echo READY$((40+2))\r",
+                    dir.join(script).display()
+                )
+                .as_bytes(),
+            );
+            tty.wait("READY42");
+            tty.send(b"echo SHELL$((40+2))=$$\r");
+            let shell_pid = tty.value("SHELL42=");
+            let forget = |tty: &mut Tty| {
+                tty.send(b"rm -f \"$HOME/.cialai/agents/codex.last\"; echo CLEAN$((40+2))\r");
+                tty.wait("CLEAN42");
+            };
+            let check = |got: Option<std::collections::HashMap<String, String>>,
+                         home_dir: &str,
+                         profile: &str,
+                         what: &str| {
+                let got = got.unwrap_or_else(|| panic!("{shell} {what}: o menu desistiu"));
+                assert_eq!(got["home"], home_dir, "{shell} {what}");
+                assert_eq!(got["profile"], profile, "{shell} {what}");
+                assert_eq!(
+                    got["args"], "marca",
+                    "{shell} {what}: os argumentos chegam ao agente"
+                );
+                assert_eq!(
+                    got["ppid"], shell_pid,
+                    "{shell} {what}: o agente roda no proprio shell, sem subshell"
+                );
+                assert_eq!(
+                    got["pgid"], got["pid"],
+                    "{shell} {what}: o agente lidera o grupo em primeiro plano"
+                );
+            };
+
+            // A padrao esgotada fica para tras: Enter abre a seguinte com cota.
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\r"]),
+                &folder(".codex-felipe"),
+                "felipe",
+                "Enter",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[B", b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "seta para baixo",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[A", b"\r"]),
+                "unset",
+                "unset",
+                "seta para cima, na padrao",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[B", b"\x1b[B", b"\r"]),
+                "unset",
+                "unset",
+                "a seta da volta",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1bOB", b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "modo de aplicacao do cursor",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"j", b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "j",
+            );
+            forget(&mut tty);
+            check(round(&mut tty, "\r", &[b"k", b"\r"]), "unset", "unset", "k");
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[1;5A", b"\r"]),
+                "unset",
+                "unset",
+                "Ctrl+seta nao vira numero",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"3"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "numero abre direto",
+            );
+
+            // A ultima conta usada na pasta volta marcada.
+            check(
+                round(&mut tty, "\r", &[b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "a ultima da pasta",
+            );
+
+            // Esc desiste, o agente nao roda e o shell devolve 130.
+            forget(&mut tty);
+            tty.send(b"codex marca; echo CANCELADO$((40+2))=$?\r");
+            tty.wait("Qual conta?");
+            tty.wait("Enter usa");
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            tty.send(b"\x1b");
+            let status = tty.value("CANCELADO42=");
+            assert_eq!(status, "130", "{shell} Esc");
+            tty.send(b"echo AFTER$((40+2))=${CODEX_HOME-unset},${CODEX_PROFILE-unset}\r");
+            assert_eq!(
+                tty.value("AFTER42="),
+                "unset,unset",
+                "{shell}: a conta nao fica no shell depois do agente"
+            );
+
+            // Uma funcao do usuario com o mesmo nome roda depois do menu, com a conta.
+            tty.send(
+                b"_cialai_user_codex() { command codex embrulho \"$@\"; }; echo WRAP$((40+2))\r",
+            );
+            tty.wait("WRAP42");
+            forget(&mut tty);
+            tty.send(b"codex marca\r");
+            tty.wait("Enter usa");
+            std::thread::sleep(std::time::Duration::from_millis(120));
+            tty.send(b"\r");
+            let line = tty.value("RESULT ");
+            let got = fields(&line);
+            assert_eq!(
+                got["home"],
+                folder(".codex-felipe"),
+                "{shell} funcao do usuario"
+            );
+            assert_eq!(got["args"], "embrulho,marca", "{shell} funcao do usuario");
+            ran.push(shell);
+        }
+        assert!(!ran.is_empty(), "nenhum shell para testar");
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    /// O mesmo menu no PowerShell, quando ele existe: o pwsh no Linux e no
+    /// macOS, e o Windows PowerShell e o pwsh no Windows, pelo ConPTY.
+    #[test]
+    fn the_powershell_menu_is_driven_by_arrows_in_a_real_terminal() {
+        let home = scratch("tty-ps");
+        let bin = home.join("bin");
+        fs::create_dir_all(&bin).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let fake = bin.join("codex");
+            fs::write(
+                &fake,
+                "#!/bin/sh\nprintf 'RESULT home=%s profile=%s args=%s ppid=%s\\n' \"${CODEX_HOME-unset}\" \"${CODEX_PROFILE-unset}\" \"$(echo $* | tr ' ' ,)\" \"$PPID\"\n",
+            )
+            .unwrap();
+            fs::set_permissions(&fake, fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        #[cfg(windows)]
+        fs::write(
+            bin.join("codex.cmd"),
+            "@echo off\r\nif defined CODEX_HOME (set H=%CODEX_HOME%) else (set H=unset)\r\nif defined CODEX_PROFILE (set P=%CODEX_PROFILE%) else (set P=unset)\r\nset A=%*\r\nset A=%A: =,%\r\necho RESULT home=%H% profile=%P% args=%A%\r\n",
+        )
+        .unwrap();
+        three_accounts(&home);
+        let dir = install(&home).unwrap();
+        let folder = |name: &str| crate::platform::to_portable(home.join(name));
+        let separator = if cfg!(windows) { ";" } else { ":" };
+        let system = std::env::var("PATH").unwrap_or_default();
+        let path = format!("{}{separator}{system}", bin.display());
+        let mut ran = Vec::new();
+        let candidates: &[&str] = if cfg!(windows) {
+            &["powershell.exe", "pwsh.exe"]
+        } else {
+            &["pwsh"]
+        };
+        for program in candidates {
+            if Command::new(program)
+                .args(["-NoLogo", "-NoProfile", "-Command", "exit 0"])
+                .output()
+                .is_err()
+            {
+                continue;
+            }
+            // Como o app abre o PowerShell: -NoExit e o script compacto em -EncodedCommand.
+            let injected = injection(&spec(program, &["-NoLogo", "-NoProfile"]), true, &dir, None)
+                .expect("injecao do PowerShell");
+            let args: Vec<&str> = injected.args.iter().map(String::as_str).collect();
+            let mut tty = Tty::open(program, &args, &home, &path).expect(program);
+            tty.prompt = Some(format!("{}>", home.file_name().unwrap().to_string_lossy()));
+            tty.command("Write-Output ('READY' + (40+2))");
+            tty.wait("READY42");
+            tty.command("Write-Output ('SHELL' + (40+2) + '=' + $PID)");
+            let shell_pid = tty.value("SHELL42=");
+            let forget = |tty: &mut Tty| {
+                tty.command("Remove-Item -Force -ErrorAction SilentlyContinue (Join-Path $global:CialaiAgentsDir 'codex.last'); Write-Output ('CLEAN' + (40+2))");
+                tty.wait("CLEAN42");
+            };
+            let check = |got: Option<std::collections::HashMap<String, String>>,
+                         home_dir: &str,
+                         profile: &str,
+                         what: &str| {
+                let got = got.unwrap_or_else(|| panic!("{program} {what}: o menu desistiu"));
+                assert_eq!(
+                    got["home"].replace('\\', "/"),
+                    home_dir.replace('\\', "/"),
+                    "{program} {what}"
+                );
+                assert_eq!(got["profile"], profile, "{program} {what}");
+                assert_eq!(got["args"], "marca", "{program} {what}");
+                if let Some(ppid) = got.get("ppid") {
+                    assert_eq!(
+                        ppid, &shell_pid,
+                        "{program} {what}: o agente e filho do PowerShell"
+                    );
+                }
+            };
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\r"]),
+                &folder(".codex-felipe"),
+                "felipe",
+                "Enter",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[B", b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "seta para baixo",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"\x1b[A", b"\r"]),
+                "unset",
+                "unset",
+                "seta para cima, na padrao",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"j", b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "j",
+            );
+            forget(&mut tty);
+            check(
+                round(&mut tty, "\r", &[b"3"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "numero abre direto",
+            );
+            check(
+                round(&mut tty, "\r", &[b"\r"]),
+                &folder(".codex-time_b"),
+                "time_b",
+                "a ultima da pasta",
+            );
+            forget(&mut tty);
+            tty.command("codex marca; Write-Output ('CANCELADO' + (40+2) + '=' + $LASTEXITCODE)");
+            tty.wait("Qual conta?");
+            tty.wait("Enter usa");
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            tty.send(b"\x1b");
+            assert_eq!(tty.value("CANCELADO42="), "130", "{program} Esc");
+            tty.command("Write-Output ('AFTER' + (40+2) + '=' + [string]$env:CODEX_HOME + ',' + [string]$env:CODEX_PROFILE)");
+            assert_eq!(
+                tty.value("AFTER42="),
+                ",",
+                "{program}: a conta nao fica no shell depois do agente"
+            );
+            ran.push(*program);
+        }
+        if ran.is_empty() {
+            eprintln!("sem PowerShell neste sistema; o teste nao rodou");
+        }
+        let _ = fs::remove_dir_all(&home);
     }
 }
