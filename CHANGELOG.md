@@ -73,6 +73,16 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.4.3 preview
+
+Preview dated 2026-10-27 for macOS, Windows and Linux. A quiet fix for the clickable terminal path shipped in 0.4.2: accented and spaced file names now become links. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* A file name with an accent, like `Apresentação.pptx` or `Logística.csv`, is recognized whole instead of being cut at the accented letter. The path matcher now treats any Unicode letter as part of the name
+* A file name with spaces, like `Desafio Logística.pptx`, becomes a single link. The match is grown leftward over the spaces and only the span that is a real file on disk is linked, so a run of words that is not a file is never underlined
+* The feature is now covered by a test against real files on disk with accented and spaced names, the gap that let 0.4.2 ship without recognizing these names
+
 ## 0.4.2 preview
 
 Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet addition on top of 0.4.1: a file path in the terminal output is clickable. No Discord announcement. The phone apps are unchanged.

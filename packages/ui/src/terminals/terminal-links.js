@@ -4,6 +4,12 @@
 // célula e da validação no disco. Reconhece caminho absoluto, relativo, com ~,
 // do Windows, e os sufixos de local mais comuns: `:linha`, `:linha:coluna`,
 // `(linha,coluna)` e o `, line N` do traceback do Python.
+//
+// Letra acentuada conta como letra: `Apresentação` e `Logística` são um token
+// só, não `Apresenta` mais `o`. Nome com espaço não cabe num token; para ele,
+// `growthStarts` devolve onde o trecho pode começar mais à esquerda, e quem
+// tem o disco, o provedor, estica o âncora por cima dos espaços e fica com o
+// maior trecho que é um arquivo de verdade.
 
 // Um token é caminho quando tem separador de pasta ou um nome com extensão de
 // letras. Isso evita marcar palavra solta, número ou versão como `1.5`.
@@ -22,7 +28,10 @@ function parseLocation(suffix) {
   return { line: null, column: null };
 }
 
-const TOKEN = /(?<![\w@~./\\-])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|[\\/])?[\w.@%+-]+(?:[\\/][\w.@%+-]+)*)((?::\d+(?::\d+)?)|(?:\(\d+,\d+\)))?/g;
+// `\p{L}` e `\p{N}`, com a flag `u`, deixam letra acentuada e de outros
+// alfabetos valerem como parte do nome, para `ç`, `ã` e `í` não cortarem o
+// token no meio.
+const TOKEN = /(?<![\p{L}\p{N}_@~./\\-])((?:[A-Za-z]:[\\/]|\.{1,2}[\\/]|~[\\/]|[\\/])?[\p{L}\p{N}_.@%+-]+(?:[\\/][\p{L}\p{N}_.@%+-]+)*)((?::\d+(?::\d+)?)|(?:\(\d+,\d+\)))?/gu;
 const QUOTED = /["']([^"'\n]+?)["'](?:,?\s*line\s+(\d+))?/gi;
 
 // Candidatos a link numa linha de texto. Cada um traz o trecho a sublinhar
@@ -73,4 +82,23 @@ export function resolveLinkPath(raw, { cwd, home, join, isAbsolute, portable }) 
   if (isAbsolute(normal)) return normal;
   if (!cwd) return null;
   return join(cwd, normal);
+}
+
+// Onde um trecho com espaços pode começar, da esquerda para a direita, para
+// esticar um âncora por cima de nomes de arquivo com espaço. Cada número é o
+// início de uma sequência sem espaço antes do âncora; da mais à esquerda, o
+// maior trecho, para a mais próxima, o menor. O provedor tenta cada começo até
+// `anchorEnd`, valida no disco e fica com o maior que é um arquivo. Limitado em
+// palavras e caracteres para não varrer a linha inteira.
+export function growthStarts(lineText, anchorStart, { maxWords = 12, maxChars = 240 } = {}) {
+  if (!lineText || anchorStart <= 0) return [];
+  const minIndex = Math.max(0, anchorStart - maxChars);
+  const left = lineText.slice(0, anchorStart);
+  const starts = [];
+  const runs = /\S+/g;
+  let match;
+  while ((match = runs.exec(left))) {
+    if (match.index >= minIndex) starts.push(match.index);
+  }
+  return starts.slice(-maxWords);
 }

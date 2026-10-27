@@ -1,14 +1,13 @@
 ## Cialai {{version}} preview
 
-A quiet addition to Cialai for macOS, Windows and Linux, on top of 0.4.1. A file path in the terminal output is now clickable: a click opens the file in the session editor, like the VS Code terminal. The phone apps are unchanged.
+A quiet fix of Cialai for macOS, Windows and Linux, on top of 0.4.2. The clickable terminal path now recognizes file names with accents and with spaces. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
-### What is new
+### What is fixed
 
-* **A file path in the terminal is a link.** When a tool prints a path, like `temp/areas/report.json`, it becomes a link and a click opens the file in the session editor. A plain click opens it, the same as the http links the app already recognizes, with an underline on hover.
-* **It recognizes what matters.** Absolute, relative, `~` and Windows paths, and the `:line`, `:line:column`, `(line,column)` and Python `File "...", line N` suffixes.
-* **It only opens what exists.** The path resolves against the live directory of the session and only becomes a link when it exists on disk and is a file, checked on hover.
+* **Accented names work.** A file name with an accent, like `Apresentação.pptx` or `Logística.csv`, is recognized whole instead of being cut at the accented letter.
+* **Names with spaces work.** A file name with spaces, like `Desafio Logística.pptx`, becomes a single link. The match is grown over the spaces and only the span that is a real file on disk is linked.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

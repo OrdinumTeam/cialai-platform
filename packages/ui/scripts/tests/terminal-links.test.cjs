@@ -84,3 +84,33 @@ test('sem diretorio vivo, um caminho relativo nao resolve', async () => {
   const out = resolveLinkPath('temp/x.csv', { cwd: null, home: '/home/foco', join: joinPath, isAbsolute: isAbsolutePath, portable: portablePath });
   assert.equal(out, null);
 });
+
+test('acento no nome nao corta o token', async () => {
+  const { findPathLinks } = await links();
+  assert.ok(at(findPathLinks('gerei Relatório-Final.csv agora'), 'Relatório-Final.csv'));
+  assert.ok(at(findPathLinks('abri Apresentação.pptx hoje'), 'Apresentação.pptx'));
+  const comDir = at(findPathLinks('em temp/áreas-15420/posição.csv tem dados'), 'temp/áreas-15420/posição.csv');
+  assert.ok(comDir, 'acento tambem vale dentro de pasta');
+});
+
+test('growthStarts da os inicios de palavra para esticar por cima de espacos', async () => {
+  const { growthStarts } = await links();
+  const texto = '– WebRota – Apresentação – Desafio Logística.pptx: editável';
+  const ancora = texto.indexOf('Logística.pptx');
+  const starts = growthStarts(texto, ancora);
+  // Todos antes do ancora, em ordem crescente, e o mais a esquerda e o bullet.
+  assert.ok(starts.length >= 4);
+  for (let i = 1; i < starts.length; i += 1) assert.ok(starts[i] > starts[i - 1]);
+  assert.ok(starts.every((s) => s < ancora));
+  assert.equal(texto.slice(starts[0]), '– WebRota – Apresentação – Desafio Logística.pptx: editável'.slice(starts[0]));
+  // O inicio de "WebRota" produz o nome de arquivo inteiro, sem o bullet.
+  const webrota = texto.indexOf('WebRota');
+  assert.ok(starts.includes(webrota));
+  assert.equal(texto.slice(webrota, ancora + 'Logística.pptx'.length), 'WebRota – Apresentação – Desafio Logística.pptx');
+});
+
+test('sem nada a esquerda, growthStarts volta vazio', async () => {
+  const { growthStarts } = await links();
+  assert.deepEqual(growthStarts('Logística.pptx aqui', 0), []);
+  assert.deepEqual(growthStarts('', 5), []);
+});

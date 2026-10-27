@@ -10,8 +10,14 @@
 // oferecer o link. A conta de linha quebrada e de caractere largo é a mesma do
 // `WebLinkProvider` do `@xterm/addon-web-links`, que trabalha só com a API
 // pública do terminal.
+//
+// Nome de arquivo com espaço não cabe num token. Para ele, o âncora é o pedaço
+// com a extensão, e o provedor estica para a esquerda por cima dos espaços,
+// conferindo cada trecho no disco, e fica com o maior que é um arquivo. Só o
+// disco decide, então um trecho que atravessa palavras que não formam arquivo
+// nenhum nunca vira link.
 
-import { findPathLinks, resolveLinkPath } from './terminal-links.js';
+import { findPathLinks, growthStarts, resolveLinkPath } from './terminal-links.js';
 import { isAbsolutePath, joinPath, portablePath } from '../lib/paths.js';
 
 // Linhas lógicas em torno da linha `lineIndex` (0-based no buffer ativo),
@@ -101,6 +107,23 @@ export function createPathLinkProvider({ terminal, context, exists, open, limit 
       .catch(() => false);
   }
 
+  // O maior trecho que é um arquivo de verdade, começando no âncora e esticando
+  // para a esquerda por cima de espaços. Tenta do maior para o menor e para no
+  // primeiro que existe no disco.
+  async function bestSpan(text, candidate, resolveArgs) {
+    const pathStart = candidate.index;
+    const pathEnd = candidate.index + candidate.path.length;
+    const starts = [...growthStarts(text, pathStart), pathStart];
+    for (const start of starts) {
+      const spanText = text.slice(start, pathEnd);
+      const abs = resolveLinkPath(spanText, resolveArgs);
+      if (abs && await checkExists(abs)) {
+        return { start, end: pathEnd, text: spanText, abs };
+      }
+    }
+    return null;
+  }
+
   return {
     provideLinks(y, callback) {
       let ctx;
@@ -111,37 +134,36 @@ export function createPathLinkProvider({ terminal, context, exists, open, limit 
       const candidates = findPathLinks(text, limit);
       if (!candidates.length) { callback(undefined); return; }
 
-      const prepared = [];
-      for (const candidate of candidates) {
-        const abs = resolveLinkPath(candidate.path, {
-          cwd: ctx.cwd || null,
-          home: ctx.home || null,
-          join: joinPath,
-          isAbsolute: isAbsolutePath,
-          portable: portablePath,
-        });
-        if (abs) prepared.push({ ...candidate, abs });
-      }
-      if (!prepared.length) { callback(undefined); return; }
+      const resolveArgs = {
+        cwd: ctx.cwd || null,
+        home: ctx.home || null,
+        join: joinPath,
+        isAbsolute: isAbsolutePath,
+        portable: portablePath,
+      };
 
-      Promise.all(prepared.map((item) => checkExists(item.abs)))
+      Promise.all(candidates.map((candidate) => bestSpan(text, candidate, resolveArgs).then((span) => ({ candidate, span }))))
         .then((results) => {
           const links = [];
-          prepared.forEach((item, index) => {
-            if (!results[index]) return;
-            const [startY, startX] = mapStrIdx(terminal, startLineIndex, 0, item.index);
-            const [endY, endX] = mapStrIdx(terminal, startY, startX, item.length);
-            if (startY === -1 || startX === -1 || endY === -1 || endX === -1) return;
+          const taken = [];
+          for (const { candidate, span } of results) {
+            if (!span) continue;
+            // Trechos que se sobrepõem, depois de esticar, ficam com o primeiro.
+            if (taken.some((range) => span.start < range.end && span.end > range.start)) continue;
+            const [startY, startX] = mapStrIdx(terminal, startLineIndex, 0, span.start);
+            const [endY, endX] = mapStrIdx(terminal, startY, startX, span.text.length);
+            if (startY === -1 || startX === -1 || endY === -1 || endX === -1) continue;
+            taken.push({ start: span.start, end: span.end });
             links.push({
-              text: item.path,
+              text: span.text,
               range: {
                 start: { x: startX + 1, y: startY + 1 },
                 end: { x: endX, y: endY + 1 },
               },
               decorations: { pointerCursor: true, underline: true },
-              activate: (event) => open(item.abs, { line: item.line, column: item.column }, event),
+              activate: (event) => open(span.abs, { line: candidate.line, column: candidate.column }, event),
             });
-          });
+          }
           callback(links.length ? links : undefined);
         })
         .catch(() => callback(undefined));
