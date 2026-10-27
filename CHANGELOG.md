@@ -73,6 +73,14 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.4.2 preview
+
+Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet addition on top of 0.4.1: a file path in the terminal output is clickable. No Discord announcement. The phone apps are unchanged.
+
+### Added
+
+* A file path in the terminal output is a link: a click opens the file in the session editor, like the VS Code terminal. It recognizes absolute, relative, `~` and Windows paths, and the `:line`, `:line:column`, `(line,column)` and Python `File "...", line N` suffixes. The path resolves against the live directory of the foreground process, then the shell, then the session folder, and only becomes a link when it exists on disk and is a file, checked on hover. A plain click opens it, the same as the http links the app already recognizes
+
 ## 0.4.1 preview
 
 Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet fix for the account menu and the session card shipped in 0.4.0. No Discord announcement. The phone apps are unchanged.

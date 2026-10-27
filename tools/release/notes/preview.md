@@ -1,14 +1,14 @@
 ## Cialai {{version}} preview
 
-A quiet fix of Cialai for macOS, Windows and Linux, on top of 0.4.0. The account menu is picked with the arrow keys, and the session card shows the agent and the account again instead of the shell. The phone apps are unchanged.
+A quiet addition to Cialai for macOS, Windows and Linux, on top of 0.4.1. A file path in the terminal output is now clickable: a click opens the file in the session editor, like the VS Code terminal. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
-### What is fixed
+### What is new
 
-* **Pick the account with the arrow keys.** Typing `codex` or `claude` with more than one account lists them; use the up and down arrows, or j and k, with the chosen one highlighted, and Enter opens it. A number from 1 to 9 still opens its account directly, and Esc cancels. Before only a number worked.
-* **The card shows the agent and the account again.** After you pick the account, the session card shows Codex or Claude Code and the profile instead of the shell. The agent now runs in the shell itself, never in a subshell, and the card finds the agent even when a shell or a launcher leads the foreground group.
-* **The tutorial teaches the arrows.** The account menu tutorial in the Agent profiles window shows the arrow keys instead of the number.
+* **A file path in the terminal is a link.** When a tool prints a path, like `temp/areas/report.json`, it becomes a link and a click opens the file in the session editor. A plain click opens it, the same as the http links the app already recognizes, with an underline on hover.
+* **It recognizes what matters.** Absolute, relative, `~` and Windows paths, and the `:line`, `:line:column`, `(line,column)` and Python `File "...", line N` suffixes.
+* **It only opens what exists.** The path resolves against the live directory of the session and only becomes a link when it exists on disk and is a file, checked on hover.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

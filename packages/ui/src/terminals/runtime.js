@@ -46,6 +46,7 @@ import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE, invoke, listen, createChannel,
 import { openExternal } from '../lib/downloads.js';
 import { buildTheme, terminalFont, watchTheme } from './theme.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
+import { createPathLinkProvider } from './path-link-provider.js';
 import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
 import { platform } from '../lib/platform.js';
@@ -469,6 +470,37 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
+// Diretorio vivo e lar da sessao, para resolver o caminho que o link viu na
+// tela. Vale o diretorio do processo em primeiro plano, senao o do shell,
+// senao a pasta onde a sessao nasceu.
+function linkContext(session) {
+  const activity = session.activity;
+  const live = (activity && (activity.foreground?.cwd || activity.shellCwd)) || session.cwd || null;
+  const home = platform().home || null;
+  return {
+    cwd: live ? portablePath(live) : null,
+    home: home ? portablePath(home) : null,
+  };
+}
+
+// Um caminho vira link so quando existe no disco e e um arquivo, nunca uma
+// pasta. O `fs.stat` segue o link simbolico e nao lanca em caminho ausente.
+function pathIsOpenableFile(path) {
+  return fs.stat(path).then((stat) => Boolean(stat && stat.exists && stat.kind === 'file')).catch(() => false);
+}
+
+// Liga os caminhos de arquivo da saida ao editor: um clique abre o arquivo na
+// sessao. A existencia e conferida no disco ao passar o mouse, entao so o que
+// da para abrir fica sublinhado.
+function installPathLinks(session) {
+  session.term.registerLinkProvider(createPathLinkProvider({
+    terminal: session.term,
+    context: () => linkContext(session),
+    exists: pathIsOpenableFile,
+    open: (path, location) => dispatch({ type: 'open-file', id: session.id, path, line: location?.line ?? null }),
+  }));
+}
+
 // Tema do xterm da sessao: cursor e selecao no tom dela, o resto igual para
 // todas. Reaplicado quando a cor ou a aparencia mudam.
 function applySessionTheme(session) {
@@ -675,6 +707,9 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   });
   installWheelScroll(session);
   installTouchScroll(session);
+  // O link de caminho abre no editor do estudio, que e do computador; no
+  // celular o terminal e so toque e nao tem esse editor.
+  if (!isPhone()) installPathLinks(session);
   applySessionTheme(session);
   state.sessions.set(session.id, session);
   return session;

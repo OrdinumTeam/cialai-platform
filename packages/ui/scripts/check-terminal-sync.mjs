@@ -15,7 +15,7 @@ const mocks = {
       this.parser={registerOscHandler:off}; this.buffer={active:{}}; }
     onData=off; onBinary=off; onBell=off; onResize(handler){this.resizeHandler=handler;return {dispose(){}};}
     open(parent) { this.element={isConnected:true,parentElement:parent,addEventListener(){},removeEventListener(){}}; }
-    loadAddon(addon){addon.term=this;} attachCustomKeyEventHandler(){} write(data, done){fixture.output.push(...data);done?.();} resize(cols,rows){this.cols=cols;this.rows=rows;this.resizeHandler?.({cols,rows});}
+    loadAddon(addon){addon.term=this;} registerLinkProvider(){return off();} attachCustomKeyEventHandler(){} write(data, done){fixture.output.push(...data);done?.();} resize(cols,rows){this.cols=cols;this.rows=rows;this.resizeHandler?.({cols,rows});}
     reset(){fixture.output=[];} focus(){} blur(){} dispose(){}
   } export class FitAddon {fit(){this.term.resize(45,28);} proposeDimensions(){return {cols:45,rows:28};}} export class SearchAddon {} export class WebglAddon {constructor(){this._renderer={_gl:{getExtension:()=>({UNMASKED_RENDERER_WEBGL:37446}),getParameter:()=>fixture.glRenderer||'Apple M2'}};} onContextLoss(){} dispose(){fixture.webglDisposed=(fixture.webglDisposed||0)+1;}} export class WebLinksAddon {}`,
   downloads: 'export const openExternal = async () => {};',

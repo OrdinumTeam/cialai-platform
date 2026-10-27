@@ -18,7 +18,7 @@ const mocks = {
   renderer: `const off = () => ({dispose(){}}); export class Terminal {
     constructor(options) { this.options=options; this.cols=options.cols; this.rows=options.rows; this.parser={registerOscHandler:off}; this.buffer={active:{}}; }
     onData=off; onBinary=off; onBell=off; onResize(){return {dispose(){}};}
-    open(){} loadAddon(addon){addon.term=this;} attachCustomKeyEventHandler(){} write(_data,done){done?.();}
+    open(){} loadAddon(addon){addon.term=this;} registerLinkProvider(){return off();} attachCustomKeyEventHandler(){} write(_data,done){done?.();}
     resize(){} reset(){} focus(){} dispose(){}
   } export class FitAddon {fit(){} proposeDimensions(){return {cols:80,rows:24};}} export class SearchAddon {} export class WebglAddon {onContextLoss(){} dispose(){}} export class WebLinksAddon {}`,
   native: `export const isTauri = () => fixture.desktop; export const hasBridge = () => true;

@@ -145,6 +145,7 @@ export default function Workbench() {
   newFileRef.current = newFile;
 
   const closeShortcutRef = useRef(() => false);
+  const openPathRef = useRef(null);
 
   useEffect(() => {
     hydrate().then(() => reconcileBrowsers()).catch(() => {});
@@ -156,6 +157,12 @@ export default function Workbench() {
         // Aviso de uma sessao leva o icone e o tom dela, para dizer de onde veio.
         const source = event.sessionId ? getSession(event.sessionId) : null;
         notify(event.message, 'info', source ? { icon: <SessionIcon session={source} size={16} />, className: 'session-scope mac-toast--session', style: accentStyle(source) } : undefined);
+      }
+      if (event?.type === 'open-file' && event.path) {
+        // Clique num caminho da saida do terminal: abre o arquivo na sessao de
+        // onde o clique veio, que e sempre a selecionada.
+        const current = getState().selected;
+        if (current && (!event.id || event.id === current.id)) openPathRef.current?.(event.path);
       }
     });
     const releaseNew = onNewTerminalRequest(() => openPickerRef.current?.());
@@ -413,6 +420,7 @@ export default function Workbench() {
     if (!current || !path) return;
     openFile(current.id, path).then(() => setEditorFocusKey((value) => value + 1)).catch((error) => notify(error?.message || String(error), 'warning'));
   }, [notify]);
+  openPathRef.current = openPath;
 
   const previewPath = useCallback((path) => {
     const current = getState().selected;

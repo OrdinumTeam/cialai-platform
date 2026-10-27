@@ -439,3 +439,13 @@ Decisão: a conta se escolhe com as setas, ou com `j` e `k`, e Enter abre; o nú
 Alternativa rejeitada: um programa de menu próprio no PATH, que resolveria as setas com uma biblioteca de terminal mas pediria um binário por sistema e mais um arquivo para manter atualizado.
 
 Consequência: a decisão 054 deixa de ter o menu por número e a recusa às setas. O script do PowerShell vai sem comentários e sem recuo no `-EncodedCommand`, para caber no limite da linha de comando do Windows. Testes novos dirigem o menu num terminal de verdade no zsh, no bash e no PowerShell, com setas, número, Enter e Esc, e conferem que o agente é filho do shell e lidera o próprio grupo; outro abre uma sessão como o app, escolhe a conta com a seta e confere nas métricas o agente e o perfil em primeiro plano.
+
+## 057 Caminho de arquivo clicável na saída do terminal
+
+Data: 26/10/2026. Contexto: o terminal só tornava clicável link `http`, que abria no navegador. Um caminho de arquivo na saída, como o `temp/.../relatorio.json` que uma ferramenta imprime, não fazia nada no clique, ao contrário do terminal do VS Code, onde o caminho abre o arquivo. A base já existia: o app sabe o diretório vivo de cada sessão e já abre arquivo no editor pela ação `openPath`.
+
+Decisão: a saída ganha um provedor de link de caminho no xterm. A varredura do texto é pura: reconhece caminho absoluto, relativo, com `~` e do Windows, mais os sufixos de local `:linha`, `:linha:coluna`, `(linha,coluna)` e o `File "...", line N` do Python. O caminho se resolve contra o diretório do processo em primeiro plano, senão o do shell, senão a pasta da sessão, e só vira link quando existe no disco e é um arquivo, conferido ao passar o mouse com um cache curto. O clique simples abre, igual ao link `http` que o app já reconhece, e abre o arquivo no editor da sessão de onde o clique veio. O provedor fala com o editor por um evento `open-file` no barramento do runtime, sem importar o editor de volta e criar ciclo.
+
+Alternativa rejeitada: exigir Cmd ou Ctrl no clique, como o VS Code. O app já abre link `http` no clique simples, então pedir modificador só para caminho seria incoerente e menos descoberto.
+
+Consequência: a conta de célula e de linha quebrada é a mesma do `WebLinkProvider` do xterm, que trabalha só com a API pública do terminal. Um teste unitário cobre a varredura e a resolução, inclusive o caminho do Windows; um teste de integração dirige o provedor com um buffer de células fiel, cobrindo range, quebra de linha, filtro pela existência e a linha e a coluna no clique. A paridade com o xterm de verdade e o clique que abre a aba foram conferidos no app em dev.

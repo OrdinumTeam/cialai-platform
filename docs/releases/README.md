@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.4.2](0.4.2.md) | 26/10/2026 | `v0.4.2` | `OrdinumTeam/cialai-platform`, caminho de arquivo clicável no terminal, abre no editor; sai calada |
 | [0.4.1](0.4.1.md) | 26/10/2026 | `v0.4.1` | `OrdinumTeam/cialai-platform`, correção do menu de contas com setas e do card mostrando o agente; sai calada |
 | [0.4.0](0.4.0.md) | 25/10/2026 | `v0.4.0` | `OrdinumTeam/cialai-platform`, perfis de agentes, explorador perto do VS Code e estado próprio em cada card |
 | [0.3.0](0.3.0.md) | 19/10/2026 | `v0.3.0` | `OrdinumTeam/cialai-platform`, visual novo, cor e ícone por sessão e avisos de atenção no celular |
