@@ -15,6 +15,7 @@ pub use crate::platform::ShellFlavor;
 use crate::platform::ShellSpec;
 
 mod cursor;
+mod probe;
 #[cfg(unix)]
 mod unix;
 #[cfg(target_os = "windows")]
@@ -22,6 +23,7 @@ mod windows;
 
 pub use cursor::CursorPosition;
 pub(crate) use cursor::StartupCursorQuery;
+pub(crate) use probe::probe_shell;
 
 #[cfg(unix)]
 use unix as backend;

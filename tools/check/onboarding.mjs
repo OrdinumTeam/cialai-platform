@@ -47,6 +47,11 @@ assert.match(repos, /"Developer"[\s\S]*"Github Projects"/);
 assert.doesNotMatch(`${repos}\n${mobileFiles}`, /REPO_ROOTS_FROM_HOME/);
 assert.match(mobileFiles, /project_roots\(home, project_roots\)/);
 assert.match(commands, /pub fn shell_probe/);
-assert.match(commands, /native_pty_system\(\)/);
+// O ensaio responde a pergunta de cursor do ConPTY e lê até o EOF; sem isso o Windows não volta.
+const probe = read('apps/desktop/src-tauri/src/workspace/pty/probe.rs');
+assert.match(commands, /pty::probe_shell\(/);
+assert.match(probe, /spawn_shell\(command, size\)/);
+assert.match(probe, /StartupCursorQuery::for_platform/);
+assert.match(probe, /Ok\(0\) \| Err\(_\) => break/);
 
 console.log('PASS onboarding: welcome, project roots, disposable PTY shell check, informative phone access step and first session are wired');

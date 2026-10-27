@@ -73,6 +73,16 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.4.4 preview
+
+Preview dated 2026-10-27 for macOS, Windows and Linux. A quiet fix for the first run on Windows, where the PTY test stayed on Opening and the shell step could not be passed. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* The onboarding PTY test answers the cursor position query the Windows console is born with and keeps reading its output until the end before closing it. It used to read a single chunk and drop the console with no reader, and before Windows 11 24H2 closing the console waits for that output to be read, so the test never returned
+* The test waits for the prompt to settle, up to four seconds, and the onboarding strips the window title the Windows console sends before it
+* A test opens a real shell through the PTY and requires the probe to return with the prompt and without the cursor query, on every system
+
 ## 0.4.3 preview
 
 Preview dated 2026-10-27 for macOS, Windows and Linux. A quiet fix for the clickable terminal path shipped in 0.4.2: accented and spaced file names now become links. No Discord announcement. The phone apps are unchanged.

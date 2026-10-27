@@ -1,13 +1,13 @@
 ## Cialai {{version}} preview
 
-A quiet fix of Cialai for macOS, Windows and Linux, on top of 0.4.2. The clickable terminal path now recognizes file names with accents and with spaces. The phone apps are unchanged.
+A quiet fix of Cialai for macOS, Windows and Linux, on top of 0.4.3. The first run on Windows no longer stays on Opening at the PTY test. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is fixed
 
-* **Accented names work.** A file name with an accent, like `Apresentação.pptx` or `Logística.csv`, is recognized whole instead of being cut at the accented letter.
-* **Names with spaces work.** A file name with spaces, like `Desafio Logística.pptx`, becomes a single link. The match is grown over the spaces and only the span that is a real file on disk is linked.
+* **The Windows first run gets past the shell step.** The PTY test now answers the cursor query the Windows console is born with and reads its output to the end before closing it. Before Windows 11 24H2, closing the console waits for that output to be read, so the test used to hang on Opening.
+* **The prompt shows up clean.** The test waits for the prompt to settle and strips the window title the console sends before it.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 

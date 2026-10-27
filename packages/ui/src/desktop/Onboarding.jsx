@@ -65,9 +65,12 @@ function mergeRoots(detected, configured) {
   return roots;
 }
 
+// O ConPTY do Windows manda o título da janela em OSC antes do prompt.
 function cleanPrompt(value) {
   return String(value || '')
-    .replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b\][^\u0007\u001b]*(?:\u0007|\u001b\\)/g, '')
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\u001b[ -/]*[0-~]/g, '')
     .replaceAll('\r', '')
     .trim()
     .slice(0, 1200);

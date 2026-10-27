@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.4.4](0.4.4.md) | 27/10/2026 | `v0.4.4` | `OrdinumTeam/cialai-platform`, teste do PTY do primeiro uso não trava mais no Windows; sai calada |
 | [0.4.3](0.4.3.md) | 27/10/2026 | `v0.4.3` | `OrdinumTeam/cialai-platform`, caminho clicável agora pega nome com acento e com espaço; sai calada |
 | [0.4.2](0.4.2.md) | 26/10/2026 | `v0.4.2` | `OrdinumTeam/cialai-platform`, caminho de arquivo clicável no terminal, abre no editor; sai calada |
 | [0.4.1](0.4.1.md) | 26/10/2026 | `v0.4.1` | `OrdinumTeam/cialai-platform`, correção do menu de contas com setas e do card mostrando o agente; sai calada |

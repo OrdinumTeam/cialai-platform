@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Comandos invocaveis pelo frontend via `invoke`.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -30,7 +26,7 @@ use crate::workspace::git::{self, GitDiff, GitStatus};
 use crate::workspace::journal::SavedTerminal;
 use crate::workspace::office::{self, ConvertResult, OfficeQueue};
 use crate::workspace::preview::PreviewRoots;
-use crate::workspace::pty::CursorPosition;
+use crate::workspace::pty::{self, CursorPosition};
 use crate::workspace::repos::{self, RepoListing, RepoRoot};
 use crate::workspace::terminal::{
     SessionMetrics, SubscriberKey, TerminalInfo, TerminalManager, TerminalPresentation,
@@ -595,14 +591,6 @@ pub fn shell_probe(
     if shell.path.trim().is_empty() {
         return Err(t("native.error.shellPathRequired"));
     }
-    let pair = native_pty_system()
-        .openpty(PtySize {
-            rows: 12,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|error| tf("native.error.ptyOpen", &[("error", &error)]))?;
     let mut command = CommandBuilder::new(&shell.path);
     for arg in &shell.args {
         command.arg(arg);
@@ -617,27 +605,15 @@ pub fn shell_probe(
         command.env("LANG", lang);
     }
     platform::child_env::sanitize(&mut command);
-    let mut child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|error| tf("native.error.shellStart", &[("error", &error)]))?;
-    drop(pair.slave);
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|error| error.to_string())?;
-    let (send, receive) = mpsc::sync_channel(1);
-    thread::spawn(move || {
-        let mut bytes = vec![0_u8; 4096];
-        let size = reader.read(&mut bytes).unwrap_or(0);
-        bytes.truncate(size);
-        let _ = send.send(bytes);
-    });
-    let bytes = receive
-        .recv_timeout(Duration::from_millis(1600))
-        .unwrap_or_default();
-    let _ = child.kill();
-    let _ = child.wait();
+    let bytes = pty::probe_shell(
+        command,
+        PtySize {
+            rows: 12,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        },
+    )?;
     // Sem texto inicial a interface mostra o aviso no idioma dela.
     let output = String::from_utf8_lossy(&bytes).into_owned();
     Ok(ShellProbe { shell, output })
