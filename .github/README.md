@@ -34,6 +34,13 @@
   <img alt="Cialai desktop studio with the session list, the workspace and the project tree with Git status" src="assets/desktop-light.webp">
 </picture>
 
+<p align="center">
+  <video src="https://github.com/OrdinumTeam/cialai-platform/raw/main/.github/assets/cialai-connection-9x16.mp4" poster="https://github.com/OrdinumTeam/cialai-platform/raw/main/.github/assets/cialai-connection-poster.png" width="320" controls muted playsinline></video>
+</p>
+<p align="center">
+  <sub>How a phone reaches your computer with no server, built from a QR card, the most direct path and end to end encryption. <a href="https://github.com/OrdinumTeam/cialai-platform/raw/main/.github/assets/cialai-connection-9x16.mp4">Open the video</a>. The clip is silent; the on-screen text and the linked <a href="assets/cialai-connection-9x16.vtt">captions</a> are in Portuguese.</sub>
+</p>
+
 > [!WARNING]
 > Cialai is experimental and has no supported production release yet. Preview installers are available on [cialai.com.br](https://cialai.com.br/#baixar); store apps are not published. See [Status](#status) for what is verified today and what is only prepared.
 
@@ -53,10 +60,14 @@ Cialai is built for people who keep several projects and several coding agents r
 
 **On the computer**
 
-* Sessions as cards with foreground command, running time, attention markers for bell, long job finished and shell exit, and CPU and memory summed across the whole process tree.
+* Sessions as cards with foreground command, running time, attention markers for bell, long job finished and shell exit, and CPU and memory summed across the whole process tree. Each card carries its own color and icon.
 * Switching cards never interrupts anything. Process, scrollback, typed input and open tabs stay where they were.
+* Every card reports the state of its own session, even with several Codex sessions in the same folder: processing, answer delivered or waiting for you.
 * Claude Code and Codex are recognized from the command line, with plan usage, model and profile on the card, and conversations resume after the app restarts.
+* Several agent accounts live in one place, with the quota of each one. Creating an account opens its login; in the terminal you type the agent and pick the account, Enter repeats the last account used in that folder and an exhausted account drops to the back.
 * Editor, project tree with Git markers, document previews and a Dev Browser per session, a Chromium instance the session's agents can drive through CDP.
+* The project tree works like the one in VS Code: select several files, cut and paste across folders, undo with the platform shortcut, drag many files at once to a folder or out to another app, and the open file stays highlighted in the tree.
+* A file path printed in the terminal becomes a link that opens the file in the editor, including names with accents and spaces.
 
 **On the phone**
 
@@ -283,16 +294,18 @@ Please report vulnerabilities privately as described in [SECURITY.md](../SECURIT
 
 ## Status
 
-Snapshot of 15 September 2026. Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md).
+Snapshot of 27 October 2026, preview 0.4.3. Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md) and every release has a page under [docs/releases](../docs/releases/README.md).
 
 | Area | Verified | Pending |
 | --- | --- | --- |
-| Desktop on macOS | Rust core with 214 tests; self test with 11 scenarios in the app binary, including the automatic network and the QR read back from the screen; preview 0.2.0 signed and notarized | Human parity review against the prototype |
+| Desktop on macOS | Rust core with 214 tests; self test with 11 scenarios in the app binary, including the automatic network and the QR read back from the screen; preview 0.4.3 signed and notarized | Human parity review against the prototype |
 | Desktop on Linux | Rust suite on Ubuntu in a container and on GitHub Actions; process metrics checked against `/proc`; the AppImage fix for recent distributions validated on Ubuntu 24.04 and Arch with Mesa 26 | Visible WebKitGTK run on a physical machine |
 | Desktop on Windows | GitHub Actions runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on Windows 2022 | Physical machine, WebView2 with a GPU, IME and code signing |
 | Automatic connectivity | Automated suites, in process tests against the real Tor network, the Docker NAT lab and an Android release build paired on the emulator with a real desktop sidecar over the direct path and the Tor backup | The connectivity checklist on real phones, computers and networks |
 | iOS and Android | Native Tor and the v2 module on both; TestFlight build of 0.2.0 in internal testing; Android APK published | Real phones, the Play internal track and store review |
-| CI and releases | CI green on Ubuntu, macOS and Windows; preview 0.2.0 published with installers, the Android APK, `SHA256SUMS` and a signed updater manifest; 0.2.1 with Linux and interface fixes in preparation | Windows code signing, store review and version 1.0.0 |
+| CI and releases | CI green on Ubuntu, macOS and Windows; preview 0.4.3 published with installers, the Android APK, `SHA256SUMS` and a signed updater manifest; the in app updater carries every desktop from 0.2.x to the current preview | Windows code signing, store review and version 1.0.0 |
+
+Since the 15 September snapshot of the connectivity plan above, the preview line has kept moving: 0.3.0 brought the visual refresh with a color and icon per session and attention markers on the phone; 0.4.0 added agent profiles, the VS Code style explorer and a state per card; 0.4.1 fixed the accounts menu and the card; and 0.4.2 and 0.4.3 made a file path in the terminal a link that opens in the editor, with accents and spaces. Each is written up in [docs/releases](../docs/releases/README.md).
 
 ## Build from source
 
@@ -337,7 +350,7 @@ $env:CARGO_BUILD_JOBS = "2"
 npm run dev:desktop
 ```
 
-Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows; on Linux the release fixes the AppImage after bundling so it runs with the graphics stack of recent distributions. Platform specific behavior is documented in [docs/arquitetura/14-diferencas-por-plataforma.md](https://github.com/Cialai/cialai/blob/main/docs/arquitetura/14-diferencas-por-plataforma.md).
+Rebuild the sidecar before calling Cargo directly or starting the app. The sidecar step also stages the pinned Tor Expert Bundle after checking its SHA-256; a target without a Tor bundle builds without the backup connection. Rust builds in this repository are capped at two jobs. Desktop packages are `dmg` and `app` on macOS, `deb`, `rpm` and `AppImage` on Linux, and `nsis` and `msi` on Windows; on Linux the release fixes the AppImage after bundling so it runs with the graphics stack of recent distributions. Platform specific behavior is documented in [docs/arquitetura/14-diferencas-por-plataforma.md](../docs/arquitetura/14-diferencas-por-plataforma.md).
 
 ### Tests and checks
 
