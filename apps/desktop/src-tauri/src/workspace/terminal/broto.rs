@@ -106,16 +106,21 @@ impl BrotoTerminals {
             return;
         }
         let mut sessions = lock(&self.sessions);
-        let id = sessions
+        let existing = sessions
             .iter()
             .find(|(_, s)| s.remote == 0 && s.info.device_id.as_deref() == Some(device))
-            .map(|(id, _)| *id)
-            .unwrap_or_else(|| {
-                sessions
-                    .keys()
-                    .max()
-                    .map_or(FIRST_ID, |id| id.saturating_add(1))
-            });
+            .map(|(id, _)| *id);
+        // Output and completion may arrive after revocation removed the card.
+        // Only a started command can create a new AI session.
+        if existing.is_none() && name != "broto.exec.started" {
+            return;
+        }
+        let id = existing.unwrap_or_else(|| {
+            sessions
+                .keys()
+                .max()
+                .map_or(FIRST_ID, |id| id.saturating_add(1))
+        });
         let session = sessions.entry(id).or_insert_with(|| {
             let link = Arc::new(OutputLink::new(Channel::new(|_| Ok(()))));
             link.detach(SubscriberKey::Webview);
@@ -530,6 +535,57 @@ mod tests {
         let (id, session) = sessions.iter().find(|(_, s)| s.remote == 0).unwrap();
         let bytes: Vec<u8> = lock(&session.link.state).history.iter().copied().collect();
         (*id, String::from_utf8(bytes).unwrap())
+    }
+    #[test]
+    fn late_exec_events_after_revocation_do_not_recreate_ai_card() {
+        for event in [
+            "broto.exec.finished",
+            "broto.exec.output",
+            "broto.exec.queued",
+        ] {
+            let (manager, _) = fixture();
+            manager.event(
+                "broto.exec.started",
+                &json!({"deviceId":"alpha","callId":1,"command":"sleep"}),
+            );
+            let (id, _) = ai_output(&manager);
+            let (link, _) = manager.output_existing(id).unwrap();
+            manager.event(
+                "devices.changed",
+                &json!({"deviceId":"alpha","revoked":true}),
+            );
+            assert!(link.closed.load(Ordering::SeqCst));
+            manager.event(event, &json!({"deviceId":"alpha","callId":1,"exit_code":0,"data":STANDARD.encode(b"late\n")}));
+            assert!(
+                !manager
+                    .list()
+                    .iter()
+                    .any(|info| info.tag == "broto:alpha:ia"),
+                "{event} recreated revoked card"
+            );
+        }
+    }
+    #[test]
+    fn only_started_creates_an_ai_card() {
+        let (manager, _) = fixture();
+        for event in [
+            "broto.exec.queued",
+            "broto.exec.output",
+            "broto.exec.finished",
+        ] {
+            manager.event(event, &json!({"deviceId":"alpha","callId":1}));
+            assert!(!manager.list().iter().any(|info| info.tag.ends_with(":ia")));
+        }
+        manager.event(
+            "broto.exec.started",
+            &json!({"deviceId":"alpha","callId":2,"command":"echo"}),
+        );
+        assert!(
+            manager
+                .list()
+                .iter()
+                .any(|info| info.tag == "broto:alpha:ia")
+        );
     }
     #[test]
     fn closing_ai_card_hides_without_cancelling_and_next_command_reopens() {

@@ -149,3 +149,39 @@ O instalador NSIS do Broto 0.1.0 foi gerado, extraído e teve a assinatura do se
 Na validação remota da preparação, o teste de pareamento passou a conferir também o nome configurado. Ele falhou antes da correção porque o cliente enviava sempre o hostname. O cliente agora preserva o nome escolhido e limita somente o hostname automático ao contrato de 48 caracteres Unicode. Os testes de nomes, o pareamento direto e pela reserva e os dois pacotes envolvidos passaram localmente com race. Isso ainda não conta como suíte remota integral aprovada.
 
 A CI [40879056837](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40879056837) aprovou Linux e macOS, incluindo o menu PowerShell onde disponível. No Windows, o menu também passou, mas a verificação passiva do daemon falhou ao esperar o fechamento de uma conexão local. Um teste nativo na VM confirmou que o socket podia ser herdado por processos filhos. Sua criação agora desabilita a herança atomicamente, assim como a do listener da fixture. O teste da propriedade falhou antes da correção e passou depois; a verificação de conexão e timeout também passou na VM. Os cenários de conexão bem-sucedida usam um orçamento próprio na fixture, enquanto o servidor sem resposta continua limitado a 100 ms. Clippy cruzado do Windows e formatação passaram. A suíte completa da nova candidata ainda depende da CI.
+
+## Distribuição do Broto 0.1.0 em 29/10/2026
+
+A [prévia Broto 0.1.0](https://github.com/OrdinumTeam/cialai-platform/releases/tag/broto-v0.1.0) foi publicada com instalador Windows x64 e pacotes Linux DEB e RPM. Os dois builds do [run 40890318777](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40890318777) passaram. A [publicação 40892919235](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40892919235) reutilizou esses artefatos após conferir o SHA da tag e os dois resultados de build; o assinador Go fixado pelo `go.mod` substituiu o pacote ausente no apt do runner.
+
+Os dois arquivos de atualização tiveram as assinaturas e todos os hashes conferidos contra o pin público independente. Os três instaladores nativos foram extraídos; cada serviço embutido teve sua assinatura verificada e seu binário comparado ao payload correspondente. A verificação da atestação pelo GitHub CLI confirmou os doze arquivos publicados, incluindo os hashes exatos dos três instaladores. A [lista de hashes assinada](https://cialai.com.br/downloads/broto/SHA256SUMS.txt) é a fonte dos valores distribuídos.
+
+O espelho `downloads/broto` foi publicado e sua invalidação no CDN concluiu. Os cinco downloads públicos, os metadados assinados e a chave pública servida foram comparados aos arquivos verificados. A release mais recente do desktop e seu manifesto permaneceram na 0.4.4 durante a publicação do Broto; o objeto do APK manteve sua versão. Essa conferência valida a separação dos canais, sem aplicar atualização em um aplicativo instalado.
+
+A instalação sobre o serviço pareado existente, a assinatura Authenticode do Windows, a distribuição do Broto para macOS e o aceite físico BRO-022 continuam pendentes. A publicação dos pacotes não aprova esses itens.
+
+## Distribuição do hospedeiro Cialai 0.5.0
+
+A [release v0.5.0](https://github.com/OrdinumTeam/cialai-platform/releases/tag/v0.5.0) usa o commit `abf3d80`. Windows, Linux e Mac Apple Silicon vieram dos três jobs aprovados do [run 40889258187](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40889258187). Seu job Intel não conseguiu runner ARM e foi cancelado pelo GitHub por falta de capacidade. O pacote Intel foi produzido separadamente no [run 40893882454](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40893882454), em runner Intel, com checkout do mesmo commit. A tentativa de repetição na fila ARM foi cancelada e os três builds anteriores foram preservados. O workflow original completo não foi aprovado; a montagem final reutilizou esses resultados e os comandos existentes de manifestos, verificação e publicação.
+
+Os dois Macs passaram por Developer ID e notarização. Os arquivos baixados tiveram a assinatura do atualizador, versão 0.5.0, arquitetura, `codesign`, Gatekeeper do app, ticket do DMG e Gatekeeper do DMG conferidos. Ambos mantêm mínimo macOS 13.0; o cabeçalho Mach-O Intel também foi inspecionado. As sete assinaturas do atualizador e os hashes dos nove binários foram conferidos antes de publicar o manifesto com onze alvos.
+
+A validação da candidata reutilizou o job macOS aprovado da [CI 40883261100](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40883261100), com 499 testes Rust e 372 móveis, e os jobs Linux e Windows aprovados da [CI 40886270999](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40886270999). O Windows passou 447 testes Rust e 372 móveis. Entre a revisão aprovada no macOS e a candidata mudaram apenas dois arquivos Go de teste, cujos pacotes passaram localmente com race e em onze testes nativos de arquivos no Windows. O código de produto permaneceu igual.
+
+O teste de menu PowerShell teve uma falha intermitente de prontidão na última rodada macOS e passou isolado em 7.86 segundos. A repetição desse job foi retirada da fila após conferir a identidade do código de produto e reutilizar a validação anterior. A última execução completa da CI não ficou verde; a corrida dessa fixture permanece pendente. A tentativa opcional de empacotamento com ThinLTO foi cancelada assim que o pacote padrão terminou, e nenhum arquivo dessa tentativa foi distribuído.
+
+
+## Conferência pública do site em 29/10/2026
+
+O manifesto público respondeu HTTP 200 com `broto-v0.1.0`; o módulo respondeu com MIME JavaScript e carregou os três instaladores, sem erro de console. A espera inicial falhava porque o bloco estava dentro de um `<details>` fechado, mesmo depois de o script remover `hidden`. A conferência passou a aguardar a remoção do atributo e abrir o resumo antes de verificar a visibilidade da tabela.
+
+O módulo recebeu URL versionada conforme a política de cache immutable do site. Após o deploy e a invalidação concluída do CDN, `check-public-site.py` passou nas páginas Broto em português, inglês e espanhol, nas larguras 375 e 1280. As seis capturas foram inspecionadas com a tabela aberta: três instaladores, hashes legíveis, sem overflow e sem erros JavaScript. Home e downloads também passaram nos três idiomas, com o manifesto desktop em 0.5.0. O commit do site é `9b324b4`.
+
+
+## Regressões após a publicação
+
+O teste `late_exec_events_after_revocation_do_not_recreate_ai_card` falhou com o produto anterior: depois de `devices.changed` com `revoked`, um `broto.exec.finished` atrasado recriou o card IA. A criação agora ocorre somente em `broto.exec.started`. O mesmo teste passou após a correção, incluindo conclusão, saída e fila atrasadas; outro teste confere que somente o início cria a sessão. O fechamento do link revogado também é conferido.
+
+No wrapper Linux, o sidecar montado do AppImage pode desaparecer ao fechar o desktop. A ausência agora devolve código 120 e a mensagem de Cialai fechado no idioma instalado, antes de tentar executar o caminho. O teste isolado de mount ausente falhou antes da correção e passou depois; o teste de repasse de argumentos e código de saída do sidecar continua aprovado. Nenhum aplicativo do usuário foi fechado ou reiniciado para essa prova. Isso verifica o wrapper gerado; os instaladores 0.5.0 já publicados ainda contêm o código anterior.
+
+A rodada local de `cargo test --locked --lib` teve 500 aprovados, duas falhas e oito ignorados. As falhas foram os prazos de espera do stdin bloqueado e do menu de contas do terminal; ambas também falharam nas repetições isoladas. Os dez testes do gerenciador Broto e os 22 da CLI passaram isoladamente, assim como os quatro testes i18n, o catálogo nativo e a interface Broto nos três idiomas. A aprovação integral nos três sistemas depende da nova CI.

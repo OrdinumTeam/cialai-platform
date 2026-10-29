@@ -1,7 +1,13 @@
 #!/bin/sh
 # cialai-command v2
 if [ "${1:-}" = "broto" ]; then
-  exec @CIALAI_SIDECAR@ "$@"
+  SIDECAR=@CIALAI_SIDECAR@
+  # AppImage unmounts this sidecar when the desktop closes.
+  if [ ! -x "$SIDECAR" ]; then
+    printf '%s\n' @CIALAI_CLOSED@ >&2
+    exit 120
+  fi
+  exec "$SIDECAR" "$@"
 fi
 # Abre o Cialai. Gerado pelo proprio app, apague este arquivo para remover.
 #

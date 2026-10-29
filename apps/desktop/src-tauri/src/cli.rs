@@ -180,6 +180,8 @@ pub fn sidecar_from(launcher: &Path, target: Target) -> PathBuf {
     }
     let executable =
         if target == Target::Linux && launcher.extension().is_some_and(|ext| ext == "AppImage") {
+            // The mounted sidecar is usable only while the AppImage is open.
+            // The Linux wrapper reports a closed host when it is unmounted.
             std::env::current_exe().unwrap_or_else(|_| launcher.to_path_buf())
         } else {
             launcher.to_path_buf()
@@ -219,6 +221,10 @@ pub fn script_for(target: Target, launcher: &Path, missing: &str) -> String {
             .replace(MISSING_SLOT, &quote_sh(missing)),
         Target::Linux => LINUX_SOURCE
             .replace("@CIALAI_SIDECAR@", &quote_sh(&sidecar))
+            .replace(
+                "@CIALAI_CLOSED@",
+                &quote_sh(&crate::i18n::t("native.command.hostClosed")),
+            )
             .replace(LAUNCHER_SLOT, &quote_sh(&path))
             .replace(MISSING_SLOT, &quote_sh(missing)),
     }
@@ -811,6 +817,31 @@ mod tests {
                 "broto\nrodar\nmachine name\necho '$HOME' && false\n--prazo\n20m\n"
             );
         }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn appimage_broto_with_unmounted_sidecar_reports_closed_host() {
+        let (home, _) = sandbox("appimage-closed");
+        let launcher = home.join("Cialai.AppImage");
+        let script = home.join("cialai");
+        // No app, mount or sidecar exists in this isolated fixture.
+        let missing_sidecar = home.join("unmounted/usr/bin/cialai-tunnel");
+        let body = script_for(Target::Linux, &launcher, "missing").replace(
+            &quote_sh(&sidecar_from(&launcher, Target::Linux).to_string_lossy()),
+            &quote_sh(&missing_sidecar.to_string_lossy()),
+        );
+        fs::write(&script, body).unwrap();
+        let output = std::process::Command::new("sh")
+            .arg(script)
+            .args(["broto", "listar"])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(120));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr).trim(),
+            crate::i18n::t("native.command.hostClosed")
+        );
+        assert!(output.stdout.is_empty());
     }
     #[test]
     fn rc_file_escolhe_o_arquivo_do_shell_interativo() {

@@ -152,6 +152,7 @@ export default Object.freeze({
   'native.notch.windowSession': 'current session',
   'native.notch.windowWeekly': 'weekly',
   'native.notch.windowWeeklyAll': 'all models',
+  'native.command.hostClosed': 'Cialai is not open on this computer.',
   'native.command.missing': 'Cialai not found. Open the app once to fix the command.',
   'native.quit.cancel': 'Cancel',
   'native.quit.confirm': 'Quit',
