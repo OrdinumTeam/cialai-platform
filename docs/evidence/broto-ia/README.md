@@ -200,3 +200,18 @@ A [transcrição sanitizada dos onze testes nativos de arquivos no Windows](wind
 Na conferência seguinte, a VM apareceu inicialmente ligada, mas ficou desligada antes de concluir o inventário somente leitura. Nenhum comando de iniciar, parar ou reiniciar foi enviado. O IPC do hospedeiro preservado aceitou uma conexão, mas não respondeu a `broto.list` no prazo de sete segundos; a CLI também não concluiu `listar` em dezoito segundos. As sondagens próprias foram encerradas e o aplicativo, sidecar e watchers do usuário foram preservados.
 
 Claude sem MCP contra o Windows, fluxo ao vivo e Ctrl C no card, aprovação em Terminais, transferência de 100 MB Mac ↔ Windows, descoberta da skill em sessão aberta à mão e aceite com dois Brotos continuam sem aprovação nesta rodada. Os checkboxes correspondentes permanecem abertos.
+
+
+## CI completa após as correções
+
+A [CI `tests_only` 40914270268](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40914270268), no commit `99facc8`, concluiu com sucesso nos três sistemas em 29/10/2026. Os logs de cada job foram baixados e conferidos.
+
+| Sistema | Rust aprovados | Rust ignorados | Móveis aprovados |
+| --- | --- | --- | --- |
+| macOS | 503 | 8 | 372 |
+| Linux | 496 | 7 | 372 |
+| Windows | 449 | 5 | 372 |
+
+A regressão de revogação do card IA passou nos três sistemas. O wrapper de AppImage com mount ausente passou no Mac e no Linux; a prontidão após o prompt passou nos dois Unix e o menu PowerShell real passou nos três sistemas. Os checks de navegador e de desempenho do Linux também passaram. Os testes ignorados continuam explicitamente separados dos aprovados.
+
+A primeira tentativa desta rodada parou num contrato estático desatualizado de `release-broto.yml`, antes dos testes Rust. O check foi alinhado ao fluxo de publicação já existente, mantendo autor autorizado, identidade do SHA e dois builds aprovados; o workflow e o produto não foram alterados por esse ajuste. A execução completa acima substitui a pendência de CI desta retomada. Ela não aprova os cenários remotos de uso nem atualiza os instaladores já publicados.
