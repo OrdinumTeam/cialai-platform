@@ -52,7 +52,10 @@ if (!job) throw new Error(`Unknown job: ${process.argv[2]}`);
 for (const [command, ...args] of job.commands) {
   // No Windows o npm é um .cmd, que o Node só executa por um shell; os argumentos são fixos deste arquivo.
   const shell = process.platform === 'win32' && command === 'npm';
-  const result = spawnSync(command, args, { cwd: `${root}/${job.cwd}`, stdio: 'inherit', shell });
+  // macOS's default temporary root makes Go socket-test paths too long.
+  // IPC fixtures still create their sockets in short private home directories.
+  const env = command === 'go' && process.platform === 'darwin' ? { ...process.env, TMPDIR: '/tmp' } : process.env;
+  const result = spawnSync(command, args, { cwd: `${root}/${job.cwd}`, stdio: 'inherit', shell, env });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }

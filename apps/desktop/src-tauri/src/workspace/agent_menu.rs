@@ -660,7 +660,21 @@ mod tests {
                 .ok()?;
             let mut command = portable_pty::CommandBuilder::new(program);
             command.args(args);
+            // Windows PowerShell relies on the OS runtime/module environment.
+            // Keep that environment as the app does, while isolating the home,
+            // profiles and selected agents below. Unix needs only the fixture.
+            #[cfg(unix)]
             command.env_clear();
+            for key in [
+                "CODEX_HOME",
+                "CODEX_PROFILE",
+                "CLAUDE_CONFIG_DIR",
+                "CLAUDE_PROFILE",
+                "CIALAI_AGENT_MENU",
+                "CIALAI_USER_ZDOTDIR",
+            ] {
+                command.env_remove(key);
+            }
             command.env("HOME", home);
             command.env("USERPROFILE", home);
             command.env("PATH", path);

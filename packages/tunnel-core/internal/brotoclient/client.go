@@ -70,6 +70,7 @@ type Client struct {
 	sequence        uint32
 	paths           statedir.Paths
 	local           *identity.Identity
+	name            string
 	endpoint        *direct.Endpoint
 	collector       *candidates.Collector
 	tor             *tor.Client
@@ -111,8 +112,10 @@ func New(ctx context.Context, c Config) (*Client, error) {
 		return nil, err
 	}
 	fail := func(err error) (*Client, error) { _ = lock.Release(); return nil, err }
-	if c.Name == "" {
-		c.Name, _ = os.Hostname()
+	hostname, _ := os.Hostname()
+	c.Name, err = brotoName(c.Name, hostname)
+	if err != nil {
+		return fail(err)
 	}
 	local, _, _, err := identity.Open(identity.Options{Role: identity.RoleBroto, Dir: paths.Root, Name: c.Name})
 	if err != nil {
@@ -136,7 +139,7 @@ func New(ctx context.Context, c Config) (*Client, error) {
 		return fail(err)
 	}
 	base, stop := context.WithCancel(ctx)
-	client := &Client{paths: paths, local: local, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock, allowPrivileged: c.AllowPrivileged}
+	client := &Client{paths: paths, local: local, name: c.Name, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock, allowPrivileged: c.AllowPrivileged}
 	if raw, readErr := os.ReadFile(filepath.Join(paths.Root, "pty-sequence.json")); readErr == nil {
 		if json.Unmarshal(raw, &client.sequence) != nil {
 			_ = client.Close()
@@ -703,8 +706,7 @@ func (c *Client) pair(ctx context.Context, p pairing.Payload) (*savedHost, error
 	key, _ := identity.ParsePublicKey(p.Desktop.PublicKey)
 	ctx, cancel := context.WithDeadline(ctx, time.Unix(p.ExpiresAt, 0))
 	defer cancel()
-	name, _ := os.Hostname()
-	body, _ := json.Marshal(map[string]any{"v": 2, "kind": "broto", "pairId": p.PairID, "secret": p.Secret, "device": map[string]string{"name": name, "model": runtime.GOARCH, "platform": runtime.GOOS, "app": "broto-1", "publicKey": c.local.PublicKeyString()}})
+	body, _ := json.Marshal(map[string]any{"v": 2, "kind": "broto", "pairId": p.PairID, "secret": p.Secret, "device": map[string]string{"name": c.name, "model": runtime.GOARCH, "platform": runtime.GOOS, "app": "broto-1", "publicKey": c.local.PublicKeyString()}})
 	for ctx.Err() == nil {
 		conn, err := c.reachPair(ctx, p, key)
 		if err != nil {

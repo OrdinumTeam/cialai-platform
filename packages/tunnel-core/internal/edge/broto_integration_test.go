@@ -173,6 +173,9 @@ func TestBrotoDaemonPairsExecutesPausesAndForgets(t *testing.T) {
 		}
 	}
 	wait(func() bool { return len(h.config.Sessions.PendingBrotos()) == 1 })
+	if h.config.Sessions.PendingBrotos()[0].Name != "Test Broto" {
+		t.Fatal("pairing ignored the configured Broto name")
+	}
 	if len(h.config.Devices.List()) != 0 {
 		t.Fatal("registered before approval")
 	}

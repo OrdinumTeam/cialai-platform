@@ -86,6 +86,8 @@ O fluxo reaproveita o do celular em `internal/pairing` e `internal/edge/edge.go`
 2. O Broto alcança o hospedeiro por um dos caminhos e faz `POST /pair` com a própria chave pública, que precisa ser igual à chave da conexão TLS.
 3. A borda confere que o pareamento existe, não expirou e não foi consumido, compara o segredo em tempo constante e confere que a chave da conexão bate com a declarada.
 4. O pedido entra na lista Brotos ligando, na página Dispositivos, com o nome e o sistema do Broto e quatro dígitos derivados do id do pareamento e da chave do Broto. A janela do Broto mostra os mesmos quatro dígitos. A pessoa confere e aprova ou recusa. Essa aprovação é sempre obrigatória para Broto; no celular ela é opcional.
+
+O nome configurado do Broto é o enviado no pedido. Ele aceita até 48 caracteres Unicode, sem controles. Quando não há nome escolhido, o cliente usa o hostname, removendo controles e limitando esse valor automático a 48 caracteres; um hostname vazio usa Cialai Broto. A validação do hospedeiro permanece a mesma.
 5. O pedido fica guardado no hospedeiro até a decisão ou até o código vencer. Enquanto espera, o Broto volta a perguntar, sem segurar uma conexão aberta, e a primeira pergunta depois da aprovação já recebe o token. No celular, a borda espera a decisão por até 60 s com a conexão aberta; no Broto, o pedido guardado substitui essa espera, porque a pessoa pode estar na outra máquina quando cola o código.
 6. Na aprovação, a borda consome o pareamento, grava o registro com o papel `broto` e entrega o token do aparelho. Na recusa, o pedido some e o código deixa de valer.
 
