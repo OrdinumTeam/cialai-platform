@@ -185,3 +185,9 @@ O teste `late_exec_events_after_revocation_do_not_recreate_ai_card` falhou com o
 No wrapper Linux, o sidecar montado do AppImage pode desaparecer ao fechar o desktop. A ausência agora devolve código 120 e a mensagem de Cialai fechado no idioma instalado, antes de tentar executar o caminho. O teste isolado de mount ausente falhou antes da correção e passou depois; o teste de repasse de argumentos e código de saída do sidecar continua aprovado. Nenhum aplicativo do usuário foi fechado ou reiniciado para essa prova. Isso verifica o wrapper gerado; os instaladores 0.5.0 já publicados ainda contêm o código anterior.
 
 A rodada local de `cargo test --locked --lib` teve 500 aprovados, duas falhas e oito ignorados. As falhas foram os prazos de espera do stdin bloqueado e do menu de contas do terminal; ambas também falharam nas repetições isoladas. Os dez testes do gerenciador Broto e os 22 da CLI passaram isoladamente, assim como os quatro testes i18n, o catálogo nativo e a interface Broto nos três idiomas. A aprovação integral nos três sistemas depende da nova CI.
+
+## Prontidão da fixture PSReadLine
+
+A transcrição da falha macOS mostrou o primeiro comando ecoado antes da inicialização da leitura de teclas: o prompt já estava na saída, mas o terminal ainda podia converter CR em LF. A fixture aguardava somente o texto do prompt. Agora, no Unix, ela também observa pelo PTY que `ICANON`, `ECHO` e `ICRNL` estão desligados antes de enviar a linha. Ela não altera o modo do terminal nem o código do produto.
+
+Uma regressão com prompt anterior ao modo raw perdeu a primeira linha antes da correção e passou depois. Os sete testes de `agent_menu` passaram com PowerShell 7.6.9 real; o menu PowerShell passou também em três repetições separadas. Clippy com todos os alvos e avisos como erros passou. Esses resultados locais não substituem a CI `tests_only` completa nos três sistemas.

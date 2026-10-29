@@ -610,6 +610,7 @@ mod tests {
         /// antes disso o terminal ainda converte o Enter em quebra de linha. O
         /// espaco depois do `>` do PowerShell e um `ESC[1C`, nao um espaco, por
         /// isso o fim do prompt e o nome da pasta da sessao mais `>`.
+        /// No Unix o prompt ainda pode preceder o modo raw do PSReadLine.
         prompt: Option<String>,
     }
 
@@ -750,8 +751,38 @@ mod tests {
             self.last_command = line.to_owned();
             if let Some(prompt) = self.prompt.clone() {
                 self.wait(&prompt);
+                self.wait_for_input_mode();
             }
             self.send(format!("{line}\r").as_bytes());
+        }
+
+        /// Printing the prompt does not guarantee ReadKey is ready yet.
+        /// Observe the PTY input mode instead of sleeping or changing it.
+        fn wait_for_input_mode(&self) {
+            #[cfg(unix)]
+            {
+                let fd = self._master.as_raw_fd().expect("fixture PTY fd");
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+                loop {
+                    let mut mode = std::mem::MaybeUninit::<libc::termios>::uninit();
+                    // SAFETY: fd belongs to the live master and mode is writable.
+                    assert_eq!(unsafe { libc::tcgetattr(fd, mode.as_mut_ptr()) }, 0);
+                    // SAFETY: tcgetattr initialized mode on success above.
+                    let mode = unsafe { mode.assume_init() };
+                    if mode.c_lflag & (libc::ICANON | libc::ECHO) == 0
+                        && mode.c_iflag & libc::ICRNL == 0
+                    {
+                        break;
+                    }
+                    assert!(
+                        std::time::Instant::now() < deadline,
+                        "fixture prompt appeared before raw input: iflag={} lflag={}",
+                        mode.c_iflag,
+                        mode.c_lflag
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+            }
         }
 
         fn send(&mut self, bytes: &[u8]) {
@@ -1027,6 +1058,24 @@ mod tests {
         }
         assert!(!ran.is_empty(), "nenhum shell para testar");
         fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fixture_waits_for_raw_input_after_the_prompt() {
+        let home = scratch("tty-readiness");
+        // Model the interval between PowerShell printing its prompt and
+        // PSReadLine switching input out of canonical mode. An early CR
+        // becomes LF, which ReadKey does not accept as Enter.
+        let source = "import os,time,tty; print('FIXTURE>',flush=True); time.sleep(0.4); tty.setraw(0); data=os.read(0,6); print('RESULT='+data.hex(),flush=True); time.sleep(0.1)";
+        let path = std::env::var("PATH").unwrap_or_default();
+        let mut terminal = Tty::open("python3", &["-u", "-c", source], &home, &path).unwrap();
+        terminal.prompt = Some("FIXTURE>".into());
+        terminal.command("probe");
+        let output = terminal.wait("RESULT=70726f62650d");
+        assert!(output.contains("RESULT=70726f62650d"));
+        drop(terminal);
+        fs::remove_dir_all(home).unwrap();
     }
 
     /// O mesmo menu no PowerShell, quando ele existe: o pwsh no Linux e no
