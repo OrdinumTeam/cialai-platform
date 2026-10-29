@@ -4104,6 +4104,14 @@ echo 'recovered-fixture'
         };
         let home = scratch("menu-card");
         let home = home.canonicalize().unwrap();
+        // Wait for this fixture's prompt before sending input. A new zsh can
+        // still be initializing its line editor when spawn returns, and an
+        // empty home can invoke the distribution's first-run setup wizard.
+        std::fs::write(
+            home.join(".zshrc"),
+            "PROMPT='CIALAI_MENU_READY> '; RPROMPT=''\n",
+        )
+        .unwrap();
         let bin = home.join("bin");
         std::fs::create_dir_all(&bin).unwrap();
         // O shell da sessao e um zsh de mentira que fixa o HOME da pasta de
@@ -4197,10 +4205,16 @@ echo 'recovered-fixture'
             .expect("spawn");
         let mut queries = LaterCursorQueries::new("menu-card", &manager, info.id);
         let mut output = Vec::new();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "CIALAI_MENU_READY>"),
+            "o prompt do zsh abriu; saida: {:?}",
+            String::from_utf8_lossy(&output)
+        );
         manager.write(info.id, b"echo READY$((40+2))\r").unwrap();
         assert!(
             collect_until_printed(&rx, &mut queries, &mut output, "READY42"),
-            "o zsh com o menu abriu"
+            "o zsh com o menu respondeu; saida: {:?}",
+            String::from_utf8_lossy(&output)
         );
         manager.write(info.id, b"codex 30\r").unwrap();
         assert!(
