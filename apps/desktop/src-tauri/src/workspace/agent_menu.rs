@@ -604,6 +604,7 @@ mod tests {
         child: Box<dyn portable_pty::Child + Send + Sync>,
         _master: Box<dyn portable_pty::MasterPty + Send>,
         seen: usize,
+        last_command: String,
         /// Fim do prompt que o shell mostra antes de aceitar a proxima linha.
         /// O PSReadLine so trata o Enter como Enter depois de abrir o prompt;
         /// antes disso o terminal ainda converte o Enter em quebra de linha. O
@@ -725,12 +726,14 @@ mod tests {
                 child,
                 _master: pair.master,
                 seen: 0,
+                last_command: String::new(),
                 prompt: None,
             })
         }
 
         /// Digita uma linha de comando, depois do prompt quando o shell pede.
         fn command(&mut self, line: &str) {
+            self.last_command = line.to_owned();
             if let Some(prompt) = self.prompt.clone() {
                 self.wait(&prompt);
             }
@@ -758,8 +761,11 @@ mod tests {
                     }
                     if std::time::Instant::now() > deadline {
                         panic!(
-                            "esperando {needle:?}; veio:\n{}",
-                            text.get(self.seen..).unwrap_or("")
+                            "esperando {needle:?} para {:?}; offset {}; veio:\n{}\ntranscricao crua: {:?}",
+                            self.last_command,
+                            self.seen,
+                            text.get(self.seen..).unwrap_or(""),
+                            self.output.lock().unwrap()
                         );
                     }
                 }
