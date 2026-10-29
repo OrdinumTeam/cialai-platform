@@ -207,15 +207,21 @@ pub(super) fn dispatch(
         }
         "pty_metrics" => value(commands::pty_metrics(app.state())),
         "ai_usage" => value(commands::ai_usage(app.clone(), app.state(), app.state())),
-        "pty_write" => value(commands::pty_write(
-            app.state(),
-            arg(&args, "id")?,
-            arg(&args, "data")?,
-            arg(&args, "binary")?,
-        )?),
+        "pty_write" => {
+            let data: String = arg(&args, "data")?;
+            let binary: Option<bool> = arg(&args, "binary")?;
+            let bytes = if binary.unwrap_or(false) {
+                commands::binary_bytes(&data)?
+            } else {
+                data.into_bytes()
+            };
+            app.state::<TerminalManager>()
+                .write_as(arg(&args, "id")?, &bytes, "phone")?;
+            Ok(Value::Null)
+        }
         "pty_kill" => {
             let id = arg(&args, "id")?;
-            commands::pty_kill(app.state(), id)?;
+            app.state::<TerminalManager>().kill_as(id, "phone")?;
             lock(&conn.bindings).remove(&id);
             Ok(Value::Null)
         }

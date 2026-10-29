@@ -64,6 +64,7 @@ export default function Workbench() {
   const { locale } = useI18n();
   useRuntimeEvents(['sessions', 'editor', 'theme']);
   const layout = useLayout();
+  const { selected, hydrated } = getState();
   const [picker, setPicker] = useState(null);
   const [menu, setMenu] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
@@ -83,7 +84,7 @@ export default function Workbench() {
   const newButtonRef = useRef(null);
   const focusRestore = useRef(null);
   const sessionsCollapsed = panelCollapsed(auto, 'sessions', { preferred: layout.sessionsCollapsed, focus: layout.focus });
-  const explorerCollapsed = panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
+  const explorerCollapsed = Boolean(selected?.deviceId) || panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
   // Mostrar ou esconder uma coluna grava a preferencia e, em janela estreita,
   // vence o recolhimento automatico. Na primeira vez que cada coluna recolhe,
   // um aviso diz onde reabri-la: `display: none` some com a lista inteira, e
@@ -106,7 +107,6 @@ export default function Workbench() {
   showPanelRef.current = showPanel;
   const native = hasBridge() || isDemo();
 
-  const { selected, hydrated } = getState();
   const sessions = orderedSessions();
   const selectedId = selected?.id || null;
   const tabs = selected ? selected.editor.tabs : [];
@@ -335,7 +335,7 @@ export default function Workbench() {
       { id: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
       { id: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
       { separator: true },
-      { id: 'browser', label: translate('terminal.browser.openDevBrowser'), icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
+      { id: 'browser', disabled: Boolean(session.deviceId), label: translate('terminal.browser.openDevBrowser'), icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
       session.browser?.status === 'ready' || session.browser?.status === 'starting'
         ? { id: 'browser-stop', label: translate('terminal.browser.stopDevBrowser'), icon: Globe, run: () => stopBrowser(session.id).catch(() => {}) }
         : null,
@@ -345,8 +345,8 @@ export default function Workbench() {
         const ok = await copyToClipboard(session.saved.resume.sessionId);
         notify(translate(ok ? 'terminal.restore.idCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning');
       } } : null,
-      { id: 'finder', label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
-      { id: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
+      { id: 'finder', disabled: Boolean(session.deviceId), label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
+      { id: 'clone', disabled: Boolean(session.deviceId), label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
       {
         id: 'launch',
         label: translate('terminal.profiles.launchHere'),
@@ -549,7 +549,7 @@ export default function Workbench() {
       else if (action === 'open-browser') openBrowserTab(selected.id);
       else if (action === 'next-session') selectNext(1);
       else if (action === 'previous-session') selectNext(-1);
-      else if (action === 'quick-open') setQuickOpen(true);
+      else if (action === 'quick-open' && !selected?.deviceId) setQuickOpen(true);
       else if (action === 'find') setFindOpen(true);
       else if (action === 'font-increase') setLayout({ fontSize: Math.min(LAYOUT_LIMITS.fontSize.max, layout.fontSize + 1) });
       else if (action === 'font-decrease') setLayout({ fontSize: Math.max(LAYOUT_LIMITS.fontSize.min, layout.fontSize - 1) });
@@ -837,7 +837,7 @@ export default function Workbench() {
       )}
       {pickerNode}
       {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={menu.label || translate('terminal.menu.sessionActions')} style={menu.style} className={menu.className} /> : null}
-      {quickOpen && selected ? (
+      {quickOpen && selected && !selected.deviceId ? (
         <QuickOpen
           root={selected.explorer.root}
           onClose={() => { setQuickOpen(false); setTimeout(focusSelected, 30); }}

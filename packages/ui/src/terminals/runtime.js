@@ -291,7 +291,7 @@ export function persist() {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const store = readStore();
-    store.sessions = state.order.map((id) => state.sessions.get(id)).filter(Boolean).map(serializeSession);
+    store.sessions = state.order.map((id) => state.sessions.get(id)).filter((session) => session && !session.deviceId).map(serializeSession);
     store.selectedId = state.selectedId;
     writeStore(store);
     // A apresentacao do card tem o Rust como fonte de verdade, e os dois
@@ -680,7 +680,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     paste: (text) => pasteText(session.id, text),
     paths: (paths) => insertPaths(session.id, paths),
     files: async (files) => {
-      if (!isTauri()) throw new Error('clipboard_files_require_desktop');
+      if (!isTauri() || session.deviceId) throw new Error('clipboard_files_require_desktop');
       const paths = [];
       for (const file of files) {
         if (file.size > 32 * 1024 * 1024) throw new Error('clipboard_file_too_large');
@@ -1773,7 +1773,9 @@ async function syncSharedSessions() {
       // A spawn result can arrive after pty_list observed its tag.
       if (session?.spawning) continue;
       if (!session) {
-        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: baseName(info.cwd) });
+        // A sessão de um Broto leva o nome da máquina, que é o que a pessoa
+        // reconhece; a pasta inicial de lá costuma ser só o nome do usuário.
+        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName || info.deviceId }) : (info.deviceId && info.brotoName) || baseName(info.cwd) });
         state.order.push(session.id);
         session.ptyId = info.id;
       }
@@ -1797,6 +1799,12 @@ async function syncSharedSessions() {
         session.remoteOrder = shared.order;
         adopted.push(session);
       }
+      session.deviceId = info.deviceId || null;
+      if (info.brotoName && info.brotoName !== session.brotoName) {
+        const oldName = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: session.brotoName || session.deviceId }) : session.brotoName;
+        if (!session.name || session.name === oldName) session.name = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName }) : info.brotoName;
+      }
+      session.brotoName = info.brotoName || null;
       applyTerminalInfo(session, info);
       session.ptyAliveEpoch = connectionEpoch;
       if (!session.spawnToken || session.status !== 'running') {
@@ -1959,6 +1967,21 @@ export async function pickAndOpen(defaultPath, options) {
   return picked ? openSession(picked, options) : null;
 }
 
+// Uma sessão aberta fora da tela de Terminais, como a de um Broto, chega pelo
+// laço de sessões. Sincroniza até ela aparecer e a seleciona.
+export async function revealSession(id, { attempts = 20, delay = 300 } = {}) {
+  await hydrate();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await syncSharedSessions().catch(() => {});
+    if (state.sessions.has(id)) {
+      selectSession(id);
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  return false;
+}
+
 export function selectSession(id) {
   if (!state.sessions.has(id) || state.selectedId === id) return;
   state.selectedId = id;
@@ -2078,6 +2101,7 @@ export function focusSelected() {
 // rodava nela, a conversa volta pelo comando de retomada.
 export async function reopen(id) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (session?.status === 'running' && ['failed', 'sent'].includes(session.resumeState) && session.saved?.resume) {
     return resumeAgent(session, session.saved.resume, { retry: true });
   }
@@ -2115,6 +2139,7 @@ export async function restart(id) {
 
 export async function changeDirectory(id, cwd) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session) return;
   const picked = cwd || await chooseDirectory({ title: translate('terminal.session.changeFolderTitle'), defaultPath: session.cwd });
   if (!picked || picked === session.cwd) return;
@@ -2393,6 +2418,7 @@ export function scrollToBottom(id) {
 // caminho relativo deixava de valer assim que o shell trocava de pasta.
 export function insertPaths(id, paths) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session || session.ptyId == null || session.status !== 'running') return false;
   const valid = paths.filter((path) => typeof path === 'string' && path.length > 0 && !/[\x00-\x1f\x7f]/.test(path));
   if (!valid.length) return false;
@@ -2407,6 +2433,7 @@ export function insertPaths(id, paths) {
 // silencio; aqui ela espera o terminal ser adotado.
 export function deliverPaths(id, paths) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session || session.ptyId == null || session.status !== 'running') return false;
   selectSession(id);
   const attempt = (left) => {

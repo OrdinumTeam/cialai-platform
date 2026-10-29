@@ -3,6 +3,10 @@
 // catálogo que o Rust embute a partir destas chaves.
 
 export default Object.freeze({
+  "native.broto.execFailed": "Command interrupted · {error}",
+  "native.broto.execTimedOut": "Command timed out",
+  "native.broto.execFinished": "Exited with {code} in {duration} s",
+
   'native.browser.downloading': 'Downloading {name}',
   'native.browser.downloadingProgress': 'Downloading {name}, {percent}% of {size}',
   'native.browser.preparingDownload': 'Preparing the Chromium download',

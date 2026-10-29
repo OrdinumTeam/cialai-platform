@@ -27,6 +27,17 @@ use super::protocol::{
 use super::{MobileSite, bundled_tor_executable};
 
 const CALL_TIMEOUT: Duration = Duration::from_secs(30);
+// Approval and execution are operational deadlines, not sidecar health checks.
+fn command_timeout(command: &str) -> Duration {
+    if command == "broto.call" {
+        Duration::from_secs(40 * 60 + 30)
+    } else {
+        CALL_TIMEOUT
+    }
+}
+fn invalidates_process(command: &str, code: &str) -> bool {
+    code == "tunnel_disconnected" || (code == "tunnel_timeout" && command != "broto.call")
+}
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_RESTARTS: usize = 10;
@@ -281,6 +292,11 @@ impl Supervisor {
                 parent_pid: std::process::id(),
             },
             Arc::new(move |channel, payload| {
+                if let Some(manager) =
+                    sink_app.try_state::<crate::workspace::terminal::TerminalManager>()
+                {
+                    manager.broto_event(payload["event"].as_str().unwrap_or(""), &payload["data"]);
+                }
                 let _ = sink_app.emit(channel, payload);
             }),
             Arc::new(bridge_control),
@@ -330,14 +346,11 @@ impl Supervisor {
         let process = self.inner.ready_process()?;
         let result = self
             .inner
-            .send_on(&process, command, args.clone(), CALL_TIMEOUT);
+            .send_on(&process, command, args.clone(), command_timeout(command));
         let result = match result {
             Ok(result) => result,
             Err(problem) => {
-                if matches!(
-                    problem.code.as_str(),
-                    "tunnel_timeout" | "tunnel_disconnected"
-                ) {
+                if invalidates_process(command, &problem.code) {
                     // Only our exact child is invalidated, never a PID-file owner.
                     let _gate = lock(&self.inner.start_gate);
                     self.inner.fail_start(&process);
@@ -1052,6 +1065,21 @@ fn resolve_tor_binary(app: &AppHandle) -> Result<PathBuf, String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn broto_operational_deadline_does_not_restart_a_healthy_sidecar() {
+        assert_eq!(
+            super::command_timeout("broto.call"),
+            std::time::Duration::from_secs(2430)
+        );
+        assert!(!super::invalidates_process("broto.call", "tunnel_timeout"));
+        assert!(super::invalidates_process(
+            "broto.call",
+            "tunnel_disconnected"
+        ));
+        assert!(super::invalidates_process("devices.list", "tunnel_timeout"));
+        assert_eq!(super::command_timeout("devices.list"), super::CALL_TIMEOUT);
+    }
+
     use std::fs;
 
     use super::super::awake::AwakeBackend;

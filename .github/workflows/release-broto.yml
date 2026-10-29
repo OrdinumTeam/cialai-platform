@@ -1,0 +1,155 @@
+# SPDX-License-Identifier: Apache-2.0
+name: Release Broto
+on:
+  push:
+    tags: ['broto-v*']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: broto-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    environment: broto-release
+    if: startsWith(github.ref, 'refs/tags/broto-v') && contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-22.04, target: linux-x64, rust: x86_64-unknown-linux-gnu, bundles: 'deb,rpm' }
+          - { os: windows-2022, target: windows-x64, rust: x86_64-pc-windows-msvc, bundles: nsis }
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.98.1
+          targets: ${{ matrix.rust }}
+      - name: Validate independent Broto version
+        shell: bash
+        run: node tools/broto/version-config.mjs "$RUNNER_TEMP/broto-version.json"
+      - name: Test installer and updater safety
+        shell: bash
+        run: |
+          node --test tools/broto/*.test.mjs
+          cd packages/tunnel-core
+          go test -mod=readonly ./internal/brotohostipc ./internal/brotomcp ./internal/brotoupdate ./internal/brotoinstall ./internal/brotoexec ./internal/brotoclient ./internal/brotorpc ./internal/edge ./internal/pairing
+      - name: Verify Tor publisher signature
+        if: runner.os == 'Linux'
+        run: bash tools/broto/verify-tor.sh
+      - name: Build standalone payload
+        shell: bash
+        env:
+          GOCACHE: ${{ runner.temp }}/go-cache
+          BROTO_VERSION: ${{ github.ref_name }}
+        run: node tools/broto/build.mjs '${{ matrix.target }}' '${{ runner.temp }}/payload'
+      - name: Sign and notarize macOS executable payload
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.BROTO_APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.BROTO_APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.BROTO_APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash tools/broto/sign-macos.sh '${{ runner.temp }}/payload'
+      - name: Generate CycloneDX dependency inventory
+        shell: bash
+        run: node tools/broto/sbom.mjs '${{ runner.temp }}/payload/sbom.cdx.json'
+      - name: Authenticate bundled service before building the monitor
+        shell: bash
+        env:
+          BROTO_MINISIGN_SECRET_KEY: ${{ secrets.BROTO_MINISIGN_SECRET_KEY }}
+          CIALAI_BROTO_SERVICE_PUBLIC_KEY: ${{ vars.BROTO_MINISIGN_PUBLIC_KEY }}
+        run: |
+          node tools/broto/stage-service.mjs '${{ runner.temp }}/payload' '${{ runner.temp }}/service-payload'
+          node tools/broto/sign-service.mjs '${{ runner.temp }}/service-payload' apps/broto/src-tauri/resources/service
+      - name: Install Linux UI build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential libxdo-dev libssl-dev librsvg2-dev patchelf
+      - name: Build Broto Tauri monitor
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/broto-ui/target
+          CARGO_BUILD_JOBS: '2'
+          CIALAI_BROTO_SERVICE_PUBLIC_KEY: ${{ vars.BROTO_MINISIGN_PUBLIC_KEY }}
+          APPLE_CERTIFICATE: ${{ secrets.BROTO_APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.BROTO_APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.BROTO_APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          rustup target add '${{ matrix.rust }}'
+          npm ci --ignore-scripts
+          if [ "$RUNNER_OS" = macOS ]; then source tools/broto/prepare-macos.sh; fi
+          npm run build --workspace @cialai/broto -- --config "$RUNNER_TEMP/broto-version.json" --config src-tauri/tauri.service.conf.json --target '${{ matrix.rust }}' --bundles '${{ matrix.bundles }}' -- --locked
+          node tools/broto/stage-ui.mjs '${{ runner.temp }}/broto-ui/target/${{ matrix.rust }}/release/bundle' '${{ runner.temp }}/payload/ui'
+          if [ "$RUNNER_OS" = macOS ]; then node tools/broto/verify-service.mjs '${{ runner.temp }}/payload/ui/CialaiBroto.app/Contents/Resources/service' "$CIALAI_BROTO_SERVICE_PUBLIC_KEY"; fi
+      - name: Payload checksums
+        shell: bash
+        run: node tools/broto/manifest.mjs '${{ runner.temp }}/payload'
+      - name: Preserve executable modes in artifact
+        shell: bash
+        run: node tools/broto/archive.mjs '${{ runner.temp }}/payload' '${{ runner.temp }}/CialaiBroto_${{ matrix.target }}.tar'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: CialaiBroto_${{ matrix.target }}
+          path: ${{ runner.temp }}/CialaiBroto_${{ matrix.target }}.tar
+          retention-days: 7
+  publish:
+    needs: build
+    runs-on: ubuntu-22.04
+    environment: broto-release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: payloads
+      - name: Sign manifests with independent Broto key
+        env:
+          BROTO_MINISIGN_SECRET_KEY: ${{ secrets.BROTO_MINISIGN_SECRET_KEY }}
+          BROTO_MINISIGN_PUBLIC_KEY: ${{ vars.BROTO_MINISIGN_PUBLIC_KEY }}
+        shell: bash
+        run: |
+          test -n "$BROTO_MINISIGN_SECRET_KEY"
+          sudo apt-get update && sudo apt-get install -y minisign
+          umask 077
+          key="$RUNNER_TEMP/broto.key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$BROTO_MINISIGN_SECRET_KEY" > "$key"
+          mkdir release
+          printf 'untrusted comment: Cialai Broto release verification key\n%s\n' "$BROTO_MINISIGN_PUBLIC_KEY" > release/minisign.pub
+          for dir in payloads/*; do
+            tar -xf "$dir/$(basename "$dir").tar" -C "$dir"
+            rm "$dir/$(basename "$dir").tar"
+            minisign -S -s "$key" -m "$dir/SHA256SUMS.txt" -x "$dir/SHA256SUMS.txt.minisig" </dev/null
+            node tools/broto/stage-installers.mjs "$dir/ui" release
+            COPYFILE_DISABLE=1 tar --no-xattrs -czf "release/$(basename "$dir").tar.gz" -C "$dir" .
+            cp "$dir/sbom.cdx.json" "release/$(basename "$dir").sbom.cdx.json"
+          done
+          node tools/broto/site-manifest.mjs release "$GITHUB_REF_NAME"
+          cd release
+          minisign -S -s "$key" -m latest.json </dev/null
+          minisign -S -s "$key" -m SHA256SUMS.txt </dev/null
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: release/*
+      - name: Publish separate release without replacing desktop latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --latest=false --prerelease --generate-notes

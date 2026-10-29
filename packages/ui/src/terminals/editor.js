@@ -233,7 +233,7 @@ let untitledCount = 0;
 // painel de salvar do sistema.
 export function newUntitled(sessionId) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   untitledCount += 1;
   const tab = makeTab(null, 'text');
   tab.name = translate('terminal.editor.untitled', { count: untitledCount });
@@ -249,7 +249,7 @@ export function newUntitled(sessionId) {
 // Abre o arquivo numa aba da sessao, ou ativa a aba que ja existe.
 export async function openFile(sessionId, path, { activate = true } = {}) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   const existing = findTab(sessionId, path);
   if (existing) {
     if (activate) session.editor.activeId = existing.id;
@@ -611,7 +611,7 @@ export async function restoreTabs(sessionId) {
 
 export async function openDiff(sessionId, root, path) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   const existing = session.editor.tabs.find((tab) => tab.kind === 'diff' && tab.path === path);
   if (existing) {
     session.editor.activeId = existing.id;

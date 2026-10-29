@@ -166,6 +166,9 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    que todo card mostra. O indicador de atividade acompanha o estado escrito,
    na linha dele. */
 .terminais-card{position:relative;display:flex;flex-direction:column;gap:3px;padding:11px 10px 11px 14px;border:1px solid var(--mac-separator);border-radius:16px;background:var(--mac-surface);box-shadow:var(--mac-shadow-card,none);cursor:default;transition:background var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease);animation:macRowIn 240ms var(--mac-ease) both}
+/* Sessão de um Broto: o símbolo dele no canto de baixo do card, solto, sem
+   placa, como o ícone da sessão. A arte é da marca, por isso entra pelo CSS. */
+.terminais-card__broto{position:absolute;right:10px;bottom:9px;width:18px;height:17px;background:url('../assets/broto-mark.png') center/contain no-repeat}
 .terminais-card::before{content:'';position:absolute;left:-1px;top:14px;bottom:14px;width:4px;border-radius:0 3px 3px 0;background:var(--session-accent,var(--terminais-accent))}
 .terminais-card:hover{background:color-mix(in srgb,var(--mac-accent) 4%,var(--mac-surface));border-color:var(--mac-separator-strong)}
 .terminais-card.is-selected{background:color-mix(in srgb,var(--mac-accent) 9%,var(--mac-surface));border-color:var(--session-accent-border,var(--mac-accent))}

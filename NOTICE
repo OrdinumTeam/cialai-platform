@@ -97,3 +97,13 @@ This inventory does not replace upstream license texts. Before distributing
 binaries, include the applicable copyright and license notices for all bundled
 direct and transitive dependencies and fonts. No product binaries are distributed
 at this stage.
+
+Cialai Broto packages the same pinned Tor Expert Bundle as separate programs
+in its tor directory. All Tor, libevent and OpenSSL notices and source references
+above also apply to Broto. The payload includes LICENSE, NOTICE and the upstream
+Tor bundle license texts. Its CycloneDX inventory covers Go modules; this notice
+and the Tor bundle license texts cover the separately bundled native programs.
+
+Broto installer and updater include aead.dev/minisign v0.3.0, MIT,
+Copyright 2021 Andreas Auernhammer. The license text ships in
+licenses/minisign-MIT.txt. https://github.com/aead/minisign/tree/v0.3.0

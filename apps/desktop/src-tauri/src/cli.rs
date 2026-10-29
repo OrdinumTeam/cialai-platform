@@ -44,6 +44,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+#[cfg(windows)]
+mod native_windows;
+
 /// Sistema de destino. Vem por parametro, e nao por `cfg!` dentro da funcao,
 /// para os tres corpos de script serem exercitados nos tres runners da CI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,7 +74,7 @@ const WINDOWS_SOURCE: &str = include_str!("../../../../scripts/cialai-command-wi
 
 /// Primeira linha de comentario dos tres scripts. E por ela que o app
 /// reconhece um arquivo como seu, e nunca sobrescreve nem apaga o de outro.
-pub const CLI_MARKER: &str = "cialai-command v1";
+pub const CLI_MARKER: &str = "cialai-command v2";
 const LAUNCHER_SLOT: &str = "@CIALAI_LAUNCHER@";
 const MISSING_SLOT: &str = "@CIALAI_MISSING@";
 /// Lapide de remocao: enquanto existir, a abertura nao reinstala.
@@ -124,7 +127,7 @@ pub fn command_dir(home: &Path, target: Target) -> PathBuf {
 
 pub fn command_file(target: Target) -> &'static str {
     match target {
-        Target::Windows => "cialai.cmd",
+        Target::Windows => "cialai.exe",
         _ => "cialai",
     }
 }
@@ -171,13 +174,37 @@ pub fn launcher_from(
     Some(current_exe.to_path_buf())
 }
 
+pub fn sidecar_from(launcher: &Path, target: Target) -> PathBuf {
+    if target == Target::MacOs && launcher.extension().is_some_and(|ext| ext == "app") {
+        return launcher.join("Contents/MacOS/cialai-tunnel");
+    }
+    let executable =
+        if target == Target::Linux && launcher.extension().is_some_and(|ext| ext == "AppImage") {
+            std::env::current_exe().unwrap_or_else(|_| launcher.to_path_buf())
+        } else {
+            launcher.to_path_buf()
+        };
+    executable.with_file_name(if target == Target::Windows {
+        "cialai-tunnel.exe"
+    } else {
+        "cialai-tunnel"
+    })
+}
+
 /// Corpo do script para um sistema, com o caminho e a mensagem ja no lugar.
 pub fn script_for(target: Target, launcher: &Path, missing: &str) -> String {
     let path = launcher.to_string_lossy();
+    let sidecar = sidecar_from(launcher, target)
+        .to_string_lossy()
+        .into_owned();
     match target {
         Target::Windows => {
             let body = WINDOWS_SOURCE
-                .replace(LAUNCHER_SLOT, &format!("\"{path}\""))
+                .replace(
+                    "@CIALAI_SIDECAR@",
+                    &format!("\"{}\"", sidecar.replace('%', "%%")),
+                )
+                .replace(LAUNCHER_SLOT, &format!("\"{}\"", path.replace('%', "%%")))
                 // Aspas duplas quebrariam o `echo` do batch. O caractere e
                 // escrito por codigo para nao confundir o varredor de chaves
                 // de `check-mobile-i18n.mjs`, que parea aspas por regex.
@@ -187,9 +214,11 @@ pub fn script_for(target: Target, launcher: &Path, missing: &str) -> String {
             body.replace("\r\n", "\n").replace('\n', "\r\n")
         }
         Target::MacOs => MACOS_SOURCE
+            .replace("@CIALAI_SIDECAR@", &quote_sh(&sidecar))
             .replace(LAUNCHER_SLOT, &quote_sh(&path))
             .replace(MISSING_SLOT, &quote_sh(missing)),
         Target::Linux => LINUX_SOURCE
+            .replace("@CIALAI_SIDECAR@", &quote_sh(&sidecar))
             .replace(LAUNCHER_SLOT, &quote_sh(&path))
             .replace(MISSING_SLOT, &quote_sh(missing)),
     }
@@ -199,7 +228,7 @@ fn is_ours(contents: &str) -> bool {
     contents
         .lines()
         .take(4)
-        .any(|line| line.contains(CLI_MARKER))
+        .any(|line| line.contains(CLI_MARKER) || line.contains("cialai-command v1"))
 }
 
 fn write_atomic(path: &Path, contents: &str) -> Result<(), String> {
@@ -240,6 +269,10 @@ pub fn install(
     let Some(launcher) = launcher else {
         return Ok(CliReport::new("skipped", &path, &directory));
     };
+    #[cfg(windows)]
+    if target == Target::Windows {
+        return native_windows::install(home, config, launcher, forced);
+    }
     let wanted = script_for(target, launcher, &crate::i18n::t("native.command.missing"));
     let current = fs::read_to_string(&path).ok();
     if let Some(current) = current.as_deref() {
@@ -286,6 +319,10 @@ pub fn uninstall(
     target: Target,
     shell: Option<&str>,
 ) -> Result<CliReport, String> {
+    #[cfg(windows)]
+    if target == Target::Windows {
+        return native_windows::uninstall(home, config);
+    }
     let directory = command_dir(home, target);
     let path = command_path(home, target);
     match fs::read_to_string(&path) {
@@ -704,6 +741,77 @@ mod tests {
         path
     }
 
+    #[test]
+    fn windows_wrapper_disables_delayed_expansion_and_quotes_literal_percent_paths() {
+        let body = script_for(
+            Target::Windows,
+            Path::new("C:\\Users\\test%profile%!\\cialai-desktop.exe"),
+            "missing",
+        );
+        assert!(body.contains("setlocal DisableDelayedExpansion"));
+        assert!(body.contains("test%%profile%%!"));
+        assert!(!body.contains("%*"));
+    }
+    #[test]
+    fn scripts_dispatch_broto_before_launch_and_migrate_v1() {
+        assert!(is_ours("#!/bin/sh\n# cialai-command v1\n"));
+        for target in [Target::MacOs, Target::Linux] {
+            let body = script_for(target, Path::new("/apps/Cialai.app"), "missing");
+            assert!(body.contains(CLI_MARKER));
+            assert!(body.contains("cialai-tunnel"));
+            assert!(!body.contains("@CIALAI_SIDECAR@"));
+            assert!(
+                body.find("broto").unwrap()
+                    < body
+                        .find(if target == Target::Windows {
+                            "tasklist"
+                        } else if target == Target::MacOs {
+                            "if open"
+                        } else {
+                            "APP="
+                        })
+                        .unwrap()
+            );
+        }
+        assert_eq!(
+            sidecar_from(Path::new("/Applications/Cialai.app"), Target::MacOs),
+            PathBuf::from("/Applications/Cialai.app/Contents/MacOS/cialai-tunnel")
+        );
+    }
+    #[cfg(unix)]
+    #[test]
+    fn broto_dispatch_preserves_arguments_and_remote_exit_code() {
+        use std::os::unix::fs::PermissionsExt;
+        let (home, _) = sandbox("broto-dispatch");
+        let sidecar = home.join("cialai-tunnel");
+        fs::write(&sidecar, "#!/bin/sh\nprintf '%s\\n' \"$@\"\nexit 17\n").unwrap();
+        fs::set_permissions(&sidecar, fs::Permissions::from_mode(0o700)).unwrap();
+        for target in [Target::MacOs, Target::Linux] {
+            let script = home.join("cialai");
+            fs::write(
+                &script,
+                script_for(target, &home.join("cialai-desktop"), "missing"),
+            )
+            .unwrap();
+            let output = std::process::Command::new("sh")
+                .arg(script)
+                .args([
+                    "broto",
+                    "rodar",
+                    "machine name",
+                    "echo '$HOME' && false",
+                    "--prazo",
+                    "20m",
+                ])
+                .output()
+                .unwrap();
+            assert_eq!(output.status.code(), Some(17));
+            assert_eq!(
+                String::from_utf8_lossy(&output.stdout),
+                "broto\nrodar\nmachine name\necho '$HOME' && false\n--prazo\n20m\n"
+            );
+        }
+    }
     #[test]
     fn rc_file_escolhe_o_arquivo_do_shell_interativo() {
         let home = Path::new("/home/ana");

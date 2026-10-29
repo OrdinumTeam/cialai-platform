@@ -17,6 +17,7 @@ mod menu;
 pub mod notch;
 pub mod platform;
 mod prefs;
+mod skills;
 pub mod tunnel;
 mod window;
 pub mod workspace;
@@ -123,6 +124,16 @@ pub fn run() {
             commands::splash_ready,
             commands::window_grow,
             commands::pty_spawn,
+            commands::broto_open,
+            commands::broto_list,
+            commands::broto_rename,
+            commands::broto_grant,
+            commands::broto_pair_begin,
+            commands::broto_pair_pending,
+            commands::broto_pair_decide,
+            commands::broto_permission_set,
+            commands::broto_requests,
+            commands::broto_decide,
             commands::pty_write,
             commands::pty_resize,
             commands::pty_view_claim,
@@ -172,6 +183,8 @@ pub fn run() {
             commands::ai_usage,
             commands::ai_install_claude_hook,
             commands::cli_status,
+            commands::skill_status,
+            commands::skill_change,
             commands::cli_install,
             commands::cli_uninstall,
             commands::fs_read_bytes,
@@ -242,6 +255,7 @@ pub fn run() {
                 .app_config_dir()
                 .unwrap_or_else(|_| support.clone());
             std::thread::spawn(move || {
+                skills::refresh(&cli_home);
                 let target = cli::Target::current();
                 let launcher = cli::launcher_from(
                     std::env::var_os("APPIMAGE").as_deref(),

@@ -23,6 +23,7 @@ import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
 import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
+import BrotoApprovals from '../../desktop/BrotoApprovals.jsx';
 import ActivityIndicator from './ActivityIndicator.jsx';
 import SessionIcon from './SessionIcon.jsx';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
@@ -230,6 +231,8 @@ function SessionCard({
       }}
       title={shortPath(session.cwd)}
     >
+      {session.deviceId && session.id?.endsWith(':ia') ? <BrotoApprovals deviceId={session.deviceId} /> : null}
+      {session.deviceId ? <span className="terminais-card__broto" role="img" aria-label={translate('desktop.brotos.origin', { name: session.brotoName || session.deviceId })} title={translate('desktop.brotos.origin', { name: session.brotoName || session.deviceId })} /> : null}
       <div className="terminais-card__row">
         <SessionIcon session={session} size={15} className="terminais-card__icon" />
         {renaming ? (

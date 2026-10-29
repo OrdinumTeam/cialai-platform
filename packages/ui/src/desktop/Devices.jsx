@@ -5,6 +5,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Activity, ChevronRight, CircleAlert, CircleCheck, KeyRound, Pencil, RefreshCw, ShieldOff, Smartphone } from 'lucide-react';
 import { AppModal, DataState, useToast } from '../components/ui.jsx';
 import { useTunnel, tunnelErrorMessage } from './TunnelContext.jsx';
+import Brotos from './Brotos.jsx';
 import AccessPanel, { ReserveValue, directLabel } from './AccessPanel.jsx';
 import { candidateKindLabel, deviceTransport, formatLastSeen, mappingLabel, publicNetworks } from './tunnel-model.js';
 import { getLocale, translate } from './i18n.js';
@@ -59,7 +60,9 @@ function RevokeDialog({ device, onClose, onConfirm }) {
     setBusy(true);
     try { await onConfirm(device.id); onClose(); } catch (_error) { /* the page owns the visible error */ } finally { setBusy(false); }
   };
-  return <AppModal open={Boolean(device)} title={translate('desktop.devices.revokeTitle')} onClose={busy ? undefined : onClose} maxWidth="xs" footer={<><button type="button" className="btn btn-quiet" disabled={busy} onClick={onClose}>{translate('desktop.action.cancel')}</button><button type="button" className="btn btn-danger" disabled={busy} onClick={confirm}>{busy ? translate('desktop.devices.revoking') : translate('desktop.devices.revokeAccess')}</button></>}><div className="mac-revoke"><p>{translate('desktop.devices.revokeDescription', { name: device.name })}</p></div></AppModal>;
+  // Um Broto não entra no estúdio; desvincular é o que acontece com ele.
+  const broto = device.kind === 'broto';
+  return <AppModal open={Boolean(device)} title={translate(broto ? 'desktop.brotos.revokeTitle' : 'desktop.devices.revokeTitle')} onClose={busy ? undefined : onClose} maxWidth="xs" footer={<><button type="button" className="btn btn-quiet" disabled={busy} onClick={onClose}>{translate('desktop.action.cancel')}</button><button type="button" className="btn btn-danger" disabled={busy} onClick={confirm}>{busy ? translate('desktop.devices.revoking') : translate(broto ? 'desktop.brotos.revokeAction' : 'desktop.devices.revokeAccess')}</button></>}><div className="mac-revoke"><p>{translate(broto ? 'desktop.brotos.revokeDescription' : 'desktop.devices.revokeDescription', { name: device.name })}</p></div></AppModal>;
 }
 
 function Advanced({ tunnel, notify, setError }) {
@@ -181,11 +184,13 @@ export default function Devices() {
 
     <AccessPanel heading={false} onPair={pair} onDiagnostics={() => tunnel.setAdvancedOpen(true)} />
 
-    <section className="mac-devices__list-section" aria-labelledby="paired-title"><div className="mac-devices__section-head"><div><h3 id="paired-title">{translate('desktop.devices.pairedPhones')}</h3><p>{translate(tunnel.devices.length === 1 ? 'desktop.devices.authorizedOne' : 'desktop.devices.authorizedMany', { count: tunnel.devices.length })}</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={refresh}><RefreshCw aria-hidden="true" />{translate('desktop.action.refresh')}</button></div>
-      {loading && tunnel.devices.length === 0 ? <DataState type="loading" message={translate('desktop.devices.loading')} /> : null}
-      {!loading && tunnel.devices.length === 0 ? <DataState type="empty" message={translate('desktop.devices.empty')} action={<button type="button" className="btn btn-primary" onClick={pair}>{translate('desktop.pair.generate')}</button>} /> : null}
-      {tunnel.devices.length ? <ul className="mac-device-list">{tunnel.devices.map((device) => <DeviceRow key={device.id} device={device} onRename={rename} onRevoke={setRevoke} />)}</ul> : null}
+    <section className="mac-devices__list-section" aria-labelledby="paired-title"><div className="mac-devices__section-head"><div><h3 id="paired-title">{translate('desktop.devices.pairedPhones')}</h3><p>{translate(tunnel.devices.filter(device => device.kind !== 'broto').length === 1 ? 'desktop.devices.authorizedOne' : 'desktop.devices.authorizedMany', { count: tunnel.devices.filter(device => device.kind !== 'broto').length })}</p></div><button type="button" className="btn btn-secondary btn-sm" disabled={loading} onClick={refresh}><RefreshCw aria-hidden="true" />{translate('desktop.action.refresh')}</button></div>
+      {loading && tunnel.devices.filter(device => device.kind !== 'broto').length === 0 ? <DataState type="loading" message={translate('desktop.devices.loading')} /> : null}
+      {!loading && tunnel.devices.filter(device => device.kind !== 'broto').length === 0 ? <DataState type="empty" message={translate('desktop.devices.empty')} action={<button type="button" className="btn btn-primary" onClick={pair}>{translate('desktop.pair.generate')}</button>} /> : null}
+      {tunnel.devices.filter(device => device.kind !== 'broto').length ? <ul className="mac-device-list">{tunnel.devices.filter(device => device.kind !== 'broto').map((device) => <DeviceRow key={device.id} device={device} onRename={rename} onRevoke={setRevoke} />)}</ul> : null}
     </section>
+
+    <Brotos onRevoke={setRevoke} />
 
     <details className="mac-advanced" ref={advancedRef} open={tunnel.advancedOpen} onToggle={(event) => tunnel.setAdvancedOpen(event.currentTarget.open)}>
       <summary><ChevronRight aria-hidden="true" /><span><strong>{translate('desktop.access.advanced')}</strong><small>{translate('desktop.access.advancedDescription')}</small></span></summary>

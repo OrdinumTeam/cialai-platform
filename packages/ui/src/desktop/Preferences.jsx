@@ -1,3 +1,4 @@
+import CialaiSkill from './CialaiSkill.jsx';
 // SPDX-License-Identifier: Apache-2.0
 // Focused preference areas backed by the complete Rust snapshot.
 
@@ -297,6 +298,7 @@ export default function Preferences({ open, onClose, appearance, section = null 
         </Row> : null}
       </section>
 
+      <CialaiSkill />
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.projects')}</h3>
         <p className="mac-prefs__note">{translate('desktop.preferences.projectsDescription')}</p>
         <div className="mac-prefs__roots" aria-label={translate('desktop.preferences.projectFolders')}>{draft.projectRoots.map((path) => <div className="mac-prefs__root" key={path}><code>{path}</code><button type="button" className="btn btn-quiet btn-sm" disabled={draft.projectRoots.length === 1} onClick={() => setDraft((current) => ({ ...current, projectRoots: removePath(current.projectRoots, path) }))} aria-label={translate('desktop.preferences.removePath', { path })}><Trash2 aria-hidden="true" />{translate('desktop.action.remove')}</button></div>)}</div>

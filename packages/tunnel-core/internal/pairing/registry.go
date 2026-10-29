@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	RegistryVersion       = 2
+	RegistryVersion       = 3
 	TokenRotationInterval = 30 * 24 * time.Hour
 	PreviousTokenWindow   = 24 * time.Hour
 	RevokedRetention      = 30 * 24 * time.Hour
@@ -50,6 +50,7 @@ type DesktopIdentity struct {
 }
 
 type DeviceInput struct {
+	Kind       identity.Role
 	Name       string
 	Model      string
 	Platform   string
@@ -59,23 +60,25 @@ type DeviceInput struct {
 	RemoteAddr string
 }
 
-// Device is the public view of a paired phone. Its id is derived from
+// Device is the public view of a paired phone or Broto. Its id is derived from
 // DeviceKey, the canonical base64url Ed25519 public key proven over TLS.
 type Device struct {
-	ID             string     `json:"id"`
-	Name           string     `json:"name"`
-	Model          string     `json:"model"`
-	Platform       string     `json:"platform"`
-	App            string     `json:"app"`
-	DeviceKey      string     `json:"deviceKey"`
-	TokenIssuedAt  time.Time  `json:"tokenIssuedAt"`
-	TokenRotatedAt *time.Time `json:"tokenRotatedAt,omitempty"`
-	PairedAt       time.Time  `json:"pairedAt"`
-	LastSeenAt     time.Time  `json:"lastSeenAt"`
-	LastTransport  string     `json:"lastTransport"`
-	LastRemoteAddr string     `json:"lastRemoteAddr"`
-	Revoked        bool       `json:"revoked"`
-	RevokedAt      *time.Time `json:"revokedAt,omitempty"`
+	Level          string        `json:"level,omitempty"`
+	Kind           identity.Role `json:"kind"`
+	ID             string        `json:"id"`
+	Name           string        `json:"name"`
+	Model          string        `json:"model"`
+	Platform       string        `json:"platform"`
+	App            string        `json:"app"`
+	DeviceKey      string        `json:"deviceKey"`
+	TokenIssuedAt  time.Time     `json:"tokenIssuedAt"`
+	TokenRotatedAt *time.Time    `json:"tokenRotatedAt,omitempty"`
+	PairedAt       time.Time     `json:"pairedAt"`
+	LastSeenAt     time.Time     `json:"lastSeenAt"`
+	LastTransport  string        `json:"lastTransport"`
+	LastRemoteAddr string        `json:"lastRemoteAddr"`
+	Revoked        bool          `json:"revoked"`
+	RevokedAt      *time.Time    `json:"revokedAt,omitempty"`
 }
 
 type deviceRecord struct {
@@ -129,7 +132,7 @@ func OpenRegistry(paths statedir.Paths, desktop DesktopIdentity, now func() time
 	if header.Version == legacyRegistryVersion {
 		return nil, wrapError("registry_legacy", "Os celulares vinculados em uma versão anterior do Cialai precisam ser pareados de novo.", ErrLegacyRegistry)
 	}
-	if header.Version != RegistryVersion {
+	if header.Version != RegistryVersion && header.Version != 2 {
 		return nil, fmt.Errorf("device registry version %d is not supported", header.Version)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -144,6 +147,12 @@ func OpenRegistry(paths statedir.Paths, desktop DesktopIdentity, now func() time
 		return nil, errors.New("device registry desktop identity does not match")
 	}
 	registry.file.Desktop.Name = desktop.Name
+	for i := range registry.file.Devices {
+		if registry.file.Devices[i].Kind == "" {
+			registry.file.Devices[i].Kind = identity.RolePhone
+		}
+	}
+	registry.file.Version = RegistryVersion
 	if err := registry.validateRecords(); err != nil {
 		return nil, err
 	}
@@ -152,9 +161,10 @@ func OpenRegistry(paths statedir.Paths, desktop DesktopIdentity, now func() time
 
 func (registry *Registry) validateRecords() error {
 	ids := make(map[string]bool, len(registry.file.Devices))
+	keys := make(map[string]bool, len(registry.file.Devices))
 	for _, device := range registry.file.Devices {
-		derived, keyErr := deviceIDForKey(device.DeviceKey)
-		if keyErr != nil || device.ID != derived || !validHash(device.TokenHash) || ids[device.ID] {
+		derived, keyErr := deviceIDForKind(device.DeviceKey, device.Kind)
+		if keyErr != nil || device.ID != derived || !validHash(device.TokenHash) || ids[device.ID] || keys[device.DeviceKey] {
 			return errors.New("device registry contains an invalid or duplicate record")
 		}
 		if !validTransport(device.LastTransport) || !validRemoteAddr(device.LastRemoteAddr) {
@@ -164,22 +174,33 @@ func (registry *Registry) validateRecords() error {
 			return errors.New("device registry contains an invalid previous token hash")
 		}
 		ids[device.ID] = true
+		keys[device.DeviceKey] = true
 	}
 	return nil
 }
 
 func deviceIDForKey(deviceKey string) (string, error) {
+	return deviceIDForKind(deviceKey, identity.RolePhone)
+}
+
+func deviceIDForKind(deviceKey string, kind identity.Role) (string, error) {
+	if kind != identity.RolePhone && kind != identity.RoleBroto {
+		return "", errors.New("invalid device kind")
+	}
 	public, err := identity.ParsePublicKey(deviceKey)
 	if err != nil {
 		return "", err
 	}
-	return identity.DeriveID(identity.RolePhone, public)
+	return identity.DeriveID(kind, public)
 }
 
-// Pair records a phone whose key was proven over TLS and whose pairing session
+// Pair records a device whose key was proven over TLS and whose pairing session
 // was consumed. Pairing the same key again keeps the device id and pairedAt,
 // clears a revocation and replaces the token.
 func (registry *Registry) Pair(input DeviceInput) (Device, string, error) {
+	if input.Kind == "" {
+		input.Kind = identity.RolePhone
+	}
 	deviceID, err := validateDeviceInput(input)
 	if err != nil {
 		return Device{}, "", err
@@ -188,12 +209,17 @@ func (registry *Registry) Pair(input DeviceInput) (Device, string, error) {
 	defer registry.mu.Unlock()
 	now := registry.now().UTC()
 	index := registry.indexLocked(deviceID)
+	for _, existing := range registry.file.Devices {
+		if existing.DeviceKey == input.DeviceKey && existing.Kind != input.Kind {
+			return Device{}, "", errors.New("device key already belongs to another kind")
+		}
+	}
 	token, hash, err := registry.issueTokenLocked(deviceID)
 	if err != nil {
 		return Device{}, "", err
 	}
 	device := Device{
-		ID: deviceID, Name: input.Name, Model: input.Model, Platform: input.Platform, App: input.App,
+		ID: deviceID, Kind: input.Kind, Level: "confirm", Name: input.Name, Model: input.Model, Platform: input.Platform, App: input.App,
 		DeviceKey: input.DeviceKey, TokenIssuedAt: now, PairedAt: now, LastSeenAt: now,
 		LastTransport: input.Transport, LastRemoteAddr: input.RemoteAddr,
 	}
@@ -218,7 +244,7 @@ func validateDeviceInput(input DeviceInput) (string, error) {
 	if !validName(input.Name, 48) || !validName(input.Model, 64) || !regexpToken(input.Platform, 16) || !validName(input.App, 32) {
 		return "", errors.New("invalid device identity")
 	}
-	deviceID, err := deviceIDForKey(input.DeviceKey)
+	deviceID, err := deviceIDForKind(input.DeviceKey, input.Kind)
 	if err != nil {
 		return "", errors.New("invalid device public key")
 	}
@@ -279,7 +305,11 @@ func (registry *Registry) issueTokenLocked(deviceID string) (string, string, err
 	if err != nil {
 		return "", "", err
 	}
-	token := "cdt1." + deviceID + "." + secret
+	prefix := "cdt1."
+	if strings.HasPrefix(deviceID, "bro_") {
+		prefix = "cbt1."
+	}
+	token := prefix + deviceID + "." + secret
 	return token, tokenHash(token), nil
 }
 
@@ -303,14 +333,20 @@ func hashesEqual(left, right string) bool {
 // RegisteredKey implements identity.KeyRegistry: it maps a canonical phone
 // public key to its device id, only while the device is not revoked.
 func (registry *Registry) RegisteredKey(publicKey string) (string, bool) {
+	device, ok := registry.RegisteredDevice(publicKey)
+	return device.ID, ok
+}
+
+// RegisteredDevice returns the persisted role, never a role claimed by a peer.
+func (registry *Registry) RegisteredDevice(publicKey string) (Device, bool) {
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	for _, device := range registry.file.Devices {
 		if device.DeviceKey == publicKey && !device.Revoked {
-			return device.ID, true
+			return device.Device, true
 		}
 	}
-	return "", false
+	return Device{}, false
 }
 
 // RevokedKey reports whether publicKey belongs to a revoked device that was not
@@ -329,14 +365,20 @@ func (registry *Registry) RevokedKey(publicKey string) bool {
 
 func (registry *Registry) Authenticate(token string) (Device, bool) {
 	parts := strings.Split(token, ".")
-	if len(parts) != 3 || parts[0] != "cdt1" || !validEncodedID(parts[1], "dev_", 16) || !validRawURLBytes(parts[2], 32) {
+	if len(parts) != 3 || !validRawURLBytes(parts[2], 32) {
+		return Device{}, false
+	}
+	kind := identity.RolePhone
+	if parts[0] == "cbt1" && validEncodedID(parts[1], "bro_", 16) {
+		kind = identity.RoleBroto
+	} else if parts[0] != "cdt1" || !validEncodedID(parts[1], "dev_", 16) {
 		return Device{}, false
 	}
 	presentedHash := tokenHash(token)
 	registry.mu.Lock()
 	defer registry.mu.Unlock()
 	device := registry.activeLocked(parts[1])
-	if device == nil {
+	if device == nil || device.Kind != kind {
 		return Device{}, false
 	}
 	accepted := hashesEqual(device.TokenHash, presentedHash)
@@ -508,4 +550,15 @@ func cloneRegistry(source registryFile) registryFile {
 	clone := source
 	clone.Devices = append([]deviceRecord(nil), source.Devices...)
 	return clone
+}
+
+func (r *Registry) SetBrotoLevel(id, level string) error {
+	if level != "read" && level != "confirm" && level != "free" {
+		return errors.New("invalid permission")
+	}
+	d, ok := r.Get(id)
+	if !ok || d.Kind != identity.RoleBroto || d.Revoked {
+		return errors.New("Broto not found")
+	}
+	return r.update(id, true, func(d *deviceRecord) { d.Level = level })
 }

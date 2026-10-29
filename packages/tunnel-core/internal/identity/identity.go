@@ -30,13 +30,13 @@ const ALPN = "cialai/1"
 // offers it, because a QUIC session carries its control stream inside.
 const ControlALPN = "cialai-control/1"
 
-// Role selects the id prefix: desktops use d_ and phones use dev_, matching the
-// identifiers already accepted by the pairing registry.
+// Role selects the id prefix: desktops use d_, phones dev_ and Brotos bro_.
 type Role string
 
 const (
 	RoleDesktop Role = "desktop"
 	RolePhone   Role = "phone"
+	RoleBroto   Role = "broto"
 )
 
 const idBytes = 16
@@ -62,6 +62,8 @@ func (role Role) prefix() (string, error) {
 		return "d_", nil
 	case RolePhone:
 		return "dev_", nil
+	case RoleBroto:
+		return "bro_", nil
 	default:
 		return "", fmt.Errorf("unknown identity role %q", role)
 	}

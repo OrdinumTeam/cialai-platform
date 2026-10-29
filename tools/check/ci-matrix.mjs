@@ -226,14 +226,15 @@ const OWNER_GUARD = `contains(fromJSON('["ordinum-br","focoamorim"]'), github.tr
 const workflowsDir = `${root}/.github/workflows`;
 for (const file of readdirSync(workflowsDir).filter((name) => /\.ya?ml$/.test(name))) {
   const flow = yaml.load(readFileSync(`${workflowsDir}/${file}`, 'utf8'));
-  const release = file === 'release.yml';
+  const broto = file === 'release-broto.yml';
+  const release = file === 'release.yml' || broto;
   assert.deepEqual(Object.keys(flow.on).sort(), release ? ['push', 'workflow_dispatch'] : ['workflow_dispatch'], `${file} só roda por disparo manual`);
-  if (release) assert.deepEqual(flow.on.push, { tags: ['v*'] }, 'a release só dispara sozinha pela tag');
+  if (release) assert.deepEqual(flow.on.push, { tags: [broto ? 'broto-v*' : 'v*'] }, 'a release só dispara sozinha pela tag própria');
   for (const [name, job] of Object.entries(flow.jobs)) {
     if (job.needs) {
       assert.doesNotMatch(job.if ?? '', /always\(\)|cancelled\(\)|failure\(\)/, `${file} ${name} não pode rodar com o job anterior pulado`);
     } else {
-      assert.equal(job.if, OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
+      assert.equal(job.if, broto ? `startsWith(github.ref, 'refs/tags/broto-v') && ${OWNER_GUARD}` : OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
     }
   }
 }

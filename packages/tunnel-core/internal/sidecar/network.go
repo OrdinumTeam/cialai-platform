@@ -95,6 +95,7 @@ type NetworkConfig struct {
 
 // startConfig is everything one network run needs from the runtime.
 type startConfig struct {
+	broto           func(string, net.Conn)
 	paths           statedir.Paths
 	logger          *logx.Logger
 	identity        *identity.Identity
@@ -180,7 +181,7 @@ func startNetwork(config startConfig) (*network, error) {
 	// The edge is built before any socket opens, so an invalid static
 	// directory or bridge URL fails without touching the network.
 	server, err := edge.New(edge.Config{
-		StaticDir: config.staticDir, BridgeURL: config.bridgeURL, ProxySecret: config.proxySecret,
+		Broto: config.broto, StaticDir: config.staticDir, BridgeURL: config.bridgeURL, ProxySecret: config.proxySecret,
 		Desktop: config.desktop, Reach: n.reach, Sessions: config.sessions, Devices: config.devices,
 		RequireApproval: config.requireApproval, Approver: config.approver, OnEvent: config.onEvent,
 	})
@@ -603,8 +604,12 @@ func (n *network) acceptOnionControls(listener *onion.Listener) {
 // control connection. Restricted direct sessions never get one and end the
 // wait when they close.
 func (n *network) acceptControl(session transport.ControlSession) {
+	device, ok := n.config.devices.RegisteredDevice(session.PeerKey())
+	if !ok {
+		return
+	}
 	conn, err := rendezvous.Accept(n.ctx, session, rendezvous.Config{
-		Role: identity.RoleDesktop, LocalKey: n.config.identity.PublicKeyString(), Puncher: n.endpoint,
+		Role: identity.RoleDesktop, PeerRole: device.Kind, LocalKey: n.config.identity.PublicKeyString(), Puncher: n.endpoint,
 		Handler: rendezvous.Handler{
 			PathReport: func(report rendezvous.PathReport) { n.pathReport(session, report) },
 			PunchServed: func(result rendezvous.PunchResult) {

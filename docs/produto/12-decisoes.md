@@ -56,6 +56,20 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 048 | Preparado | Teclado especial e comandos rápidos na página do terminal, com sequências conferidas contra o xterm e em PTY local com bash, less, vim, Claude Code e Codex; conferência em aparelho pendente |
 | 051 | Preparado | Primeiro acesso no início com convite ilustrado e as abas que dependem de computador travadas por uma guarda única na navegação; testes passam, conferência em aparelho pendente |
 | 053 | Pendente | Escopo inicial do Cialai Pro registrado no documento 17; Multi-Device Sessions e Agents Manager sem código |
+| 058 | Preparado | Cialai Broto como terceira persona; execução em docs/broto/08-roteiro.md |
+| 059 | Preparado | Identidade e pareamento próprios do Broto; execução em docs/broto/08-roteiro.md |
+| 060 | Preparado | O hospedeiro não recebe ordens de um Broto; execução em docs/broto/08-roteiro.md |
+| 061 | Preparado | Windows do Broto sem Authenticode; execução em docs/broto/08-roteiro.md |
+| 062 | Preparado | Todo celular pareado comanda os Brotos; execução em docs/broto/08-roteiro.md |
+| 063 | Preparado | Lista Brotos ligando e janela de acompanhamento; execução em docs/broto/08-roteiro.md |
+| 064 | Preparado | Confirmação do Broto segura só a IA; a pessoa opera direto; execução em docs/broto/08-roteiro.md |
+| 065 | Preparado | CLI e skill do hospedeiro; aceite integrado em BRO-022 |
+| 066 | Preparado | Execução em fluxo e card IA por Broto; prova visual remota pendente |
+| 067 | Preparado | Transferência por blocos com hash e raízes locais; prova remota pendente |
+| 068 | Preparado | Aprovação global e liberação temporária em memória; aceite integrado pendente |
+| 069 | Proposta | Lançador gráfico do Broto Windows aguarda escolha do usuário, sem implementação |
+| 070 | Proposta | Espera por saída com fronteira de comando aguarda definição de contrato, sem filtro de eco |
+| 071 | Preparado | Prévia Broto Windows e Linux autorizada junto do Cialai 0.5.0; publicação em validação |
 
 ## 001 Nome Cialai
 
@@ -451,3 +465,179 @@ Alternativa rejeitada: exigir Cmd ou Ctrl no clique, como o VS Code. O app já a
 Consequência: a conta de célula e de linha quebrada é a mesma do `WebLinkProvider` do xterm, que trabalha só com a API pública do terminal. Um teste unitário cobre a varredura e a resolução, inclusive o caminho do Windows; um teste de integração dirige o provedor com um buffer de células fiel, cobrindo range, quebra de linha, filtro pela existência e a linha e a coluna no clique. A paridade com o xterm de verdade e o clique que abre a aba foram conferidos no app em dev.
 
 Correção na 0.4.3, 27/10/2026: a 0.4.2 saiu com dois buracos porque foi provada só no app em dev, onde o `fs.stat` do demo sempre diz que o arquivo existe, e com caminhos em ASCII. No app real, letra acentuada cortava o token, `Logística.pptx` virava `stica.pptx`, e nome com espaço não era tratado. O reconhecedor passou a usar `\p{L}` e `\p{N}` com a flag `u`, então qualquer letra conta como parte do nome; para o espaço, o âncora com a extensão é esticado para a esquerda por cima dos espaços e só o trecho que é um arquivo de verdade no disco vira link, decidido pelo próprio disco. O teste que faltava foi escrito: cria arquivos reais com acento e espaço no nome e confere a resolução, no lugar do mock permissivo.
+
+## 058 Cialai Broto como terceira persona
+
+Data: 28/10/2026.
+
+Contexto: A execução em outra máquina precisa de uma ponta separada do estúdio.
+
+Decisão: Programa gratuito e aberto, com um hospedeiro por Broto e vários Brotos por hospedeiro. Não equivale ao Multi-Device Sessions do Pro.
+
+Alternativa rejeitada: Transformar o Broto em outro estúdio completo.
+
+Consequência: A implementação segue o checklist único em docs/broto/08-roteiro.md.
+
+## 059 Identidade e pareamento próprios do Broto
+
+Data: 28/10/2026.
+
+Contexto: Uma identidade de celular teria acesso aos terminais do hospedeiro.
+
+Decisão: Papel broto, id bro_, token cbt1 e payload CIALAIB2. O registro v3 guarda kind e lê registros v2 sem kind como phone.
+
+Alternativa rejeitada: Usar o mesmo papel e código do celular.
+
+Consequência: A chave tem um único papel no registro; o payload próprio e a aprovação obrigatória estão preparados em BRO-003.
+
+## 060 O hospedeiro não recebe ordens de um Broto
+
+Data: 28/10/2026.
+
+Contexto: A ponte atual permite controlar terminais locais.
+
+Decisão: O papel persistido limita o Broto à rota /broto de RPC reversa. Celulares não acessam essa rota.
+
+Alternativa rejeitada: Confiar no papel declarado pelo cliente ou numa guarda da interface.
+
+Consequência: A borda recusa acesso cruzado antes de encaminhar à ponte. A RPC negocia hello versão 1 e só aceita comandos sujeitos às permissões do hospedeiro e ao teto local.
+
+## 061 Windows do Broto sem Authenticode
+
+Data: 28/10/2026.
+
+Contexto: O desenho aprovado prevê distribuição Windows sem certificado de código.
+
+Decisão: Distribuir sem Authenticode com somas assinadas, atestado de proveniência, SBOM e actions fixadas por SHA.
+
+Alternativa rejeitada: Distribuir somente com soma sem assinatura.
+
+Consequência: O pipeline e sua comprovação continuam pendentes; nenhuma release é autorizada pela execução local.
+
+## 062 Todo celular pareado comanda os Brotos
+
+Data: 28/10/2026.
+
+Contexto: O celular espelha o estúdio do hospedeiro.
+
+Decisão: Celulares vinculados podem comandar os Brotos pelas permissões do hospedeiro, sem conexão direta entre celular e Broto.
+
+Alternativa rejeitada: Criar pareamento separado de cada celular com cada Broto.
+
+Consequência: O roteamento de sessões remotas depende de BRO-008.
+
+## 063 Lista Brotos ligando e janela de acompanhamento
+
+Data: 28/10/2026.
+
+Contexto: O código precisa ser levado até outra máquina e a aprovação pode demorar.
+
+Decisão: Código aleatório de uso único válido por dez minutos, preso ao primeiro aparelho. Aprovação obrigatória na lista Brotos ligando. Pausar recusa novas ordens sem desfazer vínculo; Desconectar esquece o hospedeiro e exige código novo.
+
+Alternativa rejeitada: Aprovação automática pelo código e espera HTTP longa como no celular.
+
+Consequência: Pedido guardado até decisão ou expiração, com janela de monitoramento e controle local. Desenvolvimento local autorizado em 28/10/2026 pelo pedido de execução do plano.
+
+## 064 Confirmação do Broto segura a IA, não a pessoa
+
+Data: 28/10/2026.
+
+Contexto: No primeiro teste entre o Mac e a VM, o Abrir terminal da própria pessoa caiu na lista de comandos aguardando confirmação, e cada tecla digitada também cairia.
+
+Decisão: No nível pedir confirmação, só o que a IA pede espera o sim da pessoa no hospedeiro. A pessoa no hospedeiro ou no celular opera direto, e redimensionar terminal nunca pede confirmação. Abrir terminal leva à tela de Terminais com a sessão do Broto selecionada, marcada pelo símbolo do Broto no card.
+
+Alternativa rejeitada: Confirmar cada ação de qualquer autor, inclusive cada tecla da pessoa.
+
+Consequência: O nível só leitura continua recusando a pessoa e a IA. A atividade do Broto deixa de registrar as consultas de leitura do hospedeiro e junta a digitação seguida numa linha.
+
+## 065 CLI e skill para comandar Brotos
+
+Data: 28/10/2026.
+
+Contexto: A IA precisa comandar aparelhos sem configuração obrigatória de servidor MCP.
+
+Decisão: O caminho principal é cialai broto, ensinado por uma skill cialai instalada a pedido. O MCP continua disponível.
+
+Alternativa rejeitada: Registrar MCP obrigatoriamente ou injetar instruções fixas em toda conversa.
+
+Consequência: O comando usa o IPC privado, sempre com autor IA, e exige o Cialai aberto.
+
+## 066 Execução em fluxo e card IA
+
+Data: 28/10/2026.
+
+Contexto: A pessoa precisa acompanhar comandos da IA sem disputar o terminal interativo.
+
+Decisão: Cada Broto tem uma sessão virtual de leitura com comandos e saída em fluxo; Ctrl C cancela a execução.
+
+Alternativa rejeitada: Injetar comandos e marcadores no terminal da pessoa.
+
+Consequência: Execução ganha eventos e cancelamento, mantendo resumo limitado na resposta final e histórico apenas em memória.
+
+## 067 Arquivos pelo túnel
+
+Data: 28/10/2026.
+
+Contexto: Transferir arquivos por comandos de shell dificulta integridade e confinamento.
+
+Decisão: Verbos próprios transferem blocos com SHA256, limitados pelas raízes e pela política local, com aprovação por arquivo.
+
+Alternativa rejeitada: Colar base64 no terminal remoto.
+
+Consequência: Recebimento parcial usa arquivo temporário; hash é conferido antes da entrega e sobrescrita exige intenção explícita.
+
+## 068 Aprovação global com prazo
+
+Data: 28/10/2026.
+
+Contexto: Pedir confirmação somente em Dispositivos interrompe o acompanhamento em Terminais.
+
+Decisão: Pedidos aparecem no topo do app e no card IA. A pessoa pode liberar aquele Broto por 15 minutos e encerrar antes.
+
+Alternativa rejeitada: Liberar sem prazo ou exigir navegação para Dispositivos.
+
+Consequência: A liberação fica somente em memória e respeita pausa, revogação e nível só acompanhar.
+
+
+## 069 Proposta de lançador gráfico do Broto no Windows
+
+Data: 28/10/2026.
+
+Contexto: No ensaio pela ponte MCP, exec executou na Session 0 enquanto a conta comum estava no console em outra sessão. O monitor Tauri já roda na sessão interativa, mas não recebe ordens de lançamento gráfico. O contrato atual e a limitação estão em [MCP](../broto/06-mcp.md#aplicativos-gráficos-no-windows).
+
+Proposta, ainda sem decisão: escolher uma das opções abaixo antes de implementar. Todas exigem um verbo explícito, a autorização normal do hospedeiro, o teto local, autoria e registro de atividade nas duas pontas. A escolha da sessão precisa ser explícita; ausência de usuário conectado ou de monitor deve retornar erro. Um Broto continua sem direito de comandar o hospedeiro.
+
+| Opção | Segurança e operação | Custo estimado |
+| --- | --- | --- |
+| Monitor Tauri como lançador na própria sessão | Recomendação para avaliação. Evita transportar token de usuário. Exige IPC privado autenticado entre serviço e monitor, vínculo à mesma conta e sessão, IDs contra repetição, validade curta e confirmação da execução. Monitor fechado ou mais de uma sessão exige tratamento explícito. Não deve aceitar origem da WebView como autorização | Médio, com protocolo, testes de reconexão, múltiplas sessões e auditoria |
+| Agente dedicado por usuário na sessão interativa | Isola o lançamento da janela do monitor e permite rodar sem a janela. Acrescenta um processo persistente, instalação por login, atualização e superfície de IPC com as mesmas proteções | Alto, com empacotamento e ciclo de vida próprios |
+| Serviço transfere ou obtém token para criar processo na sessão gráfica | Exige gestão de tokens, desktop e ACLs. Amplia a área sensível e pode exigir privilégios que o executor remove por segurança. As tentativas de laboratório não aprovaram esse caminho | Alto e com revisão de segurança adicional |
+| Manter execução de terminal e orientar abertura local pela pessoa | Mantém o contrato atual. Não atende automação de janela, mas não introduz novo executor ou protocolo | Baixo |
+
+Alternativa rejeitada para adoção automática: usar registro, início e remoção de tarefa agendada como se fosse o lançador oficial. O ensaio demonstra utilidade como contorno, mas não resolve limpeza após queda, foco de janela ou ciclo de vida de uma API suportada.
+
+Consequência: nenhuma opção foi implementada ou autorizada por esta proposta. A descrição das ferramentas informa a limitação de Session 0 enquanto o usuário escolhe.
+
+## 070 Proposta de espera com fronteira de comando
+
+Data: 28/10/2026.
+
+Contexto: A leitura bruta do PTY inclui o eco da entrada, e um marcador na própria linha pode satisfazer esperar_texto antes da saída desejada. O offset separa histórico, mas não separa o eco futuro da resposta.
+
+Proposta, ainda sem decisão: avaliar integração de shell optativa que publique início e fim de comando com um ID e offsets reconhecidos pelo Broto. Uma operação futura poderia esperar somente dentro dessa fronteira, com erro explícito quando o shell não oferecer a capacidade. O protocolo precisaria cobrir shell comum, PowerShell, cmd e programas que assumem o terminal, além de entrada simultânea pela pessoa. A saída remota continuaria sendo dado não confiável; um marcador forjado por um programa não pode conceder permissão ou executar ações.
+
+Alternativas: um verbo de escrita que devolve offset torna a coleta posterior mais simples, mas sozinho não exclui eco que chega depois; um executor separado por comando já existe em exec e deve ser preferido quando não houver interação. Filtrar linhas iguais à entrada é rejeitado como solução geral, pois pode apagar saída legítima e falha com edição, sequências ANSI e eco parcial.
+
+Consequência: a semântica atual de esperar_texto permanece busca no fluxo bruto, documentada no [MCP](../broto/06-mcp.md#prazos-e-eco-do-terminal). Não foram implementados filtro heurístico, marcador montado em pedaços ou alteração silenciosa do shell da pessoa.
+
+## 071 Distribuição inicial do Broto para Windows e Linux
+
+Data: 29/10/2026.
+
+Contexto: o usuário autorizou preparar, commitar e publicar o Cialai 0.5.0 e os instaladores iniciais do Broto, com uma seção simples na home e uma página própria no site. Pediu deixar o Broto para macOS fora desta etapa.
+
+Decisão: distribuir o Broto 0.1.0 como prévia independente para Windows x64 e Linux x64, sem submissão a lojas. Publicar NSIS, DEB e RPM diretamente, com integridade assinada por uma chave própria, arquivos de atualização e SBOM. O Cialai 0.5.0 mantém seus três sistemas desktop e seu canal de atualização. Os aplicativos móveis não são enviados novamente nesta entrega.
+
+Alternativa rejeitada: exigir o instalador macOS do Broto antes da prévia ou misturar sua tag e seu manifesto com os do hospedeiro.
+
+Consequência: a tag broto-v0.1.0 não substitui latest do Cialai. A página do Broto mostra somente os instaladores desta etapa. Provas físicas, aceite BRO-022 e distribuição macOS continuam separados do estado desta prévia.

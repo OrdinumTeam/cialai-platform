@@ -72,6 +72,7 @@ type ReachCard struct {
 
 // Config wires the edge. The transport listeners are handed to Serve.
 type Config struct {
+	Broto       func(string, net.Conn)
 	StaticDir   string
 	BridgeURL   string
 	ProxySecret string
@@ -222,6 +223,73 @@ func (server *Server) ServeHTTP(response http.ResponseWriter, request *http.Requ
 	session := sessionOf(request)
 	if session == nil || !server.registered(session) {
 		server.serveRestricted(response, request, session)
+		return
+	}
+	device, ok := server.config.Devices.RegisteredDevice(session.PeerKey())
+	if !ok {
+		server.serveRestricted(response, request, session)
+		return
+	}
+	if device.Kind == identity.RoleBroto {
+		if request.URL.Path == "/pair" && request.Method == http.MethodPost {
+			server.servePair(response, request, session)
+			return
+		}
+		if request.URL.Path != "/broto" {
+			server.writeProblem(response, http.StatusForbidden, "device_role", "Este dispositivo não pode acessar esta rota.")
+			return
+		}
+		tokenDevice, authenticated := server.config.Devices.Authenticate(bearerToken(request.Header.Get("Authorization")))
+		if !authenticated || tokenDevice.ID != device.ID || tokenDevice.Kind != identity.RoleBroto {
+			server.writeProblem(response, http.StatusUnauthorized, "device_unauthorized", "O token deste dispositivo não foi aceito.")
+			return
+		}
+		if server.config.Broto == nil {
+			server.writeProblem(response, 503, "broto_unavailable", "O canal do Broto ainda não está disponível.")
+			return
+		}
+		if request.Method != "GET" || request.Header.Get("Upgrade") != "cialai-broto" || !headerContainsToken(request.Header.Get("Connection"), "upgrade") {
+			server.writeProblem(response, 400, "upgrade_required", "Esta rota exige o canal do Broto.")
+			return
+		}
+		nextToken := ""
+		if server.config.Devices.TokenRotationDue(device.ID) {
+			var err error
+			nextToken, err = server.config.Devices.RotateToken(device.ID)
+			if err != nil {
+				server.writeProblem(response, 500, "token_rotation", "Falha ao renovar o vínculo.")
+				return
+			}
+		}
+		if err := server.config.Devices.MarkSeen(device.ID, session.Transport(), sessionRemoteAddr(session)); err != nil {
+			server.writeProblem(response, 500, "device_state", "Falha ao atualizar vínculo.")
+			return
+		}
+		h, ok := response.(http.Hijacker)
+		if !ok {
+			server.writeProblem(response, 500, "hijack_failed", "Canal indisponível.")
+			return
+		}
+		conn, rw, err := h.Hijack()
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+		header := "HTTP/1.1 101 Switching Protocols\r\nConnection: Upgrade\r\nUpgrade: cialai-broto\r\n"
+		if nextToken != "" {
+			header += "X-Cialai-Token-Next: " + nextToken + "\r\n"
+		}
+		if _, err = rw.WriteString(header + "\r\n"); err != nil {
+			return
+		}
+		if rw.Flush() != nil {
+			return
+		}
+		server.config.Broto(device.ID, &bufferedBrotoConn{Conn: conn, reader: rw.Reader})
+		return
+	}
+	if device.Kind != identity.RolePhone || request.URL.Path == "/broto" {
+		server.writeProblem(response, http.StatusForbidden, "device_role", "Este dispositivo não pode acessar esta rota.")
 		return
 	}
 	switch request.URL.Path {
@@ -440,6 +508,7 @@ type PairDevice struct {
 }
 
 type pairRequest struct {
+	Kind    string     `json:"kind,omitempty"`
 	Version int        `json:"v"`
 	PairID  string     `json:"pairId"`
 	Secret  string     `json:"secret"`
@@ -455,7 +524,8 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 	fail := func(pairID string, status int, code, message string) {
 		server.failPair(response, session, pairID, status, code, message)
 	}
-	if !server.allowPair(pairOrigin(session)) {
+	charge, allowed := server.chargePair(pairOrigin(session))
+	if !allowed {
 		fail("", http.StatusTooManyRequests, "pair_rate_limited", "Muitas tentativas de pareamento. Gere um novo código e tente novamente.")
 		return
 	}
@@ -475,6 +545,18 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 	// same key is also refused.
 	if input.Device.PublicKey != session.PeerKey() {
 		fail(input.PairID, http.StatusForbidden, "pair_key_mismatch", "A chave do aparelho não confere com a conexão segura.")
+		return
+	}
+	if input.Kind == "broto" {
+		server.serveBrotoPair(response, request, session, input, charge)
+		return
+	}
+	if input.Kind != "" && input.Kind != "phone" {
+		fail(input.PairID, 400, "pair_role", "Papel inválido.")
+		return
+	}
+	if device, ok := server.config.Devices.RegisteredDevice(session.PeerKey()); ok && device.Kind == identity.RoleBroto {
+		fail(input.PairID, 403, "pair_role", "Use o fluxo de Broto.")
 		return
 	}
 	if _, err := server.config.Sessions.Verify(input.PairID, input.Secret); err != nil {
@@ -580,6 +662,11 @@ func addressHost(remoteAddr string) string {
 }
 
 func (server *Server) allowPair(origin string) bool {
+	_, allowed := server.chargePair(origin)
+	return allowed
+}
+
+func (server *Server) chargePair(origin string) (time.Time, bool) {
 	now := server.config.Now()
 	server.rateMu.Lock()
 	defer server.rateMu.Unlock()
@@ -589,11 +676,23 @@ func (server *Server) allowPair(origin string) bool {
 	}
 	if window.count >= MaxPairingsPerMin {
 		server.rates[origin] = window
-		return false
+		return window.started, false
 	}
 	window.count++
 	server.rates[origin] = window
-	return true
+	return window.started, true
+}
+
+// A valid, key-bound approval poll is not a new pairing attempt. Keep invalid
+// codes and requests charged while allowing the person time to approve.
+func (server *Server) releasePairCharge(origin string, started time.Time) {
+	server.rateMu.Lock()
+	defer server.rateMu.Unlock()
+	window := server.rates[origin]
+	if window.started.Equal(started) && window.count > 0 {
+		window.count--
+		server.rates[origin] = window
+	}
 }
 
 func pairingErrorStatus(err error) (int, string) {
@@ -647,6 +746,10 @@ func (server *Server) serveUpgrade(response http.ResponseWriter, request *http.R
 	}
 	if device.DeviceKey != session.PeerKey() {
 		server.writeProblem(response, http.StatusForbidden, "device_identity_mismatch", "A identidade desta conexão não corresponde ao dispositivo.")
+		return
+	}
+	if device.Kind != identity.RolePhone {
+		server.writeProblem(response, http.StatusForbidden, "device_role", "Este dispositivo não pode acessar esta rota.")
 		return
 	}
 	remoteAddr := sessionRemoteAddr(session)

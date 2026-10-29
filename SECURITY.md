@@ -49,3 +49,27 @@ Since the 0.2.0 preview the computer and the phone connect without any server ru
 The Tor Expert Bundle, tor-android and Tor.framework are third party components. Vulnerabilities in Tor or in other upstream components should also be reported to their maintainers when appropriate, after coordinating disclosure for any Cialai specific impact.
 
 The Headscale mode of the 0.1.x previews remains in the repository only as inert code until device validation of the new connectivity. `infra/headscale` is kept as history and is not part of the product path.
+
+## Broto security scope
+
+Broto is a remote access agent running under the local account. Treat its pairing
+code and credentials as secrets. The host authorizes each Broto independently;
+a phone pairing does not grant Broto permissions. Revocation must close active
+connections. A paired host can exercise only the local capability ceiling.
+Read-only access still exposes file contents and metadata. Command execution
+can read credentials accessible to the service account, so use a dedicated
+unprivileged account and restricted project roots.
+
+The local control socket belongs to the service user and must not be exposed
+over TCP. Local administrators and processes running under that user remain
+outside this isolation boundary. Pausing blocks new operations; it does not
+undo completed writes. Disconnecting removes the relationship and must stop
+remote access. Audit records must omit pairing codes, tokens and file contents.
+MCP tools inherit the same permission checks and require host authorization.
+
+Broto release manifests require a separate minisign key. Installers verify the
+signed manifest before copying files, reject unknown payload files and require
+codesign plus Gatekeeper assessment on macOS. Windows builds currently have no
+Authenticode signature and can trigger SmartScreen. A verified release identity
+does not make remote commands safe. No cross-platform service installation,
+notarized release, automatic updater or soak result is claimed by local fixtures.

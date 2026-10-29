@@ -1,5 +1,8 @@
 #!/bin/sh
-# cialai-command v1
+# cialai-command v2
+if [ "${1:-}" = "broto" ]; then
+  exec @CIALAI_SIDECAR@ "$@"
+fi
 # Abre o Cialai. Gerado pelo proprio app, apague este arquivo para remover.
 #
 # Nao ha equivalente ao `open` do macOS, entao o executavel e chamado direto.

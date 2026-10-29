@@ -1,0 +1,4 @@
+/dist/
+/src-tauri/gen/
+/src-tauri/target/
+/src-tauri/resources/service/

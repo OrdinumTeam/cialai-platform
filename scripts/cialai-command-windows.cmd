@@ -1,5 +1,6 @@
 @echo off
-rem cialai-command v1
+rem cialai-command v2
+setlocal DisableDelayedExpansion
 rem Abre o Cialai. Gerado pelo proprio app, apague este arquivo para remover.
 rem
 rem `start` desgruda do console, que volta na hora. Chamar o executavel direto
@@ -10,3 +11,5 @@ if not exist @CIALAI_LAUNCHER@ (
   exit /b 1
 )
 start "" @CIALAI_LAUNCHER@
+
+exit /b 0

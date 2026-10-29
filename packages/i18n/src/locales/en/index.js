@@ -6,5 +6,6 @@ import mobile from './mobile.js';
 import desktopNative from './desktop-native.js';
 import terminal from './terminal.js';
 import agents from './agents.js';
+import broto from './broto.js';
 
-export default Object.freeze({ ...common, ...shared, ...desktop, ...mobile, ...desktopNative, ...terminal, ...agents });
+export default Object.freeze({ ...common, ...shared, ...desktop, ...mobile, ...desktopNative, ...terminal, ...agents, ...broto });

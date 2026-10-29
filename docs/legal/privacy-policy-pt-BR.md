@@ -70,3 +70,22 @@ Mudanças relevantes nesta política serão publicadas com uma nova data de vig�
 Contato de privacidade: **A CONFIRMAR ANTES DA PUBLICAÇÃO**
 
 Até a confirmação do contato dedicado, use o canal privado descrito no arquivo `SECURITY.md` do repositório.
+
+## Cialai Broto
+
+O Broto conecta outra máquina a um hospedeiro autorizado pela pessoa usuária.
+A máquina do Broto processa sua identidade, vínculo, permissões locais, raízes
+de arquivos permitidas e registros de atividade. Arquivos, metadados e saída
+de comandos podem ser enviados ao hospedeiro conforme as permissões concedidas.
+O hospedeiro pode exibir essa informação aos seus dispositivos autorizados e
+a agentes conectados pelo MCP. Esses agentes podem ser serviços de terceiros
+escolhidos pela pessoa; suas políticas também se aplicam ao conteúdo enviado.
+A Ordinum não recebe esse conteúdo. O serviço continua depois de fechar a janela.
+Pausar impede novas operações; desconectar revoga o vínculo, sem apagar cópias
+ou registros que já tenham sido recebidos. Restrinja as pastas e use uma conta
+sem privilégios. Não compartilhe códigos de pareamento ou credenciais.
+
+Na instalação do Broto como serviço do Windows, a pessoa fornece a credencial
+da conta sem privilégios à interface protegida do próprio sistema. O Windows
+protege a credencial do serviço e da tarefa de atualização. O Broto não grava
+essa senha em seus arquivos, argumentos ou registros, nem a envia à Ordinum.

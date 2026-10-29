@@ -16,7 +16,9 @@ import (
 
 const (
 	ProtocolVersion = 1
-	MaxLineBytes    = 256 * 1024
+	// Broto exec returns bounded stdout and stderr in one response, including
+	// JSON escaping. Keep this in sync with the native supervisor.
+	MaxLineBytes    = 4 * 1024 * 1024
 )
 
 type Request struct {

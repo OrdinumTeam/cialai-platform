@@ -31,6 +31,13 @@ const (
 func (runtime *runtimeState) handleService(ctx context.Context, request rpc.Request) rpc.Response {
 	var result any
 	var err error
+	if strings.HasPrefix(request.Command, "broto.") {
+		result, err = runtime.brotoCommand(ctx, request.Command, request.Args)
+		if err != nil {
+			return runtime.errorResponse(request.ID, err)
+		}
+		return rpc.Success(request.ID, result)
+	}
 	switch request.Command {
 	case "net.start":
 		result, err = runtime.netStart(ctx, request.Args)
@@ -120,7 +127,7 @@ func (runtime *runtimeState) netStart(ctx context.Context, raw json.RawMessage) 
 	runtime.mu.Lock()
 	config := startConfig{
 		paths: runtime.paths, logger: runtime.logger, identity: runtime.identity, desktop: runtime.desktop,
-		devices: runtime.devices, sessions: runtime.sessions, approver: runtime.approvals,
+		devices: runtime.devices, sessions: runtime.sessions, approver: runtime.approvals, broto: runtime.brotos.Attach,
 		requireApproval: args.RequireApproval, staticDir: args.StaticDir, bridgeURL: args.BridgeURL,
 		proxySecret: args.ProxySecret, stunServers: stun, torEnabled: args.Tor == nil || *args.Tor,
 		torExecutable: runtime.torExecutable, seams: runtime.seams,
@@ -330,6 +337,9 @@ func (runtime *runtimeState) devicesList(raw json.RawMessage) (any, error) {
 	list := devices.List()
 	views := make([]DeviceView, 0, len(list))
 	for _, device := range list {
+		if device.Kind == identity.RoleBroto {
+			continue
+		}
 		views = append(views, runtime.deviceView(device))
 	}
 	return map[string]any{"devices": views}, nil

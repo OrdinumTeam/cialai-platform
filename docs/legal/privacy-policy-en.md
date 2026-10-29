@@ -70,3 +70,21 @@ Material changes to this policy will be published with a new effective date. Sto
 Privacy contact: **TO BE CONFIRMED BEFORE PUBLICATION**
 
 Until the dedicated contact is confirmed, use the private contact route described in the repository `SECURITY.md` file.
+
+## Cialai Broto
+
+Broto connects another machine to a host authorized by the user. The Broto
+machine processes its identity, pairing, local permissions, allowed file roots
+and activity records. Files, metadata and command output may be sent to the
+host within granted permissions. The host may expose this information to its
+authorized devices and agents connected through MCP. User-selected agents may
+be third-party services whose policies also apply to content sent to them.
+Ordinum does not receive this content. The service continues after its window
+closes. Pausing blocks new operations; disconnecting revokes the pairing but
+does not erase copies or records already received. Restrict shared roots and
+use an unprivileged account. Do not share pairing codes or credentials.
+
+When installing Broto as a Windows service, the user supplies the unprivileged
+account credential through the operating system's protected interface. Windows
+protects the service and scheduled update task credentials. Broto does not write
+this password to its files, arguments or logs, or send it to Ordinum.

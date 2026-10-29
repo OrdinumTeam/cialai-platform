@@ -17,6 +17,7 @@ import { installDomShortcuts, installNativeMenu } from './menu.js';
 import NotchBar from '../notch/NotchBar.jsx';
 import { ensureSubscribed as ensureNotchSubscribed, notchActions, onFocusSession, onOpenSettings } from './notch-runtime.js';
 import Preferences from './Preferences.jsx';
+import BrotoApprovals from './BrotoApprovals.jsx';
 import Onboarding, { shouldShowOnboarding } from './Onboarding.jsx';
 import PairingDialog from './PairingDialog.jsx';
 import Sidebar from './Sidebar.jsx';
@@ -229,13 +230,22 @@ function DesktopShell() {
     const diagnostics = () => { setPrefsOpen(false); navigate('dispositivos'); setAdvancedOpen(true); };
     // Os botões de perfil novo das telas de contas abrem o modal Perfis de agentes.
     const agents = (event) => { setPrefsOpen(false); openAgentProfiles(event?.detail?.agent); };
+    // Abrir terminal num Broto leva à tela de Terminais com a sessão dele selecionada.
+    const brotoSession = (event) => {
+      const tag = event?.detail?.tag;
+      if (typeof tag !== 'string') return;
+      navigate('terminais');
+      import('../terminals/runtime.js').then((runtime) => runtime.revealSession(tag)).catch(() => {});
+    };
     window.addEventListener('cialai:pair-device', pair);
     window.addEventListener('cialai:network-diagnostics', diagnostics);
     window.addEventListener('cialai:agent-profiles', agents);
+    window.addEventListener('cialai:open-broto-session', brotoSession);
     return () => {
       window.removeEventListener('cialai:pair-device', pair);
       window.removeEventListener('cialai:network-diagnostics', diagnostics);
       window.removeEventListener('cialai:agent-profiles', agents);
+      window.removeEventListener('cialai:open-broto-session', brotoSession);
     };
   }, [navigate, setAdvancedOpen, openAgentProfiles]);
 
@@ -250,6 +260,7 @@ function DesktopShell() {
             <Sidebar views={views} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
               <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={views} />
+              <BrotoApprovals />
               <div className="mac-body">
                 <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
                 <NotchBar />

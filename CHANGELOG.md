@@ -6,6 +6,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 ## Unreleased
 
+
 ### Added
 
 * A cross platform Tauri desktop application for project workspaces, terminal sessions, files, previews, Git tools and local integrations
@@ -72,6 +73,21 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 ### Release status
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.5.0 · 2026-10-29
+
+### Added
+
+* Cialai Broto preview for Windows and Linux, with approved pairing, remote terminals, AI permissions, streamed execution and file transfers.
+* Host CLI and optional skill for AI tools, global approvals and a dedicated AI activity card for each Broto.
+* Separate Broto installers and signed integrity manifests, without changing the desktop update channel.
+
+### Fixed
+
+* Host IPC failures report their cause and endpoint, and independent app instances use separate sockets.
+* Windows execution and ConPTY prepare UTF-8 consoles and preserve Ctrl C across inherited process groups.
+* Polling no longer consumes the operational info log; MCP descriptions explain process deadlines, terminal echo and the Windows graphical-session limitation.
+
 
 ## 0.4.4 preview
 

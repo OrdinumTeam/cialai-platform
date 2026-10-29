@@ -34,7 +34,7 @@ type PunchResult struct {
 // When ctx has no deadline, Config.PunchTimeout bounds the whole punch. A
 // refusal returns an error wrapping ErrPunchRefused with the desktop reason.
 func (conn *Conn) Punch(ctx context.Context) (transport.Session, error) {
-	if conn.config.Role != identity.RolePhone {
+	if conn.config.Role != identity.RolePhone && conn.config.Role != identity.RoleBroto {
 		return nil, fmt.Errorf("%w: only the phone requests a punch", ErrProtocol)
 	}
 	if conn.config.Puncher == nil {

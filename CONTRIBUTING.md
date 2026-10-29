@@ -47,9 +47,11 @@ cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml --locked -j 2
 
 ## Tests
 
-Run the complete local suite with:
+Install the browser test dependencies once, then run the complete local suite:
 
 ```sh
+npm ci --prefix tools/browser
+node tools/browser/node_modules/playwright/cli.js install chromium
 npm test
 ```
 
@@ -58,6 +60,8 @@ Useful focused commands:
 | Area | Command |
 | --- | --- |
 | Shared interface | `npm run test:ui` |
+| Broto approvals in three languages | `npm run test:broto-ui` |
+| Native Windows command forwarding | `npm run test:broto-command-windows` on Windows |
 | Desktop Rust | `npm run test:desktop` |
 | Bridge protocol | `npm run test:protocol` |
 | Go networking core | `npm run test:tunnel` |

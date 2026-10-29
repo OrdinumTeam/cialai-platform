@@ -147,6 +147,71 @@ pub async fn tunnel_call(
         .map_err(tunnel_join_error)?
 }
 
+#[tauri::command]
+pub async fn broto_open(
+    app: AppHandle,
+    device_id: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.call".into(), serde_json::json!({"deviceId":device_id,"cmd":"pty.open","args":{"cols":80,"rows":24},"actor":"human"})).await
+}
+
+// Broto host actions stay native and use the supervised sidecar.
+#[tauri::command]
+pub async fn broto_list(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.list".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_begin(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.pair.begin".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_pending(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.pair.pending".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_decide(
+    app: AppHandle,
+    pair_id: String,
+    approve: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.pair.decide".into(),
+        serde_json::json!({"pairId":pair_id,"approve":approve}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_permission_set(
+    app: AppHandle,
+    device_id: String,
+    level: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.permission.set".into(),
+        serde_json::json!({"deviceId":device_id,"level":level}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_requests(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.requests".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_decide(
+    app: AppHandle,
+    id: u64,
+    approve: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.decide".into(),
+        serde_json::json!({"id":id,"approve":approve}),
+    )
+    .await
+}
+
 /// Apaga a chave da API do Headscale deixada por versões anteriores; a
 /// conectividade v2 não usa servidor de controle.
 #[tauri::command(async)]
@@ -222,7 +287,7 @@ pub fn pty_metrics(terminals: State<'_, TerminalManager>) -> Vec<SessionMetrics>
 /// eventos `onBinary` do xterm: a pagina so usa esse caminho para os relatos
 /// de mouse X10, que cabem em um byte por char. Qualquer char acima de U+00FF
 /// e recusado em vez de truncado, para texto nunca perder acentos por ali.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_write(
     terminals: State<'_, TerminalManager>,
     id: u32,
@@ -237,7 +302,7 @@ pub fn pty_write(
 }
 
 /// Bytes do caminho `binary`: um por char, somente ate U+00FF.
-fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
     data.chars()
         .map(|char| {
             u8::try_from(u32::from(char)).map_err(|_| {
@@ -250,7 +315,7 @@ fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_resize(
     terminals: State<'_, TerminalManager>,
     id: u32,
@@ -305,7 +370,7 @@ pub fn pty_ack(terminals: State<'_, TerminalManager>, id: u32, bytes: usize) -> 
     terminals.ack(id, bytes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_kill(terminals: State<'_, TerminalManager>, id: u32) -> Result<(), String> {
     terminals.kill(id)
 }
@@ -321,7 +386,7 @@ pub fn pty_attach(
     terminals.attach(id, on_output)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_list(terminals: State<'_, TerminalManager>) -> Vec<TerminalInfo> {
     terminals.list()
 }
@@ -1451,4 +1516,57 @@ pub fn cli_uninstall(app: AppHandle) -> Result<cli::CliReport, String> {
         .map_err(|error| error.to_string())?;
     let shell = platform::system_shell();
     cli::uninstall(&home, &config, cli::Target::current(), Some(shell.as_str()))
+}
+
+#[tauri::command]
+pub async fn broto_rename(
+    app: AppHandle,
+    device_id: String,
+    name: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.rename".into(),
+        serde_json::json!({"deviceId":device_id,"name":name}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_grant(
+    app: AppHandle,
+    device_id: String,
+    end: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        if end {
+            "broto.grant.end"
+        } else {
+            "broto.grant"
+        }
+        .into(),
+        serde_json::json!({"deviceId":device_id}),
+    )
+    .await
+}
+
+#[tauri::command(async)]
+pub fn skill_status(app: AppHandle) -> Result<Vec<crate::skills::SkillStatus>, String> {
+    Ok(crate::skills::status(
+        &app.path().home_dir().map_err(|e| e.to_string())?,
+    ))
+}
+#[tauri::command(async)]
+pub fn skill_change(
+    app: AppHandle,
+    agent: String,
+    remove: bool,
+    remove_shared: Option<bool>,
+) -> Result<Vec<crate::skills::SkillStatus>, String> {
+    crate::skills::change_with_shared(
+        &app.path().home_dir().map_err(|e| e.to_string())?,
+        &agent,
+        remove,
+        remove_shared.unwrap_or(false),
+    )
 }

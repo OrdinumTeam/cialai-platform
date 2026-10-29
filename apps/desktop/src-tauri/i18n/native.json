@@ -3,6 +3,9 @@
   "defaultLocale": "pt-BR",
   "locales": {
     "pt-BR": {
+      "native.broto.execFailed": "Comando interrompido · {error}",
+      "native.broto.execFinished": "Saiu com {code} em {duration} s",
+      "native.broto.execTimedOut": "Prazo do comando esgotado",
       "native.browser.downloading": "Baixando {name}",
       "native.browser.downloadingProgress": "Baixando {name}, {percent}% de {size}",
       "native.browser.preparingDownload": "Preparando o download do Chromium",
@@ -158,6 +161,9 @@
       "native.terminal.reopenedAt": "Shell reaberto em {date} às {time}"
     },
     "en": {
+      "native.broto.execFailed": "Command interrupted · {error}",
+      "native.broto.execFinished": "Exited with {code} in {duration} s",
+      "native.broto.execTimedOut": "Command timed out",
       "native.browser.downloading": "Downloading {name}",
       "native.browser.downloadingProgress": "Downloading {name}, {percent}% of {size}",
       "native.browser.preparingDownload": "Preparing the Chromium download",
@@ -313,6 +319,9 @@
       "native.terminal.reopenedAt": "Shell reopened on {date} at {time}"
     },
     "es": {
+      "native.broto.execFailed": "Comando interrumpido · {error}",
+      "native.broto.execFinished": "Terminó con {code} en {duration} s",
+      "native.broto.execTimedOut": "Se agotó el plazo del comando",
       "native.browser.downloading": "Descargando {name}",
       "native.browser.downloadingProgress": "Descargando {name}, {percent}% de {size}",
       "native.browser.preparingDownload": "Preparando la descarga de Chromium",

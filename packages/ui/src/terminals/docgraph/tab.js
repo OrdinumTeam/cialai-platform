@@ -25,7 +25,7 @@ export function findDocGraphTab(session) {
 // o pedido, montado ou nao.
 export function openDocGraphTab(sessionId, { focusPath = null, activate = true } = {}) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   if (focusPath) session.docgraph.focusRequest = { path: focusPath, at: Date.now() };
   let tab = findDocGraphTab(session);
   if (!tab) {

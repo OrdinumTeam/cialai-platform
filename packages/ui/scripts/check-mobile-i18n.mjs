@@ -10,6 +10,7 @@ const scriptPath = fileURLToPath(import.meta.url);
 const repositoryRoot = path.resolve(path.dirname(scriptPath), '../../..');
 export const SOURCE_ROOTS = Object.freeze([
   path.join(repositoryRoot, 'packages/ui/src/mobile'),
+  path.join(repositoryRoot, 'packages/ui/src/broto'),
   path.join(repositoryRoot, 'packages/ui/src/desktop'),
   path.join(repositoryRoot, 'packages/ui/src/components'),
   path.join(repositoryRoot, 'packages/ui/src/views'),

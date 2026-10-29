@@ -85,7 +85,7 @@ func (puncher *RendezvousPuncher) Punch(ctx context.Context, desktop Desktop) (t
 		return nil, fmt.Errorf("open control channel: %w", err)
 	}
 	conn, err := rendezvous.Establish(ctx, stream, rendezvous.Config{
-		Role:     identity.RolePhone,
+		Role:     puncher.Local.Role(),
 		LocalKey: puncher.Local.PublicKeyString(),
 		PeerKey:  identity.EncodePublicKey(desktop.PublicKey),
 		Puncher:  puncher.Endpoint,

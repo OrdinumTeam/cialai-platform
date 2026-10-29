@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 pub const PROTOCOL_VERSION: u64 = 1;
-pub const MAX_LINE_BYTES: usize = 256 * 1024;
+// Bounded Broto exec output can expand under JSON escaping.
+pub const MAX_LINE_BYTES: usize = 4 * 1024 * 1024;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -90,7 +91,9 @@ pub fn encode_request(id: u64, command: &str, args: Value) -> Result<String, Str
 /// celulares e sessões em `devices`, e `net.state`, `tor.state`,
 /// `path.changed` e o estado do próprio supervisor em `state`.
 pub fn event_channel(name: &str) -> &'static str {
-    if name.starts_with("pair.") {
+    if name.starts_with("broto.") {
+        "tunnel://broto"
+    } else if name.starts_with("pair.") {
         "tunnel://pair"
     } else if name.starts_with("devices.") || name.starts_with("session.") {
         "tunnel://devices"

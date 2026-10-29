@@ -78,18 +78,17 @@ jobs:
       - name: Compilar sidecar local
         run: npm run sidecar --workspace @cialai/desktop
 
+      - name: Preparar Playwright e Chromium
+        run: |
+          npm ci --prefix tools/browser
+          node tools/browser/node_modules/playwright/cli.js install --with-deps chromium
+
       - name: Executar suítes
         run: npm test
 
       - name: Conferir texto visível
         if: runner.os == 'Linux'
         run: npm run check:text
-
-      - name: Preparar Playwright e Chromium
-        if: runner.os == 'Linux'
-        run: |
-          npm ci --prefix tools/browser
-          node tools/browser/node_modules/playwright/cli.js install --with-deps chromium
 
       - name: Checks de navegador
         if: runner.os == 'Linux'

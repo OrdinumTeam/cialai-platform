@@ -35,6 +35,7 @@ O produto é open source sob Apache 2.0, mantido pela Ordinum, com o código, a 
 | Perfil | Necessidade que o Cialai atende |
 | --- | --- |
 | Desenvolvedora com vários agentes de código abertos em pastas diferentes | Saber qual sessão pede atenção, qual terminou, quanto do plano do agente já foi gasto, sem alternar janelas |
+| Quem administra máquinas adicionais com consentimento local | Conectar um Broto ao hospedeiro, consultar arquivos e executar comandos dentro do teto de permissões da máquina remota |
 | Quem deixa processos longos rodando e sai da mesa | Acompanhar e intervir pelo celular, com o computador acordado e o app aberto |
 | Equipes que não podem depender de um serviço de terceiros no meio do caminho | Nenhum servidor para operar; TLS 1.3 mútuo entre os aparelhos no caminho direto e na reserva pelo Tor, que só transporta bytes cifrados |
 
@@ -97,3 +98,11 @@ mesma conectividade. Objetivos, requisitos e dependências estão no
 3. As suítes de verificação elegíveis do protótipo passam no Cialai sem falhas e com cada caso ignorado justificado: baseline Rust e contagens reais no documento 13, `check-terminal-sync.mjs` com 17 casos, `check-phone-*.mjs`, os testes Node de `terminal-*` e `mobile-*` e o `selftest-app.js` dentro do app.
 4. Os roteiros manuais de rede do documento 06 passam nos três sistemas desktop e nas duas plataformas móveis.
 5. Os cinco estados visuais da demo do estúdio ficam idênticos ao Control nas capturas de referência, exceto pela marca.
+
+## Cialai Broto
+
+O Broto é a terceira ponta do produto, além do computador hospedeiro e do celular.
+Roda em outra máquina com usuário sem privilégios e vínculo próprio, separado do
+pareamento de celulares. O escopo e os critérios de aceite estão em
+[docs/broto](../broto/README.md). Código preparado e testes locais não substituem
+instalação em cada sistema, assinatura, publicação e validação em máquinas reais.

@@ -332,7 +332,7 @@ export default function PhoneWorkbench() {
         <button type="button" className="mac-tool phone-terminal__new-icon" disabled={!available} aria-label={translate('terminal.session.new')} onClick={() => setPicker({ path: '' })}><Plus size={24} /></button>
       </div>}
       {pane === 'terminal' && <div className="phone-terminal__actions">
-        <button type="button" className="mac-tool" disabled={!supported || selected.status !== 'running'} aria-label={translate('terminal.phone.sessionFiles')} onClick={() => navigate({ type: 'files' })}><FolderOpen size={22} /></button>
+        <button type="button" className="mac-tool" disabled={!supported || Boolean(selected.deviceId) || selected.status !== 'running'} aria-label={translate('terminal.phone.sessionFiles')} onClick={() => navigate({ type: 'files' })}><FolderOpen size={22} /></button>
         <button type="button" className="mac-tool" aria-label={translate('terminal.session.actionsFor', { name: selected.name })} title={translate('terminal.session.actionsFor', { name: selected.name })} onClick={() => setMenuFor(selected)}><MoreHorizontal size={22} /></button>
       </div>}
     </div>

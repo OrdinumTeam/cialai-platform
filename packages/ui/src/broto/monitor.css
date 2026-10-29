@@ -1,0 +1,192 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/* Janela do Cialai Broto.
+   Os tokens repetem os da casca solida do desktop, em
+   packages/ui/src/desktop/solid.css, para a janela do Broto ter a mesma fonte,
+   os mesmos neutros, o mesmo rosa e os mesmos raios do Cialai sem carregar a
+   casca inteira. O tema segue o sistema, como o Cialai faz por padrao.
+   Mudou um token la, mude aqui. */
+
+@font-face{font-family:"Cialai Outfit";font-style:normal;font-weight:100 900;font-display:swap;src:url("../fonts/Outfit-Variable.woff2") format("woff2")}
+@font-face{font-family:"Cialai JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/JetBrainsMono-Regular.woff2") format("woff2")}
+
+:root{
+  color-scheme:light dark;
+  --font:"Cialai Outfit",-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
+  --font-mono:"SF Mono",SFMono-Regular,"Cascadia Mono",Consolas,ui-monospace,"Cialai JetBrains Mono",monospace;
+
+  --bg:#F8FAFF;
+  --surface:#FFFFFF;
+  --surface-2:#F2F4F9;
+  --surface-3:#E8EBF2;
+  --field:#F2F4F9;
+  --separator:#E7EAF2;
+  --hover:rgba(32,35,44,.045);
+  --label:#20232C;
+  --label-2:#666D7C;
+  --label-3:#9CA2B0;
+
+  --accent:#E23B84;
+  --accent-hover:#C9317A;
+  --accent-text:#C73474;
+  --accent-soft:rgba(226,59,132,.09);
+  --accent-ring:rgba(226,59,132,.22);
+  --on-accent:#FFFFFF;
+
+  --ok:#1F9D5B;
+  --warn:#C27A00;
+  --bad:#D83A3A;
+  --bad-ring:rgba(216,58,58,.18);
+
+  --radius-control:12px;
+  --ease:cubic-bezier(.2,.7,.2,1);
+  --fast:140ms;
+  --normal:220ms;
+}
+
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E0E10;
+    --surface:#1C1C1E;
+    --surface-2:#26262A;
+    --surface-3:#2E2E33;
+    --field:#26262A;
+    --separator:rgba(84,84,88,.45);
+    --hover:rgba(255,255,255,.06);
+    --label:#F5F5F7;
+    --label-2:#AEAEB2;
+    --label-3:#8E8E93;
+
+    --accent:#FF7AB2;
+    --accent-hover:#FF8FC0;
+    --accent-text:#FF7AB2;
+    --accent-soft:rgba(255,122,178,.16);
+    --accent-ring:rgba(255,122,178,.38);
+    --on-accent:#3A1B33;
+
+    --ok:#3CCF76;
+    --warn:#F0A629;
+    --bad:#FF5C5C;
+    --bad-ring:rgba(255,92,92,.24);
+  }
+}
+
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--label);font:13px/1.45 var(--font);letter-spacing:.005em;-webkit-font-smoothing:antialiased}
+h1,h2,p,ol{margin:0}
+button{font:inherit}
+
+@keyframes brotoRise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes brotoSweep{from{transform:translateX(-120%)}to{transform:translateX(320%)}}
+@keyframes brotoSpin{to{transform:rotate(360deg)}}
+
+/* ── telas de conectar, aguardar e serviço ─────────────────────── */
+
+.broto{display:flex;min-height:100vh;padding:40px 32px}
+.broto.is-linked{padding:0}
+.broto-screen{width:min(100%,460px);margin:auto;animation:brotoRise var(--normal) var(--ease)}
+
+.broto-mark{display:block;width:44px;height:auto;margin:0 0 20px;user-select:none;-webkit-user-drag:none}
+.broto-mark--small{width:32px;margin:0}
+
+.broto h1{color:var(--label);font-size:24px;line-height:1.2;font-weight:650;letter-spacing:-.025em}
+.broto-lead{margin-top:8px;color:var(--label-2);font-size:13.5px;line-height:1.5}
+
+.broto-form{display:flex;flex-direction:column;margin-top:28px}
+.broto-label{margin-bottom:6px;color:var(--label-2);font-size:12px;font-weight:500}
+
+/* O código é uma linha só, em fonte monoespaçada, com o Colar dentro do campo:
+   é um token para colar inteiro, não texto para escrever. */
+.broto-code{display:flex;align-items:center;gap:6px;height:42px;padding:0 5px 0 13px;border:1px solid transparent;border-radius:var(--radius-control);background:var(--field);transition:background-color var(--fast) var(--ease),border-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease)}
+.broto-code:hover{background:var(--surface-3)}
+.broto-code:focus-within{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-ring)}
+.broto-code.is-error,.broto-code.is-error:focus-within{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-ring)}
+.broto-code input{flex:1;min-width:0;height:100%;padding:0;border:0;outline:0;background:transparent;color:var(--label);font:12.5px var(--font-mono);letter-spacing:0;text-overflow:ellipsis}
+.broto-paste{flex:none;height:32px;padding:0 12px;border:0;border-radius:9px;background:transparent;color:var(--accent-text);font-size:12.5px;font-weight:600;cursor:default;transition:background-color var(--fast) var(--ease)}
+.broto-paste:hover{background:var(--accent-soft)}
+.broto-paste:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+
+.broto-note{min-height:18px;margin-top:8px;color:var(--label-3);font-size:12px;line-height:1.45}
+.broto-note.is-error{color:var(--bad)}
+.broto-screen>.broto-note{margin-top:20px}
+
+.broto-form__actions{display:flex;justify-content:flex-end;gap:8px;margin-top:24px}
+
+/* Progresso sem fim conhecido, a mesma varredura da abertura do Cialai: a
+   instalação espera o UAC e a senha, e a aprovação espera o hospedeiro. */
+.broto-progress{position:relative;height:3px;margin-top:24px;overflow:hidden;border-radius:999px;background:var(--surface-3)}
+.broto-progress span{position:absolute;top:0;bottom:0;left:0;width:34%;border-radius:999px;background:var(--accent);animation:brotoSweep 1.5s var(--ease) infinite}
+.broto-progress+.broto-note{margin-top:12px;color:var(--label-2)}
+.broto-spinner{width:13px;height:13px;margin-right:8px;flex:none;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:brotoSpin .8s linear infinite}
+
+.broto-digits{display:flex;gap:6px;margin-top:28px;color:var(--label);font:600 40px/1 var(--font-mono);letter-spacing:.14em;font-variant-numeric:tabular-nums}
+
+/* ── botões, os do Cialai ──────────────────────────────────────── */
+
+.broto-btn{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 16px;border:0;border-radius:var(--radius-control);background:var(--surface-2);color:var(--label);font-size:13px;font-weight:600;white-space:nowrap;cursor:default;transition:background-color var(--fast) var(--ease),color var(--fast) var(--ease),transform 120ms var(--ease)}
+.broto-btn:hover{background:var(--surface-3)}
+.broto-btn:active{transform:scale(.97)}
+.broto-btn:disabled{opacity:.5;transform:none}
+.broto-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--accent-ring)}
+.broto-btn--primary{min-width:104px;background:var(--accent);color:var(--on-accent)}
+.broto-btn--primary:hover{background:var(--accent-hover)}
+.broto-btn--primary:disabled{opacity:1;background:var(--surface-3);color:var(--label-3)}
+.broto-btn--primary.is-busy:disabled{background:var(--accent);color:var(--on-accent);opacity:.85}
+.broto-btn--danger{color:var(--bad)}
+
+/* ── monitor, depois de aprovado ───────────────────────────────── */
+
+.broto-monitor{display:flex;flex-direction:column;width:100%;max-width:760px;height:100vh;margin:0 auto;padding:28px 32px 18px;animation:brotoRise var(--normal) var(--ease)}
+.broto-monitor__head{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:start;gap:14px}
+.broto-monitor__head .broto-mark{margin-top:1px}
+.broto-monitor__title{min-width:0}
+.broto-monitor__title h1{font-size:20px;overflow-wrap:anywhere}
+.broto-monitor__actions{display:flex;gap:8px}
+.broto-monitor>.broto-note{margin-top:14px}
+
+.broto-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.broto-chip{display:inline-flex;align-items:center;gap:7px;height:24px;padding:0 10px;border-radius:999px;background:var(--surface-2);color:var(--label-2);font-size:12px;font-weight:500}
+.broto-chip i{width:6px;height:6px;border-radius:50%;background:var(--label-3)}
+.broto-chip.is-online i{background:var(--ok)}
+.broto-chip.is-paused{color:var(--label)}
+.broto-chip.is-paused i{background:var(--warn)}
+
+.broto-monitor h2{margin:30px 0 8px;color:var(--label);font-size:14px;font-weight:600;letter-spacing:-.01em}
+
+.broto-activity{flex:1 1 auto;min-height:0;margin:0;padding:0;overflow:auto;list-style:none;border-top:1px solid var(--separator)}
+.broto-activity li{display:grid;grid-template-columns:68px minmax(0,1fr) auto;align-items:baseline;gap:12px;padding:11px 4px;border-bottom:1px solid var(--separator)}
+.broto-activity time{color:var(--label-3);font:11.5px var(--font-mono);font-variant-numeric:tabular-nums}
+.broto-activity__what{color:var(--label);overflow-wrap:anywhere}
+.broto-activity__what.is-error{color:var(--danger,var(--warn))}
+.broto-activity__path{display:block;margin-top:4px;color:var(--label-2);font:11.5px/1.5 var(--font-mono);white-space:pre-wrap;overflow-wrap:anywhere}
+.broto-activity__error-code{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;color:var(--label-3);font-size:11px}
+.broto-activity__error-code code{font-family:var(--font-mono)}
+.broto-activity__who{color:var(--label-2);font-size:12px;text-align:right}
+.broto-activity__who.is-ai{color:var(--accent-text);font-weight:600}
+.broto-activity__none{flex:1 1 auto;padding:22px 4px;border-top:1px solid var(--separator);color:var(--label-3)}
+
+.broto-monitor__foot{padding-top:14px;color:var(--label-3);font-size:12px}
+
+.broto-activity::-webkit-scrollbar{width:10px}
+.broto-activity::-webkit-scrollbar-thumb{border:3px solid transparent;border-radius:999px;background:var(--label-3);background-clip:padding-box}
+
+/* ── janela estreita ───────────────────────────────────────────── */
+
+@media (max-width:480px){
+  .broto{padding:28px 20px}
+  .broto h1{font-size:21px}
+  .broto-form__actions .broto-btn{flex:1}
+  .broto-monitor{padding:22px 20px 16px}
+  .broto-monitor__head{grid-template-columns:auto minmax(0,1fr)}
+  .broto-monitor__actions{grid-column:1/-1}
+  .broto-monitor__actions .broto-btn{flex:1}
+  .broto-activity li{grid-template-columns:62px minmax(0,1fr);row-gap:2px}
+  .broto-activity__who{grid-column:2;text-align:left}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .broto-screen,.broto-monitor{animation:none}
+  .broto-progress span{left:33%;animation:none}
+  .broto-spinner{animation-duration:2.4s}
+  .broto-btn,.broto-code,.broto-paste{transition:none}
+}

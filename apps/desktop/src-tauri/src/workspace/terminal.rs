@@ -49,6 +49,8 @@ use super::procs::{self, CommandCache, CommandLine, ProcSource, ProcState, Syste
 use super::pty::{self, CursorPosition, ShellFlavor};
 use super::resume::{self, AgentEvidence};
 
+mod broto;
+
 const READ_BUFFER: usize = 16 * 1024;
 const COALESCE_WINDOW: Duration = Duration::from_millis(4);
 const MAX_BATCH: usize = 64 * 1024;
@@ -109,6 +111,10 @@ fn is_inherited_agent_marker(name: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalInfo {
     pub id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub broto_name: Option<String>,
     /// Identificador estavel da sessao, dado pelo frontend, para religar a
     /// sessao certa depois de uma recarga do webview.
     pub tag: String,
@@ -240,6 +246,18 @@ pub struct SessionMetrics {
 enum Message {
     Data(Vec<u8>),
     Exit(Option<ExitStatus>),
+}
+
+fn send_exit_after_drain(
+    tx: mpsc::SyncSender<Message>,
+    status: Option<ExitStatus>,
+    drained: mpsc::Receiver<()>,
+) {
+    // wait() can finish before the reader publishes the final PTY bytes.
+    // A descendant may keep the PTY open after its shell exits, so EOF has a
+    // bounded wait rather than holding the session open indefinitely.
+    let _ = drained.recv_timeout(Duration::from_millis(500));
+    let _ = tx.send(Message::Exit(status));
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -619,6 +637,7 @@ type ExitNotifier = Arc<dyn Fn(TerminalExit) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct TerminalManager {
+    broto: Option<Arc<broto::BrotoTerminals>>,
     inner: Arc<Mutex<Inner>>,
     notify_exit: ExitNotifier,
     notify_view: ViewNotifier,
@@ -638,6 +657,7 @@ pub struct TerminalManager {
     closing: Arc<AtomicBool>,
     prefs: PrefsState,
     home: PathBuf,
+    broto_host_state_dir: Option<PathBuf>,
     /// Shells com o menu de contas do Codex e do Claude Code. So o app liga:
     /// os testes nascem sem tocar em `~/.cialai`.
     agent_menu: bool,
@@ -651,7 +671,18 @@ struct MetricsCache {
 const METRICS_CACHE_TTL: Duration = Duration::from_millis(250);
 
 impl TerminalManager {
+    pub fn broto_event(&self, name: &str, data: &serde_json::Value) {
+        if let Some(broto) = &self.broto {
+            broto.event(name, data);
+        }
+    }
     pub fn new(app: AppHandle, prefs: PrefsState) -> Self {
+        let broto_host_state_dir = app
+            .path()
+            .app_local_data_dir()
+            .ok()
+            .map(|dir| dir.join("tunnel"));
+        let broto = broto::BrotoTerminals::new(app.clone());
         let view_app = app.clone();
         let home = app
             .path()
@@ -673,6 +704,8 @@ impl TerminalManager {
             home,
             Arc::new(SystemProcs::default()),
         );
+        manager.broto = Some(broto);
+        manager.broto_host_state_dir = broto_host_state_dir;
         manager.agent_menu = true;
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
@@ -751,6 +784,7 @@ impl TerminalManager {
         procs: Arc<dyn ProcSource>,
     ) -> Self {
         let manager = Self {
+            broto: None,
             inner: Arc::new(Mutex::new(Inner {
                 next_id: 0,
                 sessions: HashMap::new(),
@@ -768,6 +802,7 @@ impl TerminalManager {
             prefs,
             home,
             agent_menu: false,
+            broto_host_state_dir: None,
         };
         // Weak ownership prevents this watchdog from keeping a manager alive.
         let weak = Arc::downgrade(&manager.inner);
@@ -917,6 +952,9 @@ impl TerminalManager {
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Cialai");
         command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+        if let Some(dir) = &self.broto_host_state_dir {
+            command.env("CIALAI_BROTO_HOST_STATE_DIR", dir);
+        }
         command.env("PATH", platform::path_env(prefs, &self.home));
         // O app pode ter sido aberto de dentro de um agente, e ai o ambiente
         // traz marcadores de sessao filha que fariam um Claude Code novo
@@ -995,6 +1033,8 @@ impl TerminalManager {
             guard.next_id
         };
         let info = TerminalInfo {
+            device_id: None,
+            broto_name: None,
             id,
             tag: tag.to_string(),
             cwd: cwd.clone(),
@@ -1023,6 +1063,7 @@ impl TerminalManager {
 
         let (tx, rx) = mpsc::sync_channel::<Message>(QUEUE_DEPTH);
         let tx_exit = tx.clone();
+        let (drained_tx, drained_rx) = mpsc::channel();
         let (write_tx, write_rx) = mpsc::sync_channel::<Vec<u8>>(QUEUE_DEPTH);
         let mut startup = pty::StartupCursorQuery::for_platform(cursor);
         let mut answer = startup.active().then(|| write_tx.clone());
@@ -1049,10 +1090,11 @@ impl TerminalManager {
             if !held.is_empty() {
                 let _ = tx.send(Message::Data(held));
             }
+            let _ = drained_tx.send(());
         });
         thread::spawn(move || {
             let status = child.wait().ok();
-            let _ = tx_exit.send(Message::Exit(status));
+            send_exit_after_drain(tx_exit, status, drained_rx);
         });
 
         thread::spawn(move || {
@@ -1103,7 +1145,34 @@ impl TerminalManager {
         Ok(info)
     }
 
+    pub fn write_as(&self, id: u32, bytes: &[u8], actor: &str) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .write_as(id, bytes, actor);
+        }
+        self.write(id, bytes)
+    }
+    pub fn kill_as(&self, id: u32, actor: &str) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .kill_as(id, actor);
+        }
+        self.kill(id)
+    }
     pub fn write(&self, id: u32, bytes: &[u8]) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .write(id, bytes);
+        }
         self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let writer = {
             let mut guard = self.lock();
@@ -1322,6 +1391,17 @@ impl TerminalManager {
     }
 
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            self.broto.as_ref().ok_or_else(closed_error)?.view(
+                id,
+                SubscriberKey::Webview,
+                cols,
+                rows,
+                false,
+                None,
+            )?;
+            return Ok(());
+        }
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         let cols = cols.clamp(2, 500);
@@ -1346,6 +1426,13 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .view(id, key, cols, rows, true, None);
+        }
         validate_view_size(cols, rows)?;
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1369,6 +1456,16 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.view(
+                id,
+                key,
+                cols,
+                rows,
+                false,
+                Some(lease),
+            );
+        }
         validate_view_size(cols, rows)?;
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1390,6 +1487,13 @@ impl TerminalManager {
         key: SubscriberKey,
         lease: u64,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .release(id, key, lease);
+        }
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         if !session.lease_matches(key, lease) {
@@ -1403,6 +1507,13 @@ impl TerminalManager {
 
     /// Grava a apresentacao e devolve a revisao atribuida.
     pub fn presentation(&self, id: u32, presentation: TerminalPresentation) -> Result<u64, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .presentation(id, presentation);
+        }
         if presentation.name.chars().count() > 120
             || presentation.subtitle.chars().count() > 240
             || presentation
@@ -1456,6 +1567,10 @@ impl TerminalManager {
     }
 
     pub fn ack(&self, id: u32, bytes: usize) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            self.output(id)?.0.ack(bytes);
+            return Ok(());
+        }
         let link = {
             let guard = self.lock();
             guard
@@ -1480,6 +1595,9 @@ impl TerminalManager {
     }
 
     fn output(&self, id: u32) -> Result<(Arc<OutputLink>, TerminalInfo), String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.output(id);
+        }
         let guard = self.lock();
         let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
         Ok((session.link.clone(), session.info.clone()))
@@ -1520,6 +1638,9 @@ impl TerminalManager {
     }
 
     pub fn detach_all(&self, key: SubscriberKey) {
+        if let Some(broto) = &self.broto {
+            broto.detach_all(key);
+        }
         let links: Vec<_> = self
             .lock()
             .sessions
@@ -1553,6 +1674,9 @@ impl TerminalManager {
     /// SIGHUP no shell, que repassa aos jobs. Se em 400 ms a sessao ainda
     /// existe, SIGKILL. O fim chega ao webview pela thread de lote.
     pub fn kill(&self, id: u32) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.kill(id);
+        }
         let (mut killer, pid, tree) = {
             let guard = self.lock();
             let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
@@ -1615,12 +1739,18 @@ impl TerminalManager {
     }
 
     pub fn list(&self) -> Vec<TerminalInfo> {
+        let remote = self
+            .broto
+            .as_ref()
+            .map(|broto| broto.list())
+            .unwrap_or_default();
         let guard = self.lock();
         let mut sessions: Vec<TerminalInfo> = guard
             .sessions
             .values()
             .map(|session| session.info.clone())
             .collect();
+        sessions.extend(remote);
         sessions.sort_by_key(|info| info.id);
         sessions
     }
@@ -4882,6 +5012,74 @@ echo 'recovered-fixture'
         );
         manager.kill(info.id).ok();
         let _ = rx;
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn broto_mcp_inherits_this_hosts_state_directory() {
+        let mut manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        manager.broto_host_state_dir = Some(PathBuf::from("/private/host-state"));
+        let shell = pty::TestShell::isolated();
+        let (channel, rx) = sink();
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                200,
+                24,
+                CursorPosition::default(),
+                "broto-env",
+                SubscriberKey::Webview,
+                channel,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+        manager
+            .write(
+                info.id,
+                b"printf 'host-state=%s\\n' \"$CIALAI_BROTO_HOST_STATE_DIR\"; exit 0\n",
+            )
+            .unwrap();
+        let mut queries = LaterCursorQueries::new("broto-env", &manager, info.id);
+        let (output, exit) = collect_until_exit(&rx, &mut queries);
+        assert!(exit.is_some());
+        assert!(
+            String::from_utf8_lossy(&output).contains("host-state=/private/host-state"),
+            "output: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+    }
+
+    #[test]
+    fn terminal_exit_is_published_after_the_reader_sends_final_output() {
+        let (tx, rx) = mpsc::sync_channel(8);
+        let (drained_tx, drained_rx) = mpsc::channel();
+        let exit_tx = tx.clone();
+        let waiter = thread::spawn(move || send_exit_after_drain(exit_tx, None, drained_rx));
+        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err());
+        tx.send(Message::Data(b"final output".to_vec())).unwrap();
+        drained_tx.send(()).unwrap();
+        assert!(
+            matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Message::Data(bytes) if bytes == b"final output")
+        );
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Message::Exit(_)
+        ));
+        waiter.join().unwrap();
+    }
+
+    #[test]
+    fn terminal_exit_does_not_wait_forever_for_a_descendant_holding_the_pty() {
+        let (tx, rx) = mpsc::sync_channel(8);
+        let (_drained_tx, drained_rx) = mpsc::channel();
+        let waiter = thread::spawn(move || send_exit_after_drain(tx, None, drained_rx));
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Message::Exit(_)
+        ));
+        waiter.join().unwrap();
     }
 
     #[test]
