@@ -2,7 +2,7 @@
 
 Cialai is an open source terminal studio for desktop and mobile. It keeps shells, files, Git context, previews and coding agent sessions together, then lets you reach the same terminal history from a paired phone. The computer and the phone connect on their own, directly whenever the network allows, with no server run by you, by Ordinum or by the project.
 
-> Cialai is in preview. Preview installers for macOS, Windows, Linux and Android are published on [cialai.com.br](https://cialai.com.br/#baixar), with checksums in `SHA256SUMS.txt` on the same mirror. Version 1.0.0 and the store listings have not been published yet, and the iOS app is not in the App Store.
+> Cialai is in preview. Preview installers for macOS, Windows, Linux and Android are published on [cialai.com.br](https://cialai.com.br/#baixar), with checksums in `SHA256SUMS.txt` on the same mirror. Version 1.0.0 has not been published yet. The phone apps are on the [App Store](https://apps.apple.com/br/app/cialai/id6811702125) and [Google Play](https://play.google.com/store/apps/details?id=br.com.ordinum.cialai), and Cialai Broto is a separate preview for Windows and Linux at [cialai.com.br/broto](https://cialai.com.br/broto).
 
 ## A terminal workspace that travels with you
 
@@ -45,9 +45,9 @@ Windows installers and the Android APK are on the same page. The desktop app che
 | --- | --- |
 | Desktop studio | Implemented and verified locally on macOS |
 | Automatic connectivity | Implemented with automated suites and in process tests against the real Tor network; the physical checklist on real devices is pending |
-| iOS and Android | Android preview APK published; iOS builds run through TestFlight; store review and real device checks pending |
+| iOS and Android | On the App Store and Google Play, with the Android APK also on the site; real device checks pending |
 | Linux and Windows | GitHub Actions builds, tests and bundles on Ubuntu 22.04 and Windows 2022; Windows 11 exercised in a virtual machine and on one real notebook on 2026-09-25; a physical x64 machine with measurements, Windows 10 and code signing pending |
-| Signed releases and stores | macOS previews signed with Developer ID and notarized; Windows signing, store review and version 1.0.0 pending |
+| Signed releases and stores | macOS previews signed with Developer ID and notarized; apps on the App Store and Google Play; Windows signing and version 1.0.0 pending |
 
 Prepared code is not the same as verified distribution. See the [roadmap](./docs/produto/11-roadmap-de-execucao.md) for the state of each task and the remaining external work.
 

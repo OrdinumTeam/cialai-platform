@@ -7,7 +7,8 @@
 <p align="center">
   Every session is a shell in a folder, shown as a card that reports only what was observed.<br>
   A paired phone follows and controls those sessions over an end-to-end encrypted connection<br>
-  that comes up on its own, with no server to host.
+  that comes up on its own, with no server to host.<br>
+  Cialai Broto brings your other Windows and Linux computers into the same studio.
 </p>
 
 <p align="center">
@@ -15,11 +16,13 @@
   <img alt="Status pre-release" src="https://img.shields.io/badge/status-pre--release-3A1B33">
   <img alt="Desktop macOS, Linux and Windows" src="https://img.shields.io/badge/desktop-macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-FF7AB2">
   <img alt="Mobile iOS and Android" src="https://img.shields.io/badge/mobile-iOS%20%C2%B7%20Android-FF7AB2">
+  <img alt="Broto preview for Windows and Linux" src="https://img.shields.io/badge/broto-Windows%20%C2%B7%20Linux-FF7AB2">
 </p>
 
 <p align="center">
   <a href="https://cialai.com.br">Website</a> ·
   <a href="#download">Download</a> ·
+  <a href="#cialai-broto">Broto</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#pairing-and-network">Pairing</a> ·
   <a href="#build-from-source">Build</a> ·
@@ -29,10 +32,9 @@
   <a href="../SECURITY.md">Security</a>
 </p>
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/desktop-dark.webp">
-  <img alt="Cialai desktop studio with the session list, the workspace and the project tree with Git status" src="assets/desktop-light.webp">
-</picture>
+<p align="center">
+  <img src="assets/devices-hero.webp" alt="A Mac running the Cialai studio, an iPhone 16 with the same sessions, and a TV and a monitor with Windows and Linux controlled through Cialai Broto, all in dark mode" width="820">
+</p>
 
 <p align="center">
   <video src="https://github.com/OrdinumTeam/cialai-platform/raw/main/.github/assets/cialai-connection-9x16.mp4" poster="https://github.com/OrdinumTeam/cialai-platform/raw/main/.github/assets/cialai-connection-poster.png" width="320" controls muted playsinline></video>
@@ -42,7 +44,7 @@
 </p>
 
 > [!WARNING]
-> Cialai is experimental and has no supported production release yet. Preview installers are available on [cialai.com.br](https://cialai.com.br/#baixar); store apps are not published. See [Status](#status) for what is verified today and what is only prepared.
+> Cialai is in preview and has no 1.0 release yet. Desktop installers are on [cialai.com.br](https://cialai.com.br/#baixar), the phone apps are on the [App Store](https://apps.apple.com/br/app/cialai/id6811702125) and [Google Play](https://play.google.com/store/apps/details?id=br.com.ordinum.cialai), and Cialai Broto is a separate preview for Windows and Linux. See [Status](#status) for what is verified today and what is only prepared.
 
 ## Why Cialai
 
@@ -53,7 +55,7 @@ Cialai is built for people who keep several projects and several coding agents r
 | Observed, never inferred | Card state comes from the foreground process group, bytes received, exit codes and signals the program emits. The studio never claims an agent is thinking |
 | The computer leads, the phone follows | A phone on a bad radio link is detached from the stream. It never blocks a shell on the computer |
 | Only paired keys get in | Beyond loopback, the computer accepts only mutual TLS 1.3 sessions. A key that is not paired reaches nothing but the pairing request |
-| One interface | The phone loads the same UI bundle the desktop ships. There is no second UI to maintain |
+| Same sessions everywhere | The phone's session list is the page the desktop ships, so cards look and behave the same on both. Home, Projects, Agents and Settings are native screens of the phone app |
 | What was recorded comes back | Raw history, terminal size, agent conversation, name, color, order and tabs survive closing or crashing the app |
 
 ## What it does
@@ -68,24 +70,27 @@ Cialai is built for people who keep several projects and several coding agents r
 * Editor, project tree with Git markers, document previews and a Dev Browser per session, a Chromium instance the session's agents can drive through CDP.
 * The project tree works like the one in VS Code: select several files, cut and paste across folders, undo with the platform shortcut, drag many files at once to a folder or out to another app, and the open file stays highlighted in the tree.
 * A file path printed in the terminal becomes a link that opens the file in the editor, including names with accents and spaces.
+* An AI Bar on the side shows one ring per Claude Code and Codex account, with the current session limit, the weekly limit, when each one renews and whether that account's session is working.
+* A documentation graph draws the Markdown files of the session folder, colors the largest branches and opens a document next to the map.
+
+<p align="center">
+  <img src="assets/studio-dark.webp" alt="Cialai desktop studio in dark mode with the session cards, a Claude Code terminal and the project tree with Git status" width="820">
+</p>
 
 **On the phone**
 
-* The same cards and the same studio UI, served by your computer.
+* A native app with Home, Terminals, Projects, Agents and Settings. Home shows each Codex and Claude Code account with its session and weekly limits, and the paired computers; Terminals opens the session page served by your computer, with the same cards.
+* Projects from each computer, with their color and how many sessions are open in each one.
 * Live output, typing and closing sessions, with a key row for Esc, Tab, Shift Tab, Ctrl C, arrows, Enter, Ctrl D, Ctrl L and Paste.
 * Read-only project files, capped at 200 entries per folder and 128 KiB of UTF-8 text per preview, with hidden files, credential names, keys and symlinks blocked.
 * Biometric checks when the app opens, after five minutes in background and before sensitive actions such as spawning or killing a shell.
 * A **Direct** or **Backup** badge that shows which path carries the connection.
 
-<table>
-  <tr>
-    <td align="center" width="33%"><img src="assets/mobile-list.webp" alt="Phone session list with five cards in different states" width="240"><br><sub>Sessions</sub></td>
-    <td align="center" width="33%"><img src="assets/mobile-terminal.webp" alt="Phone terminal view with the extra key row" width="240"><br><sub>Terminal and key row</sub></td>
-    <td align="center" width="33%"><img src="assets/mobile-files.webp" alt="Phone read-only file tree for a session" width="240"><br><sub>Read-only files</sub></td>
-  </tr>
-</table>
+<p align="center">
+  <img src="assets/phones-dark.webp" alt="An iPhone 16 with the Cialai Home screen and an Android phone with the Terminals list, both in dark mode" width="560">
+</p>
 
-<sub>Screenshots come from the UI demo fixture. Outside the native shell xterm does not paint, so terminal panes appear empty in these captures.</sub>
+<sub>Every screen in these images uses fictional data. Desktop screens and the phone Terminals list are captures of the demo mode; the native Home screen is rebuilt from the app, because the native screens have no demo mode.</sub>
 
 ## Download
 
@@ -99,10 +104,27 @@ Preview builds for every platform are on [cialai.com.br](https://cialai.com.br/#
 | Debian, Ubuntu and derivatives | [`Cialai_amd64.deb`](https://cialai.com.br/downloads/Cialai_amd64.deb) | Recommended on these systems: uses the WebKitGTK of the system. `sudo apt install ./Cialai_amd64.deb` |
 | Fedora, openSUSE and derivatives | [`Cialai_x86_64.rpm`](https://cialai.com.br/downloads/Cialai_x86_64.rpm) | Recommended on these systems. `sudo dnf install ./Cialai_x86_64.rpm` |
 | Other Linux distributions | [`Cialai_amd64.AppImage`](https://cialai.com.br/downloads/Cialai_amd64.AppImage) | Portable build for x64 |
-| Android 8 or newer | [`Cialai_android_universal.apk`](https://cialai.com.br/downloads/Cialai_android_universal.apk) | Signed APK for arm64 and x86_64 |
-| iPhone | TestFlight | Internal testing group only for now |
+| Android 8 or newer | [Google Play](https://play.google.com/store/apps/details?id=br.com.ordinum.cialai) or [`Cialai_android_universal.apk`](https://cialai.com.br/downloads/Cialai_android_universal.apk) | The APK is signed for arm64 and x86_64, for installs outside the store |
+| iPhone with iOS 16.4 or newer | [App Store](https://apps.apple.com/br/app/cialai/id6811702125) | |
 
-Checksums are in [`SHA256SUMS.txt`](https://cialai.com.br/downloads/SHA256SUMS.txt). Desktop updates are signed with the Cialai updater key and verified by the app before installing, in every format above.
+On Linux and macOS, `curl -fsSL https://cialai.com.br/install.sh | bash` picks the right package, checks its SHA-256 and installs it. Checksums are in [`SHA256SUMS.txt`](https://cialai.com.br/downloads/SHA256SUMS.txt). Desktop updates are signed with the Cialai updater key and verified by the app before installing, in every format above.
+
+## Cialai Broto
+
+Cialai Broto connects another Windows or Linux computer to your Cialai. Once paired, you and the AI working in your Cialai open terminals, run commands and move files on that computer, within the permission level you choose for it.
+
+<p align="center">
+  <img src="assets/broto-dark.webp" alt="A Mac approving an AI command on the Devices screen and a Windows PC running it in PowerShell, with the Cialai Broto window showing the activity" width="760">
+</p>
+
+| Step | What happens |
+| --- | --- |
+| Install | `curl -fsSL https://cialai.com.br/broto/install.sh \| bash` on Linux x86_64 with a user systemd, or `irm https://cialai.com.br/broto/install.ps1 \| iex` in PowerShell on a standard Windows 10 or 11 x64 account. Both check the SHA-256 of every package. The installers are also on [cialai.com.br/broto](https://cialai.com.br/broto) |
+| Pair | In Cialai, Devices, Brotos, Connect new Broto creates a code. Paste it in Broto, and when the same four digits show on both sides, approve it in Cialai |
+| Control | Each Broto has a level. View only refuses commands and files. Confirm AI, the default, makes every command, terminal or file the AI asks for wait for your yes, with Allow for 15 minutes. Free needs no confirmation per command. Whoever sits at the Broto computer can Pause or Disconnect from its own window |
+| AI | The AI uses Broto through `cialai broto`, taught by a skill that Cialai installs on request in Claude Code and Codex. The MCP adapter remains an alternative |
+
+Broto has its own version: preview 0.1.0, tag `broto-v0.1.0`. It runs on Windows x64 and Linux x86_64 and needs Cialai 0.5.0 on the computer in charge; there is no macOS build yet. Design and security notes are in [docs/broto](../docs/broto/README.md).
 
 ## Architecture
 
@@ -160,7 +182,8 @@ No server run by you, by Ordinum or by the project takes part. The computer brin
 | `apps/desktop` | Tauri 2.11, Rust, `portable-pty`, `tokio-tungstenite`, `sysinfo`, `notify`, `keyring`, Tor Expert Bundle 15.0.22 with tor 0.4.9.12 | Window, PTY, process metrics, journal and resume, files, Git, previews, Dev Browser, bridge, sidecar supervisor and the bundled `tor` resource that the sidecar starts |
 | `packages/ui` | React 18, xterm.js 6, CodeMirror 6 | Studio, desktop shell and phone shell sharing one codebase |
 | `packages/protocol` | JavaScript, JSON Schema, fixtures | Bridge and pairing contract shared by the Go, Rust and JavaScript tests |
-| `packages/tunnel-core` | Go 1.26.5, `quic-go`, `bine`, `pion/mdns`, the Tailscale port mapper | Ed25519 identity, direct QUIC transport, Tor controller and onion listener, rendezvous and NAT punch, DNS-SD, tunnel edge, phone path manager and proxy, pairing, desktop sidecar and gomobile bindings. The former Headscale mode stays in the tree, inert, until device validation |
+| `packages/tunnel-core` | Go 1.26.5, `quic-go`, `bine`, `pion/mdns`, the Tailscale port mapper | Ed25519 identity, direct QUIC transport, Tor controller and onion listener, rendezvous and NAT punch, DNS-SD, tunnel edge, phone path manager and proxy, pairing, desktop sidecar, gomobile bindings, the Cialai Broto service `cialai-broto` and its MCP adapter. The former Headscale mode stays in the tree, inert, until device validation |
+| `apps/broto` | Tauri 2, React | The Cialai Broto window: paste the code and connect, then the live activity monitor with Pause and Disconnect |
 | `packages/i18n` | JavaScript | Shared translation keys |
 | `apps/mobile` | Expo 57, React Native 0.86, Swift and Kotlin native module, tor-android on Android and Tor.framework on iOS | WebView shell, QR scanner, paired computers, connection badges, biometrics, loopback proxy through the Go core |
 | `infra/headscale` | Docker Compose, Headscale 0.29.3 | Historical recipe from the 0.1.x previews, no longer part of the product path |
@@ -210,12 +233,11 @@ sequenceDiagram
   P->>D: WebSocket upgrade on /pty, proxy injects the token
 ```
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/devices-dark.webp">
-  <img alt="Devices screen with the phone access panel, the direct and backup connection states and paired phones with Direct and Backup badges" src="assets/devices-light.webp">
-</picture>
+<p align="center">
+  <img src="assets/pairing-dark.webp" alt="A Mac showing the Pair phone dialog with the rotating QR code and an iPhone 16 reading it" width="760">
+</p>
 
-<sub>Demo mode capture with fictional devices. No real pairing payload is shown.</sub>
+<sub>Demo mode capture with fictional devices. The QR comes from the demo mode, not from a real pairing.</sub>
 
 | Topic | Design |
 | --- | --- |
@@ -294,18 +316,19 @@ Please report vulnerabilities privately as described in [SECURITY.md](../SECURIT
 
 ## Status
 
-Snapshot of 27 October 2026, preview 0.4.3. Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md) and every release has a page under [docs/releases](../docs/releases/README.md).
+Snapshot of 29 October 2026, preview 0.5.0 and Cialai Broto 0.1.0. Task states are tracked in the [roadmap](../docs/produto/11-roadmap-de-execucao.md) and every release has a page under [docs/releases](../docs/releases/README.md).
 
 | Area | Verified | Pending |
 | --- | --- | --- |
-| Desktop on macOS | Rust core with 214 tests; self test with 11 scenarios in the app binary, including the automatic network and the QR read back from the screen; preview 0.4.3 signed and notarized | Human parity review against the prototype |
+| Desktop on macOS | Rust core with 214 tests; self test with 11 scenarios in the app binary, including the automatic network and the QR read back from the screen; preview 0.5.0 signed and notarized | Human parity review against the prototype |
 | Desktop on Linux | Rust suite on Ubuntu in a container and on GitHub Actions; process metrics checked against `/proc`; the AppImage fix for recent distributions validated on Ubuntu 24.04 and Arch with Mesa 26 | Visible WebKitGTK run on a physical machine |
 | Desktop on Windows | GitHub Actions runs the native Rust suite, the Go core tests, Jest and an unsigned bundle on Windows 2022 | Physical machine, WebView2 with a GPU, IME and code signing |
 | Automatic connectivity | Automated suites, in process tests against the real Tor network, the Docker NAT lab and an Android release build paired on the emulator with a real desktop sidecar over the direct path and the Tor backup | The connectivity checklist on real phones, computers and networks |
-| iOS and Android | Native Tor and the v2 module on both; TestFlight build of 0.2.0 in internal testing; Android APK published | Real phones, the Play internal track and store review |
-| CI and releases | CI green on Ubuntu, macOS and Windows; preview 0.4.3 published with installers, the Android APK, `SHA256SUMS` and a signed updater manifest; the in app updater carries every desktop from 0.2.x to the current preview | Windows code signing, store review and version 1.0.0 |
+| iOS and Android | Native Tor and the v2 module on both; the apps are on the App Store and Google Play, and the Android APK stays on the site | The connectivity checklist on real phones |
+| CI and releases | CI green on Ubuntu, macOS and Windows; preview 0.5.0 published with installers, `SHA256SUMS` and a signed updater manifest with eleven targets; the in app updater carries every desktop from 0.2.x to the current preview | Windows code signing and version 1.0.0 |
+| Cialai Broto | Preview 0.1.0 with a Windows installer, Linux `.deb` and `.rpm` packages and the signed `.tar.gz` payloads; the services inside the three installers were compared to the signed payloads, and the attestation and published files were verified | Physical acceptance with two Brotos and a macOS build |
 
-Since the 15 September snapshot of the connectivity plan above, the preview line has kept moving: 0.3.0 brought the visual refresh with a color and icon per session and attention markers on the phone; 0.4.0 added agent profiles, the VS Code style explorer and a state per card; 0.4.1 fixed the accounts menu and the card; and 0.4.2 and 0.4.3 made a file path in the terminal a link that opens in the editor, with accents and spaces. Each is written up in [docs/releases](../docs/releases/README.md).
+Since the 15 September snapshot of the connectivity plan above, the preview line has kept moving: 0.3.0 brought the visual refresh with a color and icon per session and attention markers on the phone; 0.4.0 added agent profiles, the VS Code style explorer and a state per card; 0.4.1 fixed the accounts menu and the card; 0.4.2 and 0.4.3 made a file path in the terminal a link that opens in the editor, with accents and spaces; 0.4.4 fixed the first run PTY test on Windows; and 0.5.0 brought Cialai Broto in preview for Windows and Linux. Each is written up in [docs/releases](../docs/releases/README.md).
 
 ## Build from source
 
@@ -389,6 +412,7 @@ Limits of this preview:
 ```text
 apps/desktop          Tauri 2 and Rust
 apps/mobile           Expo for iOS and Android, native tunnel module
+apps/broto            Tauri 2 window for Cialai Broto
 packages/ui           React studio, desktop and phone shells
 packages/protocol     Bridge and pairing contract
 packages/tunnel-core  Go identity, QUIC and Tor transports, edge, proxy and pairing
