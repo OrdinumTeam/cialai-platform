@@ -56,7 +56,7 @@ Não há filtro de eco nem integração de shell que marque o começo da saída.
 
 ### Aplicativos gráficos no Windows
 
-Quando o Broto é instalado como serviço SCM, `rodar` e `abrir_terminal` executam na Session 0, mesmo usando a conta comum da pessoa. Uma janela iniciada ali não aparece na sessão gráfica do console. Abrir um PTY oferece terminal no Cialai, sem transferir o processo para o desktop do Windows. A IA deve comunicar essa limitação ao receber um pedido para abrir um app gráfico; sucesso do processo não comprova janela visível.
+Quando o Broto é instalado como serviço SCM, `rodar` e `abrir_terminal` executam na Session 0, mesmo usando a conta da pessoa. Uma janela iniciada ali não aparece na sessão gráfica do console. Abrir um PTY oferece terminal no Cialai, sem transferir o processo para o desktop do Windows. A IA deve comunicar essa limitação ao receber um pedido para abrir um app gráfico; sucesso do processo não comprova janela visível.
 
 Não existe lançador gráfico suportado. Criar tarefa agendada interativa não faz parte da API. As opções e os riscos de um futuro lançador estão na [proposta 069](../produto/12-decisoes.md#069-proposta-de-lançador-gráfico-do-broto-no-windows).
 

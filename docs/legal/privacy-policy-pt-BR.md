@@ -82,8 +82,8 @@ a agentes conectados pelo MCP. Esses agentes podem ser serviços de terceiros
 escolhidos pela pessoa; suas políticas também se aplicam ao conteúdo enviado.
 A Ordinum não recebe esse conteúdo. O serviço continua depois de fechar a janela.
 Pausar impede novas operações; desconectar revoga o vínculo, sem apagar cópias
-ou registros que já tenham sido recebidos. Restrinja as pastas e use uma conta
-sem privilégios. Não compartilhe códigos de pareamento ou credenciais.
+ou registros que já tenham sido recebidos. Restrinja as pastas. Numa conta de
+administrador, os comandos alcançam a máquina inteira. Não compartilhe códigos de pareamento ou credenciais.
 
 Na instalação do Broto como serviço do Windows, a pessoa fornece a credencial
 da conta à interface protegida do próprio sistema. O Windows

@@ -81,8 +81,8 @@ authorized devices and agents connected through MCP. User-selected agents may
 be third-party services whose policies also apply to content sent to them.
 Ordinum does not receive this content. The service continues after its window
 closes. Pausing blocks new operations; disconnecting revokes the pairing but
-does not erase copies or records already received. Restrict shared roots and
-use an unprivileged account. Do not share pairing codes or credentials.
+does not erase copies or records already received. Restrict shared roots. On
+an administrator account, commands reach the whole machine. Do not share pairing codes or credentials.
 
 When installing Broto as a Windows service, the user supplies the account
 credential through the operating system's protected interface. Windows

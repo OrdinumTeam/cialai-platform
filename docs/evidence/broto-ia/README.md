@@ -78,7 +78,7 @@ As reproduções abaixo falharam antes da correção. O estado anterior não dev
 | Resposta final antes de drenar a saída | `TestFullOutputQueueDrainsBeforeSuccessfulFinalResponse`, incluindo fila cheia e 33 saídas |
 | Escrita IPC retida após cancelamento | `TestStalledEventReaderDoesNotHoldCancelledHandler`; fechar o contexto desbloqueia o escritor |
 | Recebimento abandonado ou processo encerrado | `TestAbandonedUploadExpiresWithoutFurtherRequests` e `TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash`; expiração automática e bloqueio entre processos |
-| Arquivos acessíveis em conta privilegiada | `TestFilesPrivilegedAccountGuard`, cobrindo os cinco verbos |
+| Arquivos em conta de administrador | A guarda e o teste `TestFilesPrivilegedAccountGuard` saíram com a decisão 072; o Broto não recusa conta nenhuma |
 | Erros de arquivo indistinguíveis | `TestFileDiagnosticsAreActionableAndSanitized`; motivos específicos sem expor conteúdo ou caminho em mensagens de erro |
 | Ordem dos pedidos instável | `TestPendingApprovalsAreOldestFirst`; interface mantém seleção por ID |
 | Fila sem navegação e lista ausente | Testes Node e Playwright verificam contador, navegação sincronizada e todos os pedidos em Dispositivos |

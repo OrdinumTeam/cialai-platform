@@ -57,8 +57,9 @@ code and credentials as secrets. The host authorizes each Broto independently;
 a phone pairing does not grant Broto permissions. Revocation must close active
 connections. A paired host can exercise only the local capability ceiling.
 Read-only access still exposes file contents and metadata. Command execution
-can read credentials accessible to the service account, so use a dedicated
-unprivileged account and restricted project roots.
+runs with the full rights of the service account, administrator or root
+included when Broto is installed on such an account. Restrict project roots
+to what the host should reach.
 
 The local control socket belongs to the service user and must not be exposed
 over TCP. Local administrators and processes running under that user remain

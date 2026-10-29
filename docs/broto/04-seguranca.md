@@ -84,7 +84,7 @@ Isso é deliberado. Dar à IA um terminal numa máquina remota é poderoso e mer
 | Alguém rouba o código de pareamento | Código aleatório gerado na hora para cada Broto, de uso único, válido por 10 minutos e preso ao primeiro aparelho que o apresenta; nada entra sem Aprovar na lista Brotos ligando, conferindo os quatro dígitos |
 | Alguém na rede observa o tráfego | TLS 1.3 mútuo no caminho direto e na reserva pelo Tor; a saída de terminal cruza cifrada ponta a ponta |
 | O hospedeiro é roubado | Revogar o Broto corta a conexão; quem está na máquina do Broto também pode Desconectar; o teto local limita o estrago até lá |
-| A máquina do Broto é sensível | O teto local e uma conta comum limitam o que qualquer ordem alcança |
+| A máquina do Broto é sensível | O teto local e a conta escolhida na instalação definem o que qualquer ordem alcança |
 | O hospedeiro está desligado | O Broto fica só esperando; sem hospedeiro não há ordem, e o Broto não escuta ninguém |
 | Quem está na máquina do Broto quer parar tudo | Pausar e Desconectar na janela do próprio Broto, sem depender do hospedeiro, e o monitor mostra o que foi feito |
 
