@@ -18,7 +18,7 @@ func digest(p []byte) string { h := sha256.Sum256(p); return hex.EncodeToString(
 func fileExecutor(t *testing.T) (*Executor, string) {
 	t.Helper()
 	dir := t.TempDir()
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 1})
+	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 1, AllowPrivileged: true})
 	t.Cleanup(func() { e.Close() })
 	return e, dir
 }
