@@ -19,6 +19,11 @@ on:
           - aarch64-apple-darwin
           - x86_64-apple-darwin
           - x86_64-pc-windows-msvc
+      fast_release:
+        description: Reuse native tests already approved for this commit and use ThinLTO
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -39,6 +44,9 @@ jobs:
           ) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
+    env:
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.fast_release && 'thin' || 'fat' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.fast_release && '8' || '1' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,6 +79,7 @@ jobs:
         if: runner.os == 'macOS' && runner.arch == 'ARM64' && matrix.target == 'x86_64-apple-darwin'
         run: node tools/build-tunnel.mjs --target aarch64-apple-darwin
       - name: Session restoration regressions
+        if: '!inputs.fast_release'
         shell: bash
         run: |
           node --test packages/ui/scripts/tests/profile-badge.test.cjs
