@@ -191,3 +191,12 @@ A rodada local de `cargo test --locked --lib` teve 500 aprovados, duas falhas e 
 A transcrição da falha macOS mostrou o primeiro comando ecoado antes da inicialização da leitura de teclas: o prompt já estava na saída, mas o terminal ainda podia converter CR em LF. A fixture aguardava somente o texto do prompt. Agora, no Unix, ela também observa pelo PTY que `ICANON`, `ECHO` e `ICRNL` estão desligados antes de enviar a linha. Ela não altera o modo do terminal nem o código do produto.
 
 Uma regressão com prompt anterior ao modo raw perdeu a primeira linha antes da correção e passou depois. Os sete testes de `agent_menu` passaram com PowerShell 7.6.9 real; o menu PowerShell passou também em três repetições separadas. Clippy com todos os alvos e avisos como erros passou. Esses resultados locais não substituem a CI `tests_only` completa nos três sistemas.
+
+
+## Provas remotas e limites desta retomada
+
+A [transcrição sanitizada dos onze testes nativos de arquivos no Windows](windows-file-tests-2026-10-29.txt) registra a execução já aprovada, com saída zero. Ela foi reutilizada após conferir que `packages/tunnel-core` está idêntico ao commit `abf3d80`. As fixtures permitem a conta privilegiada apenas no laboratório e isolam o temporário no processo; isso não aprova uma configuração privilegiada do serviço. A guarda negativa também passou.
+
+Na conferência seguinte, a VM apareceu inicialmente ligada, mas ficou desligada antes de concluir o inventário somente leitura. Nenhum comando de iniciar, parar ou reiniciar foi enviado. O IPC do hospedeiro preservado aceitou uma conexão, mas não respondeu a `broto.list` no prazo de sete segundos; a CLI também não concluiu `listar` em dezoito segundos. As sondagens próprias foram encerradas e o aplicativo, sidecar e watchers do usuário foram preservados.
+
+Claude sem MCP contra o Windows, fluxo ao vivo e Ctrl C no card, aprovação em Terminais, transferência de 100 MB Mac ↔ Windows, descoberta da skill em sessão aberta à mão e aceite com dois Brotos continuam sem aprovação nesta rodada. Os checkboxes correspondentes permanecem abertos.

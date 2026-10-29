@@ -231,10 +231,19 @@ for (const file of readdirSync(workflowsDir).filter((name) => /\.ya?ml$/.test(na
   assert.deepEqual(Object.keys(flow.on).sort(), release ? ['push', 'workflow_dispatch'] : ['workflow_dispatch'], `${file} só roda por disparo manual`);
   if (release) assert.deepEqual(flow.on.push, { tags: [broto ? 'broto-v*' : 'v*'] }, 'a release só dispara sozinha pela tag própria');
   for (const [name, job] of Object.entries(flow.jobs)) {
-    if (job.needs) {
+    if (broto && name === 'publish') {
+      // Publication-only dispatch reuses two previously verified builds.
+      assert.equal(job.needs, 'build');
+      assert.equal(job.if, `always() && ${OWNER_GUARD} && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.publish_run != '' && startsWith(inputs.tag, 'broto-v')))`);
+      const validation = job.steps.find((step) => step.name === 'Validate the existing build run before reusing its artifacts');
+      assert.equal(validation?.if, "inputs.publish_run != ''");
+      for (const guard of ['.headSha == $expected', '.workflowName == "Release Broto"', '($builds | length) == 2', 'all($builds[]; .conclusion == "success")']) {
+        assert.ok(validation.run.includes(guard), `a publicação reutilizada precisa conferir ${guard}`);
+      }
+    } else if (job.needs) {
       assert.doesNotMatch(job.if ?? '', /always\(\)|cancelled\(\)|failure\(\)/, `${file} ${name} não pode rodar com o job anterior pulado`);
     } else {
-      assert.equal(job.if, broto ? `startsWith(github.ref, 'refs/tags/broto-v') && ${OWNER_GUARD}` : OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
+      assert.equal(job.if, broto ? `inputs.publish_run == '' && startsWith(github.ref, 'refs/tags/broto-v') && ${OWNER_GUARD}` : OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
     }
   }
 }

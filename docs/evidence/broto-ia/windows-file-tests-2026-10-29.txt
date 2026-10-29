@@ -1,0 +1,33 @@
+Prova Windows nativa executada em 29/10/2026, antes desta retomada.
+Origem Go: abf3d80; packages/tunnel-core permanece idêntico em 629afa9.
+Conta da execução: SYSTEM, com AllowPrivileged somente nas fixtures e temporário privado por processo.
+Não verifica instalação do serviço ou conta final.
+SHA256 do log de execução original: 6b3e95cf33dfd186a5dd6b3afbf32779450a45ef62982ad0a13036e6fd5b6425
+
+=== RUN   TestFilesPrivilegedAccountGuard
+--- PASS: TestFilesPrivilegedAccountGuard (0.02s)
+=== RUN   TestUploadOrphanRecoveryAndLiveOwnerProtection
+--- PASS: TestUploadOrphanRecoveryAndLiveOwnerProtection (0.10s)
+=== RUN   TestAbandonedUploadExpiresWithoutFurtherRequests
+--- PASS: TestAbandonedUploadExpiresWithoutFurtherRequests (0.08s)
+=== RUN   TestFileDiagnosticsAreActionableAndSanitized
+--- PASS: TestFileDiagnosticsAreActionableAndSanitized (0.03s)
+=== RUN   TestUploadLockOwnerHelper
+--- PASS: TestUploadLockOwnerHelper (0.00s)
+=== RUN   TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash
+--- PASS: TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash (0.24s)
+=== RUN   TestFilesIntegrityConfinementAndPause
+--- PASS: TestFilesIntegrityConfinementAndPause (0.13s)
+=== RUN   TestFilesRejectSymlinkEscapeAndSystemRoots
+--- PASS: TestFilesRejectSymlinkEscapeAndSystemRoots (0.03s)
+=== RUN   TestFilesDownloadDetectsMutationAndCancel
+--- PASS: TestFilesDownloadDetectsMutationAndCancel (0.02s)
+PASS
+=== RUN   TestFileRoundTripAndNoOverwrite
+--- PASS: TestFileRoundTripAndNoOverwrite (2.63s)
+=== RUN   TestCorruptDownloadNeverPublished
+--- PASS: TestCorruptDownloadNeverPublished (0.03s)
+PASS
+
+
+GUEST_EXIT=0

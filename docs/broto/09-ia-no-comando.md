@@ -355,7 +355,7 @@ Tamanho G. Depende de BRO-015.
 - [x] Hub com as regras de permissão da peça 4 e prévia própria para arquivo · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 - [x] Ações `enviar`, `baixar` e `arquivos` no `cialai broto`, com progresso e conferência · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 - [x] Atividade Arquivo recebido e Arquivo enviado nos três idiomas · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
-- [ ] Testes Go de caminho, limite, interrupção, hash e permissão, inclusive Windows na VM
+- [x] Testes Go de caminho, limite, interrupção, hash e permissão, inclusive Windows na VM · 29/10/2026, onze testes nativos aprovados, código Go preservado · [Evidência sanitizada](../evidence/broto-ia/windows-file-tests-2026-10-29.txt)
 - [ ] Prova: enviar e baixar um arquivo de 100 MB entre o Mac e o Broto Windows, com o SHA256 igual nos dois lados
 - [x] Documentos 03 e 04 atualizados · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 
