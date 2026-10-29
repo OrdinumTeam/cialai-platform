@@ -4,15 +4,26 @@ on:
   push:
     tags: ['broto-v*']
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing Broto tag to publish
+        required: false
+        type: string
+      publish_run:
+        description: Existing run with both successful builds, for publication only
+        required: false
+        type: string
 permissions:
   contents: read
 concurrency:
-  group: broto-${{ github.ref }}
+  group: broto-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
+env:
+  BROTO_RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 jobs:
   build:
     environment: broto-release
-    if: startsWith(github.ref, 'refs/tags/broto-v') && contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
+    if: inputs.publish_run == '' && startsWith(github.ref, 'refs/tags/broto-v') && contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor)
     strategy:
       fail-fast: false
       matrix:
@@ -109,17 +120,45 @@ jobs:
           retention-days: 7
   publish:
     needs: build
+    if: always() && contains(fromJSON('["ordinum-br","focoamorim"]'), github.triggering_actor) && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.publish_run != '' && startsWith(inputs.tag, 'broto-v')))
     runs-on: ubuntu-22.04
     environment: broto-release
     permissions:
       contents: write
+      actions: read
       id-token: write
       attestations: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - name: Validate the existing build run before reusing its artifacts
+        if: inputs.publish_run != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISH_RUN: ${{ inputs.publish_run }}
+        run: |
+          [[ "$PUBLISH_RUN" =~ ^[0-9]+$ ]]
+          expected="$(git rev-parse HEAD)"
+          gh run view "$PUBLISH_RUN" --repo "$GITHUB_REPOSITORY" --json headSha,workflowName,jobs > "$RUNNER_TEMP/broto-build-run.json"
+          jq -e --arg expected "$expected" '
+            [.jobs[] | select(.name | startswith("build ("))] as $builds |
+            .headSha == $expected and .workflowName == "Release Broto" and
+            ($builds | length) == 2 and all($builds[]; .conclusion == "success")
+          ' "$RUNNER_TEMP/broto-build-run.json"
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: packages/tunnel-core/go.mod
+          cache: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           path: payloads
+          run-id: ${{ inputs.publish_run || github.run_id }}
+          github-token: ${{ github.token }}
       - name: Sign manifests with independent Broto key
         env:
           BROTO_MINISIGN_SECRET_KEY: ${{ secrets.BROTO_MINISIGN_SECRET_KEY }}
@@ -127,7 +166,7 @@ jobs:
         shell: bash
         run: |
           test -n "$BROTO_MINISIGN_SECRET_KEY"
-          sudo apt-get update && sudo apt-get install -y minisign
+          (cd packages/tunnel-core && go build -mod=readonly -o "$RUNNER_TEMP/minisign" aead.dev/minisign/cmd/minisign)
           umask 077
           key="$RUNNER_TEMP/broto.key"
           trap 'rm -f "$key"' EXIT
@@ -137,19 +176,19 @@ jobs:
           for dir in payloads/*; do
             tar -xf "$dir/$(basename "$dir").tar" -C "$dir"
             rm "$dir/$(basename "$dir").tar"
-            minisign -S -s "$key" -m "$dir/SHA256SUMS.txt" -x "$dir/SHA256SUMS.txt.minisig" </dev/null
+            "$RUNNER_TEMP/minisign" -S -s "$key" -m "$dir/SHA256SUMS.txt" -x "$dir/SHA256SUMS.txt.minisig" </dev/null
             node tools/broto/stage-installers.mjs "$dir/ui" release
             COPYFILE_DISABLE=1 tar --no-xattrs -czf "release/$(basename "$dir").tar.gz" -C "$dir" .
             cp "$dir/sbom.cdx.json" "release/$(basename "$dir").sbom.cdx.json"
           done
-          node tools/broto/site-manifest.mjs release "$GITHUB_REF_NAME"
+          node tools/broto/site-manifest.mjs release "$BROTO_RELEASE_TAG"
           cd release
-          minisign -S -s "$key" -m latest.json </dev/null
-          minisign -S -s "$key" -m SHA256SUMS.txt </dev/null
+          "$RUNNER_TEMP/minisign" -S -s "$key" -m latest.json </dev/null
+          "$RUNNER_TEMP/minisign" -S -s "$key" -m SHA256SUMS.txt </dev/null
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: release/*
       - name: Publish separate release without replacing desktop latest
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" release/* --repo "$GITHUB_REPOSITORY" --title "$GITHUB_REF_NAME" --latest=false --prerelease --generate-notes
+        run: gh release create "$BROTO_RELEASE_TAG" release/* --repo "$GITHUB_REPOSITORY" --title "$BROTO_RELEASE_TAG" --latest=false --prerelease --generate-notes
