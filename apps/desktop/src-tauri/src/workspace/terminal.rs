@@ -4116,11 +4116,13 @@ echo 'recovered-fixture'
         std::fs::create_dir_all(&bin).unwrap();
         // O shell da sessao e um zsh de mentira que fixa o HOME da pasta de
         // teste e vira o zsh de verdade, no mesmo pid, com o menu injetado.
+        // -d skips global startup files: the CI image's compinit can prompt
+        // about its own completion directories before our .zshrc is loaded.
         let zsh = bin.join("zsh");
         std::fs::write(
             &zsh,
             format!(
-                "#!/bin/sh\nHOME='{}'; export HOME\nunset CIALAI_USER_ZDOTDIR\nexec '{}' \"$@\"\n",
+                "#!/bin/sh\nHOME='{}'; export HOME\nunset CIALAI_USER_ZDOTDIR\nexec '{}' -d \"$@\"\n",
                 home.display(),
                 real_zsh.display()
             ),
