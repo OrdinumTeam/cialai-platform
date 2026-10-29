@@ -14,15 +14,16 @@ configura o serviço e a checagem assinada a cada seis horas. Não precisa de
 Node ou do comando minisign instalado. Fechar a janela mantém o serviço.
 
 No Windows, o sistema pede elevação e a credencial protegida da mesma conta
-sem privilégios usada pelo monitor. A senha nunca vai em argumento, log ou
+usada pelo monitor, comum ou de administrador. A senha nunca vai em argumento, log ou
 arquivo do Broto. A conta recebe SeServiceLogonRight e SeBatchLogonRight,
 controle apenas do seu serviço e tarefa agendada limitada. O perfil e a pasta
 de estado são explícitos. A senha da tarefa fica sob a proteção do Windows.
 O usuário não recebe SERVICE_CHANGE_CONFIG. O SCM mantém um launcher fixo,
-sempre na conta comum, que supervisiona o executável atual. Atualizar troca
+sempre na conta do monitor, que supervisiona o executável atual. Atualizar troca
 somente o ponteiro privado e aguarda o PID correto confirmar saúde. Assim,
 a permissão de atualizar não permite trocar a conta do serviço para SYSTEM.
-Contas de administrador são recusadas por padrão. SmartScreen pode avisar
+Numa conta de administrador, o serviço recebe o token completo e roda
+comandos de administrador sem UAC. SmartScreen pode avisar
 editor desconhecido porque esta versão não usa Authenticode.
 
 ## Instalação sem tela
@@ -39,7 +40,7 @@ exatamente os mesmos da versão assinada. Configuração diferente é preservada
 No macOS, o padrão é LaunchAgent por usuário, iniciado no login. Para iniciar
 no boot sem login, use `--headless`. O sistema pede autorização administrativa
 para instalar dois LaunchDaemons root-owned, mas ambos executam com UserName e
-GroupName da conta sem privilégios. O supervisor lê o ponteiro privado da versão
+GroupName da conta escolhida, root incluído. O supervisor lê o ponteiro privado da versão
 e confirma a saúde do processo novo, sem exigir nova elevação a cada atualização.
 
 No Linux, o padrão é systemd por usuário. `--linger` ou `--headless` solicita

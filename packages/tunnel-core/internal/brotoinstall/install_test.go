@@ -123,7 +123,7 @@ func TestInstallerRejectsConfigurationInjection(t *testing.T) {
 		t.Fatal("HTTP allowed")
 	}
 }
-func TestHeadlessMacUsesUnprivilegedBootJobsAndNoMutablePrivilegedInput(t *testing.T) {
+func TestHeadlessMacRunsAsTheChosenAccountAndNoMutablePrivilegedInput(t *testing.T) {
 	files, commands, e := plan("darwin", "/private/Broto Space", "/private/Broto Space/releases/v1/cialai-broto", "key", DefaultURL, "/Users/test", "", planOptions{Headless: true, User: "broto-test", Group: "staff"})
 	if e != nil {
 		t.Fatal(e)
@@ -137,7 +137,7 @@ func TestHeadlessMacUsesUnprivilegedBootJobsAndNoMutablePrivilegedInput(t *testi
 		}
 	}
 	if !strings.Contains(scripts.String(), "<key>UserName</key><string>broto-test</string>") || !marker {
-		t.Fatal("headless boot lacks unprivileged identity")
+		t.Fatal("headless boot lacks the chosen identity")
 	}
 	if len(commands) != 1 || commands[0].Program != "/usr/bin/osascript" || !strings.Contains(commands[0].Args[1], "with administrator privileges") {
 		t.Fatal("missing explicit admin consent")
@@ -145,8 +145,8 @@ func TestHeadlessMacUsesUnprivilegedBootJobsAndNoMutablePrivilegedInput(t *testi
 	if strings.Contains(commands[0].Args[1], " cp ") || strings.Contains(commands[0].Args[1], "headless-daemon.plist") {
 		t.Fatal("root helper trusts a mutable user plist")
 	}
-	if _, _, e = headlessMac("/root", "/root", "root", "wheel"); e == nil {
-		t.Fatal("headless service accepted root")
+	if _, _, e = headlessMac("/var/root/Broto", "/var/root", "root", "wheel"); e != nil {
+		t.Fatal("headless service refused root", e)
 	}
 }
 func TestLinuxLingerIsExplicit(t *testing.T) {

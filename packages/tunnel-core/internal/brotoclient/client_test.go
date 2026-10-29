@@ -331,20 +331,6 @@ func TestControlCallHonorsCallerDeadline(t *testing.T) {
 	}
 }
 
-func TestPrivilegeOverrideCannotEnterThroughJSON(t *testing.T) {
-	var config Config
-	if err := json.Unmarshal([]byte(`{"AllowPrivileged":true,"allowPrivileged":true}`), &config); err != nil {
-		t.Fatal(err)
-	}
-	if config.AllowPrivileged {
-		t.Fatal("JSON enabled the trusted Go-only override")
-	}
-	raw, err := json.Marshal(Config{AllowPrivileged: true})
-	if err != nil || strings.Contains(strings.ToLower(string(raw)), "allowprivileged") {
-		t.Fatal("trusted override leaked into JSON config")
-	}
-}
-
 func TestActivitySkipsPollingAndFoldsTyping(t *testing.T) {
 	dir := t.TempDir()
 	client, err := New(context.Background(), Config{Dir: dir})

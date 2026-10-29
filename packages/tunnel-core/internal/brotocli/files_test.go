@@ -19,7 +19,7 @@ func TestFileRoundTripAndNoOverwrite(t *testing.T) {
 	if e := os.WriteFile(source, data, 0600); e != nil {
 		t.Fatal(e)
 	}
-	ex := brotoexec.New(brotoexec.Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 2, AllowPrivileged: true})
+	ex := brotoexec.New(brotoexec.Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 2})
 	defer ex.Close()
 	call := func(ctx context.Context, m string, p json.RawMessage) (json.RawMessage, error) {
 		var v struct {
@@ -82,7 +82,7 @@ func TestLargeFileRoundTrip(t *testing.T) {
 		}
 	}
 	f.Close()
-	ex := brotoexec.New(brotoexec.Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 128, AllowPrivileged: true})
+	ex := brotoexec.New(brotoexec.Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 128})
 	defer ex.Close()
 	call := func(ctx context.Context, m string, p json.RawMessage) (json.RawMessage, error) {
 		var v struct {

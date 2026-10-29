@@ -24,7 +24,7 @@ func TestCLIThroughHubStreamsAndWaitsForApproval(t *testing.T) {
 	defer peer.Close()
 	var mu sync.Mutex
 	send := func(m brotorpc.Message) { mu.Lock(); defer mu.Unlock(); _ = brotorpc.Write(peer, m) }
-	ex := brotoexec.New(brotoexec.Config{AllowExec: true, AllowPrivileged: true, OnExecOutput: func(id uint64, ch string, b []byte) {
+	ex := brotoexec.New(brotoexec.Config{AllowExec: true, OnExecOutput: func(id uint64, ch string, b []byte) {
 		send(brotorpc.Message{Event: "exec.output", Data: encode(map[string]any{"callId": id, "channel": ch, "data": b})})
 	}})
 	defer ex.Close()

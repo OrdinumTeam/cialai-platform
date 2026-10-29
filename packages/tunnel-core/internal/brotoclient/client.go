@@ -52,44 +52,40 @@ type Status struct {
 	Error     string     `json:"error,omitempty"`
 }
 type Config struct {
-	// AllowPrivileged is an explicit override for trusted Go embedders and
-	// isolated tests. It is false by default and has no JSON, CLI or IPC route.
-	AllowPrivileged bool `json:"-"`
-	Dir             string
-	TorExecutable   string
-	Name            string
+	Dir           string
+	TorExecutable string
+	Name          string
 	// TorEndpoints is an optional local SOCKS endpoint supplied by tests or
 	// a native launcher. Packaged Broto normally owns TorExecutable instead.
 	TorEndpoints *tor.Endpoints
 	STUNServers  []string
 }
 type Client struct {
-	mu              sync.Mutex
-	auditMu         sync.Mutex
-	sequenceMu      sync.Mutex
-	sequence        uint32
-	paths           statedir.Paths
-	local           *identity.Identity
-	name            string
-	endpoint        *direct.Endpoint
-	collector       *candidates.Collector
-	tor             *tor.Client
-	policy          Policy
-	allowPrivileged bool
-	host            *savedHost
-	status          Status
-	executor        *brotoexec.Executor
-	conn            net.Conn
-	send            func(brotorpc.Message) error
-	events          chan brotorpc.Message
-	disconnectAck   chan struct{}
-	cancel          context.CancelFunc
-	generation      uint64
-	paused          bool
-	base            context.Context
-	stop            context.CancelFunc
-	lock            *statedir.Lock
-	torStop         func() error
+	mu            sync.Mutex
+	auditMu       sync.Mutex
+	sequenceMu    sync.Mutex
+	sequence      uint32
+	paths         statedir.Paths
+	local         *identity.Identity
+	name          string
+	endpoint      *direct.Endpoint
+	collector     *candidates.Collector
+	tor           *tor.Client
+	policy        Policy
+	host          *savedHost
+	status        Status
+	executor      *brotoexec.Executor
+	conn          net.Conn
+	send          func(brotorpc.Message) error
+	events        chan brotorpc.Message
+	disconnectAck chan struct{}
+	cancel        context.CancelFunc
+	generation    uint64
+	paused        bool
+	base          context.Context
+	stop          context.CancelFunc
+	lock          *statedir.Lock
+	torStop       func() error
 }
 
 func New(ctx context.Context, c Config) (*Client, error) {
@@ -139,7 +135,7 @@ func New(ctx context.Context, c Config) (*Client, error) {
 		return fail(err)
 	}
 	base, stop := context.WithCancel(ctx)
-	client := &Client{paths: paths, local: local, name: c.Name, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock, allowPrivileged: c.AllowPrivileged}
+	client := &Client{paths: paths, local: local, name: c.Name, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock}
 	if raw, readErr := os.ReadFile(filepath.Join(paths.Root, "pty-sequence.json")); readErr == nil {
 		if json.Unmarshal(raw, &client.sequence) != nil {
 			_ = client.Close()
@@ -450,7 +446,7 @@ func (c *Client) serve(ctx context.Context, g uint64, conn net.Conn, token strin
 			_ = conn.Close()
 		}
 	}
-	executor := brotoexec.New(brotoexec.Config{AllowFiles: c.policy.AllowFiles, FileRoots: c.policy.FileRoots, MaxFileMB: c.policy.MaxFileMB, MaxDuration: time.Duration(c.policy.MaxDurationMinutes) * time.Minute, OnExecOutput: execOutput, AllowExec: c.policy.AllowExec, AllowPTY: c.policy.AllowPTY, Dir: c.policy.Dir, Shell: c.policy.Shell, OnOutput: output, AllocateID: c.allocatePTYID, AllowPrivileged: c.allowPrivileged})
+	executor := brotoexec.New(brotoexec.Config{AllowFiles: c.policy.AllowFiles, FileRoots: c.policy.FileRoots, MaxFileMB: c.policy.MaxFileMB, MaxDuration: time.Duration(c.policy.MaxDurationMinutes) * time.Minute, OnExecOutput: execOutput, AllowExec: c.policy.AllowExec, AllowPTY: c.policy.AllowPTY, Dir: c.policy.Dir, Shell: c.policy.Shell, OnOutput: output, AllocateID: c.allocatePTYID})
 	defer executor.Close()
 	c.mu.Lock()
 	if c.generation != g {

@@ -24,9 +24,6 @@ func Activate(ctx context.Context, result Result) error {
 	if supervised(result) {
 		return activateSupervised(ctx, result)
 	}
-	if os.Getuid() == 0 {
-		return errors.New("activate per-user Broto without root")
-	}
 	home, e := os.UserHomeDir()
 	if e != nil {
 		return e

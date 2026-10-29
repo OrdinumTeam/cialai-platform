@@ -15,21 +15,15 @@ import (
 )
 
 func windowsConfig() Config { c := testConfig(); c.MaxDuration = 30 * time.Second; return c }
-func TestWindowsPrivilegedAccountRequiresExplicitOptIn(t *testing.T) {
-	if !privileged() {
-		t.Skip("requires an elevated token to exercise the production guard")
+func TestWindowsAdministratorRunsCommands(t *testing.T) {
+	if !administratorToken(windows.GetCurrentProcessToken()) {
+		t.Skip("requires an administrator token")
 	}
-	raw := json.RawMessage(`{"command":"cmd.exe","args":["/d","/c","echo explicit-opt-in"]}`)
-	guarded := New(Config{AllowExec: true})
-	defer guarded.Close()
-	if _, err := guarded.Handle(context.Background(), "exec", raw); err == nil || !strings.HasPrefix(Diagnostic(err), "execution_account_privileged:") {
-		t.Fatal("default executor accepted an elevated account", err)
-	}
-	allowed := New(windowsConfig())
-	defer allowed.Close()
-	result := call(t, allowed, "exec", Args{Command: "cmd.exe", Args: []string{"/d", "/c", "echo explicit-opt-in"}}).(map[string]any)
-	if strings.TrimSpace(result["stdout"].(string)) != "explicit-opt-in" || result["exit_code"] != 0 {
-		t.Fatal("explicit trusted opt-in did not execute", result)
+	e := New(Config{AllowExec: true, MaxDuration: 30 * time.Second})
+	defer e.Close()
+	result := call(t, e, "exec", Args{Command: "cmd.exe", Args: []string{"/d", "/c", "fltmc >nul && echo admin-ok"}}).(map[string]any)
+	if strings.TrimSpace(result["stdout"].(string)) != "admin-ok" || result["exit_code"] != 0 {
+		t.Fatal("administrator Broto did not run an administrator command", result)
 	}
 }
 func windowsWaitFile(t *testing.T, path string) string {
@@ -229,11 +223,20 @@ func TestWindowsConPTYDrain(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
-func TestServicePrivilegesAreRemovedBeforeAnyCommand(t *testing.T) {
-	privileged()
+func TestServicePrivilegesFollowTheAccount(t *testing.T) {
+	token := windows.GetCurrentProcessToken()
+	admin := administratorToken(token)
+	before := holdsPrivilege(token, "SeImpersonatePrivilege")
+	prepareAccount()
+	if admin {
+		if before && !holdsPrivilege(token, "SeImpersonatePrivilege") {
+			t.Fatal("administrator lost a privilege of its own token")
+		}
+		return
+	}
 	for _, name := range riskyServicePrivileges {
-		if holdsPrivilege(windows.GetCurrentProcessToken(), name) {
-			t.Fatalf("%s survived for the shells this process starts", name)
+		if holdsPrivilege(token, name) {
+			t.Fatalf("%s survived for the shells a standard account starts", name)
 		}
 	}
 }

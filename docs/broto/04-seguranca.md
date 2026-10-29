@@ -55,11 +55,11 @@ O Broto tem um arquivo de política local, que o hospedeiro não altera pela red
 
 | Ajuste | Efeito |
 | --- | --- |
-| Usuário de execução | Por padrão o Broto roda os comandos com um usuário sem privilégio, não como administrador |
+| Usuário de execução | O Broto roda os comandos como a conta onde foi instalado, administrador e root incluídos |
 | Pasta inicial | Onde o `exec` e o terminal começam; não é uma cerca, porque um shell anda pelo disco com as permissões do usuário de execução |
 | Teto de capacidade | Desligar o `exec`, ou o `pty`, ou os dois, deixando o Broto só como presença |
 
-A cerca real são as permissões do usuário de execução no sistema. Por isso o padrão é um usuário sem privilégio: o que ele não pode fazer na máquina, nenhuma ordem pelo Broto consegue. Esse arquivo é a defesa de quem instala o Broto numa máquina sensível: mesmo que o hospedeiro seja comprometido, o Broto não ultrapassa o teto local.
+A cerca real são as permissões do usuário de execução no sistema, e quem escolhe essa conta é a pessoa que instala. Numa conta de administrador o Broto é administrador: o hospedeiro faz na máquina tudo o que um administrador faz, sem UAC e sem senha. Numa conta comum, o que ela não pode fazer, nenhuma ordem pelo Broto consegue. Por decisão do usuário em 29/10/2026, registrada no documento 12 como 072, o Broto não recusa conta nenhuma. Esse arquivo segue sendo a defesa de quem instala o Broto numa máquina sensível: mesmo que o hospedeiro seja comprometido, o Broto não ultrapassa o teto local.
 
 ### Camada 3, registro de auditoria
 
@@ -84,7 +84,7 @@ Isso é deliberado. Dar à IA um terminal numa máquina remota é poderoso e mer
 | Alguém rouba o código de pareamento | Código aleatório gerado na hora para cada Broto, de uso único, válido por 10 minutos e preso ao primeiro aparelho que o apresenta; nada entra sem Aprovar na lista Brotos ligando, conferindo os quatro dígitos |
 | Alguém na rede observa o tráfego | TLS 1.3 mútuo no caminho direto e na reserva pelo Tor; a saída de terminal cruza cifrada ponta a ponta |
 | O hospedeiro é roubado | Revogar o Broto corta a conexão; quem está na máquina do Broto também pode Desconectar; o teto local limita o estrago até lá |
-| A máquina do Broto é sensível | O teto local e o usuário sem privilégio limitam o que qualquer ordem alcança |
+| A máquina do Broto é sensível | O teto local e uma conta comum limitam o que qualquer ordem alcança |
 | O hospedeiro está desligado | O Broto fica só esperando; sem hospedeiro não há ordem, e o Broto não escuta ninguém |
 | Quem está na máquina do Broto quer parar tudo | Pausar e Desconectar na janela do próprio Broto, sem depender do hospedeiro, e o monitor mostra o que foi feito |
 
@@ -92,7 +92,7 @@ Isso é deliberado. Dar à IA um terminal numa máquina remota é poderoso e mer
 
 | Limite | Observação |
 | --- | --- |
-| Um hospedeiro comprometido com o Broto em livre | Nesse caso o atacante tem o terminal da máquina do Broto, limitado pelo teto local e pelo usuário de execução; por isso o padrão é pedir confirmação e o usuário sem privilégio |
+| Um hospedeiro comprometido com o Broto em livre | Nesse caso o atacante tem o terminal da máquina do Broto, limitado pelo teto local e pelo usuário de execução; numa conta de administrador, a máquina inteira; por isso o padrão é pedir confirmação |
 | A máquina do Broto já comprometida por outro caminho | O Broto não é antivírus; ele protege o canal, não a máquina inteira |
 | Windows sem assinatura Authenticode | O instalador avisa, confere a soma assinada e o `codesign` onde há; o detalhe está no documento 07 |
 

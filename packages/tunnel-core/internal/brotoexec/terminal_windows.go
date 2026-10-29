@@ -16,21 +16,22 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// riskyServicePrivileges are granted to every SCM service. The Broto never
-// impersonates a client, and a shell started for the host would otherwise
-// inherit SeImpersonatePrivilege, a known path from a service account to SYSTEM.
+// riskyServicePrivileges are granted to every SCM service. Under a standard
+// account they are a known path from a service to SYSTEM, so a shell started
+// for the host would hold more than the account the person chose.
 var riskyServicePrivileges = []string{"SeImpersonatePrivilege", "SeCreateGlobalPrivilege"}
 
-var dropPrivileges sync.Once
+var prepareToken sync.Once
 
-// privileged reports a process that must not take remote orders: one running
-// as an administrator with its full token, as a built-in service account, or
-// still holding a service privilege after trying to remove it. IsElevated is
-// not the test, because Windows reports every service token as elevated, and
-// the Broto service under a standard account could never run a command.
-func privileged() bool {
-	dropPrivileges.Do(dropServicePrivileges)
-	return privilegedToken(windows.GetCurrentProcessToken())
+// prepareAccount keeps the Broto at the rights of its account. An
+// administrator keeps its full token, so the host can do anything an
+// administrator can; a standard account loses only the service privileges.
+func prepareAccount() {
+	prepareToken.Do(func() {
+		if !administratorToken(windows.GetCurrentProcessToken()) {
+			dropServicePrivileges()
+		}
+	})
 }
 
 // dropServicePrivileges removes the service privileges from this process, so
@@ -73,30 +74,25 @@ func holdsPrivilege(token windows.Token, name string) bool {
 	return false
 }
 
-func privilegedToken(token windows.Token) bool {
-	for _, name := range riskyServicePrivileges {
-		if holdsPrivilege(token, name) {
-			return true
-		}
-	}
+// administratorToken reports LocalSystem or a token with the Administrators
+// group enabled. A service logon of an administrator account has it enabled;
+// a UAC-filtered token keeps the group only for deny checks.
+func administratorToken(token windows.Token) bool {
 	user, err := token.GetTokenUser()
 	if err != nil {
-		return true
+		return false
 	}
-	for _, kind := range []windows.WELL_KNOWN_SID_TYPE{windows.WinLocalSystemSid, windows.WinLocalServiceSid, windows.WinNetworkServiceSid} {
-		if sid, err := windows.CreateWellKnownSid(kind); err != nil || user.User.Sid.Equals(sid) {
-			return true
-		}
+	if system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid); err == nil && user.User.Sid.Equals(system) {
+		return true
 	}
 	admins, err := windows.CreateWellKnownSid(windows.WinBuiltinAdministratorsSid)
 	if err != nil {
-		return true
+		return false
 	}
 	groups, err := token.GetTokenGroups()
 	if err != nil {
-		return true
+		return false
 	}
-	// A UAC-filtered administrator keeps the group only for deny checks.
 	for _, group := range groups.AllGroups() {
 		if group.Sid.Equals(admins) && group.Attributes&windows.SE_GROUP_ENABLED != 0 {
 			return true

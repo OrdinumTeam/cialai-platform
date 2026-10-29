@@ -36,7 +36,6 @@ export function activate(update,{platform=process.platform,home=homedir(),execut
   return;
  }
  if(!['darwin','linux'].includes(platform))throw Error('Unsupported service platform');
- if(process.getuid?.()===0)throw Error('Activate the per-user service without root');
  const path=platform==='darwin'?join(home,'Library','LaunchAgents','br.com.ordinum.cialai.broto.plist'):join(home,'.config','systemd','user','cialai-broto.service');
  const stat=lstatSync(path);if(!stat.isFile()||stat.isSymbolicLink()||stat.uid!==process.getuid())throw Error('Unsafe service descriptor');
  const previous=readFileSync(path,'utf8');

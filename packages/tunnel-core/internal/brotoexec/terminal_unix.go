@@ -13,7 +13,9 @@ import (
 	ps "github.com/mitchellh/go-ps"
 )
 
-func privileged() bool { return os.Geteuid() == 0 }
+// prepareAccount leaves the token alone: the Broto runs with the rights of
+// its account, root included.
+func prepareAccount() {}
 func prepareCommand(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error { return killTree(cmd.Process.Pid) }

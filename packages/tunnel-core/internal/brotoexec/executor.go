@@ -16,8 +16,7 @@ import (
 )
 
 type Config struct {
-	// Test seams; neither is configurable by the remote peer.
-	accountPrivileged   func() bool
+	// Test seam; not configurable by the remote peer.
 	transferIdleTimeout time.Duration
 	AllowFiles          bool
 	FileRoots           []string
@@ -31,8 +30,6 @@ type Config struct {
 	MaxOutput           int
 	OnOutput            func(uint32, []byte)
 	AllocateID          func() (uint32, error)
-	// AllowPrivileged must be explicitly enabled by the local installer.
-	AllowPrivileged bool
 }
 type AuditEntry struct {
 	Time    time.Time `json:"time"`
@@ -85,12 +82,12 @@ type Args struct {
 	Offset    uint64            `json:"offset"`
 }
 
+// New prepares the process token before any command can start. The Broto has
+// the rights of the account it runs under, administrator and root included.
 func New(c Config) *Executor {
+	prepareAccount()
 	if c.transferIdleTimeout <= 0 {
 		c.transferIdleTimeout = 15 * time.Minute
-	}
-	if c.accountPrivileged == nil {
-		c.accountPrivileged = privileged
 	}
 	if c.MaxDuration <= 0 {
 		c.MaxDuration = 30 * time.Minute
@@ -178,9 +175,6 @@ func (e *Executor) HandleCall(ctx context.Context, callID uint64, verb string, r
 		return nil, failure("executor_paused", "O Broto está pausado nesta máquina.")
 	}
 	if strings.HasPrefix(verb, "files.") {
-		if e.config.accountPrivileged() && !e.config.AllowPrivileged {
-			return nil, failure("execution_account_privileged", "O acesso a arquivos exige uma conta sem elevação ou privilégios administrativos.")
-		}
 		return e.files(verb, raw)
 	}
 	switch verb {
@@ -189,10 +183,6 @@ func (e *Executor) HandleCall(ctx context.Context, callID uint64, verb string, r
 			return nil, errors.New("unsupported protocol version")
 		}
 		return map[string]any{"version": 1, "exec": e.config.AllowExec, "pty": e.config.AllowPTY, "shell": e.ExecShell(), "files": e.config.AllowFiles}, nil
-	case "exec", "pty.open":
-		if e.config.accountPrivileged() && !e.config.AllowPrivileged {
-			return nil, failure("execution_account_privileged", "A execução exige uma conta sem elevação ou privilégios administrativos.")
-		}
 	}
 	switch verb {
 	case "exec.cancel":

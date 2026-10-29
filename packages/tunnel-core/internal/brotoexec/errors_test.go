@@ -10,7 +10,7 @@ import (
 )
 
 func TestExecutionDiagnosticsContainOnlySafeReasons(t *testing.T) {
-	e := New(Config{AllowExec: true, AllowPrivileged: true})
+	e := New(Config{AllowExec: true})
 	defer e.Close()
 	check := func(a Args, code string) {
 		t.Helper()

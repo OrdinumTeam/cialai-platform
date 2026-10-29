@@ -14,8 +14,6 @@ const CODE_PATTERN = /^CIALAIB\d+\.\S+$/;
 const CODE_PREFIX = 'CIALAIB';
 // O serviço respondeu e recusou o pedido. Os outros erros são do caminho até ele.
 const REQUEST_FAILED = 'service_request_failed';
-// No Windows, a janela recusa antes do UAC uma conta de administrador.
-const ACCOUNT_PRIVILEGED = 'service_account_privileged';
 
 // No Windows a janela lê a área de transferência pelo sistema, sem o pedido de
 // permissão do WebView2. Nos outros sistemas o comando avisa que não existe.
@@ -104,10 +102,10 @@ function ServiceScreen({ installing, installFailed, onInstall }) {
     <h1>{t('broto.service.title')}</h1>
     <p className="broto-lead">{t('broto.service.lead')}</p>
     {installing && <><Progress label={t('broto.service.installing')} /><p className="broto-note" aria-live="polite">{t('broto.service.progress')}</p></>}
-    {installFailed && <p className="broto-note is-error" role="alert">{t(installFailed === 'privileged' ? 'broto.service.privileged' : 'broto.service.failed')}</p>}
-    {installFailed !== 'privileged' && <div className="broto-form__actions">
+    {installFailed && <p className="broto-note is-error" role="alert">{t('broto.service.failed')}</p>}
+    <div className="broto-form__actions">
       <button className={`broto-btn broto-btn--primary ${installing ? 'is-busy' : ''}`} data-broto-action="install" disabled={installing} onClick={onInstall}>{installing && <i className="broto-spinner" aria-hidden="true" />}{t(installing ? 'broto.service.installing' : 'broto.service.install')}</button>
-    </div>}
+    </div>
   </section>;
 }
 
@@ -162,7 +160,7 @@ export function BrotoMonitor() {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(null);
   const [installing, setInstalling] = useState(false);
-  const [installFailed, setInstallFailed] = useState(null);
+  const [installFailed, setInstallFailed] = useState(false);
   const refresh = async () => {
     try { setStatus(await invoke('broto_control', { method: 'broto.status', params: {} })); setUnreachable(false); }
     catch { setUnreachable(true); }
@@ -179,9 +177,9 @@ export function BrotoMonitor() {
     finally { setBusy(false); }
   };
   const install = async () => {
-    setInstalling(true); setInstallFailed(null);
+    setInstalling(true); setInstallFailed(false);
     try { await invoke('broto_service_install'); await refresh(); }
-    catch (error) { setInstallFailed(error === ACCOUNT_PRIVILEGED ? 'privileged' : 'failed'); }
+    catch { setInstallFailed(true); }
     finally { setInstalling(false); }
   };
   const linked = ['connected', 'paused'].includes(status.state);

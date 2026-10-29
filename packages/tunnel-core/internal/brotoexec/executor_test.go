@@ -23,7 +23,7 @@ func call(t *testing.T, e *Executor, verb string, args any) any {
 	return result
 }
 func testConfig() Config {
-	return Config{AllowExec: true, AllowPTY: true, AllowPrivileged: true, MaxDuration: time.Second}
+	return Config{AllowExec: true, AllowPTY: true, MaxDuration: time.Second}
 }
 func TestExecResultsAndDeadline(t *testing.T) {
 	if runtime.GOOS == "windows" {

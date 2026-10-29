@@ -86,6 +86,6 @@ ou registros que já tenham sido recebidos. Restrinja as pastas e use uma conta
 sem privilégios. Não compartilhe códigos de pareamento ou credenciais.
 
 Na instalação do Broto como serviço do Windows, a pessoa fornece a credencial
-da conta sem privilégios à interface protegida do próprio sistema. O Windows
+da conta à interface protegida do próprio sistema. O Windows
 protege a credencial do serviço e da tarefa de atualização. O Broto não grava
 essa senha em seus arquivos, argumentos ou registros, nem a envia à Ordinum.

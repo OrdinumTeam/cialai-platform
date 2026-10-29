@@ -20,7 +20,6 @@ export default Object.freeze({
   "broto.service.install": "Instalar e iniciar serviço",
   "broto.service.installing": "Instalando serviço",
   "broto.service.progress": "Se o sistema pedir a permissão de um administrador ou a senha desta conta, responda na janela que abrir. A instalação continua sozinha depois disso.",
-  "broto.service.privileged": "Esta conta do Windows é de administrador. Por segurança, o Broto só roda em conta comum. Entre numa conta padrão do Windows e abra o Broto por ela.",
   "broto.service.failed": "Não foi possível instalar o serviço verificado. Abra o instalador oficial do Broto e tente novamente.",
   "broto.service.title": "O serviço do Broto não responde",
   "broto.service.lead": "A conexão com o Cialai roda num serviço deste computador, que continua ativo com a janela fechada. Instale e inicie o serviço para continuar.",

@@ -102,7 +102,8 @@ mesma conectividade. Objetivos, requisitos e dependências estão no
 ## Cialai Broto
 
 O Broto é a terceira ponta do produto, além do computador hospedeiro e do celular.
-Roda em outra máquina com usuário sem privilégios e vínculo próprio, separado do
+Roda em outra máquina com os poderes da conta onde foi instalado, administrador
+incluído, e vínculo próprio, separado do
 pareamento de celulares. O escopo e os critérios de aceite estão em
 [docs/broto](../broto/README.md). Código preparado e testes locais não substituem
 instalação em cada sistema, assinatura, publicação e validação em máquinas reais.

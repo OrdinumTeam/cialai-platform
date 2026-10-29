@@ -641,3 +641,15 @@ Decisão: distribuir o Broto 0.1.0 como prévia independente para Windows x64 e 
 Alternativa rejeitada: exigir o instalador macOS do Broto antes da prévia ou misturar sua tag e seu manifesto com os do hospedeiro.
 
 Consequência: a tag broto-v0.1.0 não substitui latest do Cialai. A página do Broto mostra somente os instaladores desta etapa. Provas físicas, aceite BRO-022 e distribuição macOS continuam separados do estado desta prévia.
+
+## 072 Broto com os poderes da conta, administrador incluído
+
+Data: 29/10/2026.
+
+Contexto: a prévia 0.1.0 recusava conta de administrador no Windows e root no Linux e no macOS. A recusa vinha do desenho de segurança do documento 04, nunca foi decisão do usuário, e impedia a IA de instalar programas, mexer no sistema e administrar a máquina do Broto. O usuário pediu o Broto livre de tudo.
+
+Decisão: o Broto roda com os poderes da conta onde foi instalado e não recusa conta nenhuma. A janela não barra administrador, o instalador do Windows aceita a conta de administrador e o serviço dela recebe o token completo, porque o logon de serviço não passa pelo filtro do UAC. O executor não recusa token elevado, LocalSystem nem root. Numa conta comum, o Windows continua tirando SeImpersonatePrivilege e SeCreateGlobalPrivilege do serviço, para o shell não passar da conta escolhida; numa conta de administrador, o token fica inteiro. A skill manda a IA rodar comandos de administrador direto quando o Broto for administrador.
+
+Alternativa rejeitada: manter a recusa com uma opção de liberar na instalação. Seria mais uma tela para uma escolha que a pessoa já faz ao escolher a conta.
+
+Consequência: um hospedeiro comprometido com um Broto administrador em livre tem a máquina inteira do Broto. Pedir confirmação, Pausar, Desconectar e o teto local seguem valendo. A transferência de arquivos continua presa às raízes da política local e às pastas fora do sistema.

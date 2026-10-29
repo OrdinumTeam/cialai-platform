@@ -17,8 +17,8 @@ type planOptions struct {
 }
 
 func headlessMac(root, home, user, group string, state ...string) ([]File, []Command, error) {
-	if user == "" || group == "" || user == "root" || strings.ContainsAny(user+group, "\r\n\x00<>&\"'") {
-		return nil, nil, errors.New("unprivileged account required for headless service")
+	if user == "" || group == "" || strings.ContainsAny(user+group, "\r\n\x00<>&\"'") {
+		return nil, nil, errors.New("valid account required for headless service")
 	}
 	stateDir := filepath.Dir(root)
 	if len(state) > 0 && state[0] != "" {

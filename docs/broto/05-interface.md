@@ -72,7 +72,7 @@ A janela segue o visual do Cialai: a mesma fonte, os mesmos neutros, o mesmo ros
 
 | Tela | O que mostra |
 | --- | --- |
-| Serviço | Quando o serviço não responde, o motivo e o botão Instalar e iniciar serviço, no lugar do campo de código. Durante a instalação, uma barra de progresso e o aviso de responder às janelas de permissão e senha do sistema. Numa conta de administrador do Windows, a janela explica que o Broto roda só em conta comum, sem abrir o UAC |
+| Serviço | Quando o serviço não responde, o motivo e o botão Instalar e iniciar serviço, no lugar do campo de código. Durante a instalação, uma barra de progresso e o aviso de responder às janelas de permissão e senha do sistema. Numa conta de administrador do Windows, o UAC pede consentimento e o serviço roda como administrador |
 | Conectar | Um campo de uma linha, em fonte monoespaçada, para colar o código, com o botão Colar dentro dele, que no Windows lê a área de transferência pelo sistema para o WebView2 não pedir permissão, e o botão Ligar, que só acende com um texto no formato de código de Broto |
 | Aguardando | O nome do hospedeiro, os quatro dígitos para conferir com a lista Brotos ligando e o botão Cancelar |
 

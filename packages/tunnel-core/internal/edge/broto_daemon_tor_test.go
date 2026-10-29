@@ -95,7 +95,7 @@ func TestBrotoDaemonTorFallbackAndPrivateRestart(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	dir := t.TempDir()
-	client, err := brotoclient.New(ctx, brotoclient.Config{Dir: dir, TorEndpoints: &endpoints, STUNServers: []string{}, AllowPrivileged: true})
+	client, err := brotoclient.New(ctx, brotoclient.Config{Dir: dir, TorEndpoints: &endpoints, STUNServers: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +142,7 @@ func TestBrotoDaemonTorFallbackAndPrivateRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	wait(func() bool { online, _ := hub.State(id); return !online })
-	client, err = brotoclient.New(ctx, brotoclient.Config{Dir: dir, TorEndpoints: &endpoints, STUNServers: []string{}, AllowPrivileged: true})
+	client, err = brotoclient.New(ctx, brotoclient.Config{Dir: dir, TorEndpoints: &endpoints, STUNServers: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}

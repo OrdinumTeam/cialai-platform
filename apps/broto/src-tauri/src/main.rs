@@ -185,52 +185,8 @@ fn service_install_command(
     command
 }
 
-/// O instalador recusa conta de administrador. A janela confere antes, para não
-/// abrir o UAC e o pedido de senha que terminariam na mesma recusa. Um
-/// administrador com UAC aparece como token limitado; sem UAC, como elevado.
-#[cfg(windows)]
-fn account_is_administrator() -> bool {
-    use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows_sys::Win32::Security::{
-        GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation, TokenElevationType,
-        TokenElevationTypeLimited,
-    };
-    use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    unsafe {
-        let mut token: HANDLE = std::ptr::null_mut();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) == 0 {
-            return false;
-        }
-        let mut size = 0u32;
-        let mut kind = 0i32;
-        let limited = GetTokenInformation(
-            token,
-            TokenElevationType,
-            (&mut kind as *mut i32).cast(),
-            size_of::<i32>() as u32,
-            &mut size,
-        ) != 0
-            && kind == TokenElevationTypeLimited;
-        let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
-        let elevated = GetTokenInformation(
-            token,
-            TokenElevation,
-            (&mut elevation as *mut TOKEN_ELEVATION).cast(),
-            size_of::<TOKEN_ELEVATION>() as u32,
-            &mut size,
-        ) != 0
-            && elevation.TokenIsElevated != 0;
-        CloseHandle(token);
-        limited || elevated
-    }
-}
-
 #[tauri::command]
 async fn broto_service_install(app: tauri::AppHandle) -> Result<(), String> {
-    #[cfg(windows)]
-    if account_is_administrator() {
-        return Err("service_account_privileged".into());
-    }
     let payload = app
         .path()
         .resource_dir()

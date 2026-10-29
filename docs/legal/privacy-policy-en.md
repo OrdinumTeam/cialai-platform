@@ -84,7 +84,7 @@ closes. Pausing blocks new operations; disconnecting revokes the pairing but
 does not erase copies or records already received. Restrict shared roots and
 use an unprivileged account. Do not share pairing codes or credentials.
 
-When installing Broto as a Windows service, the user supplies the unprivileged
-account credential through the operating system's protected interface. Windows
+When installing Broto as a Windows service, the user supplies the account
+credential through the operating system's protected interface. Windows
 protects the service and scheduled update task credentials. Broto does not write
 this password to its files, arguments or logs, or send it to Ordinum.

@@ -13,18 +13,6 @@ import (
 	"time"
 )
 
-func TestFilesPrivilegedAccountGuard(t *testing.T) {
-	dir := t.TempDir()
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, accountPrivileged: func() bool { return true }})
-	defer e.Close()
-	for _, verb := range []string{"files.list", "files.stat", "files.get", "files.put", "files.cancel"} {
-		raw, _ := json.Marshal(fileArgs{Path: dir})
-		_, err := e.Handle(context.Background(), verb, raw)
-		if err == nil || !strings.HasPrefix(Diagnostic(err), "execution_account_privileged:") {
-			t.Errorf("%s bypassed privileged-account guard: %v", verb, err)
-		}
-	}
-}
 func TestUploadOrphanRecoveryAndLiveOwnerProtection(t *testing.T) {
 	e, dir := fileExecutor(t)
 	path := filepath.Join(dir, "recovered")
@@ -48,7 +36,7 @@ func TestUploadOrphanRecoveryAndLiveOwnerProtection(t *testing.T) {
 }
 func TestAbandonedUploadExpiresWithoutFurtherRequests(t *testing.T) {
 	dir := t.TempDir()
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, AllowPrivileged: true, transferIdleTimeout: 25 * time.Millisecond})
+	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, transferIdleTimeout: 25 * time.Millisecond})
 	defer e.Close()
 	path := filepath.Join(dir, "abandoned")
 	call(t, e, "files.put", fileArgs{Path: path, Data: []byte("partial"), Size: 100, TransferID: "gone"})
@@ -83,7 +71,7 @@ func TestUploadLockOwnerHelper(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, AllowPrivileged: true})
+	e := New(Config{AllowFiles: true, FileRoots: []string{dir}})
 	call(t, e, "files.put", fileArgs{Path: filepath.Join(dir, "cross-process"), Data: []byte("owner"), Size: 100, TransferID: "child"})
 	fmt.Println("upload-lock-ready")
 	select {}
@@ -114,7 +102,7 @@ func TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("helper did not start")
 	}
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, AllowPrivileged: true})
+	e := New(Config{AllowFiles: true, FileRoots: []string{dir}})
 	defer e.Close()
 	path := filepath.Join(dir, "cross-process")
 	a := fileArgs{Path: path, Data: []byte("replacement"), Size: 11, TransferID: "parent", Final: true, SHA256: digest([]byte("replacement"))}

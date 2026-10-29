@@ -14,7 +14,7 @@ notarização de distribuição nesta entrega.
 | Tor empacotado | `tools/fetch-tor.mjs`, hashes fixados e assinatura upstream conferida |
 | Monitor | `apps/broto`, Tauri e interface compartilhada, com instalação do serviço pela própria janela |
 | Instalador | `internal/brotoinstall`, verificação minisign embutida e cópia imutável antes de ativar |
-| Serviços | LaunchAgent ou LaunchDaemon sem privilégios, systemd por usuário e SCM com conta comum |
+| Serviços | LaunchAgent ou LaunchDaemon, systemd por usuário e SCM, todos na conta de quem instala |
 | Atualização | `internal/brotoupdate`, manifesto próprio, assinatura, saúde e rollback |
 | Release | `.github/workflows/release-broto.yml`, prefixo e chave independentes do desktop |
 | Site | Seção Broto nos três idiomas, arquivos, tamanhos, somas e espelho separado |
@@ -71,40 +71,42 @@ O código de pareamento entra pelo stdin de `parear`, nunca como argumento.
 `status`, `pausar`, `retomar` e `desconectar` usam somente IPC protegido do usuário.
 Fechar o monitor não encerra a conexão.
 
-## Serviços sem privilégios
+## Serviços na conta de quem instala
 
 | Sistema | Mecanismo |
 | --- | --- |
 | macOS com sessão gráfica | LaunchAgent do usuário, iniciado no login |
-| macOS sem login | Opção explícita `--headless`, LaunchDaemons com UserName e GroupName da conta comum |
+| macOS sem login | Opção explícita `--headless`, LaunchDaemons com UserName e GroupName da conta escolhida, root incluído |
 | Linux | systemd por usuário, com `--linger` ou `--headless` para solicitar execução após logout e no boot |
-| Windows | Serviço SCM na mesma conta sem privilégios do monitor |
+| Windows | Serviço SCM na mesma conta do monitor, comum ou de administrador |
 
 O modo headless do macOS pede autorização administrativa apenas para os
 descritores pertencentes ao root. O XML autorizado é enviado diretamente ao helper, sem
-confiar em um plist mutável escrito pelo usuário. Os processos continuam na
-conta comum. O supervisor acompanha o ponteiro privado e confirma a saúde do
+confiar em um plist mutável escrito pelo usuário. Os processos rodam na
+conta escolhida. O supervisor acompanha o ponteiro privado e confirma a saúde do
 processo novo antes de aceitar a troca.
 
-No Windows, a interface protegida do sistema pede a credencial da conta comum.
+No Windows, a interface protegida do sistema pede a credencial da conta do monitor.
 A senha não vai em argumentos, logs ou arquivos do Broto. O sistema protege a
 credencial do SCM e da tarefa agendada. A conta recebe os direitos de logon de
 serviço e de tarefa, sem receber SERVICE_CHANGE_CONFIG. O SCM usa um launcher
 fixo; atualizar muda somente o filho verificado e mantém a conta do serviço.
-O perfil e o diretório de estado são explícitos. Contas administrativas são
-recusadas por padrão. A janela recusa uma conta de administrador antes de abrir
-o UAC. O instalador confere a senha e o grupo da conta por logon interativo
-antes de conceder qualquer direito, e só então testa o logon de serviço. Se o
-Windows não elevar o instalador, como acontece com o UAC desligado, ele para
-com erro em vez de se relançar; nessa configuração nenhuma conta comum
-consegue instalar o serviço.
+O perfil e o diretório de estado são explícitos. Conta de administrador é
+aceita desde a decisão 072: o logon de serviço não passa pelo filtro do UAC, e
+o serviço recebe o token completo, então o hospedeiro roda comandos de
+administrador sem consentimento nem senha. O instalador confere a senha por
+logon interativo antes de conceder qualquer direito, e só então testa o logon
+de serviço. Se o Windows não elevar o instalador, como acontece com o UAC
+desligado, ele para com erro em vez de se relançar; nessa configuração nenhuma
+conta comum consegue instalar o serviço.
 
 Todo serviço do Windows recebe SeImpersonatePrivilege e SeCreateGlobalPrivilege,
 e por causa deles o Windows marca o token de qualquer serviço como elevado.
-Antes do primeiro comando, o Broto remove esses dois privilégios do próprio
-token, para nenhum shell aberto pelo hospedeiro herdá-los, e recusa executar se
-algum continuar lá. A recusa por conta privilegiada olha a conta de fato: o
-grupo Administradores ativo ou as contas de sistema, e não a marca de elevado.
+Numa conta comum, o Broto remove esses dois privilégios do próprio token antes
+do primeiro comando, para nenhum shell aberto pelo hospedeiro passar da conta
+escolhida. Numa conta de administrador ou de sistema, o token fica inteiro. O
+teste olha a conta de fato, o grupo Administradores ativo ou LocalSystem, e não
+a marca de elevado.
 
 O socket Unix exige proprietário correto e permissão 0600. O named pipe do
 Windows tem ACL do usuário. Nenhuma dessas superfícies abre uma porta TCP.
@@ -113,7 +115,7 @@ Windows tem ACL do usuário. Nenhuma dessas superfícies abre uma porta TCP.
 
 Um job separado consulta o `latest.json` próprio a cada seis horas. No macOS é
 um agente ou daemon do launchd, no Linux um timer systemd, e no Windows uma
-tarefa limitada da conta comum. O job resolve `current-path` para sempre usar a
+tarefa limitada da conta do serviço. O job resolve `current-path` para sempre usar a
 CLI ativa e não depender do caminho de uma versão antiga.
 
 A atualização exige o pin minisign independente antes de buscar dados. Usa

@@ -17,7 +17,6 @@ public static class BrotoAccount {
  [DllImport("advapi32.dll")] static extern uint LsaClose(IntPtr handle);
  [DllImport("advapi32.dll")] static extern uint LsaNtStatusToWinError(uint status);
  [DllImport("advapi32.dll",CharSet=CharSet.Unicode,SetLastError=true)] static extern bool LogonUser(string user,string domain,IntPtr password,int type,int provider,out IntPtr token);
- [DllImport("advapi32.dll",SetLastError=true)] static extern bool GetTokenInformation(IntPtr token,int infoClass,out int info,int length,out int returned);
  [DllImport("kernel32.dll")] static extern bool CloseHandle(IntPtr handle);
  public static void GrantRight(SecurityIdentifier sid,string name) {
   if(name!="SeServiceLogonRight" && name!="SeBatchLogonRight")throw new ArgumentException("Unsupported Broto account right.");
@@ -27,9 +26,9 @@ public static class BrotoAccount {
   try { byte[] bytes=new byte[sid.BinaryLength];sid.GetBinaryForm(bytes,0);status=LsaAddAccountRights(policy,bytes,new Unicode[]{right},1);if(status!=0)throw new Win32Exception((int)LsaNtStatusToWinError(status)); }
   finally {Marshal.FreeHGlobal(right.Buffer);LsaClose(policy);}
  }
- // The interactive logon proves the password and shows a UAC-filtered administrator as
- // TokenElevationTypeLimited, so a refused account never receives a logon right. The
- // service logon runs afterwards because it needs the right it is testing.
+ // The interactive logon proves the password before the account receives a logon right.
+ // The service logon runs afterwards because it needs the right it is testing. An
+ // administrator account is accepted: its service logon gets the full token.
  public static void Prepare(string account,SecurityIdentifier sid,SecureString password) {
   Check(account,password,2);
   GrantRight(sid,"SeServiceLogonRight");GrantRight(sid,"SeBatchLogonRight");
@@ -37,12 +36,8 @@ public static class BrotoAccount {
  }
  static void Check(string account,SecureString password,int type) {
   string domain=".";string name=account;int split=account.IndexOf('\\');if(split>=0){domain=account.Substring(0,split);name=account.Substring(split+1);}else if(account.Contains("@")){domain=null;}IntPtr raw=Marshal.SecureStringToGlobalAllocUnicode(password);IntPtr token=IntPtr.Zero;
-  try {if(!LogonUser(name,domain,raw,type,0,out token))throw new Win32Exception(Marshal.GetLastWin32Error());if(Administrator(token))throw new InvalidOperationException("Choose an unprivileged account; administrator services are disabled by default.");}
+  try {if(!LogonUser(name,domain,raw,type,0,out token))throw new Win32Exception(Marshal.GetLastWin32Error());}
   finally {if(token!=IntPtr.Zero)CloseHandle(token);Marshal.ZeroFreeGlobalAllocUnicode(raw);}
- }
- static bool Administrator(IntPtr token) {
-  int elevation,size;if(GetTokenInformation(token,18,out elevation,4,out size)&&elevation==3)return true;
-  using(WindowsIdentity identity=new WindowsIdentity(token)){return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);}
  }
 }
 '@
@@ -64,7 +59,7 @@ Import-Module (Join-Path $PSHOME 'Modules\ScheduledTasks\ScheduledTasks.psd1') -
 $systemDirectory=[IO.Path]::GetFullPath((Join-Path $PSHOME '..\..'))
 $serviceController=Join-Path $systemDirectory 'sc.exe'
 $account=([Security.Principal.SecurityIdentifier]::new($OwnerSid)).Translate([Security.Principal.NTAccount]).Value
-$credential=Get-Credential -UserName $account -Message 'Cialai Broto uses this unprivileged account for the service and its updates.'
+$credential=Get-Credential -UserName $account -Message 'Cialai Broto runs the service and its updates with this account and all of its permissions.'
 if ($null -eq $credential) { throw 'Installation cancelled.' }
 $chosen=([Security.Principal.NTAccount]::new($credential.UserName)).Translate([Security.Principal.SecurityIdentifier]).Value
 if ($chosen -ne $OwnerSid) { throw 'Use the same account as the Broto window.' }

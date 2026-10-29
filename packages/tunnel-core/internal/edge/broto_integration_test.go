@@ -77,7 +77,7 @@ func TestBrotoReverseRPCOverBothTransports(t *testing.T) {
 				t.Fatalf("upgrade %d", response.StatusCode)
 			}
 			c.conn.SetDeadline(time.Time{})
-			ex := brotoexec.New(brotoexec.Config{AllowExec: true, AllowPTY: true, AllowPrivileged: true})
+			ex := brotoexec.New(brotoexec.Config{AllowExec: true, AllowPTY: true})
 			defer ex.Close()
 			go func() {
 				for {
@@ -154,7 +154,7 @@ func TestBrotoDaemonPairsExecutesPausesAndForgets(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	client, err := brotoclient.New(ctx, brotoclient.Config{Dir: t.TempDir(), Name: "Test Broto", STUNServers: []string{}, AllowPrivileged: true})
+	client, err := brotoclient.New(ctx, brotoclient.Config{Dir: t.TempDir(), Name: "Test Broto", STUNServers: []string{}})
 	if err != nil {
 		t.Fatal(err)
 	}
