@@ -181,16 +181,32 @@ struct DeadlineStream {
     deadline: Instant,
 }
 
-fn connect_local(path: &str, deadline: Instant) -> io::Result<DeadlineStream> {
-    remaining(deadline)?;
-    // SAFETY: Winsock is initialized by the caller; socket has no pointers.
-    let raw = unsafe { socket(AF_UNIX as i32, SOCK_STREAM, 0) };
+fn local_socket() -> io::Result<TcpStream> {
+    // Allocate without inheritance atomically: concurrently launched shells
+    // must not retain this profile's control connection after the probe ends.
+    // SAFETY: Winsock is initialized and no protocol-info pointer is supplied.
+    let raw = unsafe {
+        WSASocketW(
+            AF_UNIX as i32,
+            SOCK_STREAM,
+            0,
+            std::ptr::null(),
+            0,
+            WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT,
+        )
+    };
     if raw == INVALID_SOCKET {
         return Err(winsock_error());
     }
     // SAFETY: raw is a new valid stream socket transferred exactly once.
     // Keeping it owned from here closes it on every subsequent error path.
-    let stream = unsafe { TcpStream::from_raw_socket(raw as RawSocket) };
+    Ok(unsafe { TcpStream::from_raw_socket(raw as RawSocket) })
+}
+
+fn connect_local(path: &str, deadline: Instant) -> io::Result<DeadlineStream> {
+    remaining(deadline)?;
+    let stream = local_socket()?;
+    let raw = stream.as_raw_socket() as SOCKET;
     stream.set_nonblocking(true)?;
     let mut address = SOCKADDR_UN {
         sun_family: AF_UNIX,
@@ -319,5 +335,28 @@ impl Write for DeadlineStream {
     fn flush(&mut self) -> io::Result<()> {
         remaining(self.deadline)?;
         self.stream.flush()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use windows_sys::Win32::Foundation::{GetHandleInformation, HANDLE_FLAG_INHERIT};
+
+    #[test]
+    fn passive_socket_is_not_inheritable_by_child_processes() {
+        let _winsock = Winsock::start().unwrap();
+        let stream = local_socket().unwrap();
+        let mut flags = 0;
+        // SAFETY: stream owns this live socket and flags is writable storage.
+        assert_ne!(
+            unsafe { GetHandleInformation(stream.as_raw_socket() as _, &mut flags) },
+            0
+        );
+        assert_eq!(
+            flags & HANDLE_FLAG_INHERIT,
+            0,
+            "probe socket leaks into child processes"
+        );
     }
 }
