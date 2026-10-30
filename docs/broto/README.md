@@ -1,8 +1,8 @@
 # Cialai Broto
 
-## Estado em 28/10/2026
+## Estado em 29/10/2026
 
-Implementação local de BRO-001 a BRO-013 preparada. O daemon, o monitor, o pareamento aprovado, a RPC, a execução, as sessões remotas, as permissões e o MCP estão integrados. Empacotamento e atualização assinada têm código e testes locais. A execução foi exercitada no macOS e em VMs Windows e Linux, incluindo Claude Code pelo MCP. Os resultados e limites estão em `../evidence/broto-local/README.md`. Não houve release nem publicação do site. As provas físicas continuam pendentes. A continuação BRO-014 a BRO-021 está preparada e validada localmente, com CLI, card IA, arquivos, aprovação global e skill; o aceite BRO-022 com dois Brotos e Claude Code segue pendente em [IA no comando](./09-ia-no-comando.md).
+O Broto 0.1.2 está publicado para Windows e Linux, com envio, recebimento e listagem de arquivos conforme os poderes da conta. O daemon, o monitor, o pareamento aprovado, a RPC, as sessões remotas, as permissões e o MCP estão integrados. Testes nativos, assinatura, instaladores e espelho público desta versão foram conferidos em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md). O aceite geral BRO-022 continua separado das entregas de arquivos de BRO-023.
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
@@ -13,11 +13,11 @@ Implementação local de BRO-001 a BRO-013 preparada. O daemon, o monitor, o par
 | Seção Brotos na página Dispositivos, com a lista Brotos ligando | Preparado | Brotos têm seção, aprovação e acesso próprios |
 | Janela do Broto, com Conectar e o monitor | Preparado | Monitor Tauri conectado ao serviço por IPC |
 | Adaptador MCP para a IA do host | Preparado | Claude Code executou comando na VM Windows via MCP e aprovação |
-| Empacotamento, serviço e download no site | Preparado | Site preparado localmente; distribuição ainda não publicada |
+| Empacotamento, serviço e download no site | Implementado | Broto 0.1.2 publicado para Windows e Linux, com instaladores e atualizador assinados |
 
 ## O que é
 
-Envio, recebimento e listagem de arquivos fazem parte do Broto. Pela [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta), alcançam os caminhos acessíveis à conta de execução, incluindo outras unidades, volumes montados e pastas do sistema. A entrega do executor e sua validação estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), com distribuição prevista no Broto 0.1.2. O executor tem validação local em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); distribuição e atualização instalada têm estados próprios.
+Envio, recebimento e listagem de arquivos fazem parte do Broto. Pela [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta), alcançam os caminhos acessíveis à conta de execução, incluindo outras unidades, volumes montados e pastas do sistema. A entrega do executor e sua validação estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), entregue no Broto 0.1.2. O executor tem validação local em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); distribuição e atualização instalada têm estados próprios.
 
 O Cialai Broto é um terceiro tipo de Cialai. Não tem estúdio. É um programa separado, baixado à parte, instalado num aparelho com sistema operacional, e a sua única função é manter uma conexão segura com um hospedeiro, o Cialai do computador. Depois de pareado, o hospedeiro passa a rodar comandos e abrir terminais naquele aparelho, e isso vale tanto para a pessoa quanto para a IA que trabalha no hospedeiro.
 

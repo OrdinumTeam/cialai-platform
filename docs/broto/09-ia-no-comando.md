@@ -6,7 +6,7 @@ Implementação local de BRO-014 a BRO-021 revisada com regressões em 28/10/202
 
 Este documento é para ser executado. As tarefas estão no fim, em BRO-014 a BRO-023, no mesmo formato do documento 08, e a regra de marcar só com evidência vale aqui também.
 
-Envio, recebimento e listagem de arquivos fazem parte do Broto, conforme a [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta). O executor foi validado localmente em BRO-023; a distribuição do Broto 0.1.2 tem verificação própria. A validação local está em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); testes nativos, distribuição e atualização instalada têm estados próprios.
+Envio, recebimento e listagem de arquivos fazem parte do Broto, conforme a [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta). BRO-023 foi entregue no Broto 0.1.2, com testes nativos de Windows e Linux, pacotes assinados e espelho público conferidos. A validação local está em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); testes nativos, distribuição e atualização instalada têm estados próprios.
 
 ## O que a pessoa faz
 
@@ -408,7 +408,7 @@ Tamanho M. Depende de todas as anteriores.
 
 ### BRO-023 Arquivos com os poderes da conta
 
-Depende da base de transferência BRO-018. Não depende do aceite geral BRO-022 nem da integração das abas gráficas. Escopo definido pela decisão 074, com entrega prevista no Broto 0.1.2.
+Depende da base de transferência BRO-018. Não depende do aceite geral BRO-022 nem da integração das abas gráficas. Escopo definido pela decisão 074, entregue no Broto 0.1.2.
 
 - [x] Documentação e skill do repositório alinhadas em 29/10/2026, distinguindo requisito, limitação atual e entrega do binário
 - [x] Resolução de caminhos em `internal/brotoexec/files.go` conforme os poderes da conta · [Validação local](../evidence/broto-0.1.2/README.md)
@@ -416,7 +416,7 @@ Depende da base de transferência BRO-018. Não depende do aceite geral BRO-022 
 - [x] Permissões de operação, pausa, desconexão, validação de nomes, SHA256, limite de tamanho, cancelamento e sobrescrita explícita preservados · [Validação local](../evidence/broto-0.1.2/README.md)
 - [x] Envio, recebimento e listagem fora da pasta pessoal no SSD externo; raiz de volume, arquivo do sistema, caminhos relativos, links e permissão real cobertos no macOS · [Validação local](../evidence/broto-0.1.2/README.md)
 - [x] Testes específicos, detector de concorrência, vet, empacotamento e transferência de 100 MiB aprovados no macOS · [Validação local](../evidence/broto-0.1.2/README.md)
-- [ ] Distribuir o executor no Broto 0.1.2 e conferir uma transferência com o binário atualizado; manter separado o estado do código e o da versão instalada
+- [x] Broto 0.1.2 publicado, instaladores e atualizador assinados conferidos, cinco downloads públicos validados e transferência com executável nativo em QUIC real aprovada; serviços instalados preservados · [Evidências da entrega](../evidence/broto-0.1.2/README.md)
 
 ## Fora deste documento
 

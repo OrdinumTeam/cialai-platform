@@ -102,7 +102,7 @@ A borda já recusa acesso cruzado entre os papéis. A rota `/broto` autentica o 
 
 A fase [IA no comando](./09-ia-no-comando.md) mantém só acompanhar como recusa de execução e transferência, inclusive para a pessoa. Listagem e metadados continuam consultas. Enviar e baixar pela IA exigem uma aprovação por arquivo no nível confirmar IA. A liberação por 15 minutos é exclusiva do Broto, somente em memória e revogável. Arquivos usam limites de tamanho e hash antes da entrega; nenhum conteúdo de arquivo entra na prévia de aprovação.
 
-A [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta) define envio, recebimento e listagem como funcionalidades do produto nos caminhos que a conta do Broto pode ler ou gravar, inclusive outras unidades, volumes montados e pastas do sistema. As permissões do sistema operacional determinam o acesso efetivo. O executor e as validações dessa entrega estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), com distribuição prevista para 0.1.2.
+A [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta) define envio, recebimento e listagem como funcionalidades do produto nos caminhos que a conta do Broto pode ler ou gravar, inclusive outras unidades, volumes montados e pastas do sistema. As permissões do sistema operacional determinam o acesso efetivo. O executor e as validações dessa entrega estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), entregues no Broto 0.1.2.
 
 ## IPC do hospedeiro e isolamento de instâncias
 

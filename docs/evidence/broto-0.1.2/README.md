@@ -22,4 +22,14 @@ As regressões verificam acesso fora da pasta pessoal no volume externo, caminho
 
 ## Distribuição
 
-Compilação e execução nativas de Windows e Linux, assinaturas, instaladores publicados e espelho do site têm validação própria na release `broto-v0.1.2`. O estado local acima não substitui essa execução nem comprova uma atualização aplicada em um Broto instalado.
+A [release broto-v0.1.2](https://github.com/OrdinumTeam/cialai-platform/releases/tag/broto-v0.1.2) foi publicada a partir do commit `f78133b8aff5ca785ec2923067e16498946615df`. O [workflow 40989233901](https://github.com/OrdinumTeam/cialai-platform/actions/runs/40989233901) aprovou testes nativos, builds Linux e Windows e publicação.
+
+Os três instaladores, NSIS, DEB e RPM, foram extraídos. A assinatura e os hashes do serviço embutido foram conferidos com a chave pública Broto independente. Todos contêm `broto-v0.1.2`, com o mesmo executável do payload do atualizador correspondente. Os dois arquivos de atualização e os três instaladores passaram na verificação dos atestados GitHub.
+
+O espelho [downloads/broto](https://cialai.com.br/downloads/broto/latest.json) recebeu os arquivos assinados, com invalidação do CDN concluída. Os cinco downloads públicos foram lidos integralmente e comparados aos hashes e tamanhos do manifesto assinado. O manifesto público do desktop permaneceu idêntico ao baseline 0.5.1.
+
+## Executável em conexão real
+
+Um executável Broto nativo macOS, compilado do mesmo commit da release, foi exercitado em processo separado com um hospedeiro de teste. O pareamento usou identidades efêmeras e conexão QUIC com TLS mútuo. Envio e recebimento de 1520000 bytes no SSD externo passaram com SHA256 `724ba854aeb3d59246af3d7ef58e230ed0fbbac3fb8570bd2743dfc5d3a042a7`. Listagem, link simbólico, consulta de arquivo do sistema e desconexão também passaram.
+
+O estado e as credenciais efêmeras do ensaio foram removidos. Nenhum serviço instalado ou aplicativo do usuário foi reiniciado. Essa prova valida o executável e a transferência pelo transporte real; a distribuição pública desta versão continua restrita a Windows e Linux. Uma atualização aplicada em um Broto já instalado depende da execução do atualizador naquela máquina.

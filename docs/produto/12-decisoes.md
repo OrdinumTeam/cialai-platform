@@ -70,7 +70,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 069 | Proposta | Lançador gráfico do Broto Windows aguarda escolha do usuário, sem implementação |
 | 070 | Proposta | Espera por saída com fronteira de comando aguarda definição de contrato, sem filtro de eco |
 | 071 | Preparado | Prévia Broto Windows e Linux autorizada junto do Cialai 0.5.0; publicação em validação |
-| 074 | Preparado | Executor de arquivos validado localmente para Broto 0.1.2; distribuição e execução nativa nos alvos registradas separadamente em BRO-023 |
+| 074 | Implementado | Broto 0.1.2 publicado para Windows e Linux, com testes nativos, assinaturas, instaladores e espelho público verificados em BRO-023 |
 
 ## 001 Nome Cialai
 
@@ -677,7 +677,7 @@ Decisão: enviar, receber e listar arquivos faz parte do produto em qualquer cam
 
 Operação: a pessoa informa o caminho de origem e o destino. A transferência usa o túnel do Broto, com progresso, verificação de integridade e resultado explícito.
 
-Entrega: adequar o executor Go e distribuir o binário do Broto, com versão prevista 0.1.2. `allowFiles`, os níveis de operação, Pausar, Desconectar, integridade por SHA256, limites de tamanho e sobrescrita explícita seguem seus contratos próprios. Informar o resultado real da operação e os erros do sistema quando ocorrerem.
+Entrega: executor Go e binário do Broto distribuídos na versão 0.1.2 para Windows e Linux. `allowFiles`, os níveis de operação, Pausar, Desconectar, integridade por SHA256, limites de tamanho e sobrescrita explícita seguem seus contratos próprios. Informar o resultado real da operação e os erros do sistema quando ocorrerem.
 
-Estado desta etapa: documentação, skill e executor alinhados ao requisito, com testes locais aprovados; distribuição acompanhada em [BRO-023](../broto/09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta). As evidências registram somente as execuções efetivamente realizadas.
+Estado desta etapa: documentação, skill e executor alinhados ao requisito, com testes locais e nativos aprovados e distribuição verificada em [BRO-023](../broto/09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta). As evidências registram somente as execuções efetivamente realizadas.
 
