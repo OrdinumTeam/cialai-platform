@@ -45,8 +45,6 @@ html[data-shell="desktop"][data-theme] .broto-level .mac-segmented__option{heigh
 .broto-approval { display: grid; gap: 8px; padding: 12px 16px; background: var(--mac-surface-2); color: var(--mac-label); border-bottom: 1px solid var(--mac-border); }
 .broto-approval .broto-row-actions { flex-wrap: wrap; }
 
-.broto-skill { margin: 16px 0; }
-.broto-skill__row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 8px 0; }
 .mac-main > .broto-approvals { flex: 0 0 auto; margin-top: 52px; }
 .mac-main:has(> .broto-approvals) > .mac-body > .mac-content { padding-top: 24px; }
 html[data-shell="desktop"][data-theme] .mac-main:has(> .broto-approvals) > .mac-body > .mac-content:has(> .terminais-page) { padding-top: 0; }

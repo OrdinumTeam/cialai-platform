@@ -209,14 +209,14 @@ Nesta primeira versão ela cobre os Brotos. Outras partes do Cialai, como o Dev 
 
 ### Instalação
 
-A seção Brotos em Dispositivos e as Preferências ganham Ensinar o Cialai às IAs deste computador, com o estado por IA encontrada: instalada, desatualizada ou não encontrada. O botão grava a skill nas pastas de skills do usuário de cada IA:
+Desde a decisão 073, a skill se instala sozinha, sem botão nem aviso. O app confere na abertura e a cada cinco minutos e grava a skill nas pastas de skills do usuário de cada IA encontrada:
 
 | IA | Pasta |
 | --- | --- |
 | Claude Code | `~/.claude/skills/cialai/SKILL.md` |
 | Codex | `~/.agents/skills/cialai/SKILL.md`, confirmado em 28/10/2026 na [documentação oficial de skills](https://learn.chatgpt.com/docs/build-skills), seção Where Codex loads local skills |
 
-A gravação segue o molde de `cli.rs`: arquivo com marcador e versão, escrita atômica, só regrava arquivo que tem o marcador, cópia de segurança antes de mexer, e remoção exata pelo mesmo botão. Quando a versão embutida muda, o app atualiza as cópias com marcador na abertura seguinte. O app nunca escreve nos projetos do usuário nem no `CLAUDE.md` ou `AGENTS.md` dele.
+A versão vem só da release, embutida no app; não há download da skill pela rede. O estado fica em `skill.json` na pasta de configuração do app, com o texto que o Cialai gravou por último. Arquivo apagado volta, IA instalada depois recebe a skill, e uma release nova atualiza as cópias que o Cialai gravou. Em Preferências, a seção Skill do Cialai mostra o texto, a última atualização e o estado por IA, e deixa editar. Editar ali ou direto no arquivo desliga a atualização automática e leva o texto editado às duas IAs, até a pessoa escolher Voltar à versão do Cialai. Um arquivo próprio que o Cialai nunca gravou fica intocado. A escrita é atômica, e o app nunca escreve nos projetos do usuário nem no `CLAUDE.md` ou `AGENTS.md` dele.
 
 ### O texto da skill
 

@@ -136,6 +136,6 @@ Esse arquivo é a fonte aprovada e deve ser preservado nas derivações para a s
 
 ## Continuação da interface para IA
 
-As tarefas [BRO-014 a BRO-022](./09-ia-no-comando.md) acrescentam Renomear, número por ordem de aprovação, card IA por Broto, aviso de aprovação no topo do app e instalação da skill nas telas Dispositivos e Preferências. O card IA é de leitura e aceita Ctrl C para cancelar. Os terminais interativos continuam compartilhados com a pessoa. O checklist dessa fase distingue testes locais de aceite visual e remoto.
+As tarefas [BRO-014 a BRO-022](./09-ia-no-comando.md) acrescentam Renomear, número por ordem de aprovação, card IA por Broto, aviso de aprovação no topo do app e a skill instalada sozinha, com leitura e edição em Preferências. O card IA é de leitura e aceita Ctrl C para cancelar. Os terminais interativos continuam compartilhados com a pessoa. O checklist dessa fase distingue testes locais de aceite visual e remoto.
 
 A revisão da fase IA mantém a lista completa Pedidos da IA em Dispositivos. O aviso global e o card mostram contador e navegação sincronizada por ID, com ordem estável. Fechar o card IA apenas oculta a sessão; Ctrl C continua sendo a ação de cancelamento. Quando Claude Code e Codex apontam para a mesma skill por alias, a interface mostra remoção compartilhada explícita e não permite remover silenciosamente a instalação usada pela outra IA.

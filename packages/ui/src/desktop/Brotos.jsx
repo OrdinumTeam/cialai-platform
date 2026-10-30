@@ -1,4 +1,3 @@
-import CialaiSkill from './CialaiSkill.jsx';
 import BrotoApprovals from './BrotoApprovals.jsx';
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useState } from 'react';
@@ -141,7 +140,6 @@ export default function Brotos({ onRevoke }) {
     {renaming && <AppModal open title={t('desktop.brotos.rename')} onClose={() => setRenaming(null)} maxWidth="sm" footer={<button type="button" className="btn btn-primary" disabled={busy || !newName.trim()} onClick={async () => { const result = await run('broto_rename', { deviceId: renaming.id, name: newName.trim() }); if (result !== null) setRenaming(null); }}>{t('desktop.action.save')}</button>}><input className="field__control" autoFocus maxLength={100} aria-label={t('desktop.brotos.rename')} value={newName} onChange={event => setNewName(event.target.value)} /></AppModal>}
 
     <BrotoApprovals allRequests />
-    <CialaiSkill />
     {error && <p className="mac-devices__error" role="alert">{t(error.key)}{error.detail ? <small className="broto-error-detail">{error.detail}</small> : null}</p>}
     {code && <CodeDialog code={code} pending={pending} now={now} busy={busy} onDecide={decidePair} onRegenerate={begin} onClose={() => setCode(null)} />}
   </section>;

@@ -183,8 +183,9 @@ pub fn run() {
             commands::ai_usage,
             commands::ai_install_claude_hook,
             commands::cli_status,
-            commands::skill_status,
-            commands::skill_change,
+            commands::skill_view,
+            commands::skill_edit,
+            commands::skill_restore,
             commands::cli_install,
             commands::cli_uninstall,
             commands::fs_read_bytes,
@@ -254,8 +255,25 @@ pub fn run() {
                 .path()
                 .app_config_dir()
                 .unwrap_or_else(|_| support.clone());
+            // Skill do Cialai para o Claude Code e o Codex, sem tela: confere na
+            // abertura e a cada cinco minutos, para voltar se for apagada e
+            // chegar a uma IA instalada depois.
+            let skill_home = home.clone();
+            let skill_dir = cli_config.clone();
             std::thread::spawn(move || {
-                skills::refresh(&cli_home);
+                let mut last = String::new();
+                loop {
+                    let outcome = skills::sync(&skill_home, &skill_dir).err().unwrap_or_default();
+                    if outcome != last {
+                        if !outcome.is_empty() {
+                            diagnostics::note(&format!("[skill] indisponivel: {outcome}"));
+                        }
+                        last = outcome;
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(300));
+                }
+            });
+            std::thread::spawn(move || {
                 let target = cli::Target::current();
                 let launcher = cli::launcher_from(
                     std::env::var_os("APPIMAGE").as_deref(),

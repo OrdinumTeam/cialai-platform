@@ -653,3 +653,16 @@ Decisão: o Broto roda com os poderes da conta onde foi instalado e não recusa 
 Alternativa rejeitada: manter a recusa com uma opção de liberar na instalação. Seria mais uma tela para uma escolha que a pessoa já faz ao escolher a conta.
 
 Consequência: um hospedeiro comprometido com um Broto administrador em livre tem a máquina inteira do Broto. Pedir confirmação, Pausar, Desconectar e o teto local seguem valendo. A transferência de arquivos continua presa às raízes da política local e às pastas fora do sistema.
+
+## 073 Skill do Cialai automática e editável
+
+Data: 29/10/2026.
+
+Contexto: a skill `cialai` dependia de um botão em Dispositivos e em Preferências, e a pessoa via o pedido de instalar. O usuário quer a skill sempre instalada e atualizada no Claude Code e no Codex, sem nada na tela, e uma seção em Configurações para ler, ver a última atualização e editar.
+
+Decisão: o app instala e atualiza a skill sozinho, na abertura e a cada cinco minutos, para cada IA encontrada. A versão vem só da release, embutida no app. Em Preferências, a seção Skill do Cialai mostra o texto, a última atualização, a versão e o estado por IA. Editar ali ou direto no arquivo desliga a atualização automática e vale para as duas IAs, até Voltar à versão do Cialai. Arquivo próprio que o Cialai nunca gravou fica intocado.
+
+Alternativa rejeitada: baixar a skill de um endereço do site, como `cialai.com.br/CLAUDE.md`. O usuário preferiu que ela só chegue pela release, que já é assinada e verificada pelo atualizador.
+
+Consequência: some o botão de instalar e remover. Apagar o arquivo faz o Cialai gravá-lo de novo na conferência seguinte.
+

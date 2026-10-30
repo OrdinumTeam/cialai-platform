@@ -1550,23 +1550,25 @@ pub async fn broto_grant(
     .await
 }
 
-#[tauri::command(async)]
-pub fn skill_status(app: AppHandle) -> Result<Vec<crate::skills::SkillStatus>, String> {
-    Ok(crate::skills::status(
-        &app.path().home_dir().map_err(|e| e.to_string())?,
+fn skill_dirs(app: &AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let path = app.path();
+    Ok((
+        path.home_dir().map_err(|e| e.to_string())?,
+        path.app_config_dir().map_err(|e| e.to_string())?,
     ))
 }
 #[tauri::command(async)]
-pub fn skill_change(
-    app: AppHandle,
-    agent: String,
-    remove: bool,
-    remove_shared: Option<bool>,
-) -> Result<Vec<crate::skills::SkillStatus>, String> {
-    crate::skills::change_with_shared(
-        &app.path().home_dir().map_err(|e| e.to_string())?,
-        &agent,
-        remove,
-        remove_shared.unwrap_or(false),
-    )
+pub fn skill_view(app: AppHandle) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::view(&home, &dir)
+}
+#[tauri::command(async)]
+pub fn skill_edit(app: AppHandle, content: String) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::edit(&home, &dir, content)
+}
+#[tauri::command(async)]
+pub fn skill_restore(app: AppHandle) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::restore(&home, &dir)
 }
