@@ -36,7 +36,7 @@ func TestUploadOrphanRecoveryAndLiveOwnerProtection(t *testing.T) {
 }
 func TestAbandonedUploadExpiresWithoutFurtherRequests(t *testing.T) {
 	dir := t.TempDir()
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, transferIdleTimeout: 25 * time.Millisecond})
+	e := New(Config{AllowFiles: true, transferIdleTimeout: 25 * time.Millisecond})
 	defer e.Close()
 	path := filepath.Join(dir, "abandoned")
 	call(t, e, "files.put", fileArgs{Path: path, Data: []byte("partial"), Size: 100, TransferID: "gone"})
@@ -55,7 +55,7 @@ func TestFileDiagnosticsAreActionableAndSanitized(t *testing.T) {
 		verb string
 		a    fileArgs
 		code string
-	}{{"files.stat", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-missing")}, "file_not_found"}, {"files.put", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-large"), Size: 2 << 20}, "file_size_limit"}, {"files.put", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-hash"), Data: []byte("x"), Final: true, SHA256: "bad"}, "file_hash_mismatch"}, {"files.stat", fileArgs{Path: filepath.Join(dir, "..", "PRIVATE_SENTINEL")}, "file_outside_roots"}}
+	}{{"files.stat", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-missing")}, "file_not_found"}, {"files.put", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-large"), Size: 2 << 20}, "file_size_limit"}, {"files.put", fileArgs{Path: filepath.Join(dir, "PRIVATE_SENTINEL-hash"), Data: []byte("x"), Final: true, SHA256: "bad"}, "file_hash_mismatch"}, {"files.stat", fileArgs{Path: filepath.Join(dir, "..", "PRIVATE_SENTINEL")}, "file_not_found"}}
 	for _, tc := range cases {
 		raw, _ := json.Marshal(tc.a)
 		_, err := e.Handle(context.Background(), tc.verb, raw)
@@ -71,7 +71,7 @@ func TestUploadLockOwnerHelper(t *testing.T) {
 	if dir == "" {
 		return
 	}
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}})
+	e := New(Config{AllowFiles: true})
 	call(t, e, "files.put", fileArgs{Path: filepath.Join(dir, "cross-process"), Data: []byte("owner"), Size: 100, TransferID: "child"})
 	fmt.Println("upload-lock-ready")
 	select {}
@@ -102,7 +102,7 @@ func TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("helper did not start")
 	}
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}})
+	e := New(Config{AllowFiles: true})
 	defer e.Close()
 	path := filepath.Join(dir, "cross-process")
 	a := fileArgs{Path: path, Data: []byte("replacement"), Size: 11, TransferID: "parent", Final: true, SHA256: digest([]byte("replacement"))}

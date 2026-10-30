@@ -28,7 +28,9 @@ Para o que pergunta coisas ou fica rodando, abra um terminal visível:
 
 ## Arquivos
 
-`cialai broto enviar <broto> <arquivo local> <destino>`, `cialai broto baixar <broto> <caminho no Broto> [destino local]` e `cialai broto arquivos <broto> <pasta>`. Os caminhos ficam dentro da pasta pessoal da conta do Broto.
+`cialai broto enviar <broto> <arquivo local> <destino>`, `cialai broto baixar <broto> <caminho no Broto> [destino local]` e `cialai broto arquivos <broto> <pasta>`.
+
+Enviar, receber e listar arquivos faz parte do Broto. Use o caminho solicitado pela pessoa, nos locais acessíveis à conta de execução, inclusive outras unidades, volumes montados e pastas do sistema. Confira a saída e a integridade antes de informar sucesso. Se a operação falhar, informe o erro real e a versão instalada.
 
 ## Permissões
 

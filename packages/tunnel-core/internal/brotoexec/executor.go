@@ -19,7 +19,6 @@ type Config struct {
 	// Test seam; not configurable by the remote peer.
 	transferIdleTimeout time.Duration
 	AllowFiles          bool
-	FileRoots           []string
 	MaxFileMB           int64
 	OnExecOutput        func(uint64, string, []byte)
 	AllowExec           bool
@@ -97,10 +96,6 @@ func New(c Config) *Executor {
 	}
 	if c.MaxFileMB <= 0 {
 		c.MaxFileMB = 512
-	}
-	if len(c.FileRoots) == 0 {
-		home, _ := os.UserHomeDir()
-		c.FileRoots = []string{home}
 	}
 	return &Executor{downloads: map[string]*download{}, uploads: map[string]*upload{}, config: c, sessions: map[uint32]*session{}, running: map[uint64]context.CancelFunc{}}
 }

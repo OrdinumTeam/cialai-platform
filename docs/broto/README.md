@@ -17,6 +17,8 @@ Implementação local de BRO-001 a BRO-013 preparada. O daemon, o monitor, o par
 
 ## O que é
 
+Envio, recebimento e listagem de arquivos fazem parte do Broto. Pela [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta), alcançam os caminhos acessíveis à conta de execução, incluindo outras unidades, volumes montados e pastas do sistema. A entrega do executor e sua validação estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), com distribuição prevista no Broto 0.1.2. O executor tem validação local em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); distribuição e atualização instalada têm estados próprios.
+
 O Cialai Broto é um terceiro tipo de Cialai. Não tem estúdio. É um programa separado, baixado à parte, instalado num aparelho com sistema operacional, e a sua única função é manter uma conexão segura com um hospedeiro, o Cialai do computador. Depois de pareado, o hospedeiro passa a rodar comandos e abrir terminais naquele aparelho, e isso vale tanto para a pessoa quanto para a IA que trabalha no hospedeiro.
 
 A única tela do Broto é uma janela simples. Antes do pareamento, ela serve para colar o código e ligar para o hospedeiro. Depois de aprovado, ela vira um monitor do que está acontecendo, com dois botões, Pausar e Desconectar.

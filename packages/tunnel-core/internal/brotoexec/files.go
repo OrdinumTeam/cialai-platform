@@ -78,25 +78,26 @@ func (e *Executor) fileRoot(path string) (*os.Root, string, error) {
 			return nil, "", failure("file_invalid_name", "Fluxos alternativos de arquivos não são permitidos.")
 		}
 	}
-	for _, dir := range e.config.FileRoots {
-		rootPath, err := filepath.Abs(dir)
-		if err == nil {
-			resolved, resolveErr := filepath.EvalSymlinks(rootPath)
-			if resolveErr != nil || forbiddenRoot(resolved) {
-				continue
-			}
+	// Resolve the requested destination with the account's filesystem access.
+	// A new upload may have a missing leaf, but its parent must already exist.
+	resolved, err := filepath.EvalSymlinks(path)
+	if errors.Is(err, os.ErrNotExist) {
+		parent, parentErr := filepath.EvalSymlinks(filepath.Dir(path))
+		if parentErr != nil {
+			return nil, "", parentErr
 		}
-		if err != nil {
-			continue
-		}
-		rel, err := filepath.Rel(rootPath, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) || filepath.IsAbs(rel) {
-			continue
-		}
-		root, err := os.OpenRoot(rootPath)
-		return root, rel, err
+		resolved = filepath.Join(parent, filepath.Base(path))
+	} else if err != nil {
+		return nil, "", err
 	}
-	return nil, "", failure("file_outside_roots", "O caminho está fora das pastas permitidas.")
+	parent, name := filepath.Dir(resolved), filepath.Base(resolved)
+	if parent == resolved {
+		name = "."
+	}
+	// Hold the actual parent directory while transferring. This keeps staging,
+	// locking and publication together even if a parent link is later changed.
+	root, err := os.OpenRoot(parent)
+	return root, name, err
 }
 func fileInfo(info os.FileInfo) map[string]any {
 	kind := "file"
@@ -316,24 +317,6 @@ func (e *Executor) files(verb string, raw json.RawMessage) (result any, err erro
 	return nil, failure("file_unsupported", "A operação de arquivo não é suportada.")
 }
 
-func forbiddenRoot(path string) bool {
-	clean := strings.ToLower(filepath.ToSlash(filepath.Clean(path)))
-	if clean == "/" || clean == strings.ToLower(filepath.ToSlash(filepath.VolumeName(path)))+"/" {
-		return true
-	}
-	for _, prefix := range []string{"/etc", "/bin", "/sbin", "/usr", "/system", "/library", "/dev", "/proc", "/sys", "/private/etc", "/private/var/db", "/private/var/root"} {
-		if clean == prefix || strings.HasPrefix(clean, prefix+"/") {
-			return true
-		}
-	}
-	vol := strings.ToLower(filepath.ToSlash(filepath.VolumeName(path)))
-	for _, prefix := range []string{"/windows", "/program files", "/program files (x86)", "/programdata"} {
-		if clean == vol+prefix || strings.HasPrefix(clean, vol+prefix+"/") {
-			return true
-		}
-	}
-	return false
-}
 func (e *Executor) getFile(root *os.Root, name, key string, a fileArgs, limit int64) (any, error) {
 	if a.Length <= 0 || a.Length > 1<<20 {
 		return nil, failure("file_invalid_range", "O tamanho do bloco é inválido.")

@@ -10,7 +10,7 @@ A rodada inicial passou nas suítes disponíveis, mas não cobria os defeitos id
 - IPC privado impondo autor IA, fluxo maior que 4 MiB em vários quadros e cancelamento do handler quando o cliente encerra a conexão.
 - CLI integrada ao hub, fio RPC e executor reais, com espera por aprovação e saída em fluxo.
 - Transferência local de 104857600 bytes por blocos. Envio e download produziram SHA256 `122921bf96749ccbe330a032072c597559a5840f7a6c9471ca1417f337b73ccc`.
-- Recusa de sobrescrita, integridade de bloco e arquivo, confinamento, cancelamento, pausa e permissões cobertos pelos testes Go.
+- Recusa de sobrescrita, integridade de bloco e arquivo, cancelamento, pausa e permissões cobertos pelos testes Go.
 - Sessão IA em memória, cancelamento, wrappers v2 e instalação gerenciada de skill cobertos pelos testes Rust. Os wrappers POSIX foram executados com argumentos contendo espaços e metacaracteres; o Windows foi conferido pela geração, sem execução de cmd nesta rodada.
 - Paridade MCP coberta pela suíte do servidor e pela implementação compartilhada de transferência.
 
@@ -78,7 +78,7 @@ As reproduções abaixo falharam antes da correção. O estado anterior não dev
 | Resposta final antes de drenar a saída | `TestFullOutputQueueDrainsBeforeSuccessfulFinalResponse`, incluindo fila cheia e 33 saídas |
 | Escrita IPC retida após cancelamento | `TestStalledEventReaderDoesNotHoldCancelledHandler`; fechar o contexto desbloqueia o escritor |
 | Recebimento abandonado ou processo encerrado | `TestAbandonedUploadExpiresWithoutFurtherRequests` e `TestUploadLockSurvivesLiveOwnerAndRecoversAfterCrash`; expiração automática e bloqueio entre processos |
-| Arquivos em conta de administrador | A guarda e o teste `TestFilesPrivilegedAccountGuard` saíram com a decisão 072; o Broto não recusa conta nenhuma |
+| Arquivos em conta de administrador | Seguem os poderes da conta de execução, conforme as decisões 072 e 074 |
 | Erros de arquivo indistinguíveis | `TestFileDiagnosticsAreActionableAndSanitized`; motivos específicos sem expor conteúdo ou caminho em mensagens de erro |
 | Ordem dos pedidos instável | `TestPendingApprovalsAreOldestFirst`; interface mantém seleção por ID |
 | Fila sem navegação e lista ausente | Testes Node e Playwright verificam contador, navegação sincronizada e todos os pedidos em Dispositivos |
@@ -195,7 +195,7 @@ Uma regressão com prompt anterior ao modo raw perdeu a primeira linha antes da 
 
 ## Provas remotas e limites desta retomada
 
-A [transcrição sanitizada dos onze testes nativos de arquivos no Windows](windows-file-tests-2026-10-29.txt) registra a execução já aprovada, com saída zero. Ela foi reutilizada após conferir que `packages/tunnel-core` está idêntico ao commit `abf3d80`. As fixtures permitem a conta privilegiada apenas no laboratório e isolam o temporário no processo; isso não aprova uma configuração privilegiada do serviço. A guarda negativa também passou.
+A [transcrição sanitizada dos onze testes nativos de arquivos no Windows](windows-file-tests-2026-10-29.txt) registra a execução já aprovada, com saída zero. Ela foi reutilizada após conferir que `packages/tunnel-core` está idêntico ao commit `abf3d80`. As fixtures isolam o diretório temporário no processo. Essa evidência cobre os testes registrados; a entrega de BRO-023 tem validação própria.
 
 Na conferência seguinte, a VM apareceu inicialmente ligada, mas ficou desligada antes de concluir o inventário somente leitura. Nenhum comando de iniciar, parar ou reiniciar foi enviado. O IPC do hospedeiro preservado aceitou uma conexão, mas não respondeu a `broto.list` no prazo de sete segundos; a CLI também não concluiu `listar` em dezoito segundos. As sondagens próprias foram encerradas e o aplicativo, sidecar e watchers do usuário foram preservados.
 

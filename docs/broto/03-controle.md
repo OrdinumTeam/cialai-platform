@@ -73,7 +73,7 @@ A saída da sessão remota entra no mesmo anel de 256 KiB por sessão que o est�
 
 ## As abas que não funcionam numa sessão de Broto
 
-O editor, o explorador, o grafo da documentação e o Dev Browser do estúdio usam comandos de arquivo locais do hospedeiro, por caminho. Numa sessão que vive em outra máquina, esses comandos apontariam para o disco errado. Na primeira versão essas abas ficam desligadas quando a sessão é de um Broto. Os verbos `files.list`, `files.stat`, `files.get` e `files.put` já atendem a CLI e o MCP por caminhos confinados às raízes da conta do Broto. Integrar essas operações às abas gráficas continua sendo uma etapa separada.
+O editor, o explorador, o grafo da documentação e o Dev Browser do estúdio usam comandos de arquivo locais do hospedeiro, por caminho. Numa sessão que vive em outra máquina, esses comandos apontariam para o disco errado. A integração dessas abas gráficas usa uma etapa própria. Os verbos `files.list`, `files.stat`, `files.get` e `files.put` atendem a CLI e o MCP, com acesso conforme a conta de execução pela [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta). A entrega de arquivos avança independentemente da integração das abas.
 
 ## Contrato preparado em código
 
@@ -81,7 +81,7 @@ A RPC usa tamanho u32 big-endian, byte de tipo e carga. Tipo zero contém JSON; 
 
 O anel remoto guarda 256 KiB. pty.read lê no máximo 64 KiB por chamada, com offset, next_offset e total_offset. O desktop drena todas as páginas finais antes de encerrar o fluxo. IDs remotos são reservados em sequência persistida antes da abertura, para uma reconexão não reutilizar uma sessão antiga. O hospedeiro atribui IDs locais a partir de 0x80000000.
 
-Pausar recusa mutações novas e mantém os processos existentes. Lista e leitura continuam disponíveis. Desconectar encerra os processos e apaga o vínculo. As transferências usam `allowFiles`, `fileRoots` e `maxFileMB`; a pausa recusa transferências novas e cancela recebimentos parciais. A interface continua bloqueando operações locais de arquivo em sessões de Broto.
+Pausar recusa mutações novas e mantém os processos existentes. Lista e leitura continuam disponíveis. Desconectar encerra os processos e apaga o vínculo. As transferências usam `allowFiles` e `maxFileMB`, com acesso aos caminhos conforme a conta do Broto. A adequação do executor e sua distribuição estão em [BRO-023](./09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta), com entrega prevista no Broto 0.1.2. A pausa recusa transferências novas e cancela recebimentos parciais. Operações de arquivos de uma sessão remota devem usar o disco do Broto correspondente.
 
 Ao desconectar, o Broto espera por `disconnected.ack` durante até 500 ms antes de fechar o transporte. O hospedeiro confirma depois de revogar o vínculo. Se a confirmação não chegar, o Broto ainda apaga o vínculo local. Essa ordem evita perder a revogação quando o fechamento do QUIC ultrapassa o último evento.
 
@@ -93,7 +93,7 @@ A continuação do protocolo está em [09 · IA no comando](./09-ia-no-comando.m
 
 Cada execução tem sua fila de entrega. Um consumidor parado não bloqueia a leitura da RPC nem os terminais do mesmo Broto. Se a fila limitada exceder a capacidade, somente a chamada afetada é cancelada e recebe `output_backpressure`; a resposta de sucesso só é entregue depois de drenar a saída.
 
-Transferências exigem a mesma conta sem elevação de exec e PTY. Recebimentos sem atividade por quinze minutos são encerrados. O bloqueio do destino protege outro processo vivo e permite recuperar o parcial após queda do dono. Erros de arquivo têm códigos sanitizados específicos para caminho, permissão, tamanho, integridade e concorrência.
+Transferências usam a mesma conta de execução de exec e PTY, com seus poderes no sistema conforme as decisões 072 e 074. Recebimentos sem atividade por quinze minutos são encerrados. O bloqueio do destino protege outro processo vivo e permite recuperar o parcial após queda do dono. Erros de arquivo têm códigos sanitizados específicos para caminho, permissão, tamanho, integridade e concorrência.
 
 ## Log operacional do hospedeiro
 

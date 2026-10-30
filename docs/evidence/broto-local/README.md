@@ -64,7 +64,7 @@ Em 28/10/2026, após os ensaios isolados, o usuário solicitou uma instalação 
 
 O executável instalado corresponde ao build com o marcador NSIS aplicado pelo empacotador. Todos os arquivos do payload do serviço conferiram com o manifesto, sem arquivos faltantes ou hashes divergentes. O payload usa assinatura Minisign local; a chave privada efêmera foi removida após o empacotamento. Isso não constitui assinatura Authenticode ou release oficial.
 
-O serviço desta instalação permanece inativo. A única conta ativa da VM era administradora, e o instalador daquela rodada ainda recusava administrador, regra removida pela decisão 072. A escolha entre criar uma conta Broto e indicar outra conta comum está pendente do usuário. Nenhuma conta foi criada ou alterada, e esta instalação ainda não foi pareada. A VM e a janela foram deixadas abertas ao concluir a instalação do monitor.
+O serviço desta instalação permanece inativo e esta instalação ainda não foi pareada. Nenhuma conta foi criada ou alterada. A VM e a janela foram deixadas abertas ao concluir a instalação do monitor. A conta de execução segue a decisão 072.
 
 Os resultados completos e a captura da janela estão no histórico interno ignorado pelo Git. Após a troca do ícone, passaram o build Vite, o build Windows release, o teste de encenação do payload, os 459 testes de UI, o check de texto e o check de whitespace.
 

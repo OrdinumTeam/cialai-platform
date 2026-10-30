@@ -446,7 +446,7 @@ func (c *Client) serve(ctx context.Context, g uint64, conn net.Conn, token strin
 			_ = conn.Close()
 		}
 	}
-	executor := brotoexec.New(brotoexec.Config{AllowFiles: c.policy.AllowFiles, FileRoots: c.policy.FileRoots, MaxFileMB: c.policy.MaxFileMB, MaxDuration: time.Duration(c.policy.MaxDurationMinutes) * time.Minute, OnExecOutput: execOutput, AllowExec: c.policy.AllowExec, AllowPTY: c.policy.AllowPTY, Dir: c.policy.Dir, Shell: c.policy.Shell, OnOutput: output, AllocateID: c.allocatePTYID})
+	executor := brotoexec.New(brotoexec.Config{AllowFiles: c.policy.AllowFiles, MaxFileMB: c.policy.MaxFileMB, MaxDuration: time.Duration(c.policy.MaxDurationMinutes) * time.Minute, OnExecOutput: execOutput, AllowExec: c.policy.AllowExec, AllowPTY: c.policy.AllowPTY, Dir: c.policy.Dir, Shell: c.policy.Shell, OnOutput: output, AllocateID: c.allocatePTYID})
 	defer executor.Close()
 	c.mu.Lock()
 	if c.generation != g {

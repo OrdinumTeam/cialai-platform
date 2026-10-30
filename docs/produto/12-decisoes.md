@@ -65,11 +65,12 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 064 | Preparado | Confirmação do Broto segura só a IA; a pessoa opera direto; execução em docs/broto/08-roteiro.md |
 | 065 | Preparado | CLI e skill do hospedeiro; aceite integrado em BRO-022 |
 | 066 | Preparado | Execução em fluxo e card IA por Broto; prova visual remota pendente |
-| 067 | Preparado | Transferência por blocos com hash e raízes locais; prova remota pendente |
+| 067 | Preparado | Transferência por blocos com hash e acesso conforme os poderes da conta; prova remota pendente |
 | 068 | Preparado | Aprovação global e liberação temporária em memória; aceite integrado pendente |
 | 069 | Proposta | Lançador gráfico do Broto Windows aguarda escolha do usuário, sem implementação |
 | 070 | Proposta | Espera por saída com fronteira de comando aguarda definição de contrato, sem filtro de eco |
 | 071 | Preparado | Prévia Broto Windows e Linux autorizada junto do Cialai 0.5.0; publicação em validação |
+| 074 | Preparado | Executor de arquivos validado localmente para Broto 0.1.2; distribuição e execução nativa nos alvos registradas separadamente em BRO-023 |
 
 ## 001 Nome Cialai
 
@@ -578,9 +579,9 @@ Consequência: Execução ganha eventos e cancelamento, mantendo resumo limitado
 
 Data: 28/10/2026.
 
-Contexto: Transferir arquivos por comandos de shell dificulta integridade e confinamento.
+Contexto: a transferência de arquivos precisa de progresso, integridade e operações próprias pelo túnel.
 
-Decisão: Verbos próprios transferem blocos com SHA256, limitados pelas raízes e pela política local, com aprovação por arquivo.
+Decisão: verbos próprios transferem blocos com SHA256 nos caminhos acessíveis à conta do Broto, sob as permissões de operação escolhidas pela pessoa. O contrato de acesso está na decisão 074.
 
 Alternativa rejeitada: Colar base64 no terminal remoto.
 
@@ -646,13 +647,13 @@ Consequência: a tag broto-v0.1.0 não substitui latest do Cialai. A página do 
 
 Data: 29/10/2026.
 
-Contexto: a prévia 0.1.0 recusava conta de administrador no Windows e root no Linux e no macOS. A recusa vinha do desenho de segurança do documento 04, nunca foi decisão do usuário, e impedia a IA de instalar programas, mexer no sistema e administrar a máquina do Broto. O usuário pediu o Broto livre de tudo.
+Contexto: instalar programas, configurar serviços e administrar a máquina do Broto são tarefas do produto e usam os poderes da conta escolhida na instalação.
 
-Decisão: o Broto roda com os poderes da conta onde foi instalado e não recusa conta nenhuma. A janela não barra administrador, o instalador do Windows aceita a conta de administrador e o serviço dela recebe o token completo, porque o logon de serviço não passa pelo filtro do UAC. O executor não recusa token elevado, LocalSystem nem root. Numa conta comum, o Windows continua tirando SeImpersonatePrivilege e SeCreateGlobalPrivilege do serviço, para o shell não passar da conta escolhida; numa conta de administrador, o token fica inteiro. A skill manda a IA rodar comandos de administrador direto quando o Broto for administrador.
+Decisão: o Broto roda com os poderes da conta onde foi instalado. O instalador do Windows aceita a conta de administrador e o serviço dela recebe o token completo, porque o logon de serviço usa esse token. O executor aceita conta comum, token elevado, LocalSystem e root. Numa conta comum, o Windows tira SeImpersonatePrivilege e SeCreateGlobalPrivilege do serviço, para o shell usar os poderes da conta escolhida; numa conta de administrador, o token fica inteiro. A skill manda a IA rodar comandos de administrador direto quando o Broto for administrador.
 
-Alternativa rejeitada: manter a recusa com uma opção de liberar na instalação. Seria mais uma tela para uma escolha que a pessoa já faz ao escolher a conta.
+Instalação: a pessoa escolhe a conta de execução; os poderes dessa conta se aplicam aos comandos, terminais e arquivos do Broto.
 
-Consequência: um hospedeiro comprometido com um Broto administrador em livre tem a máquina inteira do Broto. Pedir confirmação, Pausar, Desconectar e o teto local seguem valendo. A transferência de arquivos continua presa às raízes da política local e às pastas fora do sistema.
+Consequência: um hospedeiro comprometido com um Broto administrador em livre tem a máquina inteira do Broto. Pedir confirmação, Pausar, Desconectar e o teto local seguem valendo. A transferência de arquivos segue os poderes da conta, conforme a decisão 074.
 
 ## 073 Skill do Cialai automática e editável
 
@@ -665,4 +666,18 @@ Decisão: o app instala e atualiza a skill sozinho, na abertura e a cada cinco m
 Alternativa rejeitada: baixar a skill de um endereço do site, como `cialai.com.br/CLAUDE.md`. O usuário preferiu que ela só chegue pela release, que já é assinada e verificada pelo atualizador.
 
 Consequência: some o botão de instalar e remover. Apagar o arquivo faz o Cialai gravá-lo de novo na conferência seguinte.
+
+## 074 Arquivos do Broto com os poderes da conta
+
+Data: 29/10/2026.
+
+Contexto: enviar, receber e listar arquivos são funcionalidades do Broto e atendem às tarefas da pessoa e dos agentes na máquina remota.
+
+Decisão: enviar, receber e listar arquivos faz parte do produto em qualquer caminho acessível à conta de execução do Broto, incluindo outras unidades, volumes montados e pastas do sistema. As permissões do sistema operacional definem o acesso efetivo. O uso padrão aceita diretamente o caminho solicitado, com as mesmas capacidades da conta usadas por comandos e terminais.
+
+Operação: a pessoa informa o caminho de origem e o destino. A transferência usa o túnel do Broto, com progresso, verificação de integridade e resultado explícito.
+
+Entrega: adequar o executor Go e distribuir o binário do Broto, com versão prevista 0.1.2. `allowFiles`, os níveis de operação, Pausar, Desconectar, integridade por SHA256, limites de tamanho e sobrescrita explícita seguem seus contratos próprios. Informar o resultado real da operação e os erros do sistema quando ocorrerem.
+
+Estado desta etapa: documentação, skill e executor alinhados ao requisito, com testes locais aprovados; distribuição acompanhada em [BRO-023](../broto/09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta). As evidências registram somente as execuções efetivamente realizadas.
 

@@ -10,14 +10,13 @@ import (
 )
 
 type Policy struct {
-	AllowFiles         bool     `json:"allowFiles"`
-	FileRoots          []string `json:"fileRoots"`
-	MaxFileMB          int64    `json:"maxFileMB"`
-	MaxDurationMinutes int      `json:"maxDurationMinutes"`
-	AllowExec          bool     `json:"allowExec"`
-	AllowPTY           bool     `json:"allowPTY"`
-	Dir                string   `json:"dir"`
-	Shell              string   `json:"shell"`
+	AllowFiles         bool   `json:"allowFiles"`
+	MaxFileMB          int64  `json:"maxFileMB"`
+	MaxDurationMinutes int    `json:"maxDurationMinutes"`
+	AllowExec          bool   `json:"allowExec"`
+	AllowPTY           bool   `json:"allowPTY"`
+	Dir                string `json:"dir"`
+	Shell              string `json:"shell"`
 }
 type savedHost struct {
 	Card     candidates.Card `json:"card"`

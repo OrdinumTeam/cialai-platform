@@ -4,7 +4,9 @@
 
 Implementação local de BRO-014 a BRO-021 revisada com regressões em 28/10/2026, com duas frentes e integração. Testes e limites estão em [Evidência local](../evidence/broto-ia/README.md). O repasse nativo Windows foi validado em 29/10/2026; o aceite BRO-022 e as provas integradas com Claude Code continuam pendentes; não são substituídos pelas suítes locais. Ele parte do que já funciona e foi provado no mesmo dia: o Mac abre terminal no Broto Windows pela tela e pela IA, a sessão aparece em Terminais com o símbolo do Broto, a confirmação segura só a IA pela decisão 064, e o serviço Windows remove do próprio token os privilégios de serviço antes do primeiro comando. O registro dessas provas está em `_INTERNO_ORDINUM/plan/broto-execucao.md`, fora do Git.
 
-Este documento é para ser executado. As tarefas estão no fim, em BRO-014 a BRO-022, no mesmo formato do documento 08, e a regra de marcar só com evidência vale aqui também.
+Este documento é para ser executado. As tarefas estão no fim, em BRO-014 a BRO-023, no mesmo formato do documento 08, e a regra de marcar só com evidência vale aqui também.
+
+Envio, recebimento e listagem de arquivos fazem parte do Broto, conforme a [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta). O executor foi validado localmente em BRO-023; a distribuição do Broto 0.1.2 tem verificação própria. A validação local está em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md); testes nativos, distribuição e atualização instalada têm estados próprios.
 
 ## O que a pessoa faz
 
@@ -28,7 +30,7 @@ A IA trata o Broto como trata o terminal local: manda um comando, recebe a saíd
 | --- | --- | --- |
 | 065 | A IA do hospedeiro comanda os Brotos pelo comando `cialai broto`, ensinado por uma skill `cialai` instalada a pedido no Claude Code e no Codex. O MCP do documento 06 continua como alternativa | MCP como caminho principal, que exige registrar um servidor em cada IA; e um .md fixo entregue na abertura, que gasta contexto em toda conversa e não chega a quem abre o Claude à mão |
 | 066 | Cada Broto tem um card IA em Terminais, só de leitura, com os comandos da IA e a saída ao vivo; o `exec` ganha saída em fluxo e cancelamento | Rodar os comandos da IA dentro do terminal da pessoa com marcador de fim, que suja a tela e depende do shell |
-| 067 | Arquivos trafegam pelo túnel com verbos próprios, em blocos com hash, confinados às pastas da conta do Broto e sob as mesmas permissões | Transferir por comando de terminal, como base64 colado no shell |
+| 067 | Arquivos trafegam pelo túnel com verbos próprios, em blocos com hash, nos caminhos acessíveis à conta do Broto e sob as permissões de operação escolhidas pela pessoa; contrato na decisão 074 | Transferir por comando de terminal, como base64 colado no shell |
 | 068 | O pedido de confirmação aparece em qualquer tela do Cialai, com a opção Liberar por 15 minutos para aquele Broto | Confirmar só na página Dispositivos; ou liberar sem prazo |
 
 Cada entrada segue o formato do documento 12, com Data, Contexto, Decisão, Alternativa rejeitada e Consequência, e ganha uma linha na tabela de estado do topo.
@@ -176,16 +178,20 @@ Liberar por 15 minutos põe aquele Broto em livre só para a IA, sem gravar no r
 
 Blocos de 1 MiB cabem no quadro de 4 MiB depois do base64. O comando `cialai broto` mostra o progresso no erro padrão e confere o SHA256 nos dois sentidos.
 
-### Os limites no Broto
+### Acesso a caminhos e estado da implementação
+
+Enviar, receber e listar em qualquer caminho acessível à conta do Broto faz parte do produto, incluindo outras unidades, volumes montados e pastas do sistema. A [decisão 074](../produto/12-decisoes.md#074-arquivos-do-broto-com-os-poderes-da-conta) define o contrato. A entrega do executor e sua validação estão em BRO-023.
 
 | Regra | Como |
 | --- | --- |
-| Pastas permitidas | A pasta pessoal da conta do Broto por padrão; `policy.json` aceita `fileRoots` para trocar ou restringir |
-| Caminho | Absoluto ou relativo à pasta pessoal; recusa `..` que saia da raiz, ligação que aponte para fora, nomes reservados do Windows e pastas do sistema |
+| Pastas acessíveis | As que a conta do Broto pode acessar, incluindo outras unidades, volumes montados e pastas do sistema |
+| Caminho | Absoluto ou relativo à pasta pessoal, com validação da sintaxe do sistema e dos nomes reservados |
 | Tamanho | Até `maxFileMB` de `policy.json`, padrão 512 |
 | Sobrescrever | Recusado, a não ser com `overwrite` |
 | Teto local | `policy.json` ganha `allowFiles`, padrão verdadeiro; falso recusa todos os verbos de arquivo |
 | Pausa | Pausar recusa transferências novas e apaga os `.cialai-part` em andamento |
+
+A resolução de caminhos e links deve alcançar o destino solicitado com as permissões da conta, preservando validação de nomes, integridade e sobrescrita explícita. O resultado deve indicar sucesso confirmado ou o erro real da operação.
 
 ### As permissões
 
@@ -251,7 +257,9 @@ Para o que pergunta coisas ou fica rodando, abra um terminal visível:
 
 ## Arquivos
 
-`cialai broto enviar <broto> <arquivo local> <destino>`, `cialai broto baixar <broto> <caminho no Broto> [destino local]` e `cialai broto arquivos <broto> <pasta>`. Os caminhos ficam dentro da pasta pessoal da conta do Broto.
+`cialai broto enviar <broto> <arquivo local> <destino>`, `cialai broto baixar <broto> <caminho no Broto> [destino local]` e `cialai broto arquivos <broto> <pasta>`.
+
+Enviar, receber e listar arquivos faz parte do Broto. Use o caminho solicitado pela pessoa, nos locais acessíveis à conta de execução, inclusive outras unidades, volumes montados e pastas do sistema. Confira a saída e a integridade antes de informar sucesso. Se a operação falhar, informe o erro real e a versão instalada.
 
 ## Permissões
 
@@ -293,7 +301,7 @@ O adaptador do documento 06 continua para quem prefere MCP ou usa uma IA sem ter
 | Programa local usando o comando `cialai broto` | Chega como IA, então passa pelas mesmas confirmações; o IPC é privado do usuário, como já é |
 | Liberação esquecida | Prazo fixo de 15 minutos, sem gravar, com selo visível e botão Encerrar |
 | Transferência corrompida ou trocada | SHA256 conferido antes de renomear e de entregar |
-| Escrita fora de lugar | Raízes da peça 4, recusa de `..`, de ligação para fora e de pastas do sistema |
+| Destino incorreto | Caminho de destino explícito, resolução conforme o sistema, permissões da conta e sobrescrita intencional |
 | Comando que pede administrador | Roda direto se o Broto estiver numa conta de administrador ou como root; numa conta comum, a skill manda avisar a pessoa |
 
 ## Tarefas
@@ -350,8 +358,10 @@ Tamanho M. Depende de BRO-016.
 
 Tamanho G. Depende de BRO-015.
 
-- [x] Verbos `files.list`, `files.stat`, `files.get`, `files.put` e `files.cancel` no Broto, com raízes, tamanho, sobrescrita, SHA256 e `.cialai-part` · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
-- [x] `allowFiles`, `fileRoots` e `maxFileMB` no `policy.json` · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
+Os itens concluídos abaixo registram a base de transferência e suas evidências. A validação do acesso conforme os poderes da conta está em BRO-023.
+
+- [x] Verbos `files.list`, `files.stat`, `files.get`, `files.put` e `files.cancel` no Broto, com tamanho, sobrescrita, SHA256 e `.cialai-part` · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
+- [x] Política local de arquivos com `allowFiles` e `maxFileMB` · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 - [x] Hub com as regras de permissão da peça 4 e prévia própria para arquivo · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 - [x] Ações `enviar`, `baixar` e `arquivos` no `cialai broto`, com progresso e conferência · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
 - [x] Atividade Arquivo recebido e Arquivo enviado nos três idiomas · [Regressões da revisão](../evidence/broto-ia/README.md#correções-após-revisão)
@@ -395,6 +405,18 @@ Tamanho M. Depende de todas as anteriores.
 - [ ] Com o Broto Windows em confirmar IA, todas as aprovações feitas pelo aviso, sem abrir Dispositivos
 - [ ] A pessoa acompanha tudo nos cards IA e interrompe um comando com Ctrl C
 - [ ] Evidência sanitizada em `docs/evidence/broto-ia/`, sem código de pareamento, senha ou caminho desta máquina
+
+### BRO-023 Arquivos com os poderes da conta
+
+Depende da base de transferência BRO-018. Não depende do aceite geral BRO-022 nem da integração das abas gráficas. Escopo definido pela decisão 074, com entrega prevista no Broto 0.1.2.
+
+- [x] Documentação e skill do repositório alinhadas em 29/10/2026, distinguindo requisito, limitação atual e entrega do binário
+- [x] Resolução de caminhos em `internal/brotoexec/files.go` conforme os poderes da conta · [Validação local](../evidence/broto-0.1.2/README.md)
+- [x] Configuração do executor e carregamento da política alinhados ao acesso direto aos caminhos permitidos pelo sistema · [Validação local](../evidence/broto-0.1.2/README.md)
+- [x] Permissões de operação, pausa, desconexão, validação de nomes, SHA256, limite de tamanho, cancelamento e sobrescrita explícita preservados · [Validação local](../evidence/broto-0.1.2/README.md)
+- [x] Envio, recebimento e listagem fora da pasta pessoal no SSD externo; raiz de volume, arquivo do sistema, caminhos relativos, links e permissão real cobertos no macOS · [Validação local](../evidence/broto-0.1.2/README.md)
+- [x] Testes específicos, detector de concorrência, vet, empacotamento e transferência de 100 MiB aprovados no macOS · [Validação local](../evidence/broto-0.1.2/README.md)
+- [ ] Distribuir o executor no Broto 0.1.2 e conferir uma transferência com o binário atualizado; manter separado o estado do código e o da versão instalada
 
 ## Fora deste documento
 

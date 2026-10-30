@@ -18,7 +18,7 @@ func digest(p []byte) string { h := sha256.Sum256(p); return hex.EncodeToString(
 func fileExecutor(t *testing.T) (*Executor, string) {
 	t.Helper()
 	dir := t.TempDir()
-	e := New(Config{AllowFiles: true, FileRoots: []string{dir}, MaxFileMB: 1})
+	e := New(Config{AllowFiles: true, MaxFileMB: 1})
 	t.Cleanup(func() { e.Close() })
 	return e, dir
 }
@@ -29,7 +29,7 @@ func reject(t *testing.T, e *Executor, verb string, a any) {
 		t.Fatalf("accepted %s", verb)
 	}
 }
-func TestFilesIntegrityConfinementAndPause(t *testing.T) {
+func TestFilesIntegrityAndPause(t *testing.T) {
 	e, dir := fileExecutor(t)
 	path := filepath.Join(dir, "file.txt")
 	a := fileArgs{Path: path, Data: []byte("first"), TransferID: "one", ChunkSHA256: digest([]byte("first")), Size: 11}
@@ -59,7 +59,7 @@ func TestFilesIntegrityConfinementAndPause(t *testing.T) {
 	if last["sha256"] != digest([]byte("firstsecond")) {
 		t.Fatal(last)
 	}
-	for _, path := range []string{filepath.Join(dir, "..", "escape"), filepath.Join(dir, "CON.txt"), filepath.Join(dir, "a:stream")} {
+	for _, path := range []string{filepath.Join(dir, "CON.txt"), filepath.Join(dir, "a:stream")} {
 		reject(t, e, "files.stat", fileArgs{Path: path})
 	}
 	bad := filepath.Join(dir, "bad")
@@ -77,24 +77,69 @@ func TestFilesIntegrityConfinementAndPause(t *testing.T) {
 	e.SetPaused(false)
 	reject(t, e, "files.put", fileArgs{Path: filepath.Join(dir, "large"), Size: 2 << 20})
 }
-func TestFilesRejectSymlinkEscapeAndSystemRoots(t *testing.T) {
+func TestFilesFollowLinksAcrossDirectories(t *testing.T) {
 	e, dir := fileExecutor(t)
 	outside := t.TempDir()
-	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("private"), 0600); err != nil {
+	data := []byte("linked file")
+	if err := os.WriteFile(filepath.Join(outside, "source"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
 		if runtime.GOOS == "windows" {
-			t.Log("symlink creation unavailable under Windows user token")
+			t.Skip("symlink creation unavailable under Windows user token")
 		} else {
 			t.Fatal(err)
 		}
-	} else {
-		reject(t, e, "files.stat", fileArgs{Path: filepath.Join(dir, "link", "secret")})
-		reject(t, e, "files.put", fileArgs{Path: filepath.Join(dir, "link", "new"), Data: []byte("x")})
 	}
-	e.config.FileRoots = []string{string(filepath.Separator)}
-	reject(t, e, "files.stat", fileArgs{Path: dir})
+	call(t, e, "files.list", fileArgs{Path: filepath.Join(dir, "link")})
+	got := call(t, e, "files.get", fileArgs{Path: filepath.Join(dir, "link", "source"), Length: 1024}).(map[string]any)
+	if !bytes.Equal(got["data"].([]byte), data) || got["sha256"] != digest(data) {
+		t.Fatal("linked download differs")
+	}
+	call(t, e, "files.put", fileArgs{Path: filepath.Join(dir, "link", "new"), Data: data, Final: true, SHA256: digest(data)})
+	if got, err := os.ReadFile(filepath.Join(outside, "new")); err != nil || !bytes.Equal(got, data) {
+		t.Fatal("linked upload differs", err)
+	}
+	// A leaf symlink must address its target, including explicit replacement.
+	leaf := filepath.Join(dir, "leaf")
+	if err := os.Symlink(filepath.Join(outside, "source"), leaf); err != nil {
+		t.Fatal(err)
+	}
+	reject(t, e, "files.put", fileArgs{Path: leaf, Data: data, Final: true, SHA256: digest(data)})
+	updated := []byte("updated target")
+	call(t, e, "files.put", fileArgs{Path: leaf, Data: updated, Overwrite: true, Final: true, SHA256: digest(updated)})
+	if got, err := os.ReadFile(filepath.Join(outside, "source")); err != nil || !bytes.Equal(got, updated) {
+		t.Fatal("leaf link target not replaced", err)
+	}
+}
+
+func TestFilesUseAccountPathsByDefault(t *testing.T) {
+	e, dir := fileExecutor(t)
+	data := []byte("account filesystem")
+	path := filepath.Join(dir, "account-file")
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relative, err := filepath.Rel(home, path)
+	if err != nil {
+		// Separate Windows volumes cannot be expressed relative to one another.
+		relative = path
+	}
+	call(t, e, "files.put", fileArgs{Path: relative, Data: data, Final: true, SHA256: digest(data)})
+	got := call(t, e, "files.get", fileArgs{Path: path, Length: 1024}).(map[string]any)
+	if !bytes.Equal(got["data"].([]byte), data) || got["sha256"] != digest(data) {
+		t.Fatal("account path roundtrip differs")
+	}
+	call(t, e, "files.list", fileArgs{Path: dir})
+	call(t, e, "files.stat", fileArgs{Path: ""})
+	systemFile := "/bin/sh"
+	if runtime.GOOS == "windows" {
+		systemFile = filepath.Join(os.Getenv("SystemRoot"), "System32", "cmd.exe")
+	}
+	call(t, e, "files.stat", fileArgs{Path: systemFile})
+	root := filepath.VolumeName(dir) + string(filepath.Separator)
+	call(t, e, "files.list", fileArgs{Path: root})
 	e.config.AllowFiles = false
 	reject(t, e, "files.list", fileArgs{Path: dir})
 }
