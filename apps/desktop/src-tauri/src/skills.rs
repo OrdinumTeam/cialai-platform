@@ -248,7 +248,8 @@ pub fn restore(home: &Path, dir: &Path) -> Result<SkillView, String> {
 mod tests {
     use super::*;
     fn fixture(name: &str) -> (PathBuf, PathBuf) {
-        let root = std::env::temp_dir().join(format!("cialai-skills-{name}-{}", std::process::id()));
+        let root =
+            std::env::temp_dir().join(format!("cialai-skills-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(root.join(".claude")).unwrap();
         fs::create_dir_all(root.join(".codex")).unwrap();
@@ -346,7 +347,8 @@ mod tests {
     fn shared_alias_is_written_once() {
         let (root, state) = fixture("alias");
         fs::create_dir_all(root.join(".agents/skills")).unwrap();
-        std::os::unix::fs::symlink(root.join(".agents/skills"), root.join(".claude/skills")).unwrap();
+        std::os::unix::fs::symlink(root.join(".agents/skills"), root.join(".claude/skills"))
+            .unwrap();
         sync(&root, &state).unwrap();
         assert_eq!(fs::read_to_string(codex(&root)).unwrap(), SOURCE);
         edit(&root, &state, "editada no app".into()).unwrap();

@@ -263,7 +263,9 @@ pub fn run() {
             std::thread::spawn(move || {
                 let mut last = String::new();
                 loop {
-                    let outcome = skills::sync(&skill_home, &skill_dir).err().unwrap_or_default();
+                    let outcome = skills::sync(&skill_home, &skill_dir)
+                        .err()
+                        .unwrap_or_default();
                     if outcome != last {
                         if !outcome.is_empty() {
                             diagnostics::note(&format!("[skill] indisponivel: {outcome}"));
