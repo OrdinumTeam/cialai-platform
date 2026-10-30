@@ -219,6 +219,11 @@ texto = re.sub(r'("version": ")[^"]+(")', rf'\g<1>{nova}\g<2>', texto, count=1)
 texto = re.sub(r'("@cialai/protocol": ")[^"]+(")', rf'\g<1>{nova}\g<2>', texto, count=1)
 with io.open('packages/ui/package.json', 'w', encoding='utf-8') as f: f.write(texto)
 
+# O monitor do Broto tem versão própria, mas usa a interface pela versão exata dela.
+with io.open('apps/broto/package.json', encoding='utf-8') as f: texto = f.read()
+texto = re.sub(r'("@cialai/ui": ")[^"]+(")', rf'\g<1>{nova}\g<2>', texto, count=1)
+with io.open('apps/broto/package.json', 'w', encoding='utf-8') as f: f.write(texto)
+
 # Cargo.toml: só a versão do pacote, no topo, nunca a de uma dependência.
 with io.open('apps/desktop/src-tauri/Cargo.toml', encoding='utf-8') as f: texto = f.read()
 texto = re.sub(r'(?m)^(version = ")[^"]+(")', rf'\g<1>{nova}\g<2>', texto, count=1)

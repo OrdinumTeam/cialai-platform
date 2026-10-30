@@ -20,8 +20,6 @@ export const invoke = async (command,args) => {
  if(command==='broto_requests') return pending;
  if(command==='broto_list') return devices;
  if(command==='broto_pair_pending') return [];
- if(command==='skill_status') return window.sharedSkills ? [{agent:'claude',state:'installed',shared:true},{agent:'codex',state:'installed',shared:true}] : [{agent:'claude',state:'available'},{agent:'codex',state:'installed'}];
- if(command==='skill_change') return [{agent:'claude',state:args.remove?'available':'installed',shared:!!window.sharedSkills},{agent:'codex',state:args.remove?'available':'installed',shared:!!window.sharedSkills}];
  if(command==='broto_decide') { pending = pending.filter(p=>p.id!==args.id); changed(); return {}; }
  if(command==='broto_grant') { pending=[]; devices=devices.map(d=>({...d,approvalUntil:args.end?'':new Date(Date.now()+900000).toISOString()}));changed();return {}; }
  if(command==='broto_rename') {devices=devices.map(d=>({...d,name:args.name})); return {}; }
@@ -64,25 +62,15 @@ try {
  await page.getByRole('button',{name:t('desktop.action.save'),exact:true}).click();
  await page.getByText('VM de trabalho',{exact:true}).waitFor();
  assert.equal(await page.getByText(t('desktop.brotos.granted',{minutes:16}),{exact:true}).count(),0,'grant countdown never exceeds fifteen minutes');
- await page.getByRole('button',{name:t('desktop.brotos.skillInstall'),exact:true}).click();
- await page.getByRole('button',{name:t('desktop.brotos.skillRemove'),exact:true}).nth(1).waitFor();
+ // A skill se instala sozinha, sem pedido nem botão na tela de Brotos.
+ assert.equal(await page.evaluate(()=>window.calls.filter(c=>c.command.startsWith('skill_')).length),0,'Brotos never asks about the skill');
+ assert.equal(await page.getByText(t('desktop.skill.title'),{exact:true}).count(),0,'no skill section in Brotos');
  await page.setViewportSize({width:820,height:1050});
  await page.screenshot({path:join(tmpdir(),`broto-ai-ui-${locale}-narrow.png`),fullPage:true});
  const geometry=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth}));
  assert.equal(geometry.width,geometry.scroll,'no horizontal document overflow');
  assert.deepEqual(errors,[]);
- console.log(JSON.stringify({passed:true,locale,checks:['queue navigation synchronized','stable selection after refresh','Devices pending list','approval deduplication','decision synchronized','temporary grant','rename','skill installation','responsive width'],geometry,screenshots:[join(tmpdir(),`broto-ai-ui-${locale}-wide.png`),join(tmpdir(),`broto-ai-ui-${locale}-narrow.png`)]}));
+ console.log(JSON.stringify({passed:true,locale,checks:['queue navigation synchronized','stable selection after refresh','Devices pending list','approval deduplication','decision synchronized','temporary grant','rename','silent skill','responsive width'],geometry,screenshots:[join(tmpdir(),`broto-ai-ui-${locale}-wide.png`),join(tmpdir(),`broto-ai-ui-${locale}-narrow.png`)]}));
  await page.close();
  }
- const sharedPage=await browser.newPage({locale:'en'});
- await sharedPage.setContent('<html><body><div id="root"></div></body></html>');
- await sharedPage.evaluate(()=>{window.sharedSkills=true});
- await sharedPage.addScriptTag({content:bundle.outputFiles.find(f=>f.path.endsWith('.js')).text});
- const sharedButton=sharedPage.getByRole('button',{name:createI18n('en').t('desktop.brotos.skillRemoveShared'),exact:true});
- await sharedButton.waitFor();
- assert.equal(await sharedButton.count(),1,'shared install has one explicit removal');
- await sharedButton.click();
- await sharedPage.waitForFunction(()=>window.calls.some(c=>c.command==='skill_change' && c.args.remove===true && c.args.removeShared===true));
- console.log(JSON.stringify({passed:true,check:'explicit shared skill removal'}));
- await sharedPage.close();
 } finally {await browser.close();}

@@ -14,7 +14,7 @@
     "test:native:connected": "node scripts/native-connected.mjs"
   },
   "dependencies": {
-    "@cialai/ui": "0.5.0",
+    "@cialai/ui": "0.5.1",
     "@cialai/i18n": "0.1.0"
   },
   "devDependencies": {
