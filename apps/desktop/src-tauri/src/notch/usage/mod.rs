@@ -176,8 +176,7 @@ impl ProviderSnapshot {
         }
     }
 
-    /// A janela do anel e a **declarada** pelo provedor. Sem ela, nada e
-    /// promovido no lugar.
+    /// A janela do anel, escolhida por `headline_for` quando a leitura chega.
     pub fn headline(&self) -> Option<&LimitWindow> {
         let id = self.headline_id.as_deref()?;
         self.windows.iter().find(|window| window.id == id)
@@ -648,7 +647,8 @@ fn apply(
 /// A janela do anel e a **sessao atual**: cinco horas no Claude Code, a
 /// janela curta no Codex. E o mesmo numero que o `/usage` de cada ferramenta
 /// poe em primeiro lugar, entao os dois nunca discordam. As outras janelas
-/// ficam no detalhe.
+/// ficam no detalhe. Plano sem sessao, como o Ultra do Claude desde
+/// outubro de 2026, so tem o limite semanal, e ele vai para o anel.
 fn headline_for(provider: Provider, windows: &[LimitWindow]) -> Option<String> {
     let wanted = match provider {
         Provider::Claude => "session",
@@ -658,6 +658,7 @@ fn headline_for(provider: Provider, windows: &[LimitWindow]) -> Option<String> {
         .iter()
         .find(|window| window.id == wanted)
         .map(|window| window.id.clone())
+        .or_else(|| weekly_for(provider, windows))
 }
 
 /// A janela semanal geral, para o card. `None` quando e a mesma do anel.
@@ -731,11 +732,15 @@ mod tests {
     }
 
     #[test]
-    fn without_the_session_window_nothing_is_promoted() {
-        let windows = vec![window("weekly_all", 0.9)];
+    fn a_plan_without_a_session_shows_the_week() {
+        let windows = vec![window("weekly_all", 0.77), window("weekly_scoped", 0.12)];
+        assert_eq!(
+            headline_for(Provider::Claude, &windows).as_deref(),
+            Some("weekly_all")
+        );
         assert!(
-            headline_for(Provider::Claude, &windows).is_none(),
-            "sem a sessao, o anel mostra o traco"
+            headline_for(Provider::Claude, &[window("weekly_scoped", 0.12)]).is_none(),
+            "so a semana geral substitui a sessao"
         );
     }
 
