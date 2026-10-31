@@ -96,15 +96,20 @@ function ReconnectingScreen({ status, busy, onDisconnect }) {
   </section>;
 }
 
-function ServiceScreen({ installing, installFailed, onInstall }) {
+// Sem serviço, a tela pede para instalar. Com o serviço de um Broto até a
+// 0.1.2 no Windows, que roda com a senha da conta, ela oferece atualizar: o
+// mesmo instalador passa o serviço para SYSTEM, e a pessoa pode deixar para
+// depois sem perder o monitor.
+function ServiceScreen({ update, installing, installFailed, onInstall, onLater }) {
   return <section className="broto-screen">
     <img className="broto-mark" src={brotoMark} alt="" />
-    <h1>{t('broto.service.title')}</h1>
-    <p className="broto-lead">{t('broto.service.lead')}</p>
+    <h1>{t(update ? 'broto.service.update.title' : 'broto.service.title')}</h1>
+    <p className="broto-lead">{t(update ? 'broto.service.update.lead' : 'broto.service.lead')}</p>
     {installing && <><Progress label={t('broto.service.installing')} /><p className="broto-note" aria-live="polite">{t('broto.service.progress')}</p></>}
-    {installFailed && <p className="broto-note is-error" role="alert">{t('broto.service.failed')}</p>}
+    {installFailed && <p className="broto-note is-error" role="alert">{t(update ? 'broto.service.update.failed' : 'broto.service.failed')}</p>}
     <div className="broto-form__actions">
-      <button className={`broto-btn broto-btn--primary ${installing ? 'is-busy' : ''}`} data-broto-action="install" disabled={installing} onClick={onInstall}>{installing && <i className="broto-spinner" aria-hidden="true" />}{t(installing ? 'broto.service.installing' : 'broto.service.install')}</button>
+      {update && <button className="broto-btn" data-broto-action="later" disabled={installing} onClick={onLater}>{t('broto.service.update.later')}</button>}
+      <button className={`broto-btn broto-btn--primary ${installing ? 'is-busy' : ''}`} data-broto-action="install" disabled={installing} onClick={onInstall}>{installing && <i className="broto-spinner" aria-hidden="true" />}{t(installing ? 'broto.service.installing' : update ? 'broto.service.update.install' : 'broto.service.install')}</button>
     </div>
   </section>;
 }
@@ -161,6 +166,7 @@ export function BrotoMonitor() {
   const [failed, setFailed] = useState(null);
   const [installing, setInstalling] = useState(false);
   const [installFailed, setInstallFailed] = useState(false);
+  const [later, setLater] = useState(false);
   const refresh = async () => {
     try { setStatus(await invoke('broto_control', { method: 'broto.status', params: {} })); setUnreachable(false); }
     catch { setUnreachable(true); }
@@ -187,6 +193,7 @@ export function BrotoMonitor() {
   // formulário numa máquina em que o serviço ainda não existe.
   const screen = !ready ? null
     : unreachable ? <ServiceScreen installing={installing} installFailed={installFailed} onInstall={install} />
+    : status.passwordService && !later ? <ServiceScreen update installing={installing} installFailed={installFailed} onInstall={install} onLater={() => { setLater(true); setInstallFailed(false); }} />
     : status.state === 'waiting' && !status.digits ? <ReconnectingScreen status={status} busy={busy} onDisconnect={() => run('disconnect')} />
     : status.state === 'waiting' ? <WaitingScreen status={status} busy={busy} failed={failed === 'disconnect'} onCancel={() => run('disconnect')} />
     : linked ? <MonitorScreen status={status} busy={busy} failed={Boolean(failed)} onRun={run} />

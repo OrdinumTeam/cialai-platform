@@ -23,6 +23,11 @@ export default Object.freeze({
   "broto.service.failed": "No se pudo instalar el servicio verificado. Abre el instalador oficial de Broto e inténtalo de nuevo.",
   "broto.service.title": "El servicio de Broto no responde",
   "broto.service.lead": "La conexión con Cialai funciona en un servicio de este ordenador, que sigue activo con la ventana cerrada. Instala e inicia el servicio para continuar.",
+  "broto.service.update.title": "Actualiza el servicio de Broto",
+  "broto.service.update.lead": "El servicio de esta computadora todavía se ejecuta con la contraseña de tu cuenta y deja de funcionar si cambia. Actualízalo para que se ejecute como SYSTEM, sin contraseña. Windows solo pide la confirmación de administrador.",
+  "broto.service.update.install": "Actualizar servicio",
+  "broto.service.update.later": "Ahora no",
+  "broto.service.update.failed": "No se pudo actualizar el servicio. Inténtalo de nuevo o abre el instalador oficial de Broto.",
 
   "broto.connect.title": "Conectar a tu Cialai",
   "broto.connect.lead": "En Cialai, abre Dispositivos y elige Conectar nuevo Broto.",

@@ -95,7 +95,9 @@ serviço, sem receber SERVICE_CHANGE_CONFIG. O SCM usa um launcher fixo;
 atualizar muda somente o filho verificado e mantém LocalSystem. Antes de
 elevar, o instalador abre o estado da conta para LocalSystem, porque só a
 dona consegue mudar a ACL de um estado antigo. Um serviço anterior instalado
-com a senha da conta passa para LocalSystem quando o instalador roda de novo.
+com a senha da conta passa para LocalSystem pelo Atualizar serviço da janela, desde o Broto 0.1.4: o instalador
+regrava os próprios arquivos da pasta de instalação e adota o serviço da versão
+anterior da mesma instalação.
 Se o Windows não elevar o instalador, como acontece com o UAC desligado, ele
 para com erro em vez de se relançar; nessa configuração nenhuma conta comum
 consegue instalar o serviço.

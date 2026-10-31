@@ -86,6 +86,59 @@ func TestIntegratedActivationUsesFakeRunnerAndIsRetryable(t *testing.T) {
 		t.Fatal("partial install cannot retry", e)
 	}
 }
+func TestReinstallRefreshesItsOwnFilesButNotForeignConfiguration(t *testing.T) {
+	source, key := fixture(t)
+	root := filepath.Join(t.TempDir(), "install")
+	home := t.TempDir()
+	c := Config{Payload: source, PublicKey: key, RootDir: root, HomeDir: home, Activate: true, CheckBinary: func(context.Context, string) error { return nil }, Run: func(context.Context, Command) error { return nil }}
+	first, e := Install(context.Background(), c)
+	if e != nil {
+		t.Fatal(e)
+	}
+	var own, foreign File
+	for _, file := range first.Files {
+		if insideRoot(root, file.Path) && filepath.Base(file.Path) != "current-path" {
+			own = file
+		} else if !insideRoot(root, file.Path) {
+			foreign = file
+		}
+	}
+	if own.Path == "" {
+		t.Fatal("plan has no file inside the root")
+	}
+	if e = os.WriteFile(own.Path, []byte("earlier release\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = Install(context.Background(), c); e != nil {
+		t.Fatal("an earlier release of the same installation must be refreshed", e)
+	}
+	if raw, _ := os.ReadFile(own.Path); string(raw) != own.Content {
+		t.Fatal("own file was not refreshed")
+	}
+	if foreign.Path == "" {
+		return
+	}
+	if e = os.WriteFile(foreign.Path, []byte("someone else\n"), 0600); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = Install(context.Background(), c); e == nil || !strings.Contains(e.Error(), "different installation configuration") {
+		t.Fatal("configuration outside the root was overwritten", e)
+	}
+}
+func TestInsideRootRejectsSiblingsAndParents(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "x", "install")
+	for path, want := range map[string]bool{
+		filepath.Join(root, "current-path"):          true,
+		filepath.Join(root, "releases", "v1", "bin"): true,
+		root: false,
+		filepath.Join(string(filepath.Separator), "x", "install-other", "a"): false,
+		filepath.Join(string(filepath.Separator), "x", "a"):                  false,
+	} {
+		if insideRoot(root, path) != want {
+			t.Fatal("insideRoot", path, want)
+		}
+	}
+}
 func TestTamperedPayloadFailsBeforeInstall(t *testing.T) {
 	source, key := fixture(t)
 	os.WriteFile(filepath.Join(source, "release.json"), []byte(`{}`), 0600)

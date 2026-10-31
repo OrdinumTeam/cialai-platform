@@ -24,12 +24,20 @@ $account=([Security.Principal.SecurityIdentifier]::new($OwnerSid)).Translate([Se
 $path='"'+$Binary+'" service --install-root "'+$Root+'" --state-dir "'+$StateDir+'"'
 $existing=Get-CimInstance Win32_Service -Filter "Name='CialaiBroto'" -ErrorAction SilentlyContinue
 if ($null -eq $existing) { New-Service -Name CialaiBroto -BinaryPathName $path -DisplayName 'Cialai Broto' -StartupType Automatic | Out-Null }
-elseif ($existing.PathName -ne $path) { throw 'A different Broto service already exists.' }
-elseif ($existing.StartName -ne 'LocalSystem') {
- # Broto 0.1.2 ran the service with the account password. Move it to LocalSystem.
- $changed=Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments @{StartName='LocalSystem';StartPassword=''}
- if ($changed.ReturnValue -ne 0) { throw 'Could not move the Broto service to LocalSystem.' }
- Stop-Service CialaiBroto -Force -ErrorAction SilentlyContinue
+else {
+ # The same installation may come from an earlier release: its launcher sits in
+ # another folder of these releases and, up to Broto 0.1.2, the service ran
+ # with the account password. Both move to this release and LocalSystem.
+ $earlier=$existing.PathName.StartsWith('"'+$Root+'\releases\') -and $existing.PathName.EndsWith('\cialai-broto.exe" service --install-root "'+$Root+'" --state-dir "'+$StateDir+'"')
+ if ($existing.PathName -ne $path -and -not $earlier) { throw 'A different Broto service already exists.' }
+ $change=@{}
+ if ($existing.PathName -ne $path) { $change.PathName=$path }
+ if ($existing.StartName -ne 'LocalSystem') { $change.StartName='LocalSystem'; $change.StartPassword='' }
+ if ($change.Count -gt 0) {
+  $changed=Invoke-CimMethod -InputObject $existing -MethodName Change -Arguments $change
+  if ($changed.ReturnValue -ne 0) { throw 'Could not move the Broto service to this release and LocalSystem.' }
+  Stop-Service CialaiBroto -Force -ErrorAction SilentlyContinue
+ }
 }
 New-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\CialaiBroto' -Name Environment -PropertyType MultiString -Value @(('USERPROFILE='+$OwnerHome),('APPDATA='+(Split-Path $StateDir -Parent)),('LOCALAPPDATA='+(Join-Path $OwnerHome 'AppData\Local')),('USERNAME='+($account -split '\\')[-1]),('USERDOMAIN='+($account -split '\\')[0]),('CIALAI_BROTO_OWNER_SID='+$OwnerSid)) -Force | Out-Null
 # The account may query, start and stop its own service, but cannot change its account or ImagePath.

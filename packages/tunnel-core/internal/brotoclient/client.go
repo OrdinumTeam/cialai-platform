@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoaccount"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoexec"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotorpc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
@@ -50,6 +51,9 @@ type Status struct {
 	Transport string     `json:"transport"`
 	Activity  []Activity `json:"activity"`
 	Error     string     `json:"error,omitempty"`
+	// PasswordService asks the window to offer the service update that moves
+	// a Windows service of Broto 0.1.2 or earlier to LocalSystem.
+	PasswordService bool `json:"passwordService,omitempty"`
 }
 type Config struct {
 	Dir           string
@@ -177,6 +181,7 @@ func (c *Client) Status() Status {
 	s := c.status
 	s.PID = os.Getpid()
 	s.ParentPID = os.Getppid()
+	s.PasswordService = brotoaccount.PasswordService()
 	s.Activity = append([]Activity{}, s.Activity...)
 	return s
 }

@@ -23,6 +23,11 @@ export default Object.freeze({
   "broto.service.failed": "Could not install the verified service. Open the official Broto installer and try again.",
   "broto.service.title": "The Broto service is not responding",
   "broto.service.lead": "The connection to Cialai runs in a service on this computer, which stays active when the window is closed. Install and start the service to continue.",
+  "broto.service.update.title": "Update the Broto service",
+  "broto.service.update.lead": "The service on this computer still runs with your account password and stops working if it changes. Update it to run as SYSTEM, with no password. Windows only asks for administrator consent.",
+  "broto.service.update.install": "Update service",
+  "broto.service.update.later": "Not now",
+  "broto.service.update.failed": "Could not update the service. Try again or open the official Broto installer.",
 
   "broto.connect.title": "Connect to your Cialai",
   "broto.connect.lead": "In Cialai, open Devices and choose Connect new Broto.",

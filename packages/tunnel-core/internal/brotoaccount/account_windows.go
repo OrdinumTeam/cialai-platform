@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"golang.org/x/sys/windows"
+	"golang.org/x/sys/windows/registry"
 )
 
 // OwnerEnv carries the owner SID in the service environment. Only an
@@ -88,4 +89,17 @@ func ProtectState(root string) error {
 		}
 		return windows.SetNamedSecurityInfo(path, windows.SE_FILE_OBJECT, windows.DACL_SECURITY_INFORMATION|windows.PROTECTED_DACL_SECURITY_INFORMATION, nil, nil, acl, nil)
 	})
+}
+
+// PasswordService reports a Broto service installed by Broto 0.1.2 or
+// earlier, which runs with the account and its password. Running the
+// installer again moves it to LocalSystem. Any account can read this key.
+func PasswordService() bool {
+	key, err := registry.OpenKey(registry.LOCAL_MACHINE, `SYSTEM\CurrentControlSet\Services\CialaiBroto`, registry.QUERY_VALUE)
+	if err != nil {
+		return false
+	}
+	defer key.Close()
+	account, _, err := key.GetStringValue("ObjectName")
+	return err == nil && account != "" && !strings.EqualFold(account, "LocalSystem")
 }

@@ -307,20 +307,33 @@ func Install(ctx context.Context, c Config) (Result, error) {
 		return result, nil
 	}
 	// Never overwrite unrelated local service configuration. Matching partial installs are retryable.
+	// Files inside the private root are this installer's own, so an earlier
+	// release of the same installation is brought up to date in place.
+	stale := map[string]bool{}
 	for _, file := range files {
 		if st, err := os.Lstat(file.Path); err == nil {
 			if !st.Mode().IsRegular() {
 				return result, errors.New("unsafe existing configuration")
 			}
 			raw, err := os.ReadFile(file.Path)
-			if err != nil || string(raw) != file.Content {
+			if err == nil && string(raw) == file.Content {
+				continue
+			}
+			if err != nil || !insideRoot(c.RootDir, file.Path) {
 				return result, errors.New("different installation configuration already exists")
 			}
+			stale[file.Path] = true
 		} else if !os.IsNotExist(err) {
 			return result, err
 		}
 	}
 	for _, file := range files {
+		if stale[file.Path] {
+			if e = replaceFile(file.Path, file.Content); e != nil {
+				return result, e
+			}
+			continue
+		}
 		if _, err := os.Stat(file.Path); err == nil {
 			continue
 		}
@@ -369,6 +382,31 @@ func Install(ctx context.Context, c Config) (Result, error) {
 	}
 	return result, nil
 }
+
+// insideRoot reports whether path is a file of the private installation root.
+func insideRoot(root, path string) bool {
+	relative, err := filepath.Rel(root, path)
+	return err == nil && relative != "." && !filepath.IsAbs(relative) && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
+}
+
+// replaceFile swaps a file of the private root atomically, so a running
+// service never reads half of a pointer or a script.
+func replaceFile(path, content string) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+"-")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	_, err = temp.WriteString(content)
+	if closeErr := temp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), path)
+}
+
 func checkBinary(ctx context.Context, path string) error {
 	if runtime.GOOS != "darwin" {
 		return nil
