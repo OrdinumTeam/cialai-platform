@@ -1,8 +1,8 @@
 # Cialai Broto
 
-## Estado em 29/10/2026
+## Estado em 31/10/2026
 
-O Broto 0.1.2 está publicado para Windows e Linux, com envio, recebimento e listagem de arquivos conforme os poderes da conta. O daemon, o monitor, o pareamento aprovado, a RPC, as sessões remotas, as permissões e o MCP estão integrados. Testes nativos, assinatura, instaladores e espelho público desta versão foram conferidos em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md). O aceite geral BRO-022 continua separado das entregas de arquivos de BRO-023.
+O Broto 0.1.3 está publicado para Windows e Linux. No Windows, o serviço roda como LocalSystem e instala sem pedir a senha da conta, pela [decisão 075](../produto/12-decisoes.md#075-broto-windows-como-localsystem-sem-senha). Envio, recebimento e listagem de arquivos seguem os poderes da conta de execução desde a 0.1.2. O daemon, o monitor, o pareamento aprovado, a RPC, as sessões remotas, as permissões e o MCP estão integrados. Testes nativos, assinatura, instaladores e espelho público desta versão foram conferidos em [Evidências do Broto 0.1.2](../evidence/broto-0.1.2/README.md). O aceite geral BRO-022 continua separado das entregas de arquivos de BRO-023.
 
 | Item | Estado | Situação atual |
 | --- | --- | --- |
@@ -13,7 +13,7 @@ O Broto 0.1.2 está publicado para Windows e Linux, com envio, recebimento e lis
 | Seção Brotos na página Dispositivos, com a lista Brotos ligando | Preparado | Brotos têm seção, aprovação e acesso próprios |
 | Janela do Broto, com Conectar e o monitor | Preparado | Monitor Tauri conectado ao serviço por IPC |
 | Adaptador MCP para a IA do host | Preparado | Claude Code executou comando na VM Windows via MCP e aprovação |
-| Empacotamento, serviço e download no site | Implementado | Broto 0.1.2 publicado para Windows e Linux, com instaladores e atualizador assinados |
+| Empacotamento, serviço e download no site | Implementado | Broto 0.1.3 publicado para Windows e Linux, com instaladores e atualizador assinados; serviço do Windows como LocalSystem |
 
 ## O que é
 
