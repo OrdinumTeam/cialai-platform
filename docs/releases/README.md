@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.5.2](0.5.2.md) | 31/10/2026 | `v0.5.2` | Uso do plano Ultra sem o limite de cinco horas e skill do Broto 0.1.3 sem senha; sai calada |
 | [0.5.1](0.5.1.md) | 29/10/2026 | `v0.5.1` | Skill do Cialai automática e editável em Preferências, instalação no Windows pelo cmd; sai calada |
 | [0.5.0](0.5.0.md) | 29/10/2026 | `v0.5.0` | Cialai Broto em prévia para Windows e Linux |
 | [0.4.4](0.4.4.md) | 27/10/2026 | `v0.4.4` | `OrdinumTeam/cialai-platform`, teste do PTY do primeiro uso não trava mais no Windows; sai calada |

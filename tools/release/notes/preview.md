@@ -1,18 +1,15 @@
 ## Cialai {{version}} preview
 
-Cialai Broto arrives as a preview for Windows and Linux. Pair another computer with your Cialai host to run commands, open terminals and transfer files under local permissions. The phone apps are unchanged.
+Usage of Claude Code shows again on Ultra plans, which no longer report a five hour limit. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Brotos in Devices.** Create a pairing code, approve the other computer and choose view-only, confirmation for AI commands or free access.
-* **Remote terminals and AI activity.** Follow commands and live output in Cialai. Broto keeps its own Pause and Disconnect controls.
-* **CLI, optional skill and MCP.** AI tools can use `cialai broto` and the same host permissions, with file transfers over the authenticated tunnel.
-* **Windows reliability.** UTF-8 output, Ctrl C and a native host command that forwards arguments without batch interpretation.
-* **Separate host instances.** Each app state selects its own IPC endpoint, with actionable configuration diagnostics.
+* **Ultra plan usage.** The Ultra plan, formerly Max 20x, only reports the weekly limit. The session card and the ring now show the week when there is no session, instead of the Show usage button.
+* **Broto 0.1.3 in the skill.** The AI skill knows that Broto 0.1.3 on Windows installs with only the Windows consent prompt and runs as SYSTEM.
 
-Broto has its own version, 0.1.0, and release tag `broto-v0.1.0`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. There is no macOS Broto installer or supported Windows graphical-session launcher in this preview.
+Broto has its own version, 0.1.3, and release tag `broto-v0.1.3`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
