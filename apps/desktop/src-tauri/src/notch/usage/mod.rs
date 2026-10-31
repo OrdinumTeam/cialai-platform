@@ -356,6 +356,17 @@ pub fn load_archive(app_support: &Path) -> (Vec<ProviderSnapshot>, BTreeMap<Stri
             snapshot.status = ProviderStatus::Stale {
                 since_ms: snapshot.fetched_at_ms,
             };
+            // Uma leitura guardada por uma versao que so aceitava a sessao no
+            // anel fica sem ele ate a proxima consulta, que pode demorar com o
+            // limite de consultas do provedor. A janela do anel e refeita aqui.
+            if snapshot.headline_id.is_none() {
+                let provider = if snapshot.provider == Provider::Codex.as_str() {
+                    Provider::Codex
+                } else {
+                    Provider::Claude
+                };
+                snapshot.headline_id = headline_for(provider, &snapshot.windows);
+            }
             snapshot
         })
         .collect();
@@ -840,6 +851,28 @@ mod tests {
         let value = serde_json::to_value(FetchError::CurlMissing.status()).unwrap();
         assert_eq!(value["message"], "curlMissing");
         assert!(value.get("detail").is_none());
+    }
+
+    #[test]
+    fn an_archived_plan_without_a_session_shows_the_week() {
+        let dir = std::env::temp_dir().join(format!("cialai-notch-ultra-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut snapshot = ProviderSnapshot::placeholder(
+            &profile("claude-ultra", Provider::Claude),
+            ProviderStatus::Ok,
+        );
+        snapshot.windows = vec![window("weekly_all", 0.89), window("weekly_scoped", 0.27)];
+        snapshot.headline_id = None;
+        snapshot.weekly_id = Some("weekly_all".to_string());
+        snapshot.fetched_at_ms = 123;
+        save_archive(&dir, &[snapshot], &BTreeMap::new());
+        let (loaded, _) = load_archive(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(loaded[0].headline_id.as_deref(), Some("weekly_all"));
+        assert!(
+            loaded[0].weekly().is_none(),
+            "a semana nao se repete no anel de dentro"
+        );
     }
 
     #[test]
