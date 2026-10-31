@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.5.3](0.5.3.md) | 31/10/2026 | `v0.5.3` | Uso do plano Ultra ao abrir, com a leitura guardada; sai calada |
 | [0.5.2](0.5.2.md) | 31/10/2026 | `v0.5.2` | Uso do plano Ultra sem o limite de cinco horas e skill do Broto 0.1.3 sem senha; sai calada |
 | [0.5.1](0.5.1.md) | 29/10/2026 | `v0.5.1` | Skill do Cialai automática e editável em Preferências, instalação no Windows pelo cmd; sai calada |
 | [0.5.0](0.5.0.md) | 29/10/2026 | `v0.5.0` | Cialai Broto em prévia para Windows e Linux |

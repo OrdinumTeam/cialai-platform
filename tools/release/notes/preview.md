@@ -1,15 +1,15 @@
 ## Cialai {{version}} preview
 
-Usage of Claude Code shows again on Ultra plans, which no longer report a five hour limit. The phone apps are unchanged.
+Usage of Claude Code on Ultra plans shows as soon as Cialai opens, even while Claude rate limits the usage endpoint. The phone apps are unchanged.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Ultra plan usage.** The Ultra plan, formerly Max 20x, only reports the weekly limit. The session card and the ring now show the week when there is no session, instead of the Show usage button.
-* **Broto 0.1.3 in the skill.** The AI skill knows that Broto 0.1.3 on Windows installs with only the Windows consent prompt and runs as SYSTEM.
+* **Ultra plan usage on launch.** Readings saved by earlier versions had no ring window for plans without a five hour limit. Cialai now picks the week for them too, so the session card and the ring show the number without waiting for the next reading. Since 0.5.2 the week also replaces the session for new readings.
+* **Broto on Windows in the skill.** The AI skill knows that Broto on Windows installs with only the Windows consent prompt and runs as SYSTEM.
 
-Broto has its own version, 0.1.3, and release tag `broto-v0.1.3`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads.
+Broto has its own version, 0.1.4, and release tag `broto-v0.1.4`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
