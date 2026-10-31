@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const workflow = readFileSync(`${root}/.github/workflows/ci.yml`, 'utf8');
 
-for (const runner of ['ubuntu-22.04', 'windows-2022', 'macos-14']) {
+for (const runner of ['ubuntu-22.04', 'windows-2022', 'macos-15']) {
   assert.match(workflow, new RegExp(`\\b${runner.replaceAll('.', '\\.')}\\b`), `runner ausente: ${runner}`);
 }
 
@@ -134,7 +134,7 @@ const mobile = yaml.load(mobileSource);
 assert.deepEqual(Object.keys(mobile.on), ['workflow_dispatch'], 'os bindings móveis só rodam por disparo manual');
 assert.equal(mobile.permissions.contents, 'read');
 const bindings = mobile.jobs.bindings;
-assert.equal(bindings['runs-on'], 'macos-14');
+assert.equal(bindings['runs-on'], 'macos-15');
 const codemagic = yaml.load(readFileSync(`${root}/codemagic.yaml`, 'utf8'));
 assert.equal(mobile.env.ANDROID_NDK_VERSION, codemagic.workflows['android-play'].environment.ndk, 'o NDK dos bindings acompanha o Codemagic');
 const mobileRuns = bindings.steps.map((step) => step.run || '').join('\n');
