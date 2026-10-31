@@ -71,6 +71,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 070 | Proposta | Espera por saída com fronteira de comando aguarda definição de contrato, sem filtro de eco |
 | 071 | Preparado | Prévia Broto Windows e Linux autorizada junto do Cialai 0.5.0; publicação em validação |
 | 074 | Implementado | Broto 0.1.2 publicado para Windows e Linux, com testes nativos, assinaturas, instaladores e espelho público verificados em BRO-023 |
+| 075 | Preparado | Serviço do Broto Windows como LocalSystem, sem pedir senha; instalação, pareamento e comandos provados na VM em 31/10/2026, distribuição pendente |
 
 ## 001 Nome Cialai
 
@@ -681,3 +682,14 @@ Entrega: executor Go e binário do Broto distribuídos na versão 0.1.2 para Win
 
 Estado desta etapa: documentação, skill e executor alinhados ao requisito, com testes locais e nativos aprovados e distribuição verificada em [BRO-023](../broto/09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta). As evidências registram somente as execuções efetivamente realizadas.
 
+## 075 Broto Windows como LocalSystem, sem senha
+
+Data: 31/10/2026.
+
+Contexto: o serviço do Broto 0.1.2 rodava na conta de quem instalou e pedia a senha dela. Numa conta Microsoft essa senha é a do e-mail, não o PIN que a pessoa usa para entrar no Windows, e muita gente não lembra dela. O pedido de senha travava a instalação.
+
+Decisão: o serviço e a tarefa de atualização rodam como LocalSystem. A instalação pede só a confirmação de administrador do Windows. O instalador passa ao serviço o SID da conta dona em `CIALAI_BROTO_OWNER_SID`, junto do perfil e do nome dela. O canal da janela, o estado e a pasta de versões aceitam a conta dona e LocalSystem. Comandos, terminais e arquivos rodam como LocalSystem, com a pasta pessoal da conta dona como perfil.
+
+Consequência: o Broto tem os poderes de LocalSystem em qualquer conta, inclusive quando quem instalou é uma conta comum que pediu a autorização de um administrador. O Gerenciador de Credenciais, o registro HKCU e as unidades de rede mapeadas da conta dona não ficam acessíveis aos comandos. Abrir um programa na tela da pessoa continua pela tarefa agendada interativa. Um serviço já instalado com a senha da conta segue funcionando e passa para LocalSystem quando o instalador roda de novo. Rodar os comandos como a pessoa logada fica para uma etapa própria. A instalação continua na pasta da conta dona, e o serviço roda como LocalSystem o executável que está ali. Qualquer programa que rode nessa conta alcança LocalSystem trocando esses arquivos, além do caminho pelo canal da janela. Levar a instalação para uma pasta que só o sistema altera fica para decisão do usuário.
+
+Prova em 31/10/2026 na VM Windows 11 25H2, com pacote assinado por chave temporária e versão `0.1.3-local`: a conta administradora `ordinum` instalou só com o Sim do UAC, sem senha; o serviço e o processo `serve` rodaram como LocalSystem; a tarefa de atualização ficou em SISTEMA; a conta conversou com o serviço pelo canal sem elevação; um estado antigo fechado só para a conta foi reaberto ao SYSTEM e o serviço subiu; o atualizador como SYSTEM passou da pasta de versões e parou na assinatura, como esperado com a chave temporária. Um hospedeiro de teste, o sidecar do Cialai compilado do mesmo código e operado por stdio, pareou com o Broto pela rede direta: `whoami` respondeu `autoridade nt\sistema`, o perfil apontou para a pasta da conta dona, um arquivo foi gravado e apagado em `C:\Windows\System32`, a listagem leu `C:\Windows\System32\config`, e o terminal abriu e rodou `whoami` como SYSTEM. O vínculo de teste foi desfeito no fim. Não foram provados a instalação por conta comum com credencial de administrador, envio e recebimento de arquivos e uma atualização assinada de verdade.

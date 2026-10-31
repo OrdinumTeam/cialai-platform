@@ -47,7 +47,9 @@ func plan(platform, root, binary, key, source, home, owner string, options ...pl
 		files = append(files, File{filepath.Join(root, "supervised-mode"), "1\n"})
 		script := filepath.Join(root, "run-update.ps1")
 		psquote := func(v string) string { return "'" + strings.ReplaceAll(v, "'", "''") + "'" }
-		files = append(files, File{script, "$ErrorActionPreference='Stop'\n$binary=(Get-Content -LiteralPath " + psquote(pointer) + " -Raw).Trim()\n& $binary atualizar --state-dir " + psquote(opts.StateDir) + " --update-key " + psquote(key) + " --update-url " + psquote(source) + " --releases-dir " + psquote(filepath.Join(root, "releases")) + " --current-pointer " + psquote(pointer) + "\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"}, File{filepath.Join(root, "install-service.ps1"), windowsInstaller})
+		// The update task runs as LocalSystem, outside the service environment,
+		// so it learns the owner of the installation here.
+		files = append(files, File{script, "$ErrorActionPreference='Stop'\n$env:CIALAI_BROTO_OWNER_SID=" + psquote(owner) + "\n$binary=(Get-Content -LiteralPath " + psquote(pointer) + " -Raw).Trim()\n& $binary atualizar --state-dir " + psquote(opts.StateDir) + " --update-key " + psquote(key) + " --update-url " + psquote(source) + " --releases-dir " + psquote(filepath.Join(root, "releases")) + " --current-pointer " + psquote(pointer) + "\nif ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }\n"}, File{filepath.Join(root, "install-service.ps1"), windowsInstaller})
 		powershell, err := platformPowerShell()
 		if err != nil {
 			return nil, nil, err

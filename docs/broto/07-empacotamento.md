@@ -78,7 +78,7 @@ Fechar o monitor não encerra a conexão.
 | macOS com sessão gráfica | LaunchAgent do usuário, iniciado no login |
 | macOS sem login | Opção explícita `--headless`, LaunchDaemons com UserName e GroupName da conta escolhida, root incluído |
 | Linux | systemd por usuário, com `--linger` ou `--headless` para solicitar execução após logout e no boot |
-| Windows | Serviço SCM na mesma conta do monitor, comum ou de administrador |
+| Windows | Serviço SCM como LocalSystem, a serviço da conta do monitor |
 
 O modo headless do macOS pede autorização administrativa apenas para os
 descritores pertencentes ao root. O XML autorizado é enviado diretamente ao helper, sem
@@ -86,19 +86,19 @@ confiar em um plist mutável escrito pelo usuário. Os processos rodam na
 conta escolhida. O supervisor acompanha o ponteiro privado e confirma a saúde do
 processo novo antes de aceitar a troca.
 
-No Windows, a interface protegida do sistema pede a credencial da conta do monitor.
-A senha não vai em argumentos, logs ou arquivos do Broto. O sistema protege a
-credencial do SCM e da tarefa agendada. A conta recebe os direitos de logon de
-serviço e de tarefa, sem receber SERVICE_CHANGE_CONFIG. O SCM usa um launcher
-fixo; atualizar muda somente o filho verificado e mantém a conta do serviço.
-O perfil e o diretório de estado são explícitos. Conta de administrador é
-aceita desde a decisão 072: o logon de serviço não passa pelo filtro do UAC, e
-o serviço recebe o token completo, então o hospedeiro roda comandos de
-administrador sem consentimento nem senha. O instalador confere a senha por
-logon interativo antes de conceder qualquer direito, e só então testa o logon
-de serviço. Se o Windows não elevar o instalador, como acontece com o UAC
-desligado, ele para com erro em vez de se relançar; nessa configuração nenhuma
-conta comum consegue instalar o serviço.
+No Windows, o serviço e a tarefa de atualização rodam como LocalSystem, pela
+decisão 075, e a instalação pede só a confirmação de administrador do UAC.
+Nenhuma senha é pedida ou guardada. O instalador grava no serviço o SID da
+conta do monitor em `CIALAI_BROTO_OWNER_SID`, com o perfil, o nome e o
+diretório de estado dela. A conta do monitor pode consultar, iniciar e parar o
+serviço, sem receber SERVICE_CHANGE_CONFIG. O SCM usa um launcher fixo;
+atualizar muda somente o filho verificado e mantém LocalSystem. Antes de
+elevar, o instalador abre o estado da conta para LocalSystem, porque só a
+dona consegue mudar a ACL de um estado antigo. Um serviço anterior instalado
+com a senha da conta passa para LocalSystem quando o instalador roda de novo.
+Se o Windows não elevar o instalador, como acontece com o UAC desligado, ele
+para com erro em vez de se relançar; nessa configuração nenhuma conta comum
+consegue instalar o serviço.
 
 Todo serviço do Windows recebe SeImpersonatePrivilege e SeCreateGlobalPrivilege,
 e por causa deles o Windows marca o token de qualquer serviço como elevado.
@@ -109,13 +109,13 @@ teste olha a conta de fato, o grupo Administradores ativo ou LocalSystem, e não
 a marca de elevado.
 
 O socket Unix exige proprietário correto e permissão 0600. O named pipe do
-Windows tem ACL do usuário. Nenhuma dessas superfícies abre uma porta TCP.
+Windows tem ACL da conta do monitor e de LocalSystem. Nenhuma dessas superfícies abre uma porta TCP.
 
 ## Atualização automática
 
 Um job separado consulta o `latest.json` próprio a cada seis horas. No macOS é
 um agente ou daemon do launchd, no Linux um timer systemd, e no Windows uma
-tarefa limitada da conta do serviço. O job resolve `current-path` para sempre usar a
+tarefa de LocalSystem. O job resolve `current-path` para sempre usar a
 CLI ativa e não depender do caminho de uma versão antiga.
 
 A atualização exige o pin minisign independente antes de buscar dados. Usa

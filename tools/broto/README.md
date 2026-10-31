@@ -111,6 +111,5 @@ Os testes não registram serviços. Instalador e ativação usam diretórios
 temporários, assinaturas reais efêmeras e executores substituídos. A variável
 `CIALAI_BROTO_TEST_BINARY` habilita também o teste do supervisor com CLI real,
 estado temporário e STUN desligado, sem registrar LaunchDaemon.
-O script Windows aceita `-ValidateOnly` para compilar seu helper sem alterar
-contas, direitos ou serviços. `-PlanOnly` exibe o plano. `-LoadTypesOnly` carrega
-os tipos para testes administrativos explicitamente autorizados.
+O script Windows aceita `-ValidateOnly` para conferir os parâmetros sem alterar
+serviços ou tarefas. `-PlanOnly` exibe o plano.

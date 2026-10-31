@@ -110,7 +110,7 @@ func TestPlansKeepUpdaterSeparateAndResolveCurrentVersion(t *testing.T) {
 		if !strings.Contains(all.String(), "current-path") || !strings.Contains(all.String(), "atualizar") || !strings.Contains(all.String(), "current-pointer") || len(commands) == 0 {
 			t.Fatal("missing periodic update wiring", platform)
 		}
-		if platform == "windows" && (!strings.Contains(all.String(), "Get-Credential") || !strings.Contains(all.String(), "Register-ScheduledTask") || !strings.Contains(all.String(), "SeServiceLogonRight")) {
+		if platform == "windows" && (!strings.Contains(all.String(), "Register-ScheduledTask") || !strings.Contains(all.String(), "CIALAI_BROTO_OWNER_SID=") || !strings.Contains(all.String(), "$env:CIALAI_BROTO_OWNER_SID='S-1-5-21-1-2-3-1001'")) {
 			t.Fatal("Windows service setup missing")
 		}
 	}
@@ -339,11 +339,14 @@ func TestWindowsServiceDoesNotGrantChangeConfig(t *testing.T) {
 		t.Fatal("stable least-privilege SCM launcher missing")
 	}
 }
-func TestWindowsAccountIsCheckedBeforeRightsAreGranted(t *testing.T) {
-	check := strings.Index(windowsInstaller, "Check(account,password,2);")
-	grant := strings.Index(windowsInstaller, `GrantRight(sid,"SeServiceLogonRight")`)
-	if check < 0 || grant < 0 || check > grant {
-		t.Fatal("logon rights are granted before the account password and administrator check")
+func TestWindowsServiceRunsAsLocalSystemWithoutPassword(t *testing.T) {
+	for _, password := range []string{"Get-Credential", "-Credential", "-Password", "LogonUser", "SeServiceLogonRight"} {
+		if strings.Contains(windowsInstaller, password) {
+			t.Fatal("Windows installer still asks for the account password:", password)
+		}
+	}
+	if !strings.Contains(windowsInstaller, "-UserId 'S-1-5-18' -LogonType ServiceAccount") || !strings.Contains(windowsInstaller, "StartName='LocalSystem'") {
+		t.Fatal("service or updater does not run as LocalSystem")
 	}
 }
 func TestWindowsInstallerRelaunchesElevatedOnlyOnce(t *testing.T) {

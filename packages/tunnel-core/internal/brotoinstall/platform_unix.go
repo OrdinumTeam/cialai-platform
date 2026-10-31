@@ -13,6 +13,7 @@ import (
 func platformUID() string           { return strconv.Itoa(os.Getuid()) }
 func platformOwner() string         { return "" }
 func privateRoot(path string) error { return brotoupdate.ProtectDirectory(path) }
+func shareState(string) error       { return nil }
 
 func platformPowerShell() (string, error) { return "powershell.exe", nil }
 

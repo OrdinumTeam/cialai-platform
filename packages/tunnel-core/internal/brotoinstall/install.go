@@ -341,6 +341,9 @@ func Install(ctx context.Context, c Config) (Result, error) {
 		}
 	}
 	if c.Activate {
+		if e = shareState(stateDir); e != nil {
+			return result, e
+		}
 		run := c.Run
 		if run == nil {
 			run = func(ctx context.Context, cmd Command) error {

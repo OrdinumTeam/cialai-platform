@@ -19,7 +19,7 @@ export default Object.freeze({
 
   "broto.service.install": "Install and start service",
   "broto.service.installing": "Installing service",
-  "broto.service.progress": "If the system asks for an administrator's permission or for this account's password, answer in the window that opens. Installation continues on its own after that.",
+  "broto.service.progress": "If the system asks for an administrator's permission, confirm it in the window that opens. No account password is asked. Installation continues on its own after that.",
   "broto.service.failed": "Could not install the verified service. Open the official Broto installer and try again.",
   "broto.service.title": "The Broto service is not responding",
   "broto.service.lead": "The connection to Cialai runs in a service on this computer, which stays active when the window is closed. Install and start the service to continue.",

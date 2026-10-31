@@ -5,11 +5,14 @@ package brotoupdate
 
 import (
 	"errors"
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoaccount"
 	"golang.org/x/sys/windows"
 	"os"
 	"unsafe"
 )
 
+// The installer creates the releases as the owner and the updater, run as
+// LocalSystem, adds new ones. Both accounts, and Administrators, stay trusted.
 func privateDirectory(path string) error {
 	_, e := os.Lstat(path)
 	created := os.IsNotExist(e)
@@ -32,8 +35,12 @@ func privateDirectory(path string) error {
 	if e != nil {
 		return e
 	}
+	account, e := brotoaccount.Owner()
+	if e != nil {
+		return e
+	}
 	if created {
-		sd, e := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;" + user.User.Sid.String() + ")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")
+		sd, e := windows.SecurityDescriptorFromString("D:P(A;OICI;FA;;;" + account.String() + ")(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)")
 		if e != nil {
 			return e
 		}
@@ -50,7 +57,7 @@ func privateDirectory(path string) error {
 		return e
 	}
 	owner, _, e := sd.Owner()
-	if e != nil || !windows.EqualSid(owner, user.User.Sid) {
+	if e != nil || owner == nil || !brotoaccount.Trusted(owner, account) {
 		return errors.New("releases directory owner mismatch")
 	}
 	acl, _, e := sd.DACL()
@@ -69,8 +76,7 @@ func privateDirectory(path string) error {
 			return errors.New("unsupported releases directory ACL")
 		}
 		sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
-		name := sid.String()
-		if !windows.EqualSid(sid, user.User.Sid) && name != "S-1-5-18" && name != "S-1-5-32-544" {
+		if !brotoaccount.Trusted(sid, account) {
 			return errors.New("releases directory allows another account")
 		}
 	}

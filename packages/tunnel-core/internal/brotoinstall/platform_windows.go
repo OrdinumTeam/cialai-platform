@@ -4,8 +4,10 @@
 package brotoinstall
 
 import (
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoaccount"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoupdate"
 	"golang.org/x/sys/windows"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"syscall"
@@ -25,6 +27,15 @@ func platformOwner() string {
 	return user.User.Sid.String()
 }
 func privateRoot(path string) error { return brotoupdate.ProtectDirectory(path) }
+
+// The service runs as LocalSystem. A state kept by an earlier Broto may
+// still allow only the owner, and only the owner can open it to LocalSystem.
+func shareState(path string) error {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return nil
+	}
+	return brotoaccount.ProtectState(path)
+}
 
 func platformPowerShell() (string, error) {
 	root, err := windows.GetSystemDirectory()
