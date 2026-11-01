@@ -36,6 +36,9 @@ pub const BUSY_INTERVAL: Duration = Duration::from_secs(60);
 pub const IDLE_INTERVAL: Duration = Duration::from_secs(300);
 /// Acima disto a leitura aparece apagada.
 pub const STALE_AFTER_MS: u64 = 15 * 60 * 1000;
+/// Um anel semanal muda devagar: a leitura vale uma hora antes de apagar.
+pub const WEEKLY_STALE_AFTER_MS: u64 = 60 * 60 * 1000;
+const DAY_MS: u64 = 24 * 3600 * 1000;
 /// Uma rodada inteira nao passa disto.
 pub const ROUND_DEADLINE: Duration = Duration::from_secs(60);
 
@@ -180,6 +183,16 @@ impl ProviderSnapshot {
     pub fn headline(&self) -> Option<&LimitWindow> {
         let id = self.headline_id.as_deref()?;
         self.windows.iter().find(|window| window.id == id)
+    }
+
+    /// Quanto a leitura vale antes de aparecer apagada: uma hora quando o
+    /// anel mostra uma janela de dias, como a semana do plano Ultra, e quinze
+    /// minutos numa janela curta, como a sessao.
+    pub fn stale_after_ms(&self) -> u64 {
+        match self.headline().and_then(|window| window.duration_ms) {
+            Some(duration) if duration >= DAY_MS => WEEKLY_STALE_AFTER_MS,
+            _ => STALE_AFTER_MS,
+        }
     }
 
     pub fn used_fraction(&self) -> Option<f64> {
@@ -351,11 +364,6 @@ pub fn load_archive(app_support: &Path) -> (Vec<ProviderSnapshot>, BTreeMap<Stri
         .snapshots
         .into_iter()
         .map(|mut snapshot| {
-            // Tudo que vem do disco entra velho: ainda nao foi confirmado
-            // nesta sessao.
-            snapshot.status = ProviderStatus::Stale {
-                since_ms: snapshot.fetched_at_ms,
-            };
             // Uma leitura guardada por uma versao que so aceitava a sessao no
             // anel fica sem ele ate a proxima consulta, que pode demorar com o
             // limite de consultas do provedor. A janela do anel e refeita aqui.
@@ -367,6 +375,16 @@ pub fn load_archive(app_support: &Path) -> (Vec<ProviderSnapshot>, BTreeMap<Stri
                 };
                 snapshot.headline_id = headline_for(provider, &snapshot.windows);
             }
+            // Do disco, a leitura vale pela idade: recente, segue acesa ate a
+            // proxima consulta; antiga, entra apagada.
+            snapshot.status =
+                if now.saturating_sub(snapshot.fetched_at_ms) > snapshot.stale_after_ms() {
+                    ProviderStatus::Stale {
+                        since_ms: snapshot.fetched_at_ms,
+                    }
+                } else {
+                    ProviderStatus::Ok
+                };
             snapshot
         })
         .collect();
@@ -634,10 +652,14 @@ fn apply(
             match state.snapshots.get(&profile.id).cloned() {
                 Some(mut previous) if previous.has_reading() => {
                     let age = now.saturating_sub(previous.fetched_at_ms);
-                    previous.status = if age > STALE_AFTER_MS {
+                    previous.status = if age > previous.stale_after_ms() {
                         ProviderStatus::Stale {
                             since_ms: previous.fetched_at_ms,
                         }
+                    } else if status.is_stale() {
+                        // Limite de consultas ou token vencido nao envelhecem
+                        // o numero: com leitura recente, o anel segue aceso.
+                        ProviderStatus::Ok
                     } else {
                         status
                     };
@@ -851,6 +873,72 @@ mod tests {
         let value = serde_json::to_value(FetchError::CurlMissing.status()).unwrap();
         assert_eq!(value["message"], "curlMissing");
         assert!(value.get("detail").is_none());
+    }
+
+    fn weekly(id: &str, used: f64) -> LimitWindow {
+        LimitWindow {
+            duration_ms: Some(7 * DAY_MS),
+            ..window(id, used)
+        }
+    }
+
+    #[test]
+    fn a_rate_limit_keeps_a_recent_reading_lit() {
+        let mut state = StoreState::default();
+        let profile = profile("claude-ultra", Provider::Claude);
+        let good = Reading {
+            windows: vec![weekly("weekly_all", 0.04)],
+            plan: Some("max".to_string()),
+            fidelity: Fidelity::Official,
+            source: "teste".to_string(),
+        };
+        apply(&mut state, &profile, Ok(good));
+        let after = apply(
+            &mut state,
+            &profile,
+            Err(FetchError::RateLimited { until_ms: 0 }),
+        );
+        assert_eq!(
+            after.status,
+            ProviderStatus::Ok,
+            "um 429 nao apaga uma leitura recente"
+        );
+        assert_eq!(after.used_fraction(), Some(0.04));
+    }
+
+    #[test]
+    fn the_week_stays_lit_for_an_hour_and_the_session_for_fifteen_minutes() {
+        let mut snapshot = ProviderSnapshot::placeholder(
+            &profile("claude-ultra", Provider::Claude),
+            ProviderStatus::Ok,
+        );
+        snapshot.windows = vec![weekly("weekly_all", 0.5)];
+        snapshot.headline_id = Some("weekly_all".to_string());
+        assert_eq!(snapshot.stale_after_ms(), WEEKLY_STALE_AFTER_MS);
+        snapshot.windows = vec![window("session", 0.5)];
+        snapshot.headline_id = Some("session".to_string());
+        assert_eq!(snapshot.stale_after_ms(), STALE_AFTER_MS);
+    }
+
+    #[test]
+    fn a_recent_archive_comes_back_lit() {
+        let dir = std::env::temp_dir().join(format!("cialai-notch-recent-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut snapshot = ProviderSnapshot::placeholder(
+            &profile("claude-ultra", Provider::Claude),
+            ProviderStatus::Ok,
+        );
+        snapshot.windows = vec![weekly("weekly_all", 0.04)];
+        snapshot.headline_id = Some("weekly_all".to_string());
+        snapshot.fetched_at_ms = now_ms() - 20 * 60 * 1000;
+        save_archive(&dir, &[snapshot], &BTreeMap::new());
+        let (loaded, _) = load_archive(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(
+            loaded[0].status,
+            ProviderStatus::Ok,
+            "semana lida ha 20 minutos segue acesa"
+        );
     }
 
     #[test]
