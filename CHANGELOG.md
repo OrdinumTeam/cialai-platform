@@ -76,6 +76,10 @@ Version 1.0.0 has not been published. Signed installers, native mobile archives,
 
 ## 0.6.0 · in preparation
 
+### Added
+
+* Session cards collapse to a single line with the icon, the name, the activity dot and an arrow to expand again. Each card collapses from its arrow or from the three dot menu, the sessions header collapses or expands all of them at once, and Preferences can make new cards join the list collapsed. The choice stays on this computer and is not shared with the phone, whose cards are already a summary.
+
 ### Fixed
 
 * A collapsed side column had two buttons that brought it back, the rail at the edge and a toggle in the work area header, side by side. The rail is now the only way back on screen, and the header keeps only the collapse button, shown while the column is open. The shortcut and the command palette still toggle both columns, and the rail is disabled for a session of another device, as the old toggle was.

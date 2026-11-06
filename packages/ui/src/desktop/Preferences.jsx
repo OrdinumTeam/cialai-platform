@@ -8,6 +8,7 @@ import { AppModal, useToast } from '../components/ui.jsx';
 import { chooseDirectory, chooseFile, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { shortPath } from '../terminals/files.js';
+import { setLayout, useLayout } from '../terminals/layout.js';
 import {
   addUniquePath,
   DEFAULT_PREFERENCES,
@@ -88,6 +89,7 @@ const snapshotKey = (value) => JSON.stringify(sanitizePreferences(value));
 
 export default function Preferences({ open, onClose, appearance, section = null }) {
   const notify = useToast();
+  const layout = useLayout();
   const tunnel = useTunnel();
   const native = isTauri();
   const [draft, setDraft] = useState(null);
@@ -287,6 +289,9 @@ export default function Preferences({ open, onClose, appearance, section = null 
         <Row title={translate('desktop.preferences.arguments')} description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.shellArguments')} /></Row>
         {hints.showLang ? <Row title={translate('language.label')} description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label={translate('desktop.preferences.terminalLanguage')} /></Row> : null}
         <Row title={translate('desktop.preferences.pathPrefixes')} description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.pathPrefixes')} /></Row>
+        {/* Como o idioma, vale na hora e fica neste aparelho, fora do arquivo
+            de preferencias: e o jeito de mostrar a lista, nao do terminal. */}
+        <Row title={translate('desktop.preferences.compactCards')} description={translate('desktop.preferences.compactCardsDescription')}><input type="checkbox" className="mac-switch" checked={layout.cardsCompact} onChange={(event) => setLayout({ cardsCompact: event.target.checked })} aria-label={translate('desktop.preferences.compactCards')} /></Row>
         {native ? <Row title={translate('desktop.preferences.claudeHook')} description={translate('desktop.preferences.claudeHookDescription')}><button type="button" className="btn btn-secondary btn-sm" disabled={installingHook} onClick={installClaudeHook}>{translate(installingHook ? 'desktop.preferences.claudeHookInstalling' : 'desktop.preferences.claudeHookInstall')}</button></Row> : null}
         {native && command ? <Row title={translate('desktop.preferences.terminalCommand')} description={commandDescription(command)} wide>
           <div className="mac-prefs__actions">

@@ -447,6 +447,8 @@ export default Object.freeze({
   'desktop.preferences.systemLanguage': 'Empty uses the system language.',
   'desktop.preferences.terminal': 'Terminal',
   'desktop.preferences.claudeHook': 'Claude Code plan usage',
+  'desktop.preferences.compactCards': 'New cards collapsed',
+  'desktop.preferences.compactCardsDescription': 'Each new session joins the list with only its icon and name. The arrow on the card shows the rest, and the three dot menu collapses or expands one at a time.',
   'desktop.preferences.claudeHookDescription': 'Installs the Cialai status line in your Claude Code profiles. Session cards then show model, context used, cost and plan usage.',
   'desktop.preferences.claudeHookInstall': 'Install in profiles',
   'desktop.preferences.claudeHookInstalling': 'Installing…',

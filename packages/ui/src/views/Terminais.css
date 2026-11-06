@@ -186,6 +186,18 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-card__menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;margin:-2px -2px -2px 0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-card:hover .terminais-card__menu,.terminais-card.is-selected .terminais-card__menu,.terminais-card__menu:focus-visible{opacity:1}
 .terminais-card__menu:hover{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+/* Seta de recolher: aparece junto com o menu, no passar do mouse e na
+   selecao. No card recolhido fica sempre a vista, porque e o caminho de volta. */
+.terminais-card__expand{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;margin:-2px 0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-card:hover .terminais-card__expand,.terminais-card.is-selected .terminais-card__expand,.terminais-card.is-collapsed .terminais-card__expand,.terminais-card__expand:focus-visible{opacity:1}
+.terminais-card__expand:hover{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.terminais-card__expand:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+/* Card recolhido: so a linha do nome, com o ponto de atividade e o simbolo do
+   Broto dentro dela, e a barra de cor acompanhando a altura menor. */
+.terminais-card.is-collapsed{padding-top:6px;padding-bottom:6px}
+.terminais-card.is-collapsed::before{top:9px;bottom:9px}
+.terminais-card__glance{display:inline-flex;align-items:center;flex:0 0 auto}
+.terminais-card__broto.is-inline{position:static;flex:0 0 auto;width:15px;height:14px}
 .terminais-card__subtitle{font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-card__running-row{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden}
 .terminais-card__running{flex:0 1 auto;min-width:0;font-weight:500;color:var(--mac-label);overflow:hidden;text-overflow:ellipsis}

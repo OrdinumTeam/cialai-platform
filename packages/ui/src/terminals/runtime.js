@@ -261,6 +261,8 @@ function serializeSession(session) {
     color: session.color,
     icon: session.icon,
     pinned: session.pinned,
+    // So deste aparelho: o Rust recusa campo desconhecido na apresentacao.
+    collapsed: session.collapsed,
     createdAt: session.createdAt,
     editor: {
       tabs: session.editor.tabs.filter((tab) => tab.kind !== 'diff' && tab.path).map((tab) => tab.path),
@@ -507,7 +509,7 @@ function applySessionTheme(session) {
   session.term.options.theme = buildTheme(resolveSessionAccent(session.color));
 }
 
-function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
+function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, collapsed = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
   // Toda pasta guardada na sessao usa a forma portatil. O Rust ja devolve
   // assim; o que vem do armazenamento antigo ou de um caminho digitado pode
@@ -523,6 +525,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     color: validColor(color),
     icon: validIcon(icon),
     pinned: Boolean(pinned),
+    collapsed: Boolean(collapsed),
     createdAt: createdAt || Date.now(),
     term,
     fit,
@@ -1775,7 +1778,7 @@ async function syncSharedSessions() {
       if (!session) {
         // A sessão de um Broto leva o nome da máquina, que é o que a pessoa
         // reconhece; a pasta inicial de lá costuma ser só o nome do usuário.
-        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName || info.deviceId }) : (info.deviceId && info.brotoName) || baseName(info.cwd) });
+        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName || info.deviceId }) : (info.deviceId && info.brotoName) || baseName(info.cwd), collapsed: getLayout().cardsCompact });
         state.order.push(session.id);
         session.ptyId = info.id;
       }
@@ -1913,7 +1916,7 @@ export function openSession(cwd, { name, subtitle, color, icon, select = true } 
     return null;
   }
   if (!cwd) return null;
-  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null });
+  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null, collapsed: getLayout().cardsCompact });
   state.order.push(session.id);
   if (select || !state.selectedId) state.selectedId = session.id;
   persist();
@@ -2249,6 +2252,29 @@ export function togglePinned(id) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.pinned = !session.pinned;
+  persist();
+  emitSessions();
+}
+
+// Card recolhido mostra so icone, nome e o botao de expandir. E escolha
+// deste aparelho, como a ordem das abas, e nao vai para a apresentacao
+// compartilhada com o celular.
+export function toggleCollapsed(id) {
+  const session = state.sessions.get(id);
+  if (!session) return;
+  session.collapsed = !session.collapsed;
+  persist();
+  emitSessions();
+}
+
+export function setAllCollapsed(collapsed) {
+  let changed = false;
+  state.sessions.forEach((session) => {
+    if (session.collapsed === Boolean(collapsed)) return;
+    session.collapsed = Boolean(collapsed);
+    changed = true;
+  });
+  if (!changed) return;
   persist();
   emitSessions();
 }

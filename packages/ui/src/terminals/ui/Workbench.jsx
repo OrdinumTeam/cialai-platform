@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowUp, Bell, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
+  ArrowDown, ArrowUp, Bell, ChevronsDownUp, ChevronsUpDown, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
   FilePlus2, Network, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput, UserRound,
 } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
@@ -21,7 +21,7 @@ import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
   getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
-  setSessionColor, setSessionIcon, setSessionSubtitle, subscribe, togglePinned, viewMounted,
+  setSessionColor, setSessionIcon, setSessionSubtitle, subscribe, toggleCollapsed, togglePinned, viewMounted,
 } from '../runtime.js';
 import { SESSION_ICONS } from '../session-icons.js';
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
@@ -332,6 +332,7 @@ export default function Workbench() {
       { id: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: translate('terminal.menu.subtitleTitle'), description: translate('terminal.menu.subtitleDescription'), initial: session.subtitle, placeholder: translate('terminal.menu.subtitlePlaceholder'), confirmLabel: translate('terminal.common.save') }) },
       { id: 'color', label: translate('terminal.menu.sessionAppearance'), icon: Palette, run: () => setTimeout(() => appearanceMenu(session, anchor), 0) },
       { id: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
+      { id: 'collapse', label: translate(session.collapsed ? 'terminal.menu.expandCard' : 'terminal.menu.collapseCard'), icon: session.collapsed ? ChevronsUpDown : ChevronsDownUp, run: () => toggleCollapsed(session.id) },
       { id: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
       { id: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
       { separator: true },

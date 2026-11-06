@@ -447,6 +447,8 @@ export default Object.freeze({
   'desktop.preferences.systemLanguage': 'Vazio usa o idioma do sistema.',
   'desktop.preferences.terminal': 'Terminal',
   'desktop.preferences.claudeHook': 'Uso do plano do Claude Code',
+  'desktop.preferences.compactCards': 'Cards novos recolhidos',
+  'desktop.preferences.compactCardsDescription': 'Cada sessão nova entra na lista só com ícone e nome. A seta do card mostra o resto, e o menu de três pontos recolhe ou expande um por um.',
   'desktop.preferences.claudeHookDescription': 'Instala a linha de estado do Cialai nos perfis do Claude Code. Os cards passam a mostrar modelo, contexto usado, custo e uso do plano.',
   'desktop.preferences.claudeHookInstall': 'Instalar nos perfis',
   'desktop.preferences.claudeHookInstalling': 'Instalando…',
