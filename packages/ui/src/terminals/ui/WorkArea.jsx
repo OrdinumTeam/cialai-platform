@@ -10,7 +10,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
-  ArrowDown, ChevronDown, ChevronUp, Eye, EyeOff, GitBranch, Globe, Maximize2, Minimize2, Minus, Network, PanelBottomClose, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, PanelTopClose, Plus, RotateCcw, Search, X,
+  ArrowDown, ChevronDown, ChevronUp, Eye, EyeOff, GitBranch, Globe, Maximize2, Minimize2, Minus, Network, PanelBottomClose, PanelLeftClose, PanelRightClose, PanelTopClose, Plus, RotateCcw, Search, X,
 } from 'lucide-react';
 import EditorPane from './EditorPane.jsx';
 import { openDocGraphTab } from '../docgraph/tab.js';
@@ -286,17 +286,19 @@ export default function WorkArea({
   return (
     <section className="terminais-work session-scope" ref={sectionRef} aria-label={translate('terminal.work.sessionLabel', { name: session.name })} style={accentStyle(session)}>
       <header className="terminais-work__head">
-        {panels ? (
+        {/* Com a coluna recolhida, quem a reabre e a faixa da borda; aqui fica
+            so o recolher, para nao haver dois botoes com a mesma funcao. */}
+        {panels && !panels.sessionsCollapsed ? (
           <button
             type="button"
-            className={`terminais-pane__tool${panels.sessionsCollapsed ? '' : ' is-on'}`}
+            className="terminais-pane__tool is-on"
             onClick={panels.onToggleSessions}
-            aria-pressed={!panels.sessionsCollapsed}
+            aria-expanded={true}
             aria-controls="terminais-sessions"
-            aria-label={translate(panels.sessionsCollapsed ? 'terminal.work.showSessions' : 'terminal.session.collapse')}
-            title={translate(panels.sessionsCollapsed ? 'terminal.work.showSessionsShortcut' : 'terminal.session.collapseShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}
+            aria-label={translate('terminal.session.collapse')}
+            title={translate('terminal.session.collapseShortcut', { shortcut: shortcutLabel('Mod+Shift+J') })}
           >
-            {panels.sessionsCollapsed ? <PanelLeftOpen size={16} strokeWidth={1.75} /> : <PanelLeftClose size={16} strokeWidth={1.75} />}
+            <PanelLeftClose size={16} strokeWidth={1.75} />
           </button>
         ) : null}
         <span className={`dot terminais-work__dot terminais-work__dot--${status.tone}${status.animated ? ' is-working' : ''}`} aria-hidden="true" />
@@ -331,17 +333,17 @@ export default function WorkArea({
           <button type="button" className="terminais-pane__tool" onClick={() => changeFont(1)} title={translate('terminal.work.increaseFontShortcut', { shortcut: shortcutLabel('Mod+Equal') })} aria-label={translate('terminal.work.increaseFont')}><Plus size={14} strokeWidth={1.75} /></button>
           <span className="terminais-work__sep" aria-hidden="true" />
           <button type="button" className={`terminais-pane__tool${layout.focus ? ' is-on' : ''}`} onClick={onToggleFocus} aria-pressed={layout.focus} title={translate(layout.focus ? 'terminal.work.exitFocus' : 'terminal.work.focusMode')} aria-label={translate('terminal.work.focusMode')}>{layout.focus ? <Minimize2 size={14} strokeWidth={1.75} /> : <Maximize2 size={14} strokeWidth={1.75} />}</button>
-          {panels ? (
+          {panels && !panels.explorerCollapsed ? (
             <button
               type="button"
-              className={`terminais-pane__tool${panels.explorerCollapsed ? '' : ' is-on'}`}
-              disabled={Boolean(session.deviceId)} onClick={panels.onToggleExplorer}
-              aria-pressed={!panels.explorerCollapsed}
+              className="terminais-pane__tool is-on"
+              onClick={panels.onToggleExplorer}
+              aria-expanded={true}
               aria-controls="terminais-explorer"
-              aria-label={translate(panels.explorerCollapsed ? 'terminal.work.showFiles' : 'terminal.explorer.collapseFiles')}
-              title={translate(panels.explorerCollapsed ? 'terminal.work.showFilesShortcut' : 'terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}
+              aria-label={translate('terminal.explorer.collapseFiles')}
+              title={translate('terminal.explorer.collapseFilesShortcut', { shortcut: shortcutLabel('Mod+Shift+E') })}
             >
-              {panels.explorerCollapsed ? <PanelRightOpen size={16} strokeWidth={1.75} /> : <PanelRightClose size={16} strokeWidth={1.75} />}
+              <PanelRightClose size={16} strokeWidth={1.75} />
             </button>
           ) : null}
         </div>

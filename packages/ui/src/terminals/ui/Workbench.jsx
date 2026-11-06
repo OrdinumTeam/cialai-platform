@@ -823,6 +823,7 @@ export default function Workbench() {
         <button
           type="button"
           className="terminais-edge terminais-edge--right"
+          disabled={Boolean(selected?.deviceId)}
           onClick={() => { showPanel('explorer', true); if (layout.focus) toggleFocus(); }}
           aria-label={translate('terminal.work.showFiles')}
           aria-expanded={false}

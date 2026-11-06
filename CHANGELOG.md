@@ -74,6 +74,12 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.6.0 · in preparation
+
+### Fixed
+
+* A collapsed side column had two buttons that brought it back, the rail at the edge and a toggle in the work area header, side by side. The rail is now the only way back on screen, and the header keeps only the collapse button, shown while the column is open. The shortcut and the command palette still toggle both columns, and the rail is disabled for a session of another device, as the old toggle was.
+
 ## 0.5.0 · 2026-10-29
 
 ### Added

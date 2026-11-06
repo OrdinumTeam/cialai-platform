@@ -71,6 +71,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-edge{position:relative;flex:0 0 28px;width:28px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0;border:0;background:var(--mac-surface-2);color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-edge:hover{background:var(--mac-surface-3,var(--mac-fill));color:var(--mac-label)}
 .terminais-edge:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-edge:disabled,.terminais-edge:disabled:hover{background:var(--mac-surface-2);color:var(--mac-label-4)}
 .terminais-edge__summary{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-variant-numeric:tabular-nums;line-height:1.2}
 .terminais-edge__count{color:var(--mac-label-3)}
 .terminais-edge__badge{min-width:16px;padding:0 4px;border-radius:999px;background:var(--mac-warn-bg);color:var(--mac-warn);font-weight:600}

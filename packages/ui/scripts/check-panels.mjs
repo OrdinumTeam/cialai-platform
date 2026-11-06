@@ -92,22 +92,37 @@ test('recolher uma coluna e um botao so, no cabecalho da area de trabalho', () =
   assert.doesNotMatch(sessions, /onCollapse/, 'prop de recolher sem uso na coluna de sessoes');
   assert.doesNotMatch(explorer, /onCollapse/, 'prop de recolher sem uso na coluna de arquivos');
   const work = read('../src/terminals/ui/WorkArea.jsx');
-  assert.match(work, /PanelLeftOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelLeftClose size=\{16\}/);
-  assert.match(work, /PanelRightOpen size=\{16\} strokeWidth=\{1\.75\} \/> : <PanelRightClose size=\{16\}/);
+  assert.match(work, /<PanelLeftClose size=\{16\} strokeWidth=\{1\.75\} \/>/);
+  assert.match(work, /<PanelRightClose size=\{16\} strokeWidth=\{1\.75\} \/>/);
 });
 
-test('o cabecalho da area de trabalho tem os dois alternadores, sempre visiveis', () => {
+test('cada coluna tem um botao por vez: a faixa reabre e o cabecalho recolhe', () => {
+  // Com a coluna recolhida, a faixa da borda e o botao do cabecalho abriam o
+  // mesmo painel, lado a lado na tela. O cabecalho ficou so com o recolher e
+  // aparece apenas com a coluna aberta; reabrir e da faixa, do atalho e da paleta.
   const work = read('../src/terminals/ui/WorkArea.jsx');
   const header = work.slice(work.indexOf('<header className="terminais-work__head">'), work.indexOf('</header>'));
-  assert.match(header, /aria-pressed=\{!panels\.sessionsCollapsed\}/, 'sessoes a esquerda');
+  assert.doesNotMatch(work, /PanelLeftOpen|PanelRightOpen/, 'o cabecalho nao reabre coluna');
+  assert.doesNotMatch(header, /terminal\.work\.show(Sessions|Files)/, 'o cabecalho nao repete o rotulo da faixa');
+  assert.match(header, /\{panels && !panels\.sessionsCollapsed \? \(/, 'recolher sessoes so com a coluna aberta');
+  assert.match(header, /\{panels && !panels\.explorerCollapsed \? \(/, 'recolher arquivos so com a coluna aberta');
   assert.ok(header.indexOf('panels.onToggleSessions') < header.indexOf('terminais-work__name'), 'o de sessoes vem antes do nome');
-  assert.match(work, /aria-pressed=\{!panels\.explorerCollapsed\}/, 'arquivos a direita');
-  assert.match(work, /aria-controls="terminais-sessions"/);
-  assert.match(work, /aria-controls="terminais-explorer"/);
-  // O alternador nasce com o estado do painel, nao com um estado proprio.
+  assert.match(header, /aria-controls="terminais-sessions"/);
+  assert.match(header, /aria-controls="terminais-explorer"/);
   const bench = read('../src/terminals/ui/Workbench.jsx');
   assert.match(bench, /onToggleSessions: \(\) => showPanel\('sessions', sessionsCollapsed/);
   assert.match(bench, /onToggleExplorer: \(\) => showPanel\('explorer', explorerCollapsed\)/);
+  // A faixa so existe com a coluna recolhida e, numa sessao de outro aparelho,
+  // fica desligada como o botao antigo ficava.
+  const right = bench.slice(bench.indexOf('terminais-edge terminais-edge--right'));
+  assert.match(right.slice(0, 200), /disabled=\{Boolean\(selected\?\.deviceId\)\}/);
+  for (const lang of ['pt-BR', 'en', 'es']) {
+    const copy = read(`../../i18n/src/locales/${lang}/terminal.js`);
+    for (const key of ['sessionsHidden', 'filesHidden']) {
+      const line = copy.split('\n').find((text) => text.includes(`'terminal.work.${key}'`));
+      assert.doesNotMatch(line, /cabeçalho|header|encabezado/, `${lang} ${key} nao cita botao que nao existe`);
+    }
+  }
 });
 
 test('o primeiro recolhimento de cada coluna avisa onde reabrir, uma vez so', () => {
