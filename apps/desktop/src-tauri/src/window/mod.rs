@@ -40,6 +40,8 @@ use self::windows as backend;
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod generic;
+#[cfg(target_os = "linux")]
+mod linux_buttons;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use self::generic as backend;
 

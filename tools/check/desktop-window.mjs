@@ -81,12 +81,27 @@ const genericBackend = read(`${tauri}/src/window/generic.rs`);
 for (const contract of [/WAYLAND_DISPLAY/, /GDK_BACKEND/, /set_position/, /set_size/, /work_area/]) {
   assert.match(genericBackend, contract, `contrato ausente em window/generic.rs: ${contract}`);
 }
+// No Wayland o tao fixa no `HeaderBar` do GTK a ordem minimizar, maximizar e
+// fechar, por cima do layout de botoes do sistema, e a reaplica a cada troca
+// de `resizable`. O backend Linux devolve a ordem ao sistema na abertura e
+// depois de cada troca. A busca pela barra depende do formato do tao 0.35, em
+// `platform_impl/linux/wayland/header.rs`: subir o tao pede conferir de novo.
+assert.match(windowMod, /#\[cfg\(target_os = "linux"\)\]\s*mod linux_buttons;/, 'o modulo dos botoes do Linux saiu do backend');
+assert.match(genericBackend, /linux_buttons::follow_system_layout\(window\)/, 'o backend Linux nao devolve a ordem dos botoes ao sistema');
+const linuxButtons = read(`${tauri}/src/window/linux_buttons.rs`);
+assert.match(linuxButtons, /run_on_main_thread/, 'o GTK so aceita ser tocado na thread principal');
+assert.equal((linuxButtons.match(/set_decoration_layout\(None\)/g) || []).length, 2, 'a ordem do sistema vale na abertura e depois de cada troca de resizable');
+assert.match(linuxButtons, /connect_resizable_notify/);
+assert.doesNotMatch(linuxButtons, /set_decoration_layout\(Some/, 'nenhuma ordem fixa no lugar da do sistema');
+const taoVersion = read(`${tauri}/Cargo.lock`).match(/name = "tao"\nversion = "([^"]+)"/)?.[1];
+assert.match(taoVersion || '', /^0\.35\./, `o tao mudou para ${taoVersion}; confira se a barra do Wayland ainda e um EventBox com HeaderBar e atualize esta verificacao`);
 const macBackend = read(`${tauri}/src/window/macos.rs`);
 assert.match(macBackend, /setFrame_display/);
 assert.match(macBackend, /NSVisualEffectMaterial::Sidebar/);
 assert.match(read(`${tauri}/src/lib.rs`), /window::decorate\(&main_window, &backdrop\)/);
 const cargo = read(`${tauri}/Cargo.toml`);
 assert.match(cargo, /\[target\.'cfg\(any\(target_os = "macos", target_os = "windows"\)\)'\.dependencies\]\s*window-vibrancy = "0\.8"/);
+assert.match(cargo, /\[target\.'cfg\(target_os = "linux"\)'\.dependencies\]\s*gtk = "0\.18/, 'o backend Linux usa o gtk que o tao ja traz');
 for (const feature of ['Win32_UI_WindowsAndMessaging', 'Wdk_System_SystemServices', 'Win32_System_SystemInformation']) {
   assert.ok(cargo.includes(`"${feature}"`), `feature do windows-sys ausente: ${feature}`);
 }
@@ -149,4 +164,4 @@ assert.match(platformCss, /\.mac-window-controls/);
 assert.match(platformCss, /\[data-platform="windows"\]/);
 assert.match(read(`${ui}/desktop/desktop.css`), /@import '\.\/platform\.css';/);
 
-console.log('PASS desktop window: per-system configs, native backends, Windows controls, DOM menu and macOS-only Escape guard');
+console.log('PASS desktop window: per-system configs, native backends, Wayland buttons in the system order, Windows controls, DOM menu and macOS-only Escape guard');

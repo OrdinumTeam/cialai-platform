@@ -32,7 +32,7 @@ estável do site.
 
 | Tema | macOS | Linux | Windows |
 | --- | --- | --- | --- |
-| Moldura | Barra sobreposta, título oculto e semáforos nativos | Decorações do gerenciador de janelas | Moldura própria, sombra e controles na toolbar |
+| Moldura | Barra sobreposta, título oculto e semáforos nativos | Decorações do gerenciador de janelas no X11 e barra do GTK no Wayland, as duas com os botões na ordem do sistema | Moldura própria, sombra e controles na toolbar |
 | Efeito | Vibrancy na barra lateral | Fundo opaco, sem efeito nativo | Mica a partir do build 22621, com falha não fatal |
 | Abertura | Animação nativa do quadro | X11 anima posição e tamanho. Wayland abre direto no tamanho final | `SetWindowPos` atualiza o quadro em pixels físicos |
 | Menu | Menu nativo, inclusive Editar para o WKWebView | Botão na toolbar com ações no DOM | Botão na toolbar com ações no DOM |
@@ -45,6 +45,14 @@ Nos três sistemas, a confirmação de saída e as mensagens do núcleo usam o i
 No Wayland, o compositor controla a posição. Restaurar posição e centralizar o
 splash podem não produzir efeito. O app não simula controles próprios nesse
 ambiente.
+
+No Wayland a barra de título é um `HeaderBar` do GTK criado pelo tao, que fixa
+nele minimizar, maximizar e fechar à direita e reaplica essa ordem a cada troca
+de `resizable`. `window/linux_buttons.rs` tira a ordem fixa na abertura e depois
+de cada troca, e a barra passa a seguir `gtk-decoration-layout`, o reflexo do
+`button-layout` do GNOME e do ajuste equivalente do KDE, inclusive quando a
+pessoa muda o ajuste com o app aberto. No X11, e na AppImage, que força o X11,
+quem desenha a moldura é o gerenciador de janelas, que já segue o sistema.
 
 O terminal usa JetBrains Mono empacotada somente como último recurso no Linux.
 A licença OFL acompanha a fonte no pacote. macOS e Windows priorizam as fontes
