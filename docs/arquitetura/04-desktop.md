@@ -208,6 +208,10 @@ Dois números aparecem no card com um agente reconhecido, e eles medem coisas di
 
 O esforço de raciocínio continua publicado pelo hook e lido pelo Rust em `UsageSession.effort`, mas não é mostrado no card: o Codex nunca o publica, então a tag contradizia metade das sessões. `packages/ui/scripts/check-session-card.mjs` renderiza o card real com uma amostra que contém o esforço e reprova se algum rótulo dele voltar à interface.
 
+O card recolhe para uma linha com ícone, nome, alfinete, indicador de atividade, seta de expandir e menu; a barra de cor e o aviso de atenção continuam à vista. O estado `collapsed` fica só em `cialai_terminals`, fora da `TerminalPresentation` do Rust, que recusa campo desconhecido, então não chega ao celular. A seta e o menu de três pontos alternam um card, o cabeçalho da coluna recolhe ou expande todos, e `cardsCompact`, em `cialai_terminals_layout`, faz as sessões novas nascerem recolhidas. Em tela de toque o card aparece sempre inteiro.
+
+Cor e ícone escolhidos ficam lembrados por pasta em `cialai_terminals_looks`, por `terminals/directory-looks.js`: a sessão aberta depois na mesma pasta nasce com a última escolha. A chave é o caminho portátil sem barra final, em minúsculas no Windows, e o armazenamento guarda as 200 pastas usadas mais recentemente. Só a escolha da pessoa grava, ao trocar cor ou ícone ou ao escolher no popover de sessão nova; voltar ao padrão esquece a pasta. Restaurar uma sessão salva ou adotar um terminal vivo não lê nem grava a memória, e a demonstração e as sessões de Broto ficam de fora.
+
 ### Estados da sessão
 
 O computador é a fonte única do estado de atividade. `pty_metrics` leva `agentTurn`, lido dos arquivos do próprio agente, e `outputAgeMs`, medido no relógio do computador. A interface deriva rótulo, tom e animação de uma função pura só, `deriveActivity` em `packages/ui/src/terminals/activity-state.js`, e `describe`, `runningLabel` e o indicador de atividade passam por ela.
@@ -229,7 +233,7 @@ Depois de reconectar, o vínculo do fluxo de saída continua sendo assunto de ca
 
 ### Colunas laterais
 
-`sessionsCollapsed` e `explorerCollapsed` ficam em `cialai_terminals_layout`, e `panels.js` recolhe sozinho abaixo de 720 px para as sessões e 980 px para os arquivos, sem tocar na preferência. Todo mostrar e esconder passa por `showPanel` em `Workbench.jsx`, que grava a preferência, vence o recolhimento automático e, na primeira vez de cada coluna, mostra o aviso de onde reabrir. Os caminhos de volta são três e coexistem: a faixa da lateral, os dois alternadores do cabeçalho da área de trabalho e os atalhos Mod Shift J e Mod Shift E.
+`sessionsCollapsed` e `explorerCollapsed` ficam em `cialai_terminals_layout`, e `panels.js` recolhe sozinho abaixo de 720 px para as sessões e 980 px para os arquivos, sem tocar na preferência. Todo mostrar e esconder passa por `showPanel` em `Workbench.jsx`, que grava a preferência, vence o recolhimento automático e, na primeira vez de cada coluna, mostra o aviso de onde reabrir. Cada coluna mostra um botão por vez. Recolhida, só a faixa da lateral a reabre, com a contagem do Git ou das sessões; a faixa dos arquivos fica desligada na sessão de outro aparelho, como o alternador antigo. Aberta, só o alternador do cabeçalho da área de trabalho a recolhe. Os atalhos Mod Shift J e Mod Shift E e a paleta valem nos dois estados.
 
 ## Onboarding
 
