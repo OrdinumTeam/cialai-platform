@@ -392,9 +392,54 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-docgraph__issues li{display:flex;flex-direction:column;gap:1px;min-width:0}
 .terminais-docgraph__issues li span{font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label);overflow-wrap:anywhere}
 .terminais-docgraph__issues li em{font-style:normal;font-size:11px;color:var(--mac-label-3)}
+/* Seletor de vista: discreto, com o nome da vista em uso. */
+.terminais-docgraph__viewbtn{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;height:24px;padding:0 7px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12px;font-weight:500;color:var(--mac-label-2);white-space:nowrap;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-docgraph__viewbtn:hover:not(:disabled){background:var(--mac-hover);color:var(--mac-label)}
+.terminais-docgraph__viewbtn:disabled{opacity:.45}
+.terminais-docgraph__viewbtn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-docgraph__options-toggle.is-on{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+/* Painel de opcoes, no molde das ocorrencias, alinhado pela direita. */
+.terminais-docgraph__options{position:absolute;top:calc(100% + 6px);right:0;z-index:30;width:min(300px,86cqw);max-height:min(560px,70vh);overflow:auto;overscroll-behavior:contain;padding:10px 12px 12px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);animation:macPop 160ms var(--mac-ease);transform-origin:top right}
+.terminais-docgraph__options-section+.terminais-docgraph__options-section{margin-top:12px;padding-top:10px;border-top:1px solid var(--mac-separator)}
+.terminais-docgraph__options-title{margin-bottom:6px;font-size:11px;font-weight:600;color:var(--mac-label-3)}
+.terminais-docgraph__options-hint{margin:0 0 6px;font-size:11.5px;line-height:1.35;color:var(--mac-label-2);text-wrap:pretty}
+.terminais-docgraph__options-action{display:inline-flex;align-items:center;gap:4px;margin-top:6px}
+.terminais-docgraph__segmented{display:flex}
+.terminais-docgraph__segmented .segmented__option{flex:1;justify-content:center}
+.terminais-docgraph__choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
+.terminais-docgraph__choice{height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+.terminais-docgraph__choice:hover{background:var(--mac-hover)}
+.terminais-docgraph__choice.is-selected{background:var(--mac-accent-soft);color:var(--mac-accent-text);font-weight:600}
+.terminais-docgraph__palettes{display:flex;flex-direction:column;gap:2px}
+.terminais-docgraph__palette{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:9px;row-gap:1px;padding:5px 7px;border:0;border-radius:8px;background:transparent;font:inherit;text-align:left;cursor:default}
+.terminais-docgraph__palette:hover{background:var(--mac-hover)}
+.terminais-docgraph__palette.is-selected{background:var(--mac-accent-soft)}
+.terminais-docgraph__palette-chips{display:inline-flex;gap:2px}
+.terminais-docgraph__palette-chips i{display:block;width:10px;height:10px;border-radius:3px}
+.terminais-docgraph__palette-name{font-size:12px;color:var(--mac-label)}
+.terminais-docgraph__palette.is-selected .terminais-docgraph__palette-name{font-weight:600;color:var(--mac-accent-text)}
+.terminais-docgraph__palette em{grid-column:2;font-style:normal;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__switch{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:default}
+.terminais-docgraph__switch>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.terminais-docgraph__switch strong{font-size:12px;font-weight:500;color:var(--mac-label)}
+.terminais-docgraph__switch em{font-style:normal;font-size:11px;line-height:1.35;color:var(--mac-label-3)}
+.terminais-docgraph__rules{display:flex;flex-direction:column;gap:4px;margin:4px 0 0;padding:0;list-style:none}
+.terminais-docgraph__rule{display:flex;align-items:center;gap:4px}
+.terminais-docgraph__rule-swatch{flex:0 0 26px;width:26px}
+.terminais-docgraph__rule-query{flex:1;min-width:0;height:26px;padding:0 8px;border:1px solid var(--mac-separator);border-radius:6px;background:var(--mac-surface);font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label)}
+.terminais-docgraph__rule-query:focus{outline:none;border-color:var(--mac-accent);box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-docgraph__rule-colors{grid-template-columns:repeat(9,minmax(0,1fr));margin:4px 0 2px}
+.terminais-docgraph__legend-title{padding:2px 7px 3px;font-size:11px;font-weight:600;color:var(--mac-label-3)}
+/* Avisos das vistas, no alto e no meio: o foco dos Vizinhos fica a vista. */
+.terminais-docgraph__note{position:absolute;top:10px;left:50%;z-index:4;display:flex;flex-direction:column;align-items:center;gap:3px;max-width:min(420px,calc(100% - 24px));padding:8px 12px;border-radius:10px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);text-align:center;transform:translateX(-50%);animation:macFade 180ms var(--mac-ease) both}
+.terminais-docgraph__note strong{font-size:12.5px;font-weight:600;color:var(--mac-label)}
+.terminais-docgraph__note span{font-size:12px;line-height:1.35;color:var(--mac-label-2);text-wrap:balance}
+.terminais-docgraph__note .btn{margin-top:4px}
+.terminais-docgraph__note.is-quiet{padding:4px 10px;box-shadow:none;pointer-events:none}
+.terminais-docgraph__note.is-quiet span{font-size:11.5px}
 /* Paineis pequenos: o grafo fica, o que esta por cima dele sai. */
-@container docgraph (max-width:560px){.terminais-docgraph__zoom{display:none}}
-@container docgraphview (max-width:520px){.terminais-docgraph__legend{display:none}}
+@container docgraph (max-width:560px){.terminais-docgraph__zoom{display:none}.terminais-docgraph__viewbtn>span{display:none}}
+@container docgraphview (max-width:520px){.terminais-docgraph__legend{display:none}.terminais-docgraph__note{top:36px}}
 @container docgraphview (max-height:220px){.terminais-docgraph__legend{display:none}.terminais-docgraph__facts,.terminais-docgraph__card-kind,.terminais-docgraph__card-path{display:none}.terminais-docgraph__card{padding:8px 10px}.terminais-docgraph__card-actions{margin-top:6px}}
 @container docgraphview (max-height:140px){.terminais-docgraph__card,.terminais-docgraph__tip,.terminais-docgraph__counts{display:none}}
 @media (prefers-reduced-motion:reduce){.terminais-docgraph__progress.is-loading{animation:none;background:var(--mac-accent)}}

@@ -169,6 +169,26 @@ export function isCold(simulation) {
   return simulation.alpha() < ALPHA_MIN;
 }
 
+// Simulacao da vista Vizinhos: so arquivos, ligados pelas citacoes. O foco
+// fica preso na origem e o resto se arruma em volta dele.
+export function createNeighborSim(nodes, links) {
+  return forceSimulation(nodes)
+    .alphaMin(ALPHA_MIN)
+    .alphaDecay(ALPHA_DECAY)
+    .velocityDecay(0.4)
+    .force('link', forceLink(links).distance(70).strength(0.5).iterations(2))
+    .force('charge', forceManyBody().strength(-160).theta(0.9).distanceMax(700))
+    .force('collide', forceCollide().radius(16).strength(0.9))
+    .force('x', forceX(0).strength(0.03))
+    .force('y', forceY(0).strength(0.03))
+    .stop();
+}
+
+export function updateNeighborSim(simulation, nodes, links) {
+  simulation.nodes(nodes);
+  simulation.force('link').links(links);
+}
+
 // Caixa que contem todos os agrupamentos, no espaco do mundo.
 export function boundsOf(nodes) {
   let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity;

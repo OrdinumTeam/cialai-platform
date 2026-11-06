@@ -10,10 +10,9 @@
 // acoes num objeto estavel, entao a saida do terminal e as metricas nunca o
 // redesenham.
 
-import React, { memo, useEffect, useRef, useState } from 'react';
+import React, { Suspense, lazy, memo, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, Music, Network, RefreshCw, X } from 'lucide-react';
 import BrowserPane from './BrowserPane.jsx';
-import DocGraphPane from './DocGraphPane.jsx';
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { DataState } from '../../components/ui.jsx';
 import { fmtBytes } from '../../lib/helpers.js';
@@ -23,6 +22,20 @@ import { renderMarkdown, contentOf } from '../editor.js';
 import { canConvertToPdf, dirName, isInside, isPreviewable, isViewerKind, relativePath, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+
+// O painel do grafo, como o motor dele, so carrega quando a aba do grafo
+// abre: fica fora do que o estudio baixa para a primeira pintura.
+const DocGraphPane = lazy(() => import('./DocGraphPane.jsx'));
+
+function DocGraphLoading() {
+  return (
+    <div className="terminais-docgraph">
+      <div className="terminais-docgraph__view">
+        <div className="terminais-docgraph__overlay" role="status"><strong>{DOCGRAPH.indexing}</strong></div>
+      </div>
+    </div>
+  );
+}
 
 const tabName = (tab) => (tab.kind === 'browser' ? translate('terminal.browser.tabName') : tab.kind === 'docgraph' ? DOCGRAPH.name : tab.name);
 
@@ -452,7 +465,7 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           ) : null}
           {viewer ? <ViewerBar tab={activeTab} actions={actions} /> : null}
           {activeTab.kind === 'browser' ? <BrowserPane session={session} /> : null}
-          {activeTab.kind === 'docgraph' ? <DocGraphPane session={session} actions={actions} /> : null}
+          {activeTab.kind === 'docgraph' ? <Suspense fallback={<DocGraphLoading />}><DocGraphPane session={session} actions={actions} /></Suspense> : null}
           <ConflictBanner tab={activeTab} actions={actions} />
           {activeTab.loading ? (
             <DataState type="loading" message={translate(activeTab.kind === 'office' ? 'terminal.editor.convertingOffice' : 'terminal.editor.openingFile')} />

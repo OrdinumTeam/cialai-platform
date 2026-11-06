@@ -324,6 +324,8 @@ mod tests {
             "meetings_rename",
             "meetings_transcribe",
             "meetings_delete",
+            "docgraph_scan",
+            "docgraph_cancel",
             "unknown",
         ] {
             assert!(!allowed_command(cmd));

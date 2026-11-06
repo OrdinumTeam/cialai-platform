@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 // Estado do grafo da documentacao que sobrevive ao fechamento do app, guardado
-// por raiz: o que o usuario expandiu e recolheu, a visao da camera, a selecao e
-// os tons dos grupos. Recebe o storage de fora, entao o script de verificacao
-// testa com um objeto em memoria.
+// por raiz: o que o usuario expandiu e recolheu, a visao da camera, a selecao,
+// os tons dos grupos, a vista, o escopo e as opcoes de cor. Recebe o storage
+// de fora, entao o script de verificacao testa com um objeto em memoria.
+//
+// Uma raiz nova herda da ultima raiz gravada a vista, o escopo e as opcoes de
+// cor, para a escolha feita num projeto valer no proximo. Regras e tons
+// apontam para caminhos e ficam so na raiz em que nasceram.
 //
 // A chave de cada raiz e o caminho canonizado que o Rust devolve, para duas
 // sessoes na mesma pasta dividirem o estado mesmo quando uma chegou por link.
@@ -10,6 +14,9 @@
 // pasta nova segue a regra padrao em vez de nascer recolhida. `bulk` lembra um
 // Expandir tudo ou Recolher tudo, que nao caberia em lista nenhuma. Posicoes dos nos
 // nao entram aqui; ficam em memoria no controlador.
+
+import { cleanColorMode, cleanPalette, cleanRules } from './colors.js';
+import { cleanDepth, cleanScope, cleanViewMode } from './options.js';
 
 export const STORAGE_KEY = 'cialai_terminals_docgraph';
 export const ROOT_LIMIT = 24;
@@ -45,14 +52,27 @@ function cleanBulk(value) {
   return value === 'all' || value === 'none' ? value : null;
 }
 
-export function emptyUi() {
-  return { bulk: null, expanded: [], collapsed: [], view: null, selected: null, tones: {}, updatedAt: 0 };
+// Opcoes que uma raiz nova herda da ultima. Entrada antiga, sem os campos,
+// cai no padrao de cada um.
+function cleanOptions(entry) {
+  return {
+    mode: cleanViewMode(entry?.mode),
+    scope: cleanScope(entry?.scope),
+    colorBy: cleanColorMode(entry?.colorBy),
+    palette: cleanPalette(entry?.palette),
+    depth: cleanDepth(entry?.depth),
+    refs: entry?.refs !== false,
+  };
 }
 
-export function loadUi(storage, rootKey) {
-  if (!rootKey) return null;
-  const entry = readStore(storage).roots[rootKey];
-  if (!entry || typeof entry !== 'object') return null;
+export function emptyUi() {
+  return {
+    bulk: null, expanded: [], collapsed: [], view: null, selected: null, tones: {}, folderTones: {}, typeTones: {}, rules: [],
+    ...cleanOptions(null), updatedAt: 0,
+  };
+}
+
+function cleanEntry(entry) {
   return {
     bulk: cleanBulk(entry.bulk),
     expanded: strings(entry.expanded, OVERRIDE_LIMIT),
@@ -60,23 +80,33 @@ export function loadUi(storage, rootKey) {
     view: cleanView(entry.view),
     selected: typeof entry.selected === 'string' ? entry.selected : null,
     tones: cleanTones(entry.tones),
-    updatedAt: Number(entry.updatedAt) || 0,
+    folderTones: cleanTones(entry.folderTones),
+    typeTones: cleanTones(entry.typeTones),
+    rules: cleanRules(entry.rules),
+    ...cleanOptions(entry),
   };
+}
+
+export function loadUi(storage, rootKey) {
+  if (!rootKey) return null;
+  const entry = readStore(storage).roots[rootKey];
+  if (!entry || typeof entry !== 'object') return null;
+  return { ...cleanEntry(entry), updatedAt: Number(entry.updatedAt) || 0 };
+}
+
+// Opcoes da raiz gravada mais recente, para uma raiz que ainda nao tem estado.
+export function latestOptions(storage) {
+  const roots = Object.values(readStore(storage).roots).filter((entry) => entry && typeof entry === 'object');
+  if (!roots.length) return cleanOptions(null);
+  roots.sort((a, b) => (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0));
+  return cleanOptions(roots[0]);
 }
 
 // Grava a raiz e descarta as mais antigas acima do teto.
 export function saveUi(storage, rootKey, ui, now = Date.now()) {
   if (!rootKey) return false;
   const store = readStore(storage);
-  store.roots[rootKey] = {
-    bulk: cleanBulk(ui?.bulk),
-    expanded: strings(ui?.expanded, OVERRIDE_LIMIT),
-    collapsed: strings(ui?.collapsed, OVERRIDE_LIMIT),
-    view: cleanView(ui?.view),
-    selected: typeof ui?.selected === 'string' ? ui.selected : null,
-    tones: cleanTones(ui?.tones),
-    updatedAt: now,
-  };
+  store.roots[rootKey] = { ...cleanEntry(ui || {}), updatedAt: now };
   const keys = Object.keys(store.roots).sort((a, b) => (store.roots[b].updatedAt || 0) - (store.roots[a].updatedAt || 0));
   keys.slice(ROOT_LIMIT).forEach((key) => { delete store.roots[key]; });
   try { storage.setItem(STORAGE_KEY, JSON.stringify(store)); return true; } catch (_error) { return false; }

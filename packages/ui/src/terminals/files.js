@@ -85,7 +85,7 @@ function demoCall(command, args) {
   if (command === 'office_convert') throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
   if (command === 'fs_find') return { root, items: [], truncated: false };
   if (command === 'fs_watch') return 1;
-  if (command === 'docgraph_scan') return buildDemoScan(args.root);
+  if (command === 'docgraph_scan') return buildDemoScan(args.root, '', args.scope);
   if (command === 'docgraph_cancel') return false;
   if (command === 'fs_rename' || command === 'fs_copy') return { path: args.to, exists: true, kind: 'file', size: 32, modifiedMs: Date.now() };
   return undefined;
@@ -111,10 +111,10 @@ export const fs = {
   unwatch: (id) => call('fs_unwatch', { id }),
 };
 
-// Varredura do grafo da documentacao. `cancel` aceita token nulo, que cancela
-// o pedido em andamento seja qual for.
+// Varredura do grafo da documentacao. `scope` e `docs` ou `project`. `cancel`
+// aceita token nulo, que cancela o pedido em andamento seja qual for.
 export const docgraph = {
-  scan: (key, token, root) => call('docgraph_scan', { key, token, root }),
+  scan: (key, token, root, scope = 'docs') => call('docgraph_scan', { key, token, root, scope }),
   cancel: (key, token) => call('docgraph_cancel', { key, token: token ?? null }),
 };
 

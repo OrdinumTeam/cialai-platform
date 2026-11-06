@@ -916,9 +916,12 @@ pub fn ai_usage(
 
 /* ── grafo da documentação ────────────────────────────────────────── */
 
-/// Varre a raiz do projeto atrás de arquivos Markdown, para o grafo da
-/// documentação do estúdio. `key` é a sessão e `token` identifica o pedido: um
-/// pedido novo da mesma chave cancela o anterior. Pode durar até o prazo de
+/// Varre a raiz do projeto para o grafo do estúdio e lê as ligações entre os
+/// arquivos. `scope` é `docs`, só Markdown e o padrão quando falta ou é
+/// desconhecido, ou `project`, todo arquivo até o teto. `key` é a sessão e
+/// `token` identifica o pedido: um pedido novo da mesma chave cancela o
+/// anterior. As referências de cada arquivo ficam no cache do registro, então
+/// a próxima varredura só relê o que mudou. Pode durar até o prazo de
 /// [`docgraph::SCAN_TIME_BUDGET`], por isso roda numa thread de bloqueio e não
 /// num worker do runtime.
 #[tauri::command]
@@ -927,10 +930,12 @@ pub async fn docgraph_scan(
     key: String,
     token: String,
     root: String,
+    scope: Option<String>,
 ) -> FsResult<DocScan> {
     let guard = scans.begin(&key, &token);
+    let options = ScanOptions::for_scope(scope.as_deref());
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        let result = docgraph::scan(&root, guard.flag(), &ScanOptions::default());
+        let result = docgraph::scan_cached(&root, guard.flag(), &options, guard.cache());
         drop(guard);
         result
     })

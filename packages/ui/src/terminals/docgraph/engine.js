@@ -9,4 +9,5 @@ export { DocGraphRenderer, readGraphTheme } from './renderer.js';
 export { bindInteraction } from './interaction.js';
 export { track, snapshot, liveCounts, resetSamples } from './stats.js';
 export { searchDocs } from './search.js';
-export { ROOT_ID, absPath, groupOf } from './model.js';
+export { ROOT_ID, absPath } from './model.js';
+export { COLOR_MODES, PALETTES, RULE_LIMIT, RULE_TEXT_LIMIT, SIZE_STEPS, paletteColors, toneColor } from './colors.js';

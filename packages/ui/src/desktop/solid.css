@@ -268,7 +268,7 @@ html[data-shell="desktop"][data-theme] .mac-palette-backdrop{background:rgba(14,
 
 /* Os overlays do estudio tinham vidro com desfoque; aqui ficam solidos. As
    regras deles moram em Terminais.css, compartilhadas com o celular. */
-html[data-shell="desktop"][data-theme] :is(.terminais-menu,.terminais-pop,.terminais-find,.terminais-terminal__end,.terminais-terminal__tobottom,.terminais-docgraph__results,.terminais-docgraph__card,.terminais-docgraph__legend,.terminais-docgraph__tip,.terminais-docgraph__issues){-webkit-backdrop-filter:none;backdrop-filter:none}
+html[data-shell="desktop"][data-theme] :is(.terminais-menu,.terminais-pop,.terminais-find,.terminais-terminal__end,.terminais-terminal__tobottom,.terminais-docgraph__results,.terminais-docgraph__card,.terminais-docgraph__legend,.terminais-docgraph__tip,.terminais-docgraph__issues,.terminais-docgraph__options,.terminais-docgraph__note){-webkit-backdrop-filter:none;backdrop-filter:none}
 
 /* ── diálogos ───────────────────────────────────────────────────── */
 

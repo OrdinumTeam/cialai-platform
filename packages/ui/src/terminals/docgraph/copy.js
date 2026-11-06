@@ -32,6 +32,15 @@ export function docsCount(count) {
   return counted('docs', count);
 }
 
+export function filesCount(count) {
+  return counted('files', count);
+}
+
+// Documento na Documentacao, arquivo no Projeto inteiro.
+export function itemsCount(count, scope = 'docs') {
+  return scope === 'project' ? filesCount(count) : docsCount(count);
+}
+
 export function foldersCount(count) {
   return counted('folders', count);
 }
@@ -78,29 +87,76 @@ export function excludedLines(excluded = {}) {
   return lines;
 }
 
-export function indexingProgress(seconds) {
-  if (seconds < 2) return STRINGS.indexingHint;
+export function indexingProgress(seconds, scope = 'docs') {
+  if (seconds < 2) return scope === 'project' ? STRINGS.indexingHintProject : STRINGS.indexingHint;
   return translate('terminal.docgraph.indexingStill', { elapsed: counted('seconds', Math.floor(seconds)) });
 }
 
 // O que o leitor de tela ouve ao chegar num nó.
-export function nodeAnnouncement(node, { expanded = false, rootName = '' } = {}) {
+export function nodeAnnouncement(node, { expanded = false, rootName = '', scope = 'docs' } = {}) {
   if (!node) return '';
   if (node.kind === 'doc') {
-    return translate('terminal.docgraph.sayDoc', {
+    return translate(scope === 'project' ? 'terminal.docgraph.sayFile' : 'terminal.docgraph.sayDoc', {
       name: node.name,
       parent: node.parent === '.' ? rootName || STRINGS.projectRoot : node.parent,
     });
   }
   return translate(node.kind === 'root' ? 'terminal.docgraph.sayRoot' : 'terminal.docgraph.sayDir', {
     name: node.kind === 'root' ? rootName || node.name : node.name,
-    docs: docsCount(node.docCount),
+    docs: itemsCount(node.docCount, scope),
     state: expanded ? STRINGS.sayExpanded : STRINGS.sayCollapsed,
   });
 }
 
-export function countsAnnouncement(docs, dirs) {
-  return translate('terminal.docgraph.sayCounts', { docs: docsCount(docs), folders: foldersCount(dirs) });
+export function countsAnnouncement(docs, dirs, scope = 'docs') {
+  return translate('terminal.docgraph.sayCounts', { docs: itemsCount(docs, scope), folders: foldersCount(dirs) });
+}
+
+// Nome de cada vista, modo de cor e paleta, na ordem dos seletores.
+const VIEW_NAMES = { map: 'viewMap', tree: 'viewTree', radial: 'viewRadial', blocks: 'viewBlocks', neighbors: 'viewNeighbors', space: 'view3d' };
+const COLOR_NAMES = { group: 'colorGroup', folder: 'colorFolder', type: 'colorType', size: 'colorSize', modified: 'colorModified', rules: 'colorRules' };
+const PALETTE_NAMES = { safe: 'paletteSafe', neon: 'paletteNeon', pastel: 'palettePastel', mono: 'paletteMono' };
+const AGE_NAMES = ['ageDay', 'ageWeek', 'ageMonth', 'ageYear', 'ageOlder'];
+
+export function viewName(mode) {
+  return STRINGS[VIEW_NAMES[mode] || 'viewMap'];
+}
+
+export function colorModeName(mode) {
+  return STRINGS[COLOR_NAMES[mode] || 'colorGroup'];
+}
+
+export function paletteName(palette) {
+  return STRINGS[PALETTE_NAMES[palette] || 'paletteSafe'];
+}
+
+// Faixa de tamanho da legenda. `steps` sao os limites, do menor ao maior.
+export function sizeBinLabel(bin, steps) {
+  if (bin < steps.length) return translate('terminal.docgraph.sizeUpTo', { size: fmtSize(steps[bin]) });
+  return translate('terminal.docgraph.sizeAbove', { size: fmtSize(steps[steps.length - 1]) });
+}
+
+export function ageBinLabel(bin) {
+  return STRINGS[AGE_NAMES[bin] || 'ageOlder'];
+}
+
+// Tipo de arquivo na legenda: a extensao em maiusculas, o nome do arquivo de
+// ponto como esta, ou a falta de extensao.
+export function typeLabel(ext) {
+  if (!ext) return STRINGS.noExtension;
+  return ext.startsWith('.') ? ext : ext.toUpperCase();
+}
+
+export function linksCount(count) {
+  return counted('links', count);
+}
+
+export function rulesLimit(count) {
+  return translate('terminal.docgraph.rulesLimit', { count: number(count) });
+}
+
+export function neighborsCapped(count) {
+  return translate('terminal.docgraph.neighborsCapped', { count: number(count) });
 }
 
 // Tamanho e data do cartão de detalhes.
