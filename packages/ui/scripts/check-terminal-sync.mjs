@@ -874,3 +874,44 @@ test('abrir outra sessao na mesma pasta deixa a primeira intacta', async () => {
   // Nenhuma das duas foi encerrada para a outra nascer.
   assert.equal(s.fixture.calls.some(call => call.cmd === 'pty_kill'), false);
 });
+
+/* ── cor e icone lembrados por pasta ───────────────────────────────── */
+
+test('a sessao nova na mesma pasta nasce com a cor e o icone escolhidos antes', async () => {
+  const s = scenario({ alive: [] });
+  await s.runtime.hydrate();
+  const firstId = s.runtime.openSession('/fixture/obra/');
+  await settle();
+  s.runtime.setSessionColor(firstId, 'azul');
+  s.runtime.setSessionIcon(firstId, 'globe');
+  const memory = JSON.parse(s.storage.get('cialai_terminals_looks'));
+  assert.deepEqual(Object.keys(memory.folders), ['/fixture/obra'], 'a chave fica sem a barra do fim');
+
+  const second = s.runtime.getSession(s.runtime.openSession('/fixture/obra'));
+  assert.equal(second.color, 'azul', 'a cor da pasta volta');
+  assert.equal(second.icon, 'globe', 'o icone da pasta volta');
+
+  // Escolher o padrao de proposito vence a memoria e a apaga.
+  const plain = s.runtime.getSession(s.runtime.openSession('/fixture/obra', { color: null, icon: null }));
+  assert.equal(plain.color, null);
+  assert.equal(plain.icon, null);
+  const after = s.runtime.getSession(s.runtime.openSession('/fixture/obra'));
+  assert.equal(after.color, null, 'a pasta esqueceu a escolha antiga');
+
+  const other = s.runtime.getSession(s.runtime.openSession('/fixture/outra'));
+  assert.equal(other.color, null, 'outra pasta nao herda nada');
+});
+
+test('restaurar sessoes salvas nao troca a cor pela da memoria da pasta', async () => {
+  const saved = [{ id: 'antiga', cwd: '/fixture/obra', name: 'obra', color: null, icon: null, editor: { tabs: [], activeId: null, ratio: 0.5 }, explorer: { root: '/fixture/obra', expanded: [], followCwd: true } }];
+  const storageEntries = [
+    ['cialai_terminals', JSON.stringify({ version: 2, sessions: saved, selectedId: 'antiga', recent: [] })],
+    ['cialai_terminals_looks', JSON.stringify({ version: 1, folders: { '/fixture/obra': { color: 'lima', icon: 'rocket', at: 1 } } })],
+  ];
+  const s = scenario({ storageEntries });
+  await s.runtime.hydrate();
+  const restored = s.runtime.getSession('antiga');
+  assert.ok(restored);
+  assert.equal(restored.color, null, 'a sessao salva volta como estava');
+  assert.equal(restored.icon, null);
+});

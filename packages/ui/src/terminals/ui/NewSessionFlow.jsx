@@ -198,6 +198,10 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
   const [subtitle, setSubtitle] = useState('');
   const [color, setColor] = useState(null);
   const [icon, setIcon] = useState(null);
+  // Sem toque em cor ou icone, a sessao herda o que a pasta lembra.
+  const [lookTouched, setLookTouched] = useState(false);
+  const chooseColor = (value) => { setLookTouched(true); setColor(value); };
+  const chooseIcon = (value) => { setLookTouched(true); setIcon(value); };
 
   useEffect(() => {
     if (!hasBridge() || isDemo()) { setRepos({ roots: [], repos: [] }); setProfiles([]); return; }
@@ -228,7 +232,7 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
   const back = () => (step > 0 ? setStep(step - 1) : onClose());
 
   function create() {
-    const id = openSession(path, { name, subtitle, color, icon });
+    const id = openSession(path, lookTouched ? { name, subtitle, color, icon } : { name, subtitle });
     if (!id) return;
     onOpen(id);
     if (agent !== SHELL && account) {
@@ -313,8 +317,8 @@ export default function NewSessionFlow({ initialPath = '', onClose, onOpen, onNo
           </section> : null}
         </> : null}
 
-        {step === 2 ? <ConfigStep path={path} agent={agent} agentName={agentName} account={account} name={name} subtitle={subtitle} color={color} icon={icon} onIcon={setIcon}
-          onName={setName} onSubtitle={setSubtitle} onColor={setColor} onStep={setStep} /> : null}
+        {step === 2 ? <ConfigStep path={path} agent={agent} agentName={agentName} account={account} name={name} subtitle={subtitle} color={color} icon={icon} onIcon={chooseIcon}
+          onName={setName} onSubtitle={setSubtitle} onColor={chooseColor} onStep={setStep} /> : null}
 
         {path && existing.length && step < 2 ? <section className="phone-flow__existing" aria-live="polite">
           <h2>{translate('terminal.newSession.existingTitle')}</h2>

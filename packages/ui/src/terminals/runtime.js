@@ -49,6 +49,7 @@ import { baseName, fs, isInside, shellQuote } from './files.js';
 import { createPathLinkProvider } from './path-link-provider.js';
 import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
+import { lookKey, recallLook, rememberLook } from './directory-looks.js';
 import { platform } from '../lib/platform.js';
 import { isTerminalFocusReport } from './shortcut-actions.js';
 import { windowLabel } from '../notch/copy.js';
@@ -1910,13 +1911,20 @@ export function hydrate() {
 
 // Cria a sessao e abre o shell na hora, mesmo sem ser exibida. Devolve o
 // identificador ou null quando recusou.
+//
+// `color` e `icon` ausentes querem dizer que ninguem escolheu: a sessao herda
+// o que a pasta lembra. `null` e escolha explicita do padrao e vence a
+// memoria, que passa a lembrar a escolha nova.
 export function openSession(cwd, { name, subtitle, color, icon, select = true } = {}) {
   if (!hasBridge() && !state.demo) {
     dispatch({ type: 'error', message: translate('terminal.common.desktopOnly') });
     return null;
   }
   if (!cwd) return null;
-  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null, collapsed: getLayout().cardsCompact });
+  const chosen = color !== undefined || icon !== undefined;
+  const look = chosen ? { color: color || null, icon: icon || null } : recallDirectoryLook(cwd) || { color: null, icon: null };
+  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: look.color, icon: look.icon, collapsed: getLayout().cardsCompact });
+  if (chosen) rememberDirectoryLook(session);
   state.order.push(session.id);
   if (select || !state.selectedId) state.selectedId = session.id;
   persist();
@@ -2235,6 +2243,7 @@ export function setSessionColor(id, color) {
   if (!session) return;
   session.color = validColor(color);
   applySessionTheme(session);
+  rememberDirectoryLook(session);
   persist();
   emitSessions();
 }
@@ -2244,8 +2253,26 @@ export function setSessionIcon(id, icon) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.icon = validIcon(icon);
+  rememberDirectoryLook(session);
   persist();
   emitSessions();
+}
+
+// A pasta guarda a ultima cor e o ultimo icone escolhidos para ela, e a
+// proxima sessao aberta ali nasce igual. Sessao de Broto fica de fora: a pasta
+// e de outra maquina e o mesmo texto pode nomear uma pasta daqui.
+function directoryLookKey(cwd) {
+  return lookKey(cwd, platform().os);
+}
+
+function rememberDirectoryLook(session) {
+  if (state.demo || session.deviceId) return;
+  try { rememberLook(localStorage, directoryLookKey(session.cwd), { color: session.color, icon: session.icon }); } catch (_error) { /* sem storage */ }
+}
+
+function recallDirectoryLook(cwd) {
+  if (state.demo) return null;
+  try { return recallLook(localStorage, directoryLookKey(cwd)); } catch (_error) { return null; }
 }
 
 export function togglePinned(id) {
