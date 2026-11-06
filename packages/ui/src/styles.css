@@ -8,7 +8,7 @@
    ============================================================ */
 *{margin:0;padding:0;box-sizing:border-box}
 *:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-:root{
+:root,:where(html[data-terminal-theme]) [data-terminal-scope]{
 /* Layout shell */
 --sidebar-w:260px;
 --sidebar-w-collapsed:72px;
@@ -76,7 +76,7 @@
 --info:#3b82f6;
 --info-bg:rgba(59,130,246,.10);
 }
-[data-theme="dark"]{
+[data-theme="dark"],:where(html[data-terminal-theme="dark"]) [data-terminal-scope]{
 --bg:#0f1219;
 --bg-card:rgba(22,27,45,.92);
 --bg-card-alt:rgba(30,35,55,.85);

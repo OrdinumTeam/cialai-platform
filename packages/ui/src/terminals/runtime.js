@@ -44,7 +44,7 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE, invoke, listen, createChannel, chooseDirectory } from '../lib/native.js';
 import { openExternal } from '../lib/downloads.js';
-import { buildTheme, terminalFont, watchTheme } from './theme.js';
+import { buildTheme, terminalFont, watchTerminalTheme } from './theme.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
 import { createPathLinkProvider } from './path-link-provider.js';
 import { portablePath } from '../lib/paths.js';
@@ -1657,7 +1657,7 @@ function ensureMetrics() {
 
 function ensureWatchers() {
   if (!state.themeWatcher) {
-    state.themeWatcher = watchTheme(() => {
+    state.themeWatcher = watchTerminalTheme(() => {
       state.sessions.forEach(applySessionTheme);
       dispatch({ type: 'theme' });
     });

@@ -32,7 +32,7 @@
 
 /* ── tokens, claro ──────────────────────────────────────────────── */
 
-html[data-shell="desktop"]{
+html[data-shell="desktop"],:where(html[data-shell="desktop"][data-terminal-theme]) div[data-terminal-scope]{
   --ui-radius-chip:8px;
   --ui-radius-control:12px;
   --ui-radius-card:16px;
@@ -107,7 +107,7 @@ html[data-shell="desktop"]{
 
 /* ── tokens, escuro ─────────────────────────────────────────────── */
 
-html[data-shell="desktop"][data-theme="dark"]{
+html[data-shell="desktop"][data-theme="dark"],:where(html[data-shell="desktop"][data-terminal-theme="dark"]) div[data-terminal-scope][data-terminal-scope]{
   --mac-label:#F5F5F7;
   --mac-label-2:#AEAEB2;
   --mac-label-3:#8E8E93;
@@ -159,7 +159,7 @@ html[data-shell="desktop"][data-theme="dark"]{
 
 /* A mesma familia em todos os sistemas, como no celular. O terminal segue
    com a monoespacada de cada sistema, de platform.css. */
-html[data-shell="desktop"][data-platform]{
+html[data-shell="desktop"][data-platform],:where(html[data-shell="desktop"][data-platform][data-terminal-theme]) div[data-terminal-scope][data-terminal-scope]{
   --mac-font:"Cialai Outfit",-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
 }
 

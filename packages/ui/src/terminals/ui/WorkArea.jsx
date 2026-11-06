@@ -169,6 +169,7 @@ function TerminalPane({ session, onCloseSession, onChangeDir, findOpen, onFindCl
     <div
       ref={paneRef}
       className={`terminais-terminal${dropping ? ' is-dropping' : ''}`}
+      data-terminal-scope=""
     >
       <div className="terminais-terminal__host" ref={hostRef} />
       {findOpen ? <FindBar session={session} onClose={onFindClose} /> : null}

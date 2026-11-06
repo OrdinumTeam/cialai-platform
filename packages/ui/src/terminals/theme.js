@@ -3,8 +3,27 @@
 // suave do painel, para terminal e cabecalho formarem um bloco so, e as cores
 // ANSI de estado saem dos mesmos tokens que o resto do app usa.
 
+// Com tema proprio do terminal, de `terminal-theme.js`, os tokens do esquema
+// escolhido so existem dentro de `[data-terminal-scope]`. A leitura passa
+// entao por uma sonda escondida com o mesmo escopo, presa ao body e fora de
+// qualquer `session-scope`, para o tom da sessao nao chegar as cores ANSI.
+let probe = null;
+
+function tokenSource() {
+  const root = document.documentElement;
+  if (root.getAttribute('data-terminal-theme') == null) return root;
+  if (!probe || !probe.isConnected) {
+    probe = document.createElement('div');
+    probe.setAttribute('data-terminal-scope', '');
+    probe.setAttribute('aria-hidden', 'true');
+    probe.hidden = true;
+    (document.body || root).appendChild(probe);
+  }
+  return probe;
+}
+
 function token(name, fallback = '') {
-  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const value = getComputedStyle(tokenSource()).getPropertyValue(name).trim();
   return value || fallback;
 }
 
@@ -12,9 +31,16 @@ export function isDarkTheme() {
   return document.documentElement.getAttribute('data-theme') === 'dark';
 }
 
+// Esquema do terminal no computador: o tema proprio quando a pessoa escolheu
+// um, senao o da janela.
+export function isDarkTerminal() {
+  const mode = document.documentElement.getAttribute('data-terminal-theme');
+  return mode ? mode === 'dark' : isDarkTheme();
+}
+
 // No celular o terminal é sempre escuro, como nas referências: o painel escuro
 // sobre a página clara separa a saída do resto da tela. No computador o
-// terminal segue a aparência.
+// terminal segue a aparência ou o tema próprio escolhido em Preferências.
 export function isPhoneTerminal() {
   return document.documentElement.getAttribute('data-form-factor') === 'phone';
 }
@@ -65,7 +91,7 @@ const DARK_ANSI = {
 // CLIs fica como elas a escreveram. O celular mantem o terminal dele.
 export function buildTheme(accent = null) {
   const phone = isPhoneTerminal();
-  const dark = phone || isDarkTheme();
+  const dark = phone || isDarkTerminal();
   const tone = !phone && accent ? accent[dark ? 'dark' : 'light'] : null;
   const surface = phone ? PHONE_TERMINAL.background : token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
   const ink = phone ? PHONE_TERMINAL.foreground : token('--mac-label', dark ? '#f5f5f7' : '#1d1d1f');
@@ -116,7 +142,7 @@ export function opaqueColor(value, background, fallback) {
 // nada era marcado. Os tokens translucidos sao compostos sobre o fundo.
 export function searchDecorations() {
   const phone = isPhoneTerminal();
-  const dark = phone || isDarkTheme();
+  const dark = phone || isDarkTerminal();
   const surface = phone ? PHONE_TERMINAL.background : token('--mac-surface-2', dark ? '#26262a' : '#f5f6f8');
   if (phone) {
     return {
@@ -139,5 +165,13 @@ export function searchDecorations() {
 export function watchTheme(apply) {
   const observer = new MutationObserver(() => apply());
   observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  return () => observer.disconnect();
+}
+
+// O xterm observa tambem o tema proprio do terminal. Editor, grafo e marca
+// seguem so a janela e ficam no `watchTheme`.
+export function watchTerminalTheme(apply) {
+  const observer = new MutationObserver(() => apply());
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-terminal-theme'] });
   return () => observer.disconnect();
 }

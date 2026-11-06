@@ -26,7 +26,7 @@
 
 /* ── tokens ─────────────────────────────────────────────────────── */
 
-:is([data-shell="desktop"],[data-platform="macos"]){
+:is([data-shell="desktop"],[data-platform="macos"]),:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme]) [data-terminal-scope]{
   --mac-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mac-font-mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace;
 
@@ -168,7 +168,7 @@
   --transition-slow:var(--mac-normal) var(--mac-ease);
 }
 
-:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"]{
+:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"],:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope]{
   --mac-accent:#4a8ae6;
   --mac-accent-hover:#5f9aeb;
   --mac-accent-soft:rgba(74,138,230,.16);

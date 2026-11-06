@@ -35,7 +35,7 @@ const mocks = {
     export const listen = async () => () => {}; export const createChannel = async (onmessage) => ({onmessage});
     export const chooseDirectory = async () => null;`,
   downloads: 'export const openExternal = async () => {};',
-  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "monospace"; export const watchTheme = () => () => {};',
+  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "monospace"; export const watchTheme = () => () => {}; export const watchTerminalTheme = () => () => {};',
   files: 'export const baseName = p => String(p).split("/").at(-1); export const fs = {}; export const isInside=()=>false; export const shellQuote=p=>p;',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => fixture.remoteState; export const subscribeState = handler => {fixture.remoteListener=handler; return () => {};};',

@@ -3,12 +3,13 @@ import CialaiSkill from './CialaiSkill.jsx';
 // Focused preference areas backed by the complete Rust snapshot.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, FolderPlus, Moon, RotateCcw, Sun, SunMoon, Trash2 } from 'lucide-react';
+import { AppWindow, FolderOpen, FolderPlus, Moon, RotateCcw, Sun, SunMoon, Trash2 } from 'lucide-react';
 import { AppModal, useToast } from '../components/ui.jsx';
 import { chooseDirectory, chooseFile, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { shortPath } from '../terminals/files.js';
 import { setLayout, useLayout } from '../terminals/layout.js';
+import { setTerminalTheme, useTerminalTheme } from '../terminals/terminal-theme.js';
 import {
   addUniquePath,
   DEFAULT_PREFERENCES,
@@ -32,6 +33,11 @@ const APPEARANCE_OPTIONS = () => [
   { value: 'light', label: translate('desktop.appearance.lightShort') },
   { value: 'dark', label: translate('desktop.appearance.darkShort') },
 ];
+const TERMINAL_THEME_OPTIONS = () => [
+  { value: 'app', label: translate('desktop.appearance.followWindowShort') },
+  { value: 'light', label: translate('desktop.appearance.lightShort') },
+  { value: 'dark', label: translate('desktop.appearance.darkShort') },
+];
 export const LANGUAGE_OPTIONS = () => [
   { value: 'pt-BR', label: translate('language.portuguese') },
   { value: 'en', label: translate('language.english') },
@@ -40,7 +46,7 @@ export const LANGUAGE_OPTIONS = () => [
 
 // Aparencia em tres blocos com icone, como nos Ajustes do celular. Continua
 // sendo um grupo de radios para o teclado e o leitor de tela.
-const THEME_ICONS = { system: SunMoon, light: Sun, dark: Moon };
+const THEME_ICONS = { system: SunMoon, app: AppWindow, light: Sun, dark: Moon };
 function ThemeTiles({ value, options, onChange, ariaLabel }) {
   return <div className="mac-theme-tiles" role="radiogroup" aria-label={ariaLabel}>
     {options.map((option) => {
@@ -90,6 +96,7 @@ const snapshotKey = (value) => JSON.stringify(sanitizePreferences(value));
 export default function Preferences({ open, onClose, appearance, section = null }) {
   const notify = useToast();
   const layout = useLayout();
+  const terminalTheme = useTerminalTheme();
   const tunnel = useTunnel();
   const native = isTauri();
   const [draft, setDraft] = useState(null);
@@ -281,6 +288,9 @@ export default function Preferences({ open, onClose, appearance, section = null 
     {draft ? <>
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.appearance')}</h3>
         <Row title={translate('desktop.preferences.windowTheme')} description={translate('desktop.preferences.windowThemeDescription')} wide><ThemeTiles value={draft.appearance} options={APPEARANCE_OPTIONS()} onChange={changeAppearance} ariaLabel={translate('desktop.preferences.windowTheme')} /></Row>
+        {/* Como o idioma, vale na hora e fica neste aparelho, fora do arquivo de
+            preferencias: Cancelar nao desfaz. */}
+        <Row title={translate('desktop.preferences.terminalTheme')} description={translate('desktop.preferences.terminalThemeDescription')} wide><ThemeTiles value={terminalTheme} options={TERMINAL_THEME_OPTIONS()} onChange={setTerminalTheme} ariaLabel={translate('desktop.preferences.terminalTheme')} /></Row>
         <Row title={translate('language.label')} description={translate('desktop.preferences.languageDescription')}><Segmented value={getLocale()} options={LANGUAGE_OPTIONS()} onChange={setLocale} ariaLabel={translate('language.label')} /></Row>
       </section>
 

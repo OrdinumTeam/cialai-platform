@@ -19,7 +19,7 @@ const mocks = {
     reset(){fixture.output=[];} focus(){} blur(){} dispose(){}
   } export class FitAddon {fit(){this.term.resize(45,28);} proposeDimensions(){return {cols:45,rows:28};}} export class SearchAddon {} export class WebglAddon {constructor(){this._renderer={_gl:{getExtension:()=>({UNMASKED_RENDERER_WEBGL:37446}),getParameter:()=>fixture.glRenderer||'Apple M2'}};} onContextLoss(){} dispose(){fixture.webglDisposed=(fixture.webglDisposed||0)+1;}} export class WebLinksAddon {}`,
   downloads: 'export const openExternal = async () => {};',
-  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {};',
+  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {}; export const watchTerminalTheme = () => () => {};',
   files: 'export const baseName = p => p.split("/").at(-1); export const fs = {}; export const isInside=()=>false; export const shellQuote=p=>p;',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => fixture.remoteState; export const subscribeState = handler => {fixture.remoteListener=handler; return () => {};};',

@@ -3,7 +3,7 @@
    somente a marca azul herdada do Ordinum Control. Cores ANSI, sintaxe,
    estados e a paleta escolhida para cada sessão continuam independentes. */
 
-:root {
+:root,:where(html[data-terminal-theme]) [data-terminal-scope] {
   --cialai-magenta:#E23B84;
   --cialai-pink:#FF7AB2;
   --cialai-blush:#FFD6E6;
@@ -50,7 +50,7 @@
   --mac-shadow-primary:0 1px 2px rgba(226,59,132,.24),inset 0 1px 0 rgba(255,255,255,.42);
 }
 
-:root[data-theme="dark"] {
+:root[data-theme="dark"],:where(html[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope] {
   --brand:var(--cialai-pink);
   --brand-deep:#FF8FC0;
   --brand-accent:var(--cialai-blush);

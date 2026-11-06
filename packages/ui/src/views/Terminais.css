@@ -11,7 +11,7 @@
 :is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page{display:flex;height:100%;min-height:0;max-width:none;margin:0;animation:macFade var(--mac-normal) var(--mac-ease) both}
 :is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
 
-:is([data-shell="desktop"],[data-platform="macos"]){
+:is([data-shell="desktop"],[data-platform="macos"]),:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme]) [data-terminal-scope]{
   --terminais-editor-line:rgba(226,59,132,.045);
   --terminais-editor-match:rgba(226,59,132,.16);
   --terminais-editor-search:rgba(194,122,0,.22);
@@ -25,7 +25,7 @@
   --terminais-syn-tag:#b23b3b;
   --terminais-syn-regexp:#c25e00;
 }
-:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"]{
+:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"],:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope]{
   --terminais-editor-line:rgba(255,122,178,.10);
   --terminais-editor-match:rgba(255,122,178,.26);
   --terminais-syn-keyword:#d09aee;
@@ -144,6 +144,46 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
   --terminais-accent:var(--session-accent);
   --terminais-accent-text:var(--session-accent-text);
 }
+/* Terminal com tema proprio, de terminals/terminal-theme.js: o contenedor
+   repete o conjunto de tokens do esquema escolhido, inclusive o acento da
+   casca, entao o tom da sessao e escolhido e aplicado de novo ali, na
+   variante clara ou escura do terminal. A especificidade empata com o bloco
+   mais forte de solid.css e esta folha vem por ultimo, entao o tom vence. */
+:where(html[data-terminal-theme="light"] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --session-accent:var(--session-accent-light);
+  --session-accent-text:var(--session-accent-text-light);
+  --session-on-accent:var(--session-on-accent-light);
+  --session-accent-soft:var(--session-accent-soft-light);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-light);
+  --session-accent-ring:var(--session-accent-ring-light);
+  --session-accent-border:var(--session-accent-border-light);
+}
+:where(html[data-terminal-theme="dark"] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --session-accent:var(--session-accent-dark);
+  --session-accent-text:var(--session-accent-text-dark);
+  --session-on-accent:var(--session-on-accent-dark);
+  --session-accent-soft:var(--session-accent-soft-dark);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-dark);
+  --session-accent-ring:var(--session-accent-ring-dark);
+  --session-accent-border:var(--session-accent-border-dark);
+}
+:where(html[data-terminal-theme] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --mac-accent:var(--session-accent);
+  --mac-accent-hover:color-mix(in srgb,var(--session-accent) 86%,#000);
+  --mac-accent-text:var(--session-accent-text);
+  --mac-accent-soft:var(--session-accent-soft);
+  --mac-accent-soft-hover:var(--session-accent-soft-hover);
+  --mac-accent-row:var(--session-accent-soft);
+  --mac-accent-ring:var(--session-accent-ring);
+  --mac-on-accent:var(--session-on-accent);
+  --terminais-accent:var(--session-accent);
+  --terminais-accent-text:var(--session-accent-text);
+}
+/* O texto herdado vem do body, calculado com o tema da janela; o contenedor
+   refaz a regra do body com os tokens dele. */
+:where(html[data-terminal-theme]) [data-terminal-scope]{color:var(--text)}
+:where(html[data-terminal-theme="light"]) [data-terminal-scope]{color-scheme:light}
+:where(html[data-terminal-theme="dark"]) [data-terminal-scope]{color-scheme:dark}
 
 /* Icone da sessao: o escolhido ou o padrao, sempre no tom da sessao. */
 .session-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--mac-accent-text)}
@@ -1285,7 +1325,7 @@ body.is-dragging-path *{cursor:grabbing !important}
    nativo (apps/mobile/src/ui/tokens.ts, projectTints). O estado vazio do
    estúdio no computador usa as mesmas capas, então os tons valem também sob
    a casca desktop. */
-:is([data-form-factor="phone"],[data-shell="desktop"]) {
+:is([data-form-factor="phone"],[data-shell="desktop"]),:where(:is([data-form-factor="phone"],[data-shell="desktop"])[data-terminal-theme]) [data-terminal-scope] {
   --phone-tint-paper: #FFFFFF; --phone-tint-ink: #DCE1EC;
   --phone-tint-pink-cover: #FDEFF5; --phone-tint-pink-back: #F7B3CF; --phone-tint-pink-front: #EF7FAE;
   --phone-tint-blue-cover: #EEF3FF; --phone-tint-blue-back: #AFC3F7; --phone-tint-blue-front: #7E9DEE;
@@ -1293,7 +1333,7 @@ body.is-dragging-path *{cursor:grabbing !important}
   --phone-tint-orange-cover: #FFF3E6; --phone-tint-orange-back: #FFCB8E; --phone-tint-orange-front: #FFA44A;
   --phone-tint-violet-cover: #F3EEFF; --phone-tint-violet-back: #C6B4F6; --phone-tint-violet-front: #9C82EE;
 }
-:is([data-form-factor="phone"],[data-shell="desktop"])[data-theme="dark"] {
+:is([data-form-factor="phone"],[data-shell="desktop"])[data-theme="dark"],:where(:is([data-form-factor="phone"],[data-shell="desktop"])[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope] {
   --phone-tint-paper: #3A3A40; --phone-tint-ink: #55555C;
   --phone-tint-pink-cover: rgba(255, 122, 178, .14); --phone-tint-pink-back: #A8577C; --phone-tint-pink-front: #E0679C;
   --phone-tint-blue-cover: rgba(126, 157, 238, .14); --phone-tint-blue-back: #55689E; --phone-tint-blue-front: #7E9DEE;

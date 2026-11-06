@@ -80,6 +80,7 @@ Version 1.0.0 has not been published. Signed installers, native mobile archives,
 
 * Session cards collapse to a single line with the icon, the name, the activity dot and an arrow to expand again. Each card collapses from its arrow or from the three dot menu, the sessions header collapses or expands all of them at once, and Preferences can make new cards join the list collapsed. The choice stays on this computer and is not shared with the phone, whose cards are already a summary.
 * A folder remembers the color and the icon last chosen for a session in it. Close the session, open a new terminal in the same folder the next day, and the card comes back as it was. Choosing the default on purpose makes the folder forget, restoring saved sessions never changes their look, sessions of a Broto stay out because their folders belong to another machine, and the memory keeps the 200 folders used most recently.
+* The terminal can have its own theme. Preferences › Appearance › Terminal theme picks Match window, Light or Dark, so a dark terminal can live in a light window and the reverse. The choice applies right away, stays on this computer and is also in the command palette. The session color, the cursor, the selection and the search marks follow the terminal theme, while the editor, the graph and the rest of the window keep the window theme. The phone terminal stays dark as before.
 
 ### Fixed
 
