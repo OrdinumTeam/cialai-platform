@@ -8,11 +8,11 @@ import { invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { getLocale, translate } from '../shared/i18n.js';
 import { baseName, dirName, isAbsolutePath, isInsideWith, joinPath, pathRoot, portablePath } from '../lib/paths.js';
-import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind } from './kinds.js';
+import { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind, languageAlias } from './kinds.js';
 import { buildDemoScan } from './docgraph/fixture.js';
 import { demoParam } from '../lib/demo.js';
 
-export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind };
+export { canConvertToPdf, extensionOf, fileKind, isPreviewable, isViewerKind, languageAlias };
 export { baseName, dirName, isAbsolutePath, joinPath, pathRoot, portablePath };
 
 /* ── invokes ──────────────────────────────────────────────────────── */

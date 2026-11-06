@@ -529,6 +529,48 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-doc table{max-width:100%}
 .terminais-viewer__loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex:1;padding:24px;text-align:center;font-size:12.5px;color:var(--mac-label-2)}
 
+/* ── visualizadores: audio, video, fonte e notebook ────────────────── */
+.terminais-media{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;flex:1;min-height:0;min-width:0;padding:16px;background:var(--mac-surface-2)}
+.terminais-media video{max-width:100%;max-height:100%;border-radius:8px;background:#000}
+.terminais-media audio{width:min(480px,100%)}
+.terminais-media__icon{color:var(--mac-label-3)}
+.terminais-media__name{max-width:100%;font-size:13px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-font{flex:1;min-height:0;overflow:auto;padding:20px 24px 48px;color:var(--mac-label)}
+.terminais-font__hero{margin-bottom:12px;font-size:96px;line-height:1.1}
+.terminais-font__try{display:block;width:min(520px,100%);height:28px;margin:0 0 16px;padding:0 10px;border:0;border-radius:7px;background:var(--mac-surface-2);font:inherit;font-size:12.5px;color:var(--mac-label);outline:none;box-shadow:none}
+.terminais-font__try::placeholder{color:var(--mac-label-3)}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-font__try:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring);outline:none}
+.terminais-font__glyphs{margin-bottom:20px;font-size:22px;line-height:1.4;overflow-wrap:anywhere}
+.terminais-font__glyphs p{margin:0}
+.terminais-font__sizes{margin:0;padding:0;list-style:none}
+.terminais-font__sizes li{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:baseline;gap:12px;padding:8px 0;border-top:1px solid var(--mac-separator)}
+.terminais-font__size{font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;text-align:right}
+.terminais-font__sample{line-height:1.25;overflow-wrap:anywhere}
+.terminais-notebook{flex:1;min-height:0;overflow:auto;padding:12px 24px 48px 8px}
+.terminais-notebook__cell{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:6px 0}
+.terminais-notebook__count{padding-top:8px;font:11px/1.5 var(--mac-font-mono);color:var(--mac-label-3);text-align:right;font-variant-numeric:tabular-nums}
+.terminais-notebook__body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.terminais-notebook .terminais-notebook__md{flex:none;min-height:auto;overflow:visible;padding:0 2px}
+.terminais-notebook__code,.terminais-notebook__raw,.terminais-notebook__output{margin:0;padding:8px 12px;border-radius:8px;font:12px/1.55 var(--mac-font-mono);color:var(--mac-label)}
+.terminais-notebook__code{background:var(--mac-surface-2);white-space:pre;overflow-x:auto}
+.terminais-notebook__raw{background:var(--mac-surface-2);color:var(--mac-label-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.terminais-notebook__output{padding:2px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.terminais-notebook__output.is-stderr{padding:6px 12px;background:var(--mac-warn-bg)}
+.terminais-notebook__output.is-error{padding:6px 12px;background:var(--mac-bad-bg);color:var(--mac-bad)}
+.terminais-notebook__cut{display:block;margin-top:6px;font-family:var(--mac-font);font-size:11.5px;color:var(--mac-label-3)}
+.terminais-notebook__image{align-self:flex-start;max-width:100%;height:auto;border-radius:6px;background:#fff}
+.terminais-syn-keyword{color:var(--terminais-syn-keyword)}
+.terminais-syn-string{color:var(--terminais-syn-string)}
+.terminais-syn-number{color:var(--terminais-syn-number)}
+.terminais-syn-comment{color:var(--terminais-syn-comment);font-style:italic}
+.terminais-syn-function{color:var(--terminais-syn-function)}
+.terminais-syn-type{color:var(--terminais-syn-type)}
+.terminais-syn-property{color:var(--terminais-syn-property)}
+.terminais-syn-variable{color:var(--mac-label)}
+.terminais-syn-tag{color:var(--terminais-syn-tag)}
+.terminais-syn-muted{color:var(--mac-label-2)}
+.terminais-syn-regexp{color:var(--terminais-syn-regexp)}
+
 /* ── dev browser ───────────────────────────────────────────────────── */
 .terminais-tab.is-browser .terminais-tab__icon{flex:0 0 auto;color:var(--mac-label-3)}
 .terminais-tab.is-browser.is-active .terminais-tab__icon{color:var(--mac-accent-text)}
@@ -758,7 +800,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-sessions__reopen{animation:macPop 160ms var(--mac-ease) both}
 .terminais-work__branch,.terminais-work__running{animation:macFade 180ms var(--mac-ease) both}
 .terminais-tab{animation:macPop 140ms var(--mac-ease) both}
-.terminais-editor__body,.terminais-editor__none,.terminais-editor__host,.terminais-html,.terminais-markdown,.terminais-diff,.terminais-pdf,.terminais-sheet,.terminais-doc{animation:macFade 150ms var(--mac-ease) both}
+.terminais-editor__body,.terminais-editor__none,.terminais-editor__host,.terminais-html,.terminais-markdown,.terminais-diff,.terminais-pdf,.terminais-sheet,.terminais-doc,.terminais-media,.terminais-font,.terminais-notebook{animation:macFade 150ms var(--mac-ease) both}
 .terminais-terminal__disconnected{animation:macFade 180ms var(--mac-ease) both}
 .terminais-row.is-new{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}
 .terminais-result{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}

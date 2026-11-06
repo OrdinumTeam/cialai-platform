@@ -11,8 +11,9 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ChevronRight, ChevronsDownUp, Crosshair, File, FileCode2, FileImage, FileJson2, FileText, FilePlus2, Folder,
-  FolderOpen, FolderPlus, Locate, RefreshCw, Search, X,
+  ChevronRight, ChevronsDownUp, Crosshair, File, FileCode2, FileHeadphone, FileImage, FileJson2, FileSpreadsheet,
+  FileText, FileType, FileVideoCamera, FilePlus2, Folder, FolderOpen, FolderPlus, Locate, NotebookText, RefreshCw,
+  Search, X,
 } from 'lucide-react';
 import Menu, { anchorFromEvent } from './Menu.jsx';
 import { baseName, compactPath, dirName, extensionOf, fileKind, freeName, fs, git, isAbsolutePath, isInside, joinPath, relativePath, shortPath } from '../files.js';
@@ -47,7 +48,15 @@ const DIR_RELOAD_DEBOUNCE_MS = 150;
 const STATUS_LETTER = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', copied: 'C', typechange: 'T', untracked: 'U', conflict: '!' };
 const statusLabel = (status) => STATUS_LETTER[status] ? translate(`terminal.explorer.status.${status}`) : status;
 
-const CODE_EXT = new Set(['js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'py', 'rs', 'go', 'rb', 'php', 'java', 'kt', 'swift', 'c', 'h', 'cpp', 'hpp', 'cs', 'sh', 'zsh', 'bash', 'css', 'scss', 'html', 'vue', 'svelte', 'sql', 'lua', 'toml', 'yaml', 'yml', 'xml']);
+const CODE_EXT = new Set([
+  'js', 'jsx', 'ts', 'tsx', 'mjs', 'cjs', 'mts', 'cts', 'py', 'rs', 'go', 'rb', 'php', 'java', 'kt', 'kts', 'swift',
+  'c', 'h', 'cpp', 'hpp', 'cs', 'm', 'mm', 'dart', 'scala', 'groovy', 'gradle', 'clj', 'ex', 'exs', 'erl', 'hs', 'ml',
+  'r', 'jl', 'pl', 'zig', 'nim', 'sh', 'zsh', 'bash', 'fish', 'ps1', 'bat', 'cmd', 'css', 'scss', 'sass', 'less',
+  'html', 'vue', 'svelte', 'astro', 'sql', 'graphql', 'gql', 'proto', 'lua', 'toml', 'yaml', 'yml', 'xml', 'ini',
+  'cfg', 'conf', 'env', 'tf', 'hcl', 'nix', 'cmake', 'mk',
+]);
+const CODE_NAMES = /^(dockerfile|containerfile|(gnu)?makefile|jenkinsfile|procfile|gemfile|rakefile|vagrantfile|brewfile|justfile)$/i;
+const JSON_EXT = new Set(['json', 'jsonc', 'json5']);
 
 function IconFor({ entry, expanded }) {
   const isDir = entry.kind === 'dir' || entry.targetKind === 'dir';
@@ -56,8 +65,13 @@ function IconFor({ entry, expanded }) {
   const ext = extensionOf(entry.name);
   if (kind === 'image') return <FileImage size={14} strokeWidth={1.75} aria-hidden="true" />;
   if (kind === 'markdown') return <FileText size={14} strokeWidth={1.75} aria-hidden="true" />;
-  if (ext === 'json') return <FileJson2 size={14} strokeWidth={1.75} aria-hidden="true" />;
-  if (CODE_EXT.has(ext)) return <FileCode2 size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'audio') return <FileHeadphone size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'video') return <FileVideoCamera size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'font') return <FileType size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'notebook') return <NotebookText size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (kind === 'sheet' || kind === 'csv') return <FileSpreadsheet size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (JSON_EXT.has(ext)) return <FileJson2 size={14} strokeWidth={1.75} aria-hidden="true" />;
+  if (CODE_EXT.has(ext) || CODE_NAMES.test(entry.name)) return <FileCode2 size={14} strokeWidth={1.75} aria-hidden="true" />;
   return <File size={14} strokeWidth={1.75} aria-hidden="true" />;
 }
 
@@ -686,7 +700,7 @@ export default function ExplorerPane({ session, onOpenFile, onOpenDiff, onNewSes
       change && !dir ? { id: 'diff', label: translate('terminal.explorer.compareChanges'), run: () => onOpenDiff(gitIndex.status.root, entry.path) } : null,
       { separator: true },
       dir ? { id: 'session', label: translate('terminal.explorer.newSessionHere'), run: () => onNewSessionAt(entry.path) } : null,
-      onShowInGraph && (dir || /\.md$/i.test(entry.name)) ? { id: 'docgraph', label: translate('terminal.docgraph.showInGraph'), run: () => onShowInGraph(entry.path) } : null,
+      onShowInGraph && (dir || fileKind(entry.name) === 'markdown') ? { id: 'docgraph', label: translate('terminal.docgraph.showInGraph'), run: () => onShowInGraph(entry.path) } : null,
       { id: 'insert', label: translate('terminal.explorer.insertPath'), run: () => onInsertPath(entry.path) },
       { id: 'copy', label: translate('terminal.explorer.copyPath'), run: () => copyPath(entry.path, false) },
       { id: 'copy-rel', label: translate('terminal.explorer.copyRelativePath'), run: () => copyPath(entry.path, true) },

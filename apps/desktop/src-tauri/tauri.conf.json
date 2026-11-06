@@ -35,6 +35,7 @@
         "font-src": "'self' data:",
         "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*",
         "frame-src": "'self' blob: preview: http://preview.localhost",
+        "media-src": "'self' blob: preview: http://preview.localhost",
         "worker-src": "'self' blob:"
       },
       "devCsp": {
@@ -45,6 +46,7 @@
         "font-src": "'self' data: http://127.0.0.1:*",
         "connect-src": "'self' ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:*",
         "frame-src": "'self' blob: preview: http://preview.localhost",
+        "media-src": "'self' blob: preview: http://preview.localhost",
         "worker-src": "'self' blob:"
       }
     }

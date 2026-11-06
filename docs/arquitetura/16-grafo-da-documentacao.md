@@ -45,7 +45,7 @@ simulação de forças com a raiz fixa, expansão progressiva e foco animado.
 | Ação | Como |
 | --- | --- |
 | Abrir o grafo | Botão de rede no cabeçalho da área de trabalho, ao lado do globo do Dev Browser, ⇧⌘D, ou Abrir o grafo da documentação na paleta ⌘K |
-| Abrir já focado num item | Menu de contexto do explorador, em pastas e arquivos `.md`: Mostrar no grafo da documentação |
+| Abrir já focado num item | Menu de contexto do explorador, em pastas e arquivos Markdown: Mostrar no grafo da documentação |
 | Expandir ou recolher pasta | Clique na pasta. A pasta recolhida é um disco cheio com o total de documentos abaixo dela |
 | Ver detalhes | Clique no nó. O cartão mostra nome, caminho e contagens. Passar o ponteiro mostra nome e caminho |
 | Abrir um documento para editar | Duplo clique, Enter ou Abrir no editor no cartão. O arquivo entra numa aba própria do editor |
@@ -94,7 +94,8 @@ raiz canonizada: o editor acha a aba já aberta comparando a string exata, e
 
 ### O que entra e o que fica de fora
 
-Só arquivos com extensão `.md`, em qualquer caixa. A varredura pula as pastas
+Só arquivos Markdown, com extensão `.md`, `.markdown` ou `.mdx` em qualquer caixa,
+as mesmas que o editor abre como Markdown em `kinds.js`. A varredura pula as pastas
 pesadas e geradas da busca por nome do explorador, como `.git`, `node_modules`,
 `target`, `dist`, `build` e os caches, mais as ocultas geradas por ferramenta,
 as que começam por `.venv`, `worktrees` dentro de pasta oculta e toda pasta
@@ -105,7 +106,7 @@ marcada com `CACHEDIR.TAG`. As demais ocultas são percorridas: `.github`,
 fora do Git, como `_INTERNO_ORDINUM/` e `AGENTS.md`, e ela precisa aparecer.
 
 Pasta simbólica nunca é percorrida, o que também elimina ciclos. Arquivo
-simbólico `.md` entra só quando o alvo é um arquivo regular dentro da raiz. Alvo
+simbólico Markdown entra só quando o alvo é um arquivo regular dentro da raiz. Alvo
 fora da raiz, link quebrado e laço de links ficam de fora por regra, contados à
 parte, e não tornam a leitura parcial.
 
@@ -294,7 +295,6 @@ neste repositório. Apple M4, macOS 27.0, build de desenvolvimento, janela de
   neutro. É o que a paleta do produto sustenta sem confundir daltônicos.
 - **Tema escuro.** Os tons escuros da paleta ficam acima da banda de claridade
   que a skill `dataviz` sugere. Foram mantidos por serem os acentos já adotados.
-- **Só `.md`.** `.markdown` e `.mdx` ficam de fora.
 - **Nomes fora do UTF-8** são pulados e contados.
 - **Limite de descritores.** O teto de 32 pastas observadas existe porque o app
   empacotado abre no máximo 256 descritores. O `tauri dev` herda o limite do
@@ -321,6 +321,5 @@ neste repositório. Apple M4, macOS 27.0, build de desenvolvimento, janela de
 - Observador recursivo por FSEvents, para o primeiro Markdown de um ramo novo
   chegar na hora.
 - Varredura por subárvore em projetos muito grandes.
-- Extensões `.markdown` e `.mdx`.
 - Compactação de cadeias de pasta com filho único.
 - Grafo somente leitura no celular, hoje fora do escopo por ser recurso do computador, como o editor e o Dev Browser.

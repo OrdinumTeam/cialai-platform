@@ -199,6 +199,7 @@ transferência.
 | Gerenciador de arquivos | Finder | Gerenciador padrão | Explorer |
 | Observação de arquivos | kqueue | notify | notify |
 | Lixeira | API do sistema | API do sistema | API do sistema |
+| Áudio e vídeo no editor | O que o WebKit do sistema toca: MP4, MOV, M4A, AAC, MP3, WAV e FLAC; WebM e Ogg dependem da versão do macOS | O que os plugins do GStreamer instalados tocam; H.264 e AAC costumam pedir o `gst-libav` | O que o WebView2 toca: MP4, WebM, Ogg, M4A, MP3, WAV e FLAC |
 | Comando `cialai` | `~/.local/bin/cialai` | `~/.local/bin/cialai` | `%LOCALAPPDATA%\Programs\Cialai\bin\cialai.cmd` |
 
 ### Comando cialai no terminal

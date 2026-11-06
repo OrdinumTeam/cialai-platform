@@ -91,12 +91,18 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         // Avisos de limite da Barra de IA, desligados por padrao.
         .plugin(tauri_plugin_notification::init())
-        .register_uri_scheme_protocol(workspace::preview::SCHEME, |context, request| {
-            let roots = context
-                .app_handle()
-                .state::<workspace::preview::PreviewRoots>();
-            workspace::preview::handle(&roots, request)
-        })
+        // Fora da thread principal: um video pede muitos pedacos enquanto
+        // toca, e ler disco ali travaria a janela.
+        .register_asynchronous_uri_scheme_protocol(
+            workspace::preview::SCHEME,
+            |context, request, responder| {
+                let app = context.app_handle().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let roots = app.state::<workspace::preview::PreviewRoots>();
+                    responder.respond(workspace::preview::handle(&roots, request));
+                });
+            },
+        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(

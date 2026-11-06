@@ -172,10 +172,15 @@ pub struct DocScan {
     pub fingerprint: String,
 }
 
+/// As mesmas extensoes que o editor abre como Markdown, em `kinds.js`.
 fn is_markdown(name: &str) -> bool {
     Path::new(name)
         .extension()
-        .map(|extension| extension.eq_ignore_ascii_case("md"))
+        .map(|extension| {
+            ["md", "markdown", "mdx"]
+                .iter()
+                .any(|known| extension.eq_ignore_ascii_case(known))
+        })
         .unwrap_or(false)
 }
 
@@ -679,7 +684,10 @@ mod tests {
         touch(&dir, ".md");
         touch(&dir, "notas.md/dentro.md");
         let result = run(&dir);
-        assert_eq!(paths(&result), vec!["a.md", "b.Md", "notas.md/dentro.md"]);
+        assert_eq!(
+            paths(&result),
+            vec!["a.md", "b.Md", "c.markdown", "d.mdx", "notas.md/dentro.md"]
+        );
         fs::remove_dir_all(&dir).unwrap();
     }
 

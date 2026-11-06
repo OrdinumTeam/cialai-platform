@@ -2666,6 +2666,8 @@ export function markExplorerChanged(id) {
 /* ── editor por sessao ────────────────────────────────────────────── */
 
 function disposeTab(tab) {
+  // Um visualizador pode segurar recurso do documento, como a fonte.
+  try { tab.viewer?.release?.(); } catch (_error) { /* ja liberado */ }
   if (tab.view) {
     try { tab.onDispose?.(); } catch (_error) { /* sem ouvinte */ }
     try { tab.view.destroy(); } catch (_error) { /* ja destruido */ }
