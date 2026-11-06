@@ -84,6 +84,21 @@ redimensionamento e PowerShell 5.1 não oferece todos os modos de colagem do
 PowerShell 7. A preferência Terminal guarda shell, argumentos, `LANG` e prefixos
 de `PATH`; a escolha padrão muda por sistema.
 
+Três cuidados evitam linhas misturadas na saída de quem desenha a tela, como o
+Claude Code, depois de horas de uso. O xterm de cada sessão deste computador
+nasce com `windowsPty`, o ConPTY e o build que `app_platform` lê por
+`RtlGetVersion`: o xterm passa a tratar o ganho de linhas como o ConPTY e só
+reflui as linhas sozinho a partir do build 21376, em que o ConPTY deixou de
+refluir. A sessão de um Broto não leva a informação, porque o PTY dela pode ser
+de outro sistema. O Rust só pede tamanho ao PTY quando o tamanho muda, então a
+renovação da posse a cada 5 s e a devolução do tamanho local ao trocar de
+sessão não chegam ao ConPTY, que pode redesenhar a tela a cada pedido. E a
+renovação repete o tamanho do último encaixe: antes ela levava o tamanho do
+momento da posse, e depois de maximizar a janela, abrir um painel ou trocar a
+fonte o terminal voltava ao tamanho antigo em até 5 s e voltava de novo na
+tecla seguinte. A causa foi deduzida do código e da documentação do xterm, sem
+reprodução; a prova final é uso contínuo num Windows com GPU real.
+
 O ConPTY nasce perguntando a posição do cursor e só inicia o shell depois da
 resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e
 tira a pergunta da saída, então nenhum xterm responde de novo e a sessão abre
@@ -107,6 +122,14 @@ ponto de não responder ao WebDriver. Na máquina virtual Windows 11 sem driver
 de vídeo dedicado, com WebView2 137, o addon nem chega a carregar e o xterm
 roda no renderizador DOM sem travar; o app registra a GPU do contexto do xterm
 para diagnóstico. A medição com uma GPU real continua pendente.
+
+Cada troca de sessão abre um contexto WebGL para o terminal exibido. O addon
+não devolve o contexto ao ser descartado e o navegador só o solta no coletor
+de lixo, então o contexto da sessão que sai da tela é perdido de propósito, por
+`WEBGL_lose_context`, logo depois do descarte. Quando o contexto do terminal em
+tela se perde, por troca de monitor ou queda do driver, o xterm volta ao
+renderizador DOM, que mede a célula de outro jeito; o terminal é encaixado e
+redesenhado na hora, em vez de ficar com as colunas do WebGL.
 
 ### Foco, CSP e PATH no Windows
 

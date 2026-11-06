@@ -45,6 +45,7 @@ import '@xterm/xterm/css/xterm.css';
 import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE, invoke, listen, createChannel, chooseDirectory } from '../lib/native.js';
 import { openExternal } from '../lib/downloads.js';
 import { buildTheme, terminalFont, watchTerminalTheme } from './theme.js';
+import { windowsPty } from './pty-compat.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
 import { createPathLinkProvider } from './path-link-provider.js';
 import { portablePath } from '../lib/paths.js';
@@ -459,6 +460,7 @@ function createTerminal() {
     macOptionIsMeta: false,
     allowProposedApi: true,
     theme: buildTheme(),
+    windowsPty: windowsPty(platform(), { phone: isPhone() }),
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -662,8 +664,10 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   session.disposables.push(term.onResize(({ cols, rows }) => {
     if (session.applyingView) return;
     if (session.ptyId == null || session.status !== 'running') return;
-    if (isTauri()) invoke('pty_resize', { id: session.ptyId, cols, rows }).catch(() => {});
-    else session.viewport?.resize({ cols, rows }).catch(() => {});
+    if (isTauri()) {
+      session.viewport?.track({ cols, rows });
+      invoke('pty_resize', { id: session.ptyId, cols, rows }).catch(() => {});
+    } else session.viewport?.resize({ cols, rows }).catch(() => {});
   }));
   // Sino e notificacoes: o unico jeito honesto de saber que um programa no
   // terminal pediu atencao. Claude Code, WezTerm e iTerm usam estes canais.
@@ -1084,7 +1088,14 @@ function loadWebgl(session) {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
       addon.dispose();
-      session.webgl = null;
+      if (session.webgl === addon) session.webgl = null;
+      // O xterm volta ao renderizador DOM, que mede a celula de outro jeito.
+      // Sem encaixar de novo, colunas e linhas ficavam as do WebGL e a saida
+      // quebrava fora do lugar.
+      if (session.host) {
+        fitNow(session);
+        try { session.term.refresh(0, session.term.rows - 1); } catch (_error) { /* terminal fechado */ }
+      }
     });
     session.term.loadAddon(addon);
     session.webgl = addon;
@@ -1103,7 +1114,13 @@ function unloadWebgl(session) {
   // Blur while the renderer is still attached so its cursor blink timers
   // stop before disposal. addon-webgl 0.19 does not dispose that manager.
   session.term.blur();
+  // O addon nao devolve o contexto ao descartar, e o navegador so solta um
+  // contexto no coletor de lixo. Cada troca de sessao abre um novo, e o
+  // WebView2 derruba o mais antigo ao passar do limite de contextos vivos.
+  // Perder o contexto de proposito, depois do descarte, o devolve na hora.
+  const gl = session.webgl._renderer?._gl;
   try { session.webgl.dispose(); } catch (_error) { /* contexto ja perdido */ }
+  try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch (_error) { /* sem a extensao */ }
   session.webgl = null;
 }
 
@@ -1804,6 +1821,7 @@ async function syncSharedSessions() {
         adopted.push(session);
       }
       session.deviceId = info.deviceId || null;
+      session.term.options.windowsPty = windowsPty(platform(), { phone: isPhone(), remote: Boolean(session.deviceId) });
       if (info.brotoName && info.brotoName !== session.brotoName) {
         const oldName = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: session.brotoName || session.deviceId }) : session.brotoName;
         if (!session.name || session.name === oldName) session.name = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName }) : info.brotoName;

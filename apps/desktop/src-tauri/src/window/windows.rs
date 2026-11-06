@@ -47,7 +47,7 @@ pub fn apply_backdrop(window: &WebviewWindow, backdrop: &str) {
 
 /// Build real do sistema. `RtlGetVersion` nao depende do manifesto de
 /// compatibilidade, ao contrario de `GetVersionExW`.
-fn os_build() -> u32 {
+pub(crate) fn os_build() -> u32 {
     use windows_sys::Wdk::System::SystemServices::RtlGetVersion;
     use windows_sys::Win32::System::SystemInformation::OSVERSIONINFOW;
 

@@ -3,7 +3,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import vm from 'node:vm';
+import { readFileSync } from 'node:fs';
 import { build } from 'esbuild';
+import { windowsPty } from '../src/terminals/pty-compat.js';
 
 const mocks = {
   native: `export const isTauri = () => fixture.desktop; export const hasBridge = () => true;
@@ -16,8 +18,8 @@ const mocks = {
     onData=off; onBinary=off; onBell=off; onResize(handler){this.resizeHandler=handler;return {dispose(){}};}
     open(parent) { this.element={isConnected:true,parentElement:parent,addEventListener(){},removeEventListener(){}}; }
     loadAddon(addon){addon.term=this;} registerLinkProvider(){return off();} attachCustomKeyEventHandler(){} write(data, done){fixture.output.push(...data);done?.();} resize(cols,rows){this.cols=cols;this.rows=rows;this.resizeHandler?.({cols,rows});}
-    reset(){fixture.output=[];} focus(){} blur(){} dispose(){}
-  } export class FitAddon {fit(){this.term.resize(45,28);} proposeDimensions(){return {cols:45,rows:28};}} export class SearchAddon {} export class WebglAddon {constructor(){this._renderer={_gl:{getExtension:()=>({UNMASKED_RENDERER_WEBGL:37446}),getParameter:()=>fixture.glRenderer||'Apple M2'}};} onContextLoss(){} dispose(){fixture.webglDisposed=(fixture.webglDisposed||0)+1;}} export class WebLinksAddon {}`,
+    reset(){fixture.output=[];} focus(){} blur(){} dispose(){} refresh(){fixture.refreshed=(fixture.refreshed||0)+1;}
+  } export class FitAddon {fit(){const size=fixture.fitSize||{cols:45,rows:28};this.term.resize(size.cols,size.rows);} proposeDimensions(){return {...(fixture.fitSize||{cols:45,rows:28})};}} export class SearchAddon {} export class WebglAddon {constructor(){this._renderer={_gl:{getExtension:(name)=>name==='WEBGL_lose_context'?{loseContext(){fixture.contextsLost=(fixture.contextsLost||0)+1;}}:{UNMASKED_RENDERER_WEBGL:37446},getParameter:()=>fixture.glRenderer||'Apple M2'}};} onContextLoss(handler){fixture.webglLoss=handler;} dispose(){fixture.webglDisposed=(fixture.webglDisposed||0)+1;}} export class WebLinksAddon {}`,
   downloads: 'export const openExternal = async () => {};',
   theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {}; export const watchTerminalTheme = () => () => {};',
   files: 'export const baseName = p => p.split("/").at(-1); export const fs = {}; export const isInside=()=>false; export const shellQuote=p=>p;',
@@ -75,7 +77,7 @@ function scenario({ saved = [], alive = [], desktop = true, storageEntries } = {
     setTimeout:(fn,ms=0)=>timer(fn,ms), clearTimeout:id=>timers.delete(id),
     setInterval:(fn,ms)=>timer(fn,ms,ms), clearInterval:id=>timers.delete(id),
     localStorage:{getItem:key=>storage.get(key)||null,setItem:(key,value)=>storage.set(key,value)},
-    window:{location:{search:''},addEventListener(){},devicePixelRatio:1,matchMedia:()=>({addEventListener(){},removeEventListener(){}})},
+    window:{location:{search:''},addEventListener(){},devicePixelRatio:1,matchMedia:()=>({addEventListener(){},removeEventListener(){}}),setInterval:(fn,ms)=>timer(fn,ms,ms),clearInterval:id=>timers.delete(id)},
     document:{hasFocus:()=>true,visibilityState:'visible',addEventListener(){},body:{appendChild(){}},createElement:()=>({isConnected:true,setAttribute(){},appendChild(child){child.parentElement=this;}})},
   });
   vm.runInContext(output.outputFiles[0].text, context);
@@ -914,4 +916,62 @@ test('restaurar sessoes salvas nao troca a cor pela da memoria da pasta', async 
   assert.ok(restored);
   assert.equal(restored.color, null, 'a sessao salva volta como estava');
   assert.equal(restored.icon, null);
+});
+
+test('a renovacao da posse no computador repete o tamanho do ultimo encaixe', async () => {
+  const s = scenario({ alive: [{ ...mac, view: { id: 1, owner: 'local', leaseId: 1, revision: 1, cols: 120, rows: 32 } }] });
+  // No computador a posse e do webview; o roteiro padrao responde como o celular.
+  const original = s.fixture.invoke.bind(s.fixture);
+  s.fixture.invoke = async (cmd, args) => {
+    const result = await original(cmd, args);
+    return cmd === 'pty_view_claim' || cmd === 'pty_view_renew' ? { ...result, owner: 'local' } : result;
+  };
+  await s.runtime.hydrate();
+  const session = s.runtime.getSession('mac-session');
+  s.runtime.hostTerminal(session.id, host()); await settle();
+  await s.runtime.requestTerminalControl(session.id); await settle();
+  assert.ok(session.viewport.owned, 'o computador tem a posse');
+  // Maximizar, abrir um painel ou trocar a fonte encaixa de novo por
+  // `pty_resize`, sem passar pela posse.
+  s.fixture.fitSize = { cols: 90, rows: 40 };
+  s.runtime.fitAndResize(session.id);
+  await s.advance(100);
+  assert.deepEqual([session.term.cols, session.term.rows], [90, 40]);
+  const before = s.fixture.calls.length;
+  await s.advance(11_000);
+  const renewals = s.fixture.calls.slice(before).filter((call) => call.cmd === 'pty_view_renew');
+  assert.ok(renewals.length >= 2, 'a renovacao continua a cada 5 s');
+  for (const call of renewals) assert.deepEqual([call.args.cols, call.args.rows], [90, 40], 'a renovacao nao volta ao tamanho de antes do encaixe');
+  assert.deepEqual([session.term.cols, session.term.rows], [90, 40], 'o terminal fica no tamanho do painel');
+});
+
+test('trocar de sessao devolve o contexto WebGL, e perder o contexto encaixa o terminal de novo', async () => {
+  const s = scenario({ alive: [{ ...mac }, { ...phone }] });
+  await s.runtime.hydrate();
+  const first = s.runtime.getSession('mac-session');
+  const second = s.runtime.getSession('phone-session');
+  s.runtime.hostTerminal(first.id, host()); await settle();
+  assert.ok(first.webgl, 'o terminal em tela usa WebGL');
+  s.runtime.hostTerminal(second.id, host()); await settle();
+  assert.equal(first.webgl, null);
+  assert.equal(s.fixture.contextsLost, 1, 'o contexto da sessao que saiu volta ao navegador na hora');
+  assert.ok(second.webgl);
+  s.fixture.fitSize = { cols: 70, rows: 30 };
+  const refreshed = s.fixture.refreshed || 0;
+  s.fixture.webglLoss();
+  assert.equal(second.webgl, null, 'sem contexto o xterm fica no renderizador DOM');
+  assert.deepEqual([second.term.cols, second.term.rows], [70, 30], 'o renderizador DOM mede a celula de novo');
+  assert.ok((s.fixture.refreshed || 0) > refreshed, 'e redesenha a tela inteira');
+});
+
+test('o xterm sabe que o PTY do Windows e ConPTY, com o build do sistema', () => {
+  assert.deepEqual(windowsPty({ os: 'windows', osBuild: 22631 }), { backend: 'conpty', buildNumber: 22631 });
+  assert.deepEqual(windowsPty({ os: 'windows', osBuild: null }), { backend: 'conpty' }, 'sem o build o xterm desliga o refluxo, como no ConPTY antigo');
+  assert.deepEqual(windowsPty({ os: 'windows', osBuild: 19045 }, { remote: true }), {}, 'o PTY de um Broto pode ser de outro sistema');
+  assert.deepEqual(windowsPty({ os: 'windows', osBuild: 19045 }, { phone: true }), {}, 'o celular nao sabe o sistema do computador');
+  assert.deepEqual(windowsPty({ os: 'macos', osBuild: null }), {});
+  assert.deepEqual(windowsPty({ os: 'linux', osBuild: null }), {});
+  const runtime = readFileSync(new URL('../src/terminals/runtime.js', import.meta.url), 'utf8');
+  assert.match(runtime, /windowsPty: windowsPty\(platform\(\), \{ phone: isPhone\(\) \}\)/, 'todo terminal nasce com a informacao');
+  assert.match(runtime, /session\.deviceId = info\.deviceId \|\| null;\n\s+session\.term\.options\.windowsPty = windowsPty\(platform\(\), \{ phone: isPhone\(\), remote: Boolean\(session\.deviceId\) \}\);/, 'a sessao de Broto perde a informacao');
 });

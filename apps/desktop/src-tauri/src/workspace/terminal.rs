@@ -537,6 +537,10 @@ struct Session {
     view_owner: SubscriberKey,
     view_deadline: Option<Instant>,
     local_size: Option<(u16, u16)>,
+    /// Pedidos de tamanho que chegaram ao PTY, para os testes provarem que o
+    /// mesmo tamanho nunca vira pedido.
+    #[cfg(test)]
+    pty_resizes: u32,
     // Saved conversation stays durable until its agent is observed again.
     resume_record: Option<resume::AgentSession>,
     // Proven association belongs to this CLI process generation, not its cwd.
@@ -581,14 +585,27 @@ impl Session {
         rows: u16,
         claim: bool,
     ) -> Result<TerminalView, String> {
-        self.master
-            .resize(PtySize {
-                cols,
-                rows,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|_| t("native.error.terminalResize"))?;
+        // Pedir ao PTY o tamanho que ele ja tem nao muda nada no Unix, onde o
+        // kernel so avisa o processo quando o tamanho muda, mas o ConPTY do
+        // Windows pode redesenhar a tela a cada pedido. A renovacao da posse
+        // repete o tamanho a cada 5 s e trocar de sessao devolve o tamanho
+        // local, entao esse redesenho caia no meio da saida de quem desenha a
+        // tela, como o Claude Code. O PTY nasce com o tamanho de `info`, e
+        // `info` so muda depois de um pedido aceito.
+        if (self.info.cols, self.info.rows) != (cols, rows) {
+            self.master
+                .resize(PtySize {
+                    cols,
+                    rows,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|_| t("native.error.terminalResize"))?;
+            #[cfg(test)]
+            {
+                self.pty_resizes += 1;
+            }
+        }
         let previous = self.info.view.as_ref();
         let view = TerminalView {
             id: self.info.id,
@@ -1125,6 +1142,8 @@ impl TerminalManager {
                 view_owner: SubscriberKey::Webview,
                 view_deadline: None,
                 local_size: (key == SubscriberKey::Webview).then_some((cols, rows)),
+                #[cfg(test)]
+                pty_resizes: 0,
                 resume_record: resume_record.clone(),
                 observed_agent: None,
                 resume_attempts: 0,
@@ -3340,6 +3359,71 @@ echo 'recovered-fixture'
         assert!(local.revision > restored.revision);
         manager.detach(id, key).unwrap();
         assert!(manager.subscribed_cwd(id, key).is_err());
+    }
+
+    #[test]
+    fn same_size_requests_never_reach_the_pty() {
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(manager.clone());
+        let shell = pty::TestShell::isolated();
+        let id = spawn_test_shell(
+            &manager,
+            &shell,
+            "same-size-isolated",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        )
+        .id;
+        let resizes = |manager: &TerminalManager| manager.lock().sessions[&id].pty_resizes;
+        let (cols, rows) = {
+            let list = manager.list();
+            (list[0].cols, list[0].rows)
+        };
+        let local = manager
+            .view_claim(id, SubscriberKey::Webview, cols, rows)
+            .unwrap();
+        for _ in 0..20 {
+            manager
+                .view_renew(id, SubscriberKey::Webview, local.lease_id, cols, rows)
+                .unwrap();
+        }
+        manager.resize(id, cols, rows).unwrap();
+        assert_eq!(
+            resizes(&manager),
+            0,
+            "a renovacao no mesmo tamanho nao pede nada ao PTY"
+        );
+
+        let (wide, tall) = (cols + 10, rows + 2);
+        let renewed = manager
+            .view_renew(id, SubscriberKey::Webview, local.lease_id, wide, tall)
+            .unwrap();
+        assert_eq!((renewed.cols, renewed.rows), (wide, tall));
+        assert_eq!(resizes(&manager), 1, "tamanho novo chega ao PTY");
+
+        let remote = SubscriberKey::Remote(9);
+        manager
+            .attach_for(id, remote, Channel::new(|_| Ok(())))
+            .unwrap();
+        let lease = manager.view_claim(id, remote, wide, tall).unwrap();
+        manager.view_release(id, remote, lease.lease_id).unwrap();
+        assert_eq!(
+            resizes(&manager),
+            1,
+            "posse remota e devolucao no mesmo tamanho tambem nao"
+        );
+        let size = manager.lock().sessions[&id].master.get_size().unwrap();
+        assert_eq!(
+            (size.cols, size.rows),
+            (wide, tall),
+            "o PTY tem o tamanho que a vista anuncia"
+        );
     }
 
     #[test]
