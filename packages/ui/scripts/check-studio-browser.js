@@ -122,8 +122,15 @@ async function assertTerminalFind(session) {
   window.addEventListener('error', onError);
   try {
     session.term.focus();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true, cancelable: true }));
-    const input = await until(() => document.querySelector('.terminais-find input'), 'terminal find bar');
+    // Guardado antes da tecla: se a barra não abrir, a falha diz se o foco
+    // estava no terminal e se algum atalho tratou a tecla.
+    const focused = document.activeElement;
+    const inTerminal = Boolean(focused?.closest?.('.xterm'));
+    const handled = !window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true, cancelable: true }));
+    const input = await until(() => document.querySelector('.terminais-find input'), 'terminal find bar').catch((error) => {
+      const selected = runtime.getState().selected;
+      throw new Error(`${error.message}: focus ${focused?.tagName || 'none'}.${String(focused?.className || '').slice(0, 40)}, in terminal ${inTerminal}, handled ${handled}, same session ${selected?.id === session.id}, host ${Boolean(session.host?.isConnected)}, platform ${document.documentElement.dataset.platform}`);
+    });
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'claude');
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await until(() => results > 0, 'terminal find results');
