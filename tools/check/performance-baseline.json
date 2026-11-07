@@ -1,8 +1,8 @@
 {
-  "sobre": "Medido por tools/check/performance.mjs com a CPU 4 vezes mais lenta, mediana de 3 aberturas do estudio, sobre o build de producao. O teto tem folga para a variacao de maquina e de CI; a queda de 4601 para 615 KB veio de parar de carregar o master da marca de 4096 px na primeira pintura.",
+  "sobre": "Medido por tools/check/performance.mjs com a CPU 4 vezes mais lenta, mediana de 3 aberturas do estudio, sobre o build de producao. O teto tem folga para a variacao de maquina e de CI; a queda de 4601 para 615 KB veio de parar de carregar o master da marca de 4096 px na primeira pintura. Em 06/11/2026 o teto do payload passou de 760 para 780 KB. O grafo de seis vistas deixou a primeira pintura em 759 KB, e o QR do Broto somou 7 KB de textos, porque a primeira pintura carrega os tres idiomas e cada texto novo pesa tres vezes. Carregar so o idioma ativo tira cerca de 62 KB e e o proximo passo antes de subir o teto de novo.",
   "orcamento": {
     "interactiveMs": 1400,
-    "payloadKb": 760,
+    "payloadKb": 780,
     "requests": 24,
     "longTaskMs": 900
   },

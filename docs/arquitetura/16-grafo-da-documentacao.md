@@ -443,7 +443,7 @@ check:performance`:
 | Projeto inteiro, com o cache | nenhum lido, 45 ms |
 | Pedaço `engine` do pacote | 114,7 kB, 39,8 kB comprimido, carregado só ao abrir a aba |
 | Pedaço do painel `DocGraphPane` | 41,4 kB, 12,9 kB comprimido, também só ao abrir a aba |
-| Pacote de abertura do app | 759 KB comprimido, para um teto de 760 KB |
+| Pacote de abertura do app | 759 KB comprimido, quando o teto era 760 KB |
 | Tempo até ficar interativo | 999 ms, contra 947 ms do build anterior medido em seguida |
 
 ## Limitações reais
