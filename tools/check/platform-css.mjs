@@ -14,7 +14,10 @@ const bareMac = (source) => { const stripped = source.replaceAll(SHELL, ''); ret
 // fixture do celular, que marca data-platform="macos", com o mesmo resultado.
 assert.ok(existsSync(`${ui}/desktop/shell.css`), 'shell.css ausente');
 const shell = read('desktop/shell.css');
-assert.ok(shell.includes(`${SHELL}{\n  --mac-font:`), 'tokens da casca devem valer para data-shell="desktop"');
+// O bloco pode repetir o seletor para o terminal com tema proprio, depois da
+// casca; o que importa e a casca vir primeiro no mesmo bloco.
+const tokenBlock = new RegExp(`^${SHELL.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(,[^{\\n]+)?\\{\\n  --mac-font:`, 'm');
+assert.match(shell, tokenBlock, 'tokens da casca devem valer para data-shell="desktop"');
 const bare = bareMac(shell);
 assert.deepEqual(bare, [
   // Fundo transparente do vibrancy, nas duas metades do mesmo seletor.
@@ -63,7 +66,8 @@ assert.deepEqual(bareMac(solid.replaceAll('html[data-shell="desktop"][data-platf
 assert.match(solid, /html\[data-shell="desktop"\],html\[data-shell="desktop"\] body\{background:var\(--mac-bg\)!important\}/);
 // A mesma Outfit do celular, com a monoespaçada de cada sistema no terminal.
 assert.match(solid, /@font-face\{font-family:"Cialai Outfit";font-style:normal;font-weight:100 900;font-display:swap;src:url\("\.\.\/fonts\/Outfit-Variable\.woff2"\) format\("woff2"\)\}/);
-assert.match(solid, /html\[data-shell="desktop"\]\[data-platform\]\{\s*--mac-font:"Cialai Outfit",/);
+// O mesmo bloco pode trazer o espelho do terminal com tema proprio.
+assert.match(solid, /html\[data-shell="desktop"\]\[data-platform\](,[^{]+)?\{\s*--mac-font:"Cialai Outfit",/);
 assert.doesNotMatch(solid, /--mac-font-mono/, 'o terminal continua com a fonte monoespaçada de cada sistema');
 assert.doesNotMatch(solid, /(linear|radial|conic)-gradient\(/, 'solid.css não desenha gradiente');
 assert.doesNotMatch(solid, /backdrop-filter:blur/, 'solid.css não desenha vidro com desfoque');
@@ -76,7 +80,8 @@ assert.ok(terminals.includes(`${SHELL} .mac-content:has(> .terminais-page)`));
 // terminal no Linux.
 const platform = read('desktop/platform.css');
 const tokens = (os) => {
-  const block = platform.match(new RegExp(`\\[data-shell="desktop"\\]\\[data-platform="${os}"\\]\\{([^}]*)\\}`));
+  // O bloco pode trazer o espelho do terminal com tema proprio.
+  const block = platform.match(new RegExp(`\\[data-shell="desktop"\\]\\[data-platform="${os}"\\](?:,[^{]+)?\\{([^}]*)\\}`));
   assert.ok(block, `bloco de fontes ausente para ${os}`);
   return Object.fromEntries([...block[1].matchAll(/(--mac-font(?:-mono)?):([^;]+);/g)].map((match) => [match[1], match[2].trim()]));
 };
