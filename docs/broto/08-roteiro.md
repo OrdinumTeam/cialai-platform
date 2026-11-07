@@ -229,8 +229,8 @@ Tamanho M. Depende de BRO-003 e BRO-013. Descrito nos documentos 02, 04 e 05 e n
 
 - [x] Código do QR, da derivação, dos dígitos, do onion temporário e da marca na rede local, no hospedeiro e no Broto, com testes na suíte de `packages/tunnel-core`. 06/11/2026, `npm run test:tunnel` verde e os testes de QR com `-race`
 - [x] Janela do Broto, ponte do celular, tela de leitura no app e textos nos três idiomas, com testes. 06/11/2026, `test:ui`, `test:broto-ui`, `test:protocol`, `test:mobile` e os testes da ponte no Rust verdes
-- [ ] Pareamento real pelo Tor público, com o celular lendo o QR de um Broto Windows e de um Broto Linux, com evidência em `docs/evidence/bro-024/`
-- [ ] Pareamento real na mesma rede, pela marca mDNS
+- [ ] Pareamento real pelo Tor público, com o celular lendo o QR de um Broto Windows e de um Broto Linux, com evidência em `docs/evidence/bro-024/`. A parte do Tor foi provada em 06/11/2026 nesta máquina, com `TestRealTorQREphemeral` e o Tor 0.4.9.12: o onion temporário publicou o descritor 4,8 s depois do `ADD_ONION`, a ligação depois do NEWNYM levou 33,5 s e gravou a chave do desktop, a ligação com a chave fixada levou 14,3 s e o `DEL_ONION` tirou o serviço. Por isso cada tentativa pelo onion no Broto passou de 30 para 60 s. Falta o pareamento com o celular e os Brotos
+- [ ] Pareamento real na mesma rede, pela marca mDNS. A marca foi provada em 06/11/2026 na mesma máquina, com `TestBrotoQRFindsTheMarkerOnTheLAN`: o Broto achou o endereço e a porta certos numa janela de 2 s, e a despedida do mDNS tirou a marca. Falta a prova entre dois aparelhos
 - [x] Documentos 02, 04 e 05 e decisão 077 escritos. 06/11/2026, revisão local
 
 ## Continuação com a IA do hospedeiro

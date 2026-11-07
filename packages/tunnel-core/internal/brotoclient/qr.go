@@ -86,9 +86,14 @@ type qrTiming struct {
 	approvePoll time.Duration
 }
 
+// defaultQRTiming is the pace on real networks. In TestRealTorQREphemeral,
+// with Tor 0.4.9, a dial of the temporary onion after NEWNYM took 33.5s, most
+// of it building the introduction and rendezvous circuits. onionTimeout
+// leaves room for that: an attempt cut short loses its descriptor and
+// circuits to the NEWNYM of the next one, which may then be cut short too.
 var defaultQRTiming = qrTiming{
 	lookupWindow: 2 * time.Second, lookupEvery: 4 * time.Second, lookupSlowAfter: time.Minute, lookupSlowEvery: 12 * time.Second,
-	onionFirst: 15 * time.Second, onionEvery: 15 * time.Second, onionTimeout: 30 * time.Second, newnymSpacing: 10 * time.Second,
+	onionFirst: 15 * time.Second, onionEvery: 15 * time.Second, onionTimeout: time.Minute, newnymSpacing: 10 * time.Second,
 	directTimeout: 4 * time.Second, digitsPoll: 5 * time.Second, approvePoll: 2 * time.Second,
 }
 

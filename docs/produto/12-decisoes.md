@@ -73,7 +73,7 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 074 | Implementado | Broto 0.1.2 publicado para Windows e Linux, com testes nativos, assinaturas, instaladores e espelho público verificados em BRO-023 |
 | 075 | Implementado | Broto 0.1.3 publicado em 31/10/2026 com o serviço do Windows como LocalSystem, sem pedir senha; instalação, pareamento e comandos provados na VM |
 | 076 | Preparado | Grafo com seis vistas, escopo do projeto inteiro, ligações lidas pelo Rust e cores por modo e paleta; testes e modo de demonstração passam, conferência no app empacotado na validação da 0.6.0 |
-| 077 | Preparado | Broto pareado por QR lido pelo celular, com confirmação no celular e no Broto; testes locais passam, prova com Tor público e aparelhos na validação da 0.6.0 |
+| 077 | Preparado | Broto pareado por QR lido pelo celular, com confirmação no celular e no Broto; testes locais passam e o onion temporário foi provado no Tor público, falta o pareamento com aparelhos |
 
 ## 001 Nome Cialai
 
