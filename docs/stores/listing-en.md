@@ -71,11 +71,10 @@ Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• Notices when a session needs you, with its name and colour; tapping opens the session.
-• Enter, Esc, Ctrl C and Ctrl V always in sight in the terminal bar.
-• Each session's colour and icon across the app.
-• Weekly limit on Home and in Agents, with bands at 60 and 80%.
-• The official brand and cleaner icons.
+• Connect a Cialai Broto from your phone: in a computer's three dot menu, scan the QR code the Broto window shows.
+• You check the same four digits on the phone and on the Broto before it connects.
+• The QR code works once and for ten minutes, and a photo of it is not enough to connect another machine.
+• Needs Cialai 0.6.0 on the computer and Cialai Broto 0.2.0 on the other machine.
 ```
 <!-- PLAY_RELEASE_END -->
 

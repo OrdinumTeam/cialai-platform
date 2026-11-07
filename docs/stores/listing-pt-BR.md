@@ -75,11 +75,10 @@ Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/202
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Avisos quando uma sessão pede atenção, com o nome e a cor dela; o toque abre a sessão.
-• Enter, Esc, Ctrl C e Ctrl V sempre à vista na barra do terminal.
-• Cor e ícone de cada sessão em toda a interface.
-• Limite semanal no Início e em Agentes, com faixas em 60 e 80%.
-• Marca oficial e ícones mais limpos.
+• Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
+• Você confere os mesmos quatro dígitos no celular e no Broto antes de ligar.
+• O QR vale uma vez e por dez minutos, e uma foto dele não basta para ligar outra máquina.
+• Pede o Cialai 0.6.0 no computador e o Cialai Broto 0.2.0 na outra máquina.
 ```
 <!-- PLAY_RELEASE_END -->
 
