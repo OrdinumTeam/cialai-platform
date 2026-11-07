@@ -63,7 +63,7 @@ Pela decisão 077, o Broto também liga sem código, com um celular já vinculad
 4. Quando o Broto chega, a folha mostra o nome, o sistema e quatro números grandes, com Recusar e Confirmar, e pede para confirmar só se o nome e o sistema forem os do Broto certo. A janela do Broto pede os mesmos quatro números, com três tentativas.
 5. Com os números certos no Broto e Confirmar no celular, em qualquer ordem, o Broto liga: a folha diz Broto ligado e a janela do Broto passa ao monitor. Fechar a folha antes do fim recusa o pedido.
 
-Um computador com Cialai anterior à 0.6.0 não conhece os comandos do QR, e a folha diz que ele precisa ser atualizado.
+Um computador com Cialai anterior à 0.6.0 serve a página antiga, que não conhece o pedido do QR e o descarta: o celular volta à página sem a folha, e o Broto espera até o QR vencer. O app do celular não sabe a versão da página, então não tem como avisar antes; atualizar o computador resolve. A folha diz que o computador precisa ser atualizado só quando a página é nova e a ponte recusa os comandos do QR.
 
 ## As sessões do Broto na lista
 
