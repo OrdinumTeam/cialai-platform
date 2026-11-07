@@ -54,6 +54,9 @@ type Status struct {
 	// PasswordService asks the window to offer the service update that moves
 	// a Windows service of Broto 0.1.2 or earlier to LocalSystem.
 	PasswordService bool `json:"passwordService,omitempty"`
+	// QR is the pairing by QR while it runs or after it failed; Digits stays
+	// empty then.
+	QR *QRStatus `json:"qr,omitempty"`
 }
 type Config struct {
 	Dir           string
@@ -63,6 +66,8 @@ type Config struct {
 	// a native launcher. Packaged Broto normally owns TorExecutable instead.
 	TorEndpoints *tor.Endpoints
 	STUNServers  []string
+	// qr replaces the ways a pairing by QR reaches the host, in tests.
+	qr qrSeams
 }
 type Client struct {
 	mu            sync.Mutex
@@ -90,6 +95,8 @@ type Client struct {
 	stop          context.CancelFunc
 	lock          *statedir.Lock
 	torStop       func() error
+	qr            *qrFlow
+	qrSeams       qrSeams
 }
 
 func New(ctx context.Context, c Config) (*Client, error) {
@@ -139,7 +146,8 @@ func New(ctx context.Context, c Config) (*Client, error) {
 		return fail(err)
 	}
 	base, stop := context.WithCancel(ctx)
-	client := &Client{paths: paths, local: local, name: c.Name, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock}
+	client := &Client{paths: paths, local: local, name: c.Name, endpoint: endpoint, tor: tor.NewClient(), policy: policy, host: host, status: Status{State: "disconnected", Activity: []Activity{}}, base: base, stop: stop, lock: lock, qrSeams: c.qr}
+	client.qrSeams.fill(client)
 	if raw, readErr := os.ReadFile(filepath.Join(paths.Root, "pty-sequence.json")); readErr == nil {
 		if json.Unmarshal(raw, &client.sequence) != nil {
 			_ = client.Close()
@@ -183,6 +191,9 @@ func (c *Client) Status() Status {
 	s.ParentPID = os.Getppid()
 	s.PasswordService = brotoaccount.PasswordService()
 	s.Activity = append([]Activity{}, s.Activity...)
+	if c.qr != nil {
+		s.QR = c.qr.status()
+	}
 	return s
 }
 func (c *Client) Close() error {
@@ -200,6 +211,7 @@ func (c *Client) Close() error {
 	return c.lock.Release()
 }
 func (c *Client) stopLocked() {
+	c.qr = nil
 	c.send = nil
 	c.events = nil
 	c.disconnectAck = nil
@@ -228,7 +240,7 @@ func (c *Client) Pause(v bool) {
 		c.status.State = "paused"
 	} else if c.conn != nil {
 		c.status.State = "connected"
-	} else if c.host != nil {
+	} else if c.host != nil || (c.qr != nil && c.qr.stage != qrStageFailed) {
 		c.status.State = "waiting"
 	} else {
 		c.status.State = "disconnected"

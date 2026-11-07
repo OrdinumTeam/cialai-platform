@@ -1,8 +1,8 @@
 # 02 · Conexão e pareamento do Broto
 
-## Estado em 28/10/2026
+## Estado em 06/11/2026
 
-Pareamento próprio e discagem preparados. O código CIALAIB2 vale dez minutos e exige aprovação, com consulta curta enquanto aguarda. Identidade, token, revogação, reconexão e estado privado têm testes locais. A reserva foi exercitada com SOCKS local e TLS real; isso não comprova a rede Tor pública nem NAT entre redes distintas.
+Pareamento próprio e discagem preparados. O código CIALAIB2 vale dez minutos e exige aprovação, com consulta curta enquanto aguarda. Identidade, token, revogação, reconexão e estado privado têm testes locais. A reserva foi exercitada com SOCKS local e TLS real; isso não comprova a rede Tor pública nem NAT entre redes distintas. O pareamento por QR lido pelo celular, da decisão 077, está preparado e tem testes locais; o onion temporário no Tor público e a marca na rede local ainda não foram provados com aparelhos.
 
 | Peça | Estado | Base que reaproveita |
 | --- | --- | --- |
@@ -10,6 +10,7 @@ Pareamento próprio e discagem preparados. O código CIALAIB2 vale dez minutos e
 | Papel de identidade `broto` | Preparado | `internal/identity/identity.go`, com `desktop`, `phone` e `broto` |
 | Código, pedido guardado e lista Brotos ligando | Preparado | `internal/pairing` e a borda em `internal/edge/edge.go` |
 | Token por aparelho e revogação | Preparado | `internal/pairing/registry.go` e `edge.Server.Revoke` |
+| Pareamento por QR lido pelo celular | Preparado | `internal/pairing/qr.go`, o onion temporário em `internal/tor` e a marca em `internal/mdns` |
 
 ## Por que o Broto disca, e não o contrário
 
@@ -73,6 +74,7 @@ O conteúdo é o mesmo do celular: a chave do hospedeiro, o onion sempre present
 | Aparelho | Como |
 | --- | --- |
 | Computador com tela | A pessoa abre a janela do Broto, cola o código e clica em Ligar |
+| Computador com tela, com um celular já pareado ao hospedeiro | A janela do Broto mostra um QR, o celular lê o QR em Ligar um Broto e a pessoa confirma nos dois aparelhos |
 | Computador sem tela, como um servidor | A pessoa roda `cialai-broto parear` e cola o código quando ele pedir |
 | Aparelho sem teclado bom, como TV | Fora da primeira versão; o jeito de levar o código até ele fica para a fase desses aparelhos |
 
@@ -94,6 +96,21 @@ O nome configurado do Broto é o enviado no pedido. Ele aceita até 48 caractere
 Consultas válidas que retornam espera não consomem a quota de tentativas de pareamento. Códigos inválidos, outra chave e tentativas recusadas continuam sujeitos ao limite. Assim, aguardar a pessoa não faz o próprio Broto esgotar a quota antes da aprovação. A suíte cobre consultas repetidas acima da quota sem registrar o aparelho antes do sim.
 
 A entrada restrita de uma chave não registrada continua valendo: antes do pareamento terminar, uma chave desconhecida só alcança `POST /pair`, por no máximo 4 sessões de 60 s, com o portão reconferido a cada segundo, como em `internal/pairing/sessions.go`. Cada pergunta do Broto na espera é uma dessas sessões curtas.
+
+### Pelo QR, com o celular
+
+Pela decisão 077, há um segundo caminho, sem copiar nada: a janela do Broto mostra um QR e um celular já pareado com o hospedeiro lê esse QR. As regras de cima continuam valendo. O Broto só disca, nada escuta nele, e o celular nunca fala com o Broto pela rede: ele só lê a tela.
+
+1. Em Ligar pelo celular, o serviço do Broto sorteia um segredo de 32 bytes e monta o texto `CIALAIQ1.`, com a chave pública do Broto, o segredo, a validade de 10 minutos, o nome e o sistema. O QR é de uso único.
+2. No celular, o menu de cada computador ganha Ligar um Broto, que abre a câmera. O celular manda o texto lido ao hospedeiro pela própria ponte, no comando `broto_qr_begin`, e passa a consultar `broto_qr_state`.
+3. Do segredo, hospedeiro e Broto derivam por HKDF-SHA256, cada valor com o próprio rótulo, a chave de um onion temporário, o id e o segredo do pareamento e a chave de uma marca para a rede local. O hospedeiro publica o onion temporário com `ADD_ONION`, apontado para a mesma entrada do onion principal, e anuncia a marca por mDNS, os dois só enquanto o pedido vale.
+4. O Broto procura a marca na rede local e disca o endereço dela; sem a marca, disca o onion temporário. Ele começa antes de o celular ler o QR, e o Tor não volta a procurar por 15 minutos um onion que não achou. Por isso, antes de cada nova tentativa pelo Tor, o Broto pede `SIGNAL NEWNYM` ao próprio Tor, que esquece as buscas que falharam.
+5. Na primeira conexão o Broto ainda não conhece a chave do hospedeiro. O TLS guarda a que recebeu e, depois do primeiro pedido aceito, toda conexão do mesmo pareamento exige essa chave. O Broto faz `POST /pair` com o tipo `broto-qr`, o id e o segredo derivados e um número novo de 32 bytes a cada tentativa. O hospedeiro só aceita a chave de Broto que veio no QR.
+6. Hospedeiro e Broto calculam quatro dígitos sobre a chave do hospedeiro, a chave do Broto, o segredo e o número da tentativa. O celular mostra o nome, o sistema e os dígitos, com Confirmar e Recusar. A pessoa digita os dígitos na janela do Broto, que confere sozinha e dá três tentativas. Com os dígitos certos, o Broto avisa o hospedeiro e passa a perguntar, como no código colado.
+7. O token só sai quando o celular confirmou e o Broto conferiu os dígitos. A resposta é a mesma do código colado, e o Broto só guarda o hospedeiro se a chave dela for a mesma que o TLS guardou. No registro do hospedeiro, o Broto entra com o nome e o sistema do QR, os mesmos que o celular mostrou. Daí em diante, a conexão segue pelo onion principal e pelos candidatos da resposta.
+8. Depois do sucesso ou da recusa, o onion temporário e a marca ficam no ar mais 30 s, para o Broto ler a resposta. Na validade, ou quando a rede do hospedeiro para, saem na hora: o onion com `DEL_ONION` e a marca com a despedida do mDNS.
+
+O hospedeiro aceita no máximo dois QR ao mesmo tempo e lembra de cada QR lido até ele vencer, para recusar uma segunda leitura. Na mesma rede, a marca liga em segundos. Pelo Tor, o pareamento espera o onion temporário ser publicado, o que leva de dezenas de segundos a alguns minutos.
 
 ## Token e registro
 

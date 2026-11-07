@@ -38,6 +38,9 @@ type runtimeState struct {
 	// commandMu serializes the commands that change the network, the
 	// identity or the registry.
 	commandMu sync.Mutex
+	// qrMu serializes broto.qr.changed, so events keep the order of the
+	// stages.
+	qrMu sync.Mutex
 
 	// mu guards the fields below, read by events from other goroutines.
 	mu        sync.Mutex
@@ -102,6 +105,7 @@ func newRuntime(options Options, writer *rpc.Writer) *runtimeState {
 		}
 		runtime.emit("broto.activity", a)
 	}
+	runtime.sessions.OnQRChange(runtime.qrChanged)
 	runtime.approvals = newApprovalQueue(runtime.emit)
 	runtime.emitter = newStateEmitter(options.Network.StateInterval, runtime.status, func(status NetStatus) {
 		runtime.emit("net.state", status)

@@ -1,13 +1,14 @@
 # 04 · Segurança
 
-## Estado em 28/10/2026
+## Estado em 06/11/2026
 
-Controles preparados localmente: papel persistido por rota, aprovação obrigatória, permissões no hospedeiro, teto local, auditoria, pausa e desconexão. Testes cobrem recusa, aprovação, limites locais e vínculo da chave TLS. A prova em duas máquinas permanece pendente.
+Controles preparados localmente: papel persistido por rota, aprovação obrigatória, pareamento por QR com confirmação no celular e no Broto, permissões no hospedeiro, teto local, auditoria, pausa e desconexão. Testes cobrem recusa, aprovação, limites locais e vínculo da chave TLS. A prova em duas máquinas permanece pendente.
 
 | Controle | Estado |
 | --- | --- |
 | Papel gravado no hospedeiro separa rotas de Broto e de celular | Preparado; `go test ./...` verde em 28/10/2026 |
 | Aprovação obrigatória pela lista Brotos ligando | Preparado |
+| Pareamento por QR com confirmação no celular e no Broto | Preparado; testes locais, sem prova com aparelhos |
 | Três camadas de permissão | Preparado |
 | Teto local no próprio Broto | Preparado |
 | Registro de auditoria nos dois lados | Preparado |
@@ -32,6 +33,8 @@ O papel vem gravado no registro, no `devices.json`, e a borda confere a cada con
 ## A porta de entrada: código e aprovação
 
 Nenhum Broto entra só com o código. O código é aleatório, gerado na hora em Conectar novo Broto, de uso único, válido por 10 minutos e preso ao primeiro aparelho que o apresenta. Mesmo com o código certo, o Broto fica na lista Brotos ligando até a pessoa aprovar no hospedeiro, conferindo os quatro dígitos que aparecem nos dois lados. Um código vazado, sozinho, não abre nada: o pedido do intruso aparece na lista, com dígitos que não batem com nenhuma janela de Broto da pessoa, e ela recusa.
+
+Pelo QR da decisão 077, a porta é a mesma, com a aprovação em dois lugares: o celular que leu o QR mostra o nome, o sistema e os quatro dígitos e pede Confirmar, e a pessoa digita os dígitos na janela do Broto. O hospedeiro só aceita a chave de Broto que veio no QR, e o token só sai com as duas confirmações.
 
 ## As três camadas de permissão
 
@@ -82,6 +85,8 @@ Isso é deliberado. Dar à IA um terminal numa máquina remota é poderoso e mer
 | Um Broto quer mandar no hospedeiro | Separação de papéis; o token de Broto não entra na rota do hospedeiro |
 | Um Broto comprometido quer alcançar outro Broto | Os Brotos não se falam; cada um só tem uma conexão, com o hospedeiro |
 | Alguém rouba o código de pareamento | Código aleatório gerado na hora para cada Broto, de uso único, válido por 10 minutos e preso ao primeiro aparelho que o apresenta; nada entra sem Aprovar na lista Brotos ligando, conferindo os quatro dígitos |
+| Alguém fotografa o QR do Broto | O hospedeiro só aceita a chave de Broto que está no QR, e quem fotografou não tem a chave privada. Se o intruso publicar o mesmo onion temporário e o Broto discar para ele, o hospedeiro verdadeiro não vê o Broto e o celular não mostra dígitos. O número novo de cada tentativa só viaja depois que o TLS fixou a chave do outro lado, então o intruso não consegue fabricar uma chave que repita os dígitos. Três erros de dígito encerram o QR |
+| Alguém mostra um QR falso ao celular | O celular mostra o nome e o sistema do Broto e só segue com Confirmar. Ler o QR já pede a biometria, conforme o bloqueio escolhido no celular, e a mesma sessão destravada vale para o Confirmar |
 | Alguém na rede observa o tráfego | TLS 1.3 mútuo no caminho direto e na reserva pelo Tor; a saída de terminal cruza cifrada ponta a ponta |
 | O hospedeiro é roubado | Revogar o Broto corta a conexão; quem está na máquina do Broto também pode Desconectar; o teto local limita o estrago até lá |
 | A máquina do Broto é sensível | O teto local e a conta escolhida na instalação definem o que qualquer ordem alcança |

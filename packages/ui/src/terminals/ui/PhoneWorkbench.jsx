@@ -26,6 +26,7 @@ import PhoneSessionCard, { PhoneSessionSkeleton } from './PhoneSessionCard.jsx';
 import { SearchInput, SegmentedControl } from '../../mobile/ui.jsx';
 import { countSessions, filterSessions, sessionPhase } from '../phone-session-list.js';
 import PhoneFiles from './PhoneFiles.jsx';
+import PhoneBrotoPairing from './PhoneBrotoPairing.jsx';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 
 // Vibração curta nas teclas, onde o WebView oferece: Android sim, iOS não.
@@ -110,6 +111,8 @@ export default function PhoneWorkbench() {
   const [profiles, setProfiles] = useState(false);
   // Sessão que vai receber o agente numa conta escolhida.
   const [launchFor, setLaunchFor] = useState(null);
+  // QR de Broto que a câmera da casca leu, com o id do pedido dela.
+  const [brotoQr, setBrotoQr] = useState(null);
   const [closing, setClosing] = useState(false);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
@@ -142,14 +145,15 @@ export default function PhoneWorkbench() {
   }, [hydrated, settled]);
   // O voltar do aparelho fecha antes a tela cheia que estiver aberta.
   useEffect(() => onNavigateBack(() => {
-    if (quickOpen) setQuickOpen(false);
+    if (brotoQr) setBrotoQr(null);
+    else if (quickOpen) setQuickOpen(false);
     else if (keysOpen) setKeysOpen(false);
     else if (picker) setPicker(null);
     else if (folderFor) setFolderFor(null);
     else if (pickProject) { setPickProject(false); requestNavigateBack(); }
     else if (pane === 'list') requestNavigateBack();
     else navigate({ type: 'back' });
-  }), [pane, picker, folderFor, pickProject, keysOpen, quickOpen]);
+  }), [pane, picker, folderFor, pickProject, keysOpen, quickOpen, brotoQr]);
   // Rota restaurada depois de recarregar: a sessao aparece com a hidratacao.
   useEffect(() => { if (selected) selectSession(selected.id); }, [selected?.id]);
   useEffect(() => {
@@ -163,6 +167,7 @@ export default function PhoneWorkbench() {
       // A pasta do pedido só preenche o fluxo: a sessão abre no toque final.
       else if (intent.kind === 'new-session') setPicker({ path: typeof intent.cwd === 'string' ? intent.cwd : '' });
       else if (intent.kind === 'pick-project') setPickProject(true);
+      else if (intent.kind === 'broto-qr') setBrotoQr({ id: intent.id, payload: intent.payload });
     };
     let hydrated = false;
     hydrate().then(() => { hydrated = true; applyIntent(); }).catch((error) => notify(error.message, 'warning'));
@@ -464,6 +469,7 @@ export default function PhoneWorkbench() {
           .catch(error => notify(error.message, 'warning'));
       }} />
     </Sheet>
+    <PhoneBrotoPairing request={brotoQr} onClose={() => setBrotoQr(null)} />
     <PhoneSessionMenu
       session={menuFor}
       open={Boolean(menuFor)}

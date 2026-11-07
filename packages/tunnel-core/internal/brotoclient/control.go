@@ -92,6 +92,30 @@ func (c *Client) controlConn(ctx context.Context, conn net.Conn) {
 			} else {
 				response.Result = c.Status()
 			}
+		case "broto.qr.begin":
+			if qr, err := c.BeginQR(); err != nil {
+				response.Error = &controlError{"Não foi possível criar o código do Broto."}
+			} else {
+				response.Result = map[string]string{"payload": qr.Payload, "expiresAt": qr.ExpiresAt}
+			}
+		case "broto.qr.confirm":
+			// A mismatch is an answer, not an error: the window shows the
+			// attempts left.
+			var params struct {
+				Digits string `json:"digits"`
+			}
+			if json.Unmarshal(request.Params, &params) != nil {
+				response.Error = &controlError{errQRDigits.Error()}
+			} else if ok, left, err := c.ConfirmQR(params.Digits); err != nil {
+				response.Error = &controlError{err.Error()}
+			} else if ok {
+				response.Result = map[string]bool{"ok": true}
+			} else {
+				response.Result = map[string]any{"ok": false, "attemptsLeft": left}
+			}
+		case "broto.qr.cancel":
+			c.CancelQR()
+			response.Result = map[string]any{}
 		case "broto.connect":
 			var params struct {
 				Pairing string `json:"pairing"`

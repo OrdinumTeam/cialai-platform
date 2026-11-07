@@ -121,6 +121,37 @@ button{font:inherit}
 
 .broto-digits{display:flex;gap:6px;margin-top:28px;color:var(--label);font:600 40px/1 var(--font-mono);letter-spacing:.14em;font-variant-numeric:tabular-nums}
 
+/* ── ligar pelo celular ────────────────────────────────────────── */
+
+/* Ligar pelo celular vem antes do código colado, num bloco com o botão
+   principal. O código continua logo abaixo, com o título próprio. */
+.broto-choice{display:flex;align-items:center;gap:16px;margin-top:24px;padding:16px;border-radius:16px;background:var(--surface-2)}
+.broto-choice__text{flex:1;min-width:0}
+.broto-choice__text h2{color:var(--label);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.broto-choice__text p{margin-top:4px;color:var(--label-2);font-size:12.5px;line-height:1.45}
+.broto-choice+.broto-note{margin-top:10px}
+.broto-or{margin-top:28px;color:var(--label);font-size:14px;font-weight:600;letter-spacing:-.01em}
+.broto-or+.broto-lead{margin-top:4px}
+
+/* O QR fica sempre em fundo branco, também no tema escuro, como no pareamento
+   do celular no Cialai: a câmera precisa de contraste e de margem clara. */
+@keyframes brotoPulse{0%,100%{opacity:1}50%{opacity:.3}}
+.broto-screen--qr{text-align:center}
+.broto-qr{width:fit-content;margin:24px auto 0;padding:8px;border-radius:18px;background:#fff;box-shadow:0 0 0 1px var(--separator)}
+.broto-qr canvas{display:block;width:280px;height:280px;border-radius:12px;background:#fff}
+.broto-qr.is-expired canvas{opacity:.2}
+.broto-qr__timer{display:flex;justify-content:center;align-items:baseline;gap:8px;margin-top:16px;color:var(--label-2);font-size:12.5px}
+.broto-qr__timer strong{color:var(--label);font:600 15px var(--font-mono);font-variant-numeric:tabular-nums}
+.broto-qr__status{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:6px;color:var(--label-3);font-size:12px}
+.broto-qr__status i{width:6px;height:6px;flex:none;border-radius:50%;background:var(--accent);animation:brotoPulse 1.6s var(--ease) infinite}
+.broto-screen--qr .broto-form__actions{justify-content:center}
+
+/* Os quatro números do celular, grandes e espaçados, num campo só. */
+.broto-digits-field{width:100%;height:56px;padding:0 0 0 .5em;border:1px solid transparent;border-radius:var(--radius-control);outline:0;background:var(--field);color:var(--label);font:600 30px/1 var(--font-mono);letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums;transition:background-color var(--fast) var(--ease),border-color var(--fast) var(--ease),box-shadow var(--fast) var(--ease)}
+.broto-digits-field:hover{background:var(--surface-3)}
+.broto-digits-field:focus{border-color:var(--accent);background:var(--surface);box-shadow:0 0 0 3px var(--accent-ring)}
+.broto-digits-field.is-error,.broto-digits-field.is-error:focus{border-color:var(--bad);box-shadow:0 0 0 3px var(--bad-ring)}
+
 /* ── botões, os do Cialai ──────────────────────────────────────── */
 
 .broto-btn{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 16px;border:0;border-radius:var(--radius-control);background:var(--surface-2);color:var(--label);font-size:13px;font-weight:600;white-space:nowrap;cursor:default;transition:background-color var(--fast) var(--ease),color var(--fast) var(--ease),transform 120ms var(--ease)}
@@ -176,6 +207,7 @@ button{font:inherit}
   .broto{padding:28px 20px}
   .broto h1{font-size:21px}
   .broto-form__actions .broto-btn{flex:1}
+  .broto-choice{flex-direction:column;align-items:stretch;gap:12px}
   .broto-monitor{padding:22px 20px 16px}
   .broto-monitor__head{grid-template-columns:auto minmax(0,1fr)}
   .broto-monitor__actions{grid-column:1/-1}
@@ -188,5 +220,6 @@ button{font:inherit}
   .broto-screen,.broto-monitor{animation:none}
   .broto-progress span{left:33%;animation:none}
   .broto-spinner{animation-duration:2.4s}
-  .broto-btn,.broto-code,.broto-paste{transition:none}
+  .broto-qr__status i{animation:none}
+  .broto-btn,.broto-code,.broto-paste,.broto-digits-field{transition:none}
 }

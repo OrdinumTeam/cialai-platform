@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
+import { CameraView, useCameraPermissions, type BarcodeSettings } from 'expo-camera';
 import * as Clipboard from 'expo-clipboard';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -14,6 +14,7 @@ import {
   type PairResult
 } from 'cialai-tunnel';
 
+import { BROTO_QR_PREFIX } from '../bridge/messages';
 import { formatFingerprint } from '../desktops/format';
 import { useI18n } from '../i18n';
 import {
@@ -45,6 +46,8 @@ const STAGE_KEYS: Readonly<Record<PairStage, string>> = {
 };
 
 const STAGE_TICK_MS = 250;
+// A câmera só procura QR, aqui e em Ligar um Broto.
+export const QR_SCANNER_SETTINGS: BarcodeSettings = { barcodeTypes: ['qr'] };
 // Depois disso na reserva, a tela explica a demora e mostra o tempo.
 export const PAIR_SLOW_HINT_MS = 8_000;
 
@@ -85,6 +88,11 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
   const inspect = useCallback(async (payload: string) => {
     const clean = payload.trim();
     if (!clean) return;
+    // O QR de um Broto não vincula este celular: ele é lido em Computadores.
+    if (clean.startsWith(BROTO_QR_PREFIX)) {
+      setError(t('mobile.pair.brotoQr'));
+      return;
+    }
     setReading(true);
     setError('');
     dispatchProgress({ type: 'reading' });
@@ -97,7 +105,7 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
     } finally {
       setReading(false);
     }
-  }, []);
+  }, [t]);
 
   async function pasteCode() {
     await inspect(await Clipboard.getStringAsync());
@@ -220,7 +228,7 @@ export function Pair({ initialError, notice, device, onPaired, onCancel }: Props
     <View style={[styles.safeArea, { backgroundColor: colors.background }]}>
       {permission?.granted ? (
         <CameraView
-          barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
+          barcodeScannerSettings={QR_SCANNER_SETTINGS}
           onBarcodeScanned={reading ? undefined : event => void inspect(event.data)}
           style={StyleSheet.absoluteFill}
         />

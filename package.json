@@ -53,7 +53,7 @@
     "test:integration:headscale": "node tools/run.mjs integration-headscale",
     "test:netlab": "node tools/run.mjs netlab",
     "test:spike:headscale": "node tools/run.mjs spike-headscale",
-    "test:broto-ui": "node tools/broto/check-ai-ui.mjs",
+    "test:broto-ui": "node tools/broto/check-ai-ui.mjs && node tools/broto/check-qr-ui.mjs",
     "test:broto-command-windows": "node tools/broto/check-command-windows.mjs"
   }
 }

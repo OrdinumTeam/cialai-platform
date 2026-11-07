@@ -13,6 +13,9 @@ import (
 )
 
 func (r *runtimeState) brotoCommand(ctx context.Context, cmd string, raw json.RawMessage) (any, error) {
+	if strings.HasPrefix(cmd, "broto.qr.") {
+		return r.brotoQRCommand(cmd, raw)
+	}
 	var a struct {
 		Name     string          `json:"name"`
 		PairID   string          `json:"pairId"`

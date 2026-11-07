@@ -132,6 +132,7 @@ func (runtime *runtimeState) netStart(ctx context.Context, raw json.RawMessage) 
 		proxySecret: args.ProxySecret, stunServers: stun, torEnabled: args.Tor == nil || *args.Tor,
 		torExecutable: runtime.torExecutable, seams: runtime.seams,
 		onEvent: runtime.emit, onChange: runtime.emitter.trigger, onTorState: runtime.emitTor,
+		onQRChanged: runtime.emitQRChanged,
 	}
 	runtime.mu.Unlock()
 	n, err := startNetwork(config)

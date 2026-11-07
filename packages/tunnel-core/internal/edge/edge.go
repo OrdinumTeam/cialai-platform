@@ -513,6 +513,10 @@ type pairRequest struct {
 	PairID  string     `json:"pairId"`
 	Secret  string     `json:"secret"`
 	Device  PairDevice `json:"device"`
+	// Nonce and Confirmed belong to kind broto-qr only: the Broto nonce of
+	// the claim and its confirmation of the digits.
+	Nonce     string `json:"nonce,omitempty"`
+	Confirmed bool   `json:"confirmed,omitempty"`
 }
 
 func (server *Server) servePair(response http.ResponseWriter, request *http.Request, session transport.Session) {
@@ -541,6 +545,10 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 		fail(input.PairID, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento contém dados adicionais.")
 		return
 	}
+	if input.Kind != "broto-qr" && (input.Nonce != "" || input.Confirmed) {
+		fail(input.PairID, http.StatusBadRequest, "payload_invalid", "A solicitação de pareamento é inválida.")
+		return
+	}
 	// Both sides are canonical base64url, so a different spelling of the
 	// same key is also refused.
 	if input.Device.PublicKey != session.PeerKey() {
@@ -549,6 +557,10 @@ func (server *Server) servePair(response http.ResponseWriter, request *http.Requ
 	}
 	if input.Kind == "broto" {
 		server.serveBrotoPair(response, request, session, input, charge)
+		return
+	}
+	if input.Kind == "broto-qr" {
+		server.serveBrotoQRPair(response, session, input, charge)
 		return
 	}
 	if input.Kind != "" && input.Kind != "phone" {

@@ -8,6 +8,7 @@ package direct
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -116,7 +117,7 @@ func (endpoint *Endpoint) Dial(ctx context.Context, address string, peerKey ed25
 	if err != nil {
 		return nil, fmt.Errorf("resolve %q: %w", address, err)
 	}
-	session, err := endpoint.dial(ctx, remote, peerKey)
+	session, err := endpoint.dial(ctx, remote, endpoint.pinned(peerKey))
 	if err != nil {
 		return nil, err
 	}
@@ -125,6 +126,37 @@ func (endpoint *Endpoint) Dial(ctx context.Context, address string, peerKey ed25
 
 // DialCandidates dials every candidate at once and keeps the first session.
 func (endpoint *Endpoint) DialCandidates(ctx context.Context, candidates []netip.AddrPort, peerKey ed25519.PublicKey) (transport.Session, error) {
+	session, err := endpoint.dialCandidates(ctx, candidates, endpoint.pinned(peerKey))
+	if err != nil {
+		return nil, err
+	}
+	return session, nil
+}
+
+// DialCandidatesRecord is DialCandidates without a pin, for the first contact
+// of a Broto that pairs by QR: it keeps the first host that completes the
+// handshake and returns its key, which the caller pins from then on.
+func (endpoint *Endpoint) DialCandidatesRecord(ctx context.Context, candidates []netip.AddrPort) (transport.Session, ed25519.PublicKey, error) {
+	session, err := endpoint.dialCandidates(ctx, candidates, func() (*tls.Config, error) {
+		return identity.RecordingClientConfig(endpoint.local, func(ed25519.PublicKey) {})
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	public, err := identity.ParsePublicKey(session.PeerKey())
+	if err != nil {
+		_ = session.Close()
+		return nil, nil, err
+	}
+	return session, public, nil
+}
+
+// pinned builds the client TLS configuration of each dial to peerKey.
+func (endpoint *Endpoint) pinned(peerKey ed25519.PublicKey) func() (*tls.Config, error) {
+	return func() (*tls.Config, error) { return identity.ClientConfig(endpoint.local, peerKey) }
+}
+
+func (endpoint *Endpoint) dialCandidates(ctx context.Context, candidates []netip.AddrPort, newConfig func() (*tls.Config, error)) (*Session, error) {
 	targets := usableCandidates(candidates)
 	if len(targets) == 0 {
 		return nil, transport.ErrNoCandidates
@@ -137,7 +169,7 @@ func (endpoint *Endpoint) DialCandidates(ctx context.Context, candidates []netip
 	results := make(chan result, len(targets))
 	for _, target := range targets {
 		go func() {
-			session, err := endpoint.dial(dialContext, net.UDPAddrFromAddrPort(target), peerKey)
+			session, err := endpoint.dial(dialContext, net.UDPAddrFromAddrPort(target), newConfig)
 			if err != nil {
 				err = fmt.Errorf("%s: %w", target, err)
 			}
@@ -238,11 +270,11 @@ func (endpoint *Endpoint) Close() error {
 	return errors.Join(transportErr, packetErr)
 }
 
-func (endpoint *Endpoint) dial(ctx context.Context, remote *net.UDPAddr, peerKey ed25519.PublicKey) (*Session, error) {
+func (endpoint *Endpoint) dial(ctx context.Context, remote *net.UDPAddr, newConfig func() (*tls.Config, error)) (*Session, error) {
 	if endpoint.isClosed() {
 		return nil, transport.ErrClosed
 	}
-	clientTLS, err := identity.ClientConfig(endpoint.local, peerKey)
+	clientTLS, err := newConfig()
 	if err != nil {
 		return nil, err
 	}

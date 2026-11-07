@@ -77,6 +77,7 @@ export default Object.freeze({
   'native.error.openFile': 'Could not open the file',
   'native.error.openImage': 'Could not open the image',
   'native.error.originRefused': 'Origin refused',
+  'native.error.pairedPhoneOnly': 'Only a paired phone can do this.',
   'native.error.pathEmpty': 'Empty path',
   'native.error.pathNotAbsolute': 'The path must be absolute: {path}',
   'native.error.pathRelative': 'Relative path',

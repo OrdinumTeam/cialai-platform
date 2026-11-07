@@ -1230,6 +1230,27 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__retry{min-height:44px;font-size:15px}
 [data-form-factor="phone"] .agent-profiles__refresh{margin-left:0;justify-content:center;min-height:44px;font-size:15px}
 
+/* Ligar um Broto pelo QR: o sistema do Broto embaixo do nome, os quatro
+   numeros grandes, um em cada caixa, e a espera numa linha com o giro. */
+.broto-qr-sheet{display:flex;flex-direction:column;gap:12px}
+.broto-qr-sheet p{margin:0}
+.broto-qr-sheet .broto-qr-sheet__platform{margin-top:-6px;color:var(--mac-label-2);font-size:14px}
+.broto-qr-sheet__identity{display:flex;flex-direction:column;gap:2px;min-width:0}
+.broto-qr-sheet__identity strong{color:var(--mac-label);font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.broto-qr-sheet__identity span{color:var(--mac-label-2);font-size:14px}
+.broto-qr-sheet__digits{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.broto-qr-sheet__digits span{display:grid;place-items:center;width:56px;height:68px;border-radius:var(--mac-radius-card,14px);background:var(--mac-surface-2);color:var(--mac-label);font:600 34px/1 var(--mac-font-mono,ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.broto-qr-sheet__digits.is-muted span{color:var(--mac-label-3)}
+.broto-qr-sheet__lead{color:var(--mac-label);font-size:15px;line-height:1.45}
+.broto-qr-sheet__hint{color:var(--mac-label-3);font-size:13px;line-height:1.45}
+.broto-qr-sheet__status{display:flex;align-items:center;gap:10px;color:var(--mac-label-2);font-size:15px;line-height:1.45}
+.broto-qr-sheet__spinner{flex:none;width:16px;height:16px;border:2px solid var(--mac-accent);border-right-color:transparent;border-radius:50%;animation:phoneSpin .8s linear infinite}
+.broto-qr-sheet__done{display:flex;align-items:center;gap:10px;color:var(--mac-label);font-size:16px;font-weight:600}
+.broto-qr-sheet__done svg{flex:none;color:var(--mac-ok)}
+.broto-qr-sheet__notice{color:var(--mac-warn);font-size:13px;line-height:1.45}
+.broto-qr-sheet__error{color:var(--mac-bad);font-size:15px;line-height:1.45}
+@media (prefers-reduced-motion: reduce){.broto-qr-sheet__spinner{animation-duration:2.4s}}
+
 /* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
 [data-form-factor="phone"] .phone-menu { display: flex; flex-direction: column; margin: 0 -8px; }
 [data-form-factor="phone"] .phone-menu__item { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label); font: inherit; font-size: 16px; text-align: left; }

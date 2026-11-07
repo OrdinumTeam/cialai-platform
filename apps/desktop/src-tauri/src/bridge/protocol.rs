@@ -128,6 +128,9 @@ pub fn allowed_command(cmd: &str) -> bool {
             | "agent_profile_create"
             | "agent_profiles_refresh"
             | "pty_launch_agent"
+            | "broto_qr_begin"
+            | "broto_qr_state"
+            | "broto_qr_decide"
     )
 }
 
@@ -298,6 +301,11 @@ mod tests {
             "agent_profile_create",
             "agent_profiles_refresh",
             "pty_launch_agent",
+            // Ligar um Broto pelo QR lido no celular: comecar, acompanhar e
+            // responder. Quem pede e o aparelho da conexao, nunca a pagina.
+            "broto_qr_begin",
+            "broto_qr_state",
+            "broto_qr_decide",
         ] {
             assert!(allowed_command(cmd));
         }
@@ -326,6 +334,13 @@ mod tests {
             "meetings_delete",
             "docgraph_scan",
             "docgraph_cancel",
+            // Do Broto, o celular so liga pelo QR. Codigo colado, aprovacao,
+            // nivel e terminal continuam no computador.
+            "broto_pair_begin",
+            "broto_pair_decide",
+            "broto_decide",
+            "broto_permission_set",
+            "broto_open",
             "unknown",
         ] {
             assert!(!allowed_command(cmd));

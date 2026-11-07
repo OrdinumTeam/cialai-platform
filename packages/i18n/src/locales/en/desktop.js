@@ -53,6 +53,7 @@ export default Object.freeze({
   "desktop.brotos.accessFree": "You and the AI operate without confirmation.",
   "desktop.brotos.origin": "Session on Broto {name}",
   "desktop.brotos.codeLead": "On the other computer, open Cialai Broto and paste this code. It works only once.",
+  "desktop.brotos.qrHint": "With a paired phone, the Broto can also connect without a code. In its window, choose Connect from your phone.",
   "desktop.brotos.expires": "Expires in {time}",
   "desktop.brotos.expired": "This code has expired.",
   "desktop.brotos.regenerate": "Generate new code",

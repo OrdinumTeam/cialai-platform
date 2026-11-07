@@ -17,6 +17,22 @@ test('unknown and desktop-only commands fail closed before authorization', async
   // A apresentação do card é publicada pelos dois lados; o processo não é tocado.
   assert.equal(remoteCommandAccess('pty_presentation'), 'session');
   assert.equal(remoteCommandAccess('set_preferences'), null);
+  // Ligar um Broto pelo QR: comecar e responder pedem a sessao; o estado so le.
+  assert.equal(remoteCommandAccess('broto_qr_begin'), 'session');
+  assert.equal(remoteCommandAccess('broto_qr_state'), 'read');
+  assert.equal(remoteCommandAccess('broto_qr_decide'), 'session');
+  for (const command of ['broto_pair_begin', 'broto_pair_decide', 'broto_decide', 'broto_open']) {
+    assert.equal(remoteCommandAccess(command), null, `${command} fica no computador`);
+  }
+});
+
+test('polling the Broto QR state never asks again', async () => {
+  const prompts = [];
+  const authorizer = createSensitiveAuthorizer({ requireSensitive: async (level, reason) => { prompts.push([level, reason]); } });
+  await authorizer.authorize('broto_qr_begin', { payload: 'CIALAIQ1.x' });
+  for (let poll = 0; poll < 5; poll += 1) await authorizer.authorize('broto_qr_state', { qrId: 'q_x' });
+  await authorizer.authorize('broto_qr_decide', { qrId: 'q_x', approve: true });
+  assert.deepEqual(prompts, [['session', SENSITIVE_REASONS.computerChange], ['session', SENSITIVE_REASONS.computerChange]]);
 });
 
 test('terminal input shares a grant until lock and kill always asks again', async () => {

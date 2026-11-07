@@ -28,9 +28,11 @@ jest.mock('cialai-tunnel', () => ({
   pair: (...args) => mockPair(...args),
   stop: () => mockStop()
 }));
+// A permissão da câmera começa negada; o teste da leitura a concede.
+const mockCamera = { granted: false };
 jest.mock('expo-camera', () => ({
   CameraView: 'CameraView',
-  useCameraPermissions: () => [{ granted: false }, jest.fn()]
+  useCameraPermissions: () => [mockCamera, jest.fn()]
 }));
 jest.mock('expo-clipboard', () => ({ getStringAsync: jest.fn(async () => 'CIALAI2.payload') }));
 jest.mock('react-native-webview', () => ({ WebView: 'WebView' }));
@@ -57,6 +59,7 @@ const forbiddenOnMainScreens = /127\.0\.0\.1|\b\d{1,3}(?:\.\d{1,3}){3}\b|\.onion
 const forbiddenPunctuation = /[()–—]| - /;
 
 beforeEach(async () => {
+  mockCamera.granted = false;
   mockListeners.clear();
   mockPair.mockReset();
   mockInspect.mockReset();
@@ -162,6 +165,18 @@ test('Pair explains a slow backup, counts the time and lets the person cancel', 
   expect(pressable(tree, 'Vincular')).toBeDefined();
   await act(async () => tree.unmount());
   jest.useRealTimers();
+});
+
+test('Pair points a Broto QR to the computer menu instead of pairing with it', async () => {
+  mockCamera.granted = true;
+  let tree;
+  await act(async () => {
+    tree = create(<Pair device={{ name: 'iPhone', model: 'iPhone16,1', platform: 'ios', app: '1.0.0' }} onPaired={async () => {}} />);
+  });
+  await act(async () => { tree.root.findByType('CameraView').props.onBarcodeScanned({ data: 'CIALAIQ1.QUJD' }); });
+  expect(text(tree)).toMatch(/Este QR é de um Broto\. Para ligar um Broto, abra Computadores/);
+  expect(mockInspect).not.toHaveBeenCalled();
+  await act(async () => tree.unmount());
 });
 
 test('Pair maps a pairing failure without exposing the native message', async () => {
@@ -276,6 +291,45 @@ test('Desktops menu opens sessions, starts intents, renames, disconnects and for
   await act(async () => { tree = create(<Desktops {...desktopsProps()} />); });
   await act(async () => { labelled(tree, 'Opções de Mac de Foco').props.onPress(); });
   expect(pressable(tree, 'Desconectar')).toBeUndefined();
+  await act(async () => tree.unmount());
+});
+
+test('Desktops connects a Broto from the QR the camera reads, only for that computer', async () => {
+  const payload = `CIALAIQ1.${'A'.repeat(40)}_-${'z'.repeat(40)}`;
+  const props = desktopsProps();
+  let tree;
+  const openScanner = async () => {
+    await act(async () => { labelled(tree, 'Opções de Mac de Foco').props.onPress(); });
+    await act(async () => { pressable(tree, 'Ligar um Broto').props.onPress(); });
+  };
+  await act(async () => { tree = create(<Desktops {...props} />); });
+  await openScanner();
+  expect(text(tree)).toMatch(/Na janela do Broto, escolha Ligar pelo celular e aponte a câmera para o QR\./);
+  expect(text(tree)).toMatch(/O Broto vai ser controlado por Mac de Foco\./);
+  expect(text(tree)).toMatch(/Permitir câmera/);
+  expect(text(tree)).not.toMatch(forbiddenPunctuation);
+  await act(async () => { pressable(tree, 'Cancelar').props.onPress(); });
+  expect(tree.root.findAllByType('CameraView')).toHaveLength(0);
+  expect(props.onIntent).not.toHaveBeenCalled();
+  await act(async () => tree.unmount());
+
+  mockCamera.granted = true;
+  await act(async () => { tree = create(<Desktops {...props} />); });
+  await openScanner();
+  const camera = tree.root.findByType('CameraView');
+  expect(camera.props.barcodeScannerSettings).toEqual({ barcodeTypes: ['qr'] });
+  // A câmera repete a leitura enquanto o QR fica na frente dela.
+  const read = camera.props.onBarcodeScanned;
+  for (const data of ['CIALAIB2.abc', 'CIALAIQ1.abc==', `CIALAIQ1.${'A'.repeat(1192)}`]) {
+    await act(async () => { read({ data }); });
+  }
+  expect(text(tree)).toMatch(/Este QR não é de um Broto/);
+  expect(props.onIntent).not.toHaveBeenCalled();
+  await act(async () => { read({ data: ` ${payload}\n` }); });
+  await act(async () => { read({ data: payload }); });
+  expect(props.onIntent).toHaveBeenCalledTimes(1);
+  expect(props.onIntent).toHaveBeenCalledWith(store.desktops[0], { kind: 'broto-qr', payload });
+  expect(tree.root.findAllByType('CameraView')).toHaveLength(0);
   await act(async () => tree.unmount());
 });
 

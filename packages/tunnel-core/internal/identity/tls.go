@@ -50,6 +50,28 @@ func ControlClientConfig(local *Identity, pinned ed25519.PublicKey) (*tls.Config
 	return clientConfig(local, pinned, ControlALPN)
 }
 
+// RecordingClientConfig is ClientConfig for the first contact of a Broto that
+// pairs by QR and does not know the host key yet: it accepts any valid Ed25519
+// server certificate and hands its key to record during the handshake. The
+// caller pins that key afterwards and the digits of the QR check it.
+func RecordingClientConfig(local *Identity, record func(ed25519.PublicKey)) (*tls.Config, error) {
+	if local == nil || record == nil {
+		return nil, errors.New("local identity and a key recorder are required")
+	}
+	config := baseConfig(local, ALPN)
+	config.ServerName = ServerName
+	config.InsecureSkipVerify = true // Replaced by the recorded key, checked by the digits.
+	config.VerifyConnection = func(state tls.ConnectionState) error {
+		public, err := peerKey(state, ALPN)
+		if err != nil {
+			return err
+		}
+		record(public)
+		return nil
+	}
+	return config, nil
+}
+
 func clientConfig(local *Identity, pinned ed25519.PublicKey, protocol string) (*tls.Config, error) {
 	if local == nil || len(pinned) != ed25519.PublicKeySize {
 		return nil, errors.New("local identity and pinned desktop key are required")

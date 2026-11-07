@@ -1,6 +1,6 @@
 # 05 · Interface
 
-## Estado em 28/10/2026
+## Estado em 06/11/2026
 
 Seção Brotos, código de vínculo, pedidos de aprovação com prévia escapada, nível de acesso e abertura de terminal implementados no hospedeiro. O monitor Tauri está em `apps/broto`, com IPC local protegido, instalação do serviço a partir de payload assinado e controles de vínculo, pausa, retomada e desconexão. Strings e testes nos três idiomas passaram.
 
@@ -15,6 +15,7 @@ No serviço Windows, abrir um app com janela por exec ou PTY não o torna visív
 | Nível de permissão por Broto | Implementado | `Brotos.jsx` e `broto_permission_set` |
 | Sessões do Broto na lista | Preparado | `syncSharedSessions()` em `packages/ui/src/terminals/runtime.js` e `SessionCard.jsx` |
 | Janela do próprio Broto | Preparado | `packages/ui` e `packages/i18n`, como o desktop |
+| Ligar pelo celular, com o QR do Broto | Preparado | `packages/ui/src/broto/main.jsx`, `PhoneBrotoPairing.jsx` na página do celular e `apps/mobile/src/screens/BrotoScan.tsx` |
 | Strings nos três idiomas | Preparado | `packages/i18n/src/locales/<loc>/desktop.js` e um arquivo novo `broto.js` |
 
 ## Onde o Broto aparece no hospedeiro
@@ -44,13 +45,25 @@ O pareamento do celular vive em `PairingDialog.jsx`, com o QR que gira a cada 90
 
 | Passo | Celular | Broto |
 | --- | --- | --- |
-| Como o código chega ao aparelho | O celular lê o QR com a câmera | A pessoa copia o código e cola na janela do Broto |
-| Validade | O QR gira a cada 90 s | O código não gira e vale por 10 minutos, de uso único |
-| Aprovação | Opcional | Sempre obrigatória, pela lista Brotos ligando |
+| Como o código chega ao aparelho | O celular lê o QR com a câmera | A pessoa copia o código e cola na janela do Broto, ou o celular lê o QR que a janela do Broto mostra |
+| Validade | O QR gira a cada 90 s | O código e o QR do Broto não giram e valem por 10 minutos, de uso único |
+| Aprovação | Opcional | Sempre obrigatória: pela lista Brotos ligando no código colado, e no celular e no Broto pelo QR |
 
-Separar os fluxos evita que alguém aponte a câmera do celular para um código de Broto e entre pelo caminho errado. O código de Broto é para copiar, não para fotografar.
+Separar os fluxos evita que alguém aponte a câmera do celular para um código de Broto e entre pelo caminho errado. O QR do Broto tem prefixo próprio, `CIALAIQ1.`, e só é aceito em Ligar um Broto; lido na tela de parear o celular, ele explica onde ler. Na seção Brotos, uma linha lembra que, com um celular vinculado, o Broto também liga sem código.
 
 Ao aprovar, o pedido sai da lista e vira uma linha de Broto, já no nível pedir confirmação. Ao recusar, o pedido some e o código deixa de valer. A lista pode ter mais de um pedido ao mesmo tempo, um por código gerado, porque um hospedeiro tem quantos Brotos quiser.
+
+### Ligar pelo celular
+
+Pela decisão 077, o Broto também liga sem código, com um celular já vinculado ao hospedeiro:
+
+1. Na janela do Broto, Ligar pelo celular vem antes do campo de código, com o botão Mostrar QR. O QR vale por 10 minutos, com o tempo que falta embaixo, e a janela diz que procura o computador na rede local e pelo Tor.
+2. No celular, em Computadores, os três pontos do computador que vai controlar o Broto trazem Ligar um Broto, que abre a câmera. Um QR que não é de Broto é recusado ali mesmo.
+3. A página do computador abre a folha Ligar um Broto, que espera o Broto chamar. Pelo Tor isso leva um ou dois minutos; na mesma rede, segundos. Sem Tor no computador, a folha avisa que só funciona na mesma rede.
+4. Quando o Broto chega, a folha mostra o nome, o sistema e quatro números grandes, com Recusar e Confirmar, e pede para confirmar só se o nome e o sistema forem os do Broto certo. A janela do Broto pede os mesmos quatro números, com três tentativas.
+5. Com os números certos no Broto e Confirmar no celular, em qualquer ordem, o Broto liga: a folha diz Broto ligado e a janela do Broto passa ao monitor. Fechar a folha antes do fim recusa o pedido.
+
+Um computador com Cialai anterior à 0.6.0 não conhece os comandos do QR, e a folha diz que ele precisa ser atualizado.
 
 ## As sessões do Broto na lista
 
@@ -73,8 +86,12 @@ A janela segue o visual do Cialai: a mesma fonte, os mesmos neutros, o mesmo ros
 | Tela | O que mostra |
 | --- | --- |
 | Serviço | Quando o serviço não responde, o motivo e o botão Instalar e iniciar serviço, no lugar do campo de código. Durante a instalação, uma barra de progresso e o aviso de responder às janelas de permissão e senha do sistema. Numa conta de administrador do Windows, o UAC pede consentimento e o serviço roda como administrador |
-| Conectar | Um campo de uma linha, em fonte monoespaçada, para colar o código, com o botão Colar dentro dele, que no Windows lê a área de transferência pelo sistema para o WebView2 não pedir permissão, e o botão Ligar, que só acende com um texto no formato de código de Broto |
+| Conectar | Primeiro Ligar pelo celular, com o botão Mostrar QR. Abaixo, em Ou cole um código, um campo de uma linha, em fonte monoespaçada, para colar o código, com o botão Colar dentro dele, que no Windows lê a área de transferência pelo sistema para o WebView2 não pedir permissão, e o botão Ligar, que só acende com um texto no formato de código de Broto |
 | Aguardando | O nome do hospedeiro, os quatro dígitos para conferir com a lista Brotos ligando e o botão Cancelar |
+| Ligar pelo celular | O QR, o tempo que falta, o aviso de que procura o computador na rede local e pelo Tor, e Cancelar |
+| Confira os números | O campo dos quatro números que o celular mostra, as tentativas que restam e Confirmar |
+| Confirme no celular | Os números conferiram e falta Confirmar no celular, com Cancelar |
+| O Broto não foi ligado | O motivo: QR vencido, recusa no celular, três números errados ou recusa do computador, com Mostrar QR novo e Voltar |
 
 Se o hospedeiro recusar ou o código vencer, a janela volta para Conectar e diz o motivo.
 
@@ -127,6 +144,12 @@ A janela do Broto usa um arquivo próprio, `packages/i18n/src/locales/<loc>/brot
 | `broto.pause` | Pausar | Pause | Pausar |
 | `broto.resume` | Retomar | Resume | Reanudar |
 | `broto.disconnect` | Desconectar | Disconnect | Desconectar |
+| `broto.qr.choose` | Ligar pelo celular | Connect from your phone | Conectar desde el teléfono |
+| `broto.qr.show` | Mostrar QR | Show QR code | Mostrar QR |
+| `broto.qr.digits.title` | Confira os números | Check the numbers | Comprueba los números |
+| `broto.qr.approving.title` | Confirme no celular | Confirm on your phone | Confirma en el teléfono |
+
+No celular, a ação e a câmera usam `mobile.brotoScan.*`, em `mobile.js`, e a folha da página usa `terminal.brotoQr.*`, em `terminal.js`, com Ligar um Broto, Connect a Broto e Conectar un Broto no título.
 
 ## Ícone
 

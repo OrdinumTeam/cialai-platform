@@ -1,4 +1,4 @@
-import { pageMessageScript, parsePageMessage, shellMessageScript } from './messages';
+import { isBrotoQrPayload, pageMessageScript, parsePageMessage, shellMessageScript } from './messages';
 
 describe('page bridge messages', () => {
   test('parses bounded auth requests', () => {
@@ -81,6 +81,18 @@ describe('page bridge messages', () => {
     expect(parsePageMessage('{"type":"view","pane":"preview"}')).toBeNull();
     expect(parsePageMessage('{"type":"view","pane":"terminal","url":"https://evil.example"}')).toBeNull();
     expect(parsePageMessage('{"type":"view"}')).toBeNull();
+  });
+
+  test('accepts only the Broto QR text and hands it to the page as an inert intent', () => {
+    const payload = `CIALAIQ1.${'A'.repeat(40)}_-${'z'.repeat(40)}`;
+    expect(isBrotoQrPayload(payload)).toBe(true);
+    expect(isBrotoQrPayload(`CIALAIQ1.${'A'.repeat(1191)}`)).toBe(true);
+    for (const value of [`CIALAIQ1.${'A'.repeat(1192)}`, 'CIALAIQ1.', 'CIALAIQ1.abc==', 'CIALAIQ1.a b', 'CIALAIB2.abc', 'cialaiq1.abc', '', null, 42]) {
+      expect(isBrotoQrPayload(value)).toBe(false);
+    }
+    const script = pageMessageScript({ type: 'intent', intent: { id: 'i1', kind: 'broto-qr', payload } });
+    expect(script).toContain(`"payload":"${payload}"`);
+    expect(script.endsWith('true;')).toBe(true);
   });
 
   test('accepts a picked project folder only with a path inside the limit', () => {

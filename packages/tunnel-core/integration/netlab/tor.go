@@ -31,11 +31,13 @@ import (
 // The tor role replaces the bundled tor binary in the desktop container. The
 // sidecar supervisor starts it exactly as it starts tor, with -f torrc, and
 // drives it through the control port: cookie authentication, TAKEOWNERSHIP,
-// SETEVENTS, ADD_ONION, SETCONF DisableNetwork=0, GETINFO bootstrap and SIGNAL
-// SHUTDOWN. Instead of joining the Tor network it publishes the service id
-// derived from the ADD_ONION key at the relay named by NETLAB_RELAY and
-// forwards every stream the relay attaches to the ADD_ONION target. Killing
-// this process is the laboratory version of the tor process crashing.
+// SETEVENTS, ADD_ONION, DEL_ONION, SETCONF DisableNetwork=0, GETINFO
+// bootstrap and SIGNAL SHUTDOWN. Instead of joining the Tor network it
+// publishes the service id derived from each ADD_ONION key at the relay named
+// by NETLAB_RELAY, the desktop service and the temporary ones of a Broto
+// pairing by QR, and forwards every stream the relay attaches to the target of
+// that service. Killing this process is the laboratory version of the tor
+// process crashing.
 
 const (
 	torVersion            = "Tor version 0.4.9.12-netlab."
@@ -54,13 +56,52 @@ type fakeTor struct {
 	mu          sync.Mutex
 	cookie      []byte
 	cookiePath  string
-	serviceID   string
-	target      string
+	services    map[string]*torService
 	network     bool
 	progress    int
 	subscribers map[*torControl]struct{}
 	exit        chan int
 	exitOnce    sync.Once
+}
+
+// torService is one ADD_ONION service and, once the network runs, the loop
+// that keeps it published at the relay until DEL_ONION.
+type torService struct {
+	id      string
+	target  string
+	removed chan struct{}
+
+	mu   sync.Mutex
+	conn net.Conn
+}
+
+// track records the current relay connection, so DEL_ONION can end it; it
+// fails once the service was removed.
+func (service *torService) track(conn net.Conn) bool {
+	service.mu.Lock()
+	defer service.mu.Unlock()
+	select {
+	case <-service.removed:
+		return false
+	default:
+	}
+	service.conn = conn
+	return true
+}
+
+// remove stops publishing: the relay drops a service whose connection ends.
+func (service *torService) remove() {
+	service.mu.Lock()
+	select {
+	case <-service.removed:
+	default:
+		close(service.removed)
+	}
+	conn := service.conn
+	service.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
 }
 
 type torControl struct {
@@ -88,6 +129,7 @@ func runTor(args []string) int {
 	tor := &fakeTor{
 		relay:       os.Getenv(torRelayEnvironment),
 		cookiePath:  torrc["CookieAuthFile"],
+		services:    map[string]*torService{},
 		subscribers: map[*torControl]struct{}{},
 		exit:        make(chan int, 1),
 	}
@@ -231,9 +273,33 @@ func (tor *fakeTor) serve(conn net.Conn) {
 				continue
 			}
 			tor.mu.Lock()
-			tor.serviceID, tor.target = id, target
+			service, exists := tor.services[id]
+			if !exists {
+				service = &torService{id: id, target: target, removed: make(chan struct{})}
+				tor.services[id] = service
+			}
+			network := tor.network
 			tor.mu.Unlock()
+			if exists {
+				control.write("550 Onion address collision")
+				continue
+			}
 			control.write("250-ServiceID="+id, "250 OK")
+			if network {
+				go tor.publishLoop(service)
+			}
+		case "DEL_ONION":
+			tor.mu.Lock()
+			service := tor.services[rest]
+			delete(tor.services, rest)
+			tor.mu.Unlock()
+			if service == nil {
+				control.write("552 Unknown Onion Service id")
+				continue
+			}
+			service.remove()
+			notice("Removed the onion service %s.onion", rest)
+			control.write("250 OK")
 		case "SETCONF":
 			control.write("250 OK")
 			if rest == "DisableNetwork=0" {
@@ -285,38 +351,61 @@ func (tor *fakeTor) enableNetwork() {
 	tor.mu.Lock()
 	started := tor.network
 	tor.network = true
-	tor.mu.Unlock()
-	if !started {
-		go tor.publishLoop()
+	services := make([]*torService, 0, len(tor.services))
+	for _, service := range tor.services {
+		services = append(services, service)
 	}
-}
-
-// publishLoop keeps the service published at the relay, reconnecting after
-// the relay restarts, and reports every publication as a descriptor upload.
-func (tor *fakeTor) publishLoop() {
+	tor.mu.Unlock()
+	if started {
+		return
+	}
 	tor.setProgress(10)
-	for first := true; ; first = false {
-		err := tor.publishOnce(first)
-		notice("Relay connection ended: %v", err)
-		time.Sleep(torRelayRetry)
+	for _, service := range services {
+		go tor.publishLoop(service)
 	}
 }
 
-func (tor *fakeTor) publishOnce(first bool) error {
+// raiseProgress reports bootstrap progress, which never goes back.
+func (tor *fakeTor) raiseProgress(progress int) {
 	tor.mu.Lock()
-	id := tor.serviceID
+	current := tor.progress
 	tor.mu.Unlock()
-	if id == "" {
-		return errors.New("no onion service registered")
+	if current < progress {
+		tor.setProgress(progress)
 	}
+}
+
+// publishLoop keeps one service published at the relay, reconnecting after
+// the relay restarts, and reports every publication as a descriptor upload.
+// It ends with DEL_ONION.
+func (tor *fakeTor) publishLoop(service *torService) {
+	for {
+		err := tor.publishOnce(service)
+		select {
+		case <-service.removed:
+			return
+		default:
+		}
+		notice("Relay connection of %s.onion ended: %v", service.id, err)
+		select {
+		case <-service.removed:
+			return
+		case <-time.After(torRelayRetry):
+		}
+	}
+}
+
+func (tor *fakeTor) publishOnce(service *torService) error {
+	id := service.id
 	conn, err := net.DialTimeout("tcp", tor.relay, 5*time.Second)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
-	if first {
-		tor.setProgress(50)
+	if !service.track(conn) {
+		return errors.New("onion service removed")
 	}
+	tor.raiseProgress(50)
 	if _, err := io.WriteString(conn, "PUBLISH "+id+"\n"); err != nil {
 		return err
 	}
@@ -330,12 +419,7 @@ func (tor *fakeTor) publishOnce(first bool) error {
 	if strings.TrimSpace(line) != "OK" {
 		return fmt.Errorf("relay refused the service: %q", line)
 	}
-	tor.mu.Lock()
-	progress := tor.progress
-	tor.mu.Unlock()
-	if progress < 100 {
-		tor.setProgress(100)
-	}
+	tor.raiseProgress(100)
 	notice("Uploaded the descriptor of %s.onion to the netlab relay", id)
 	tor.broadcast("HS_DESC", "UPLOADED "+id+" NO_AUTH $0000000000000000000000000000000000000000~netlab UNKNOWN")
 	for {
@@ -345,16 +429,15 @@ func (tor *fakeTor) publishOnce(first bool) error {
 		}
 		fields := strings.Fields(line)
 		if len(fields) == 2 && fields[0] == "STREAM" {
-			go tor.attach(id, fields[1])
+			go tor.attach(service, fields[1])
 		}
 	}
 }
 
-// attach opens the relay side of one stream and forwards it to the target.
-func (tor *fakeTor) attach(id, stream string) {
-	tor.mu.Lock()
-	target := tor.target
-	tor.mu.Unlock()
+// attach opens the relay side of one stream and forwards it to the target of
+// its service.
+func (tor *fakeTor) attach(service *torService, stream string) {
+	id, target := service.id, service.target
 	local, err := net.DialTimeout("tcp", target, 5*time.Second)
 	if err != nil {
 		notice("Stream %s: target %s refused: %v", stream, target, err)

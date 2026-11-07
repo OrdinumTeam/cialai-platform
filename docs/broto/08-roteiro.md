@@ -221,6 +221,18 @@ Tamanho G. Depende de BRO-006. Descrito no documento 07.
 
 Desenho e checklist em [09 · A IA do hospedeiro no comando dos Brotos](./09-ia-no-comando.md), tarefas BRO-014 a BRO-022. As marcas dessa fase ficam lá, para não duplicar.
 
+## Fase 8, pareamento por QR
+
+### BRO-024 Broto ligado por QR lido pelo celular
+
+Tamanho M. Depende de BRO-003 e BRO-013. Descrito nos documentos 02, 04 e 05 e na decisão 077 do documento 12.
+
+- [x] Código do QR, da derivação, dos dígitos, do onion temporário e da marca na rede local, no hospedeiro e no Broto, com testes na suíte de `packages/tunnel-core`. 06/11/2026, `npm run test:tunnel` verde e os testes de QR com `-race`
+- [x] Janela do Broto, ponte do celular, tela de leitura no app e textos nos três idiomas, com testes. 06/11/2026, `test:ui`, `test:broto-ui`, `test:protocol`, `test:mobile` e os testes da ponte no Rust verdes
+- [ ] Pareamento real pelo Tor público, com o celular lendo o QR de um Broto Windows e de um Broto Linux, com evidência em `docs/evidence/bro-024/`
+- [ ] Pareamento real na mesma rede, pela marca mDNS
+- [x] Documentos 02, 04 e 05 e decisão 077 escritos. 06/11/2026, revisão local
+
 ## Continuação com a IA do hospedeiro
 
 - [ ] BRO-014 a BRO-022 em [A IA no comando](./09-ia-no-comando.md). CLI, fluxo, aprovação global, arquivos e skill em implementação local; aceite com dois Brotos exige as provas próprias daquela fase.

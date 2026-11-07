@@ -60,6 +60,10 @@ fn validate_method(method: &str) -> Result<(), String> {
         "broto.pause",
         "broto.resume",
         "broto.disconnect",
+        // Ligar pelo celular: mostrar o QR, conferir os números e desistir.
+        "broto.qr.begin",
+        "broto.qr.confirm",
+        "broto.qr.cancel",
     ]
     .contains(&method)
     {
@@ -528,5 +532,21 @@ mod tests {
         );
         assert!(exchange(service("garbage\n"), "broto.status", json!({})).is_err());
         assert!(validate_method("shell.execute").is_err());
+    }
+    #[test]
+    fn qr_pairing_methods_reach_the_service_with_their_params() {
+        for method in ["broto.qr.begin", "broto.qr.confirm", "broto.qr.cancel"] {
+            assert!(validate_method(method).is_ok(), "{method}");
+        }
+        assert!(validate_method("broto.qr.decide").is_err());
+        // Números errados voltam como resultado, não como erro: a janela precisa
+        // das tentativas que restam, e o texto de um erro não chega até ela.
+        let mut stream =
+            service("{\"id\":\"monitor\",\"result\":{\"ok\":false,\"attemptsLeft\":2}}\n");
+        let result = exchange(&mut stream, "broto.qr.confirm", json!({"digits": "1234"})).unwrap();
+        assert_eq!(result, json!({"ok": false, "attemptsLeft": 2}));
+        let request: Value = serde_json::from_slice(&stream.request).unwrap();
+        assert_eq!(request["method"], "broto.qr.confirm");
+        assert_eq!(request["params"], json!({"digits": "1234"}));
     }
 }

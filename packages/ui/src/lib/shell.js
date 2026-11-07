@@ -113,12 +113,24 @@ export const shellDesktopName = () => {
 };
 
 // Pedido da casca ao abrir o terminal: retomar uma sessao, abrir uma nova numa
-// pasta, mostrar as contas ou escolher uma pasta para virar atalho. Vale uma
-// vez por id, mesmo se a pagina recarregar.
-const INTENT_KINDS = ['session', 'new-session', 'profiles', 'pick-project'];
+// pasta, mostrar as contas, escolher uma pasta para virar atalho ou ligar um
+// Broto pelo QR que a camera leu. Vale uma vez por id, mesmo se a pagina
+// recarregar.
+const INTENT_KINDS = ['session', 'new-session', 'profiles', 'pick-project', 'broto-qr'];
 const INTENTS_USED_KEY = 'cialai_shell_intents';
+// Texto do QR do Broto: prefixo, base64url e no maximo 1200 caracteres, como a
+// casca confere ao ler. A ponte confere de novo no computador.
+const BROTO_QR_PREFIX = 'CIALAIQ1.';
+const BROTO_QR_MAX_LENGTH = 1200;
+export function isBrotoQrPayload(value) {
+  return typeof value === 'string'
+    && value.length <= BROTO_QR_MAX_LENGTH
+    && value.startsWith(BROTO_QR_PREFIX)
+    && /^[A-Za-z0-9_-]+$/.test(value.slice(BROTO_QR_PREFIX.length));
+}
 function validIntent(intent) {
-  return Boolean(intent) && typeof intent === 'object' && typeof intent.id === 'string' && INTENT_KINDS.includes(intent.kind);
+  if (!intent || typeof intent !== 'object' || typeof intent.id !== 'string' || !INTENT_KINDS.includes(intent.kind)) return false;
+  return intent.kind !== 'broto-qr' || isBrotoQrPayload(intent.payload);
 }
 export function takeShellIntent(storage = typeof window !== 'undefined' ? window.localStorage : null) {
   const intent = typeof window !== 'undefined' ? window.__CIALAI_SHELL__?.intent : null;

@@ -63,6 +63,7 @@ function CodeDialog({ code, pending, now, busy, onDecide, onRegenerate, onClose 
       <p className="broto-code-dialog__lead">{t('desktop.brotos.codeLead')}</p>
       <code className={`broto-code-dialog__code${remaining ? '' : ' is-expired'}`}>{code.payload}</code>
       <p className="broto-code-dialog__timer" role="timer">{remaining ? t('desktop.brotos.expires', { time: clock(remaining) }) : t('desktop.brotos.expired')}</p>
+      <p className="broto-code-dialog__hint">{t('desktop.brotos.qrHint')}</p>
     </div>}
   </AppModal>;
 }
