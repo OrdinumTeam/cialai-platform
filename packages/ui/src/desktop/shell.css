@@ -304,10 +304,14 @@
 /* numeros de destaque: revelacao com desfoque */
 :is([data-shell="desktop"],[data-platform="macos"]) .hero__value,:is([data-shell="desktop"],[data-platform="macos"]) .stat__value,:is([data-shell="desktop"],[data-platform="macos"]) .hero__stat strong{animation:macReveal 420ms var(--mac-ease) both;animation-delay:120ms}
 
+/* Movimento reduzido: transicao zero, e nao 0,01 ms. Com qualquer duracao a
+   visibilidade tambem transita, e um conteudo que deixa de ficar escondido
+   aparece um nivel por quadro. O terminal seguia invisivel por uns quinze
+   quadros depois da abertura, e o foco pedido nesse meio tempo se perdia. */
 @media (prefers-reduced-motion:reduce){
-  :is([data-shell="desktop"],[data-platform="macos"]) *{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important}
+  :is([data-shell="desktop"],[data-platform="macos"]) *{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:0s!important;transition-delay:0s!important}
 }
-[data-motion="none"] *{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:.01ms!important}
+[data-motion="none"] *{animation-duration:.01ms!important;animation-delay:0ms!important;transition-duration:0s!important;transition-delay:0s!important}
 
 /* ── janela ─────────────────────────────────────────────────────── */
 

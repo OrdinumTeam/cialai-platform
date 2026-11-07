@@ -165,7 +165,11 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   await assertImeTyping(runtime.getState().selected.term);
   document.title = 'PASS: Cialai phone terminal list, single pane, themed terminal surface, responsive viewport and fast IME typing';
 } else {
+  // A abertura esconde o conteúdo, e nada nele pega foco antes dela acabar.
+  // Depois dela, o terminal selecionado já está com o teclado, sem clique.
+  await until(() => document.querySelector('.mac-window.is-booted'), 'desktop boot');
   await until(() => document.querySelector('.terminais-terminal__host .xterm'), 'desktop terminal');
+  await until(() => document.activeElement?.closest?.('.terminais-terminal__host .xterm'), 'terminal focus after boot');
   assertTerminalSurface(document.querySelector('.terminais-terminal__host'));
   await assertBrandLockup(dark);
   // Barra lateral rosa e solida, sem gradiente: rosa clarinho no claro e o

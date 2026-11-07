@@ -127,6 +127,18 @@ function DesktopShell() {
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();
 
+  // O terminal selecionado pode montar durante a abertura, com o conteúdo
+  // ainda escondido, e aí o foco que ele pede se perde. Quando o conteúdo
+  // aparece, ele recebe o teclado, desde que nada mais tenha o foco e a
+  // apresentação inicial não esteja na frente.
+  const booting = boot === 'splash';
+  useEffect(() => {
+    if (booting || onboardingOpen) return;
+    const focused = document.activeElement;
+    if (focused && focused !== document.body) return;
+    import('../terminals/runtime.js').then((runtime) => runtime.focusSelected()).catch(() => {});
+  }, [booting, onboardingOpen]);
+
   const toggleSidebar = useCallback(() => {
     setSidebarHidden((hidden) => {
       writeStored(SIDEBAR_KEY, String(!hidden));

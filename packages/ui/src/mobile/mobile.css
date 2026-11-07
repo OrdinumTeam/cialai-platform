@@ -146,8 +146,8 @@
 /* O corpo da folha rola por dentro: com muitas contas, o rodape com Fechar
    precisa continuar ao alcance do polegar. */
 [data-form-factor="phone"] .MuiDialogContent-root { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
-@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
-[data-motion="none"][data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: 0s !important; transition-delay: 0s !important; } }
+[data-motion="none"][data-form-factor="phone"] * { animation-duration: .01ms !important; transition-duration: 0s !important; transition-delay: 0s !important; }
 /* Primitivas visuais do celular, usadas pelos componentes de mobile/ui.jsx.
    Seguem as referencias em docs/design-references: pilulas rosa, cartoes
    brancos com borda discreta e barras de progresso arredondadas. */

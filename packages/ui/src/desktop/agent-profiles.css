@@ -192,6 +192,6 @@
   .cialai-agents-term__body{font-size:11px}
 }
 @media (prefers-reduced-motion:reduce){
-  .cialai-agents *,.cialai-agents *::before,.cialai-agents *::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
+  .cialai-agents *,.cialai-agents *::before,.cialai-agents *::after{animation-duration:.01ms!important;transition-duration:0s!important;transition-delay:0s!important}
   .cialai-agents-tutorial__steps button.is-active i{width:100%}
 }
