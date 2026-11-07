@@ -1,15 +1,24 @@
 ## Cialai {{version}} preview
 
-The Claude Code usage ring stays lit while Claude rate limits the usage endpoint. The phone apps are unchanged.
+A Broto now connects from the phone by QR, the documentation graph gains six views, and session cards collapse to one line. The phone apps are updated too.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Usage ring lit under rate limits.** Claude has been answering 429 to the usage requests of every account on the same machine, and each 429 dimmed the ring even with a reading a few minutes old. A recent reading now stays lit.
-* **Freshness by window.** The weekly window of the Ultra plan changes slowly, so its reading stays lit for an hour. A short window, like the session, dims after fifteen minutes. Readings loaded from disk follow the same rule.
+* **Broto from the phone.** The Broto window shows a QR code, valid once and for ten minutes. On the phone, the three dot menu of a computer gains Connect a Broto, which reads it with the camera. The computer publishes a temporary onion and a mark on the local network, and the Broto dials as always: nothing listens on the Broto and the phone never talks to it. The phone shows the Broto name and four digits, and you type the same digits on the Broto, so a photo of the QR is not enough to pair another machine. Pasting a code still works.
+* **Six graph views.** A selector in the graph bar switches between Map, Tree, Radial, Blocks, Neighbors and 3D. Blocks sizes each file by its bytes, Neighbors shows one file with the files it links to and the ones that link to it, up to three steps away, and 3D turns with a drag on the same canvas, without WebGL.
+* **Links between files.** The options panel reads the documentation or the whole project, up to 20,000 files, and draws Markdown links and wikilinks and the imports of JavaScript, TypeScript, CSS, HTML, Python, Rust and Go. The next scan only reads what changed.
+* **Graph colours.** Colour by group, folder, file type, size, date of change or rules of your own, in four palettes: Safe, the default, tested for colour blindness, Neon, Pastel and Monochrome.
+* **Collapsible session cards.** A card collapses to its icon, name and activity dot, one by one or all at once, and Preferences can make new cards join collapsed.
+* **Folder looks.** A folder remembers the colour and the icon last chosen for a session in it.
+* **Terminal theme.** The terminal can be light or dark on its own, apart from the window.
+* **More formats in the editor.** Audio, video, fonts and read only Jupyter notebooks, plus highlighting for `.env`, ignore files, Makefile and shell profiles.
+* **Windows terminal size.** The terminal no longer goes back to an old size after maximizing, opening a panel or changing the font. The cause was found in the code and not reproduced, so long use on a Windows machine with a real GPU is still the final proof.
+* **Window buttons on Wayland.** On Linux with Wayland the title bar buttons follow the side and order set in GNOME or KDE.
+* **One button per side column.** The edge rail is the only way back for a collapsed column.
 
-Broto has its own version, 0.1.4, and release tag `broto-v0.1.4`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads.
+Broto has its own version, 0.2.0, and release tag `broto-v0.2.0`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
@@ -24,7 +33,7 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
 
-The Android and iPhone apps are unchanged in this preview. Get them from Google Play and the App Store; the previous `Cialai_android_universal.apk` remains on the website. There is no new TestFlight or store submission in this release.
+The Android and iPhone apps are updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website, and the iPhone build goes to TestFlight and to App Store review.
 
 ### Install
 
