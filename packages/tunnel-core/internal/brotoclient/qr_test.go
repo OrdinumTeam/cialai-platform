@@ -533,20 +533,29 @@ func TestControlServesThePairingByQR(t *testing.T) {
 	}
 	defer client.Close()
 	go func() { _ = client.ServeControl(ctx) }()
+	// Wait for the control endpoint before the first real call. Until it
+	// listens, Unix refuses the connection and Windows says the pipe does not
+	// exist, so any error is retried until the deadline, as in the lifecycle
+	// test.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, err := ControlCall(ctx, dir, "broto.status", nil)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("control did not start: %v", err)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 	call := func(method string, params any) (map[string]any, error) {
 		t.Helper()
-		deadline := time.Now().Add(2 * time.Second)
-		for {
-			raw, err := ControlCall(ctx, dir, method, params)
-			if err == nil || time.Now().After(deadline) || !strings.Contains(err.Error(), "connect") {
-				var result map[string]any
-				if err == nil {
-					err = json.Unmarshal(raw, &result)
-				}
-				return result, err
-			}
-			time.Sleep(5 * time.Millisecond)
+		raw, err := ControlCall(ctx, dir, method, params)
+		var result map[string]any
+		if err == nil {
+			err = json.Unmarshal(raw, &result)
 		}
+		return result, err
 	}
 	if _, err := call("broto.qr.confirm", map[string]string{"digits": "1234"}); err == nil || err.Error() != errQRNotWaiting.Error() {
 		t.Fatalf("confirm without a QR: %v", err)
