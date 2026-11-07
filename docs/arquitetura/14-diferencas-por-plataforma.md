@@ -96,8 +96,12 @@ sessão não chegam ao ConPTY, que pode redesenhar a tela a cada pedido. E a
 renovação repete o tamanho do último encaixe: antes ela levava o tamanho do
 momento da posse, e depois de maximizar a janela, abrir um painel ou trocar a
 fonte o terminal voltava ao tamanho antigo em até 5 s e voltava de novo na
-tecla seguinte. A causa foi deduzida do código e da documentação do xterm, sem
-reprodução; a prova final é uso contínuo num Windows com GPU real.
+tecla seguinte. A causa foi deduzida do código e da documentação do xterm. Em
+06/11/2026, numa máquina virtual com Windows 11 e WebView2 156, a 0.4.0 voltou
+ao tamanho antigo depois de maximizar e de restaurar, e o build da 0.6.0
+manteve o tamanho em dez passos de maximizar, restaurar, recolher as colunas e
+trocar a fonte. A máquina não tem GPU real, então a parte do WebGL só se prova
+com uso contínuo num Windows com GPU.
 
 O ConPTY nasce perguntando a posição do cursor e só inicia o shell depois da
 resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e

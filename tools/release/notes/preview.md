@@ -14,7 +14,7 @@ A Broto now connects from the phone by QR, the documentation graph gains six vie
 * **Folder looks.** A folder remembers the colour and the icon last chosen for a session in it.
 * **Terminal theme.** The terminal can be light or dark on its own, apart from the window.
 * **More formats in the editor.** Audio, video, fonts and read only Jupyter notebooks, plus highlighting for `.env`, ignore files, Makefile and shell profiles.
-* **Windows terminal size.** The terminal no longer goes back to an old size after maximizing, opening a panel or changing the font. The cause was found in the code and not reproduced, so long use on a Windows machine with a real GPU is still the final proof.
+* **Windows terminal size.** The terminal no longer goes back to an old size after maximizing, opening a panel or changing the font. A Windows 11 virtual machine reproduced the old behaviour with an earlier build and showed this one keeping the size. It has no real GPU, so long use on a Windows machine with one is still the final proof of the WebGL part.
 * **Window buttons on Wayland.** On Linux with Wayland the title bar buttons follow the side and order set in GNOME or KDE.
 * **One button per side column.** The edge rail is the only way back for a collapsed column.
 

@@ -74,7 +74,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
-## 0.6.0 · in preparation
+## 0.6.0 · 2026-11-07
 
 ### Added
 
@@ -87,7 +87,7 @@ Version 1.0.0 has not been published. Signed installers, native mobile archives,
 
 ### Fixed
 
-* The Windows terminal no longer mixes lines after long use or a change of window size. The size kept by the control renewal is now the size of the last fit, so after maximizing, opening a panel or changing the font the terminal no longer went back to the old size within 5 seconds. The pseudo console is only asked for a new size when the size changes, the xterm knows it runs on ConPTY and which Windows build, a terminal leaving the screen gives its WebGL context back right away, and a terminal whose WebGL context is lost fits again on the DOM renderer. The cause was found in the code and was not reproduced, so long use on a Windows machine with a real GPU is still the final proof.
+* The Windows terminal no longer mixes lines after long use or a change of window size. The size kept by the control renewal is now the size of the last fit, so after maximizing, opening a panel or changing the font the terminal no longer went back to the old size within 5 seconds. The pseudo console is only asked for a new size when the size changes, the xterm knows it runs on ConPTY and which Windows build, a terminal leaving the screen gives its WebGL context back right away, and a terminal whose WebGL context is lost fits again on the DOM renderer. On a Windows 11 virtual machine, 0.4.0 went back to the old size after maximizing and after restoring, and this build kept the size through ten steps of maximizing, restoring, closing and opening the side columns and changing the font. That machine has no real GPU, so the WebGL part still needs long use on a Windows machine with one.
 * On Linux with Wayland the window buttons follow the system layout again. The title bar drew minimize, maximize and close on the right in a fixed order, ignoring the GNOME or KDE setting, so a desktop with the buttons on the left or in another order got a Cialai window unlike every other. The buttons now take the order and the side chosen in the system and follow a change made while the app is open. X11 and the AppImage already used the window manager frame and keep it.
 * A collapsed side column had two buttons that brought it back, the rail at the edge and a toggle in the work area header, side by side. The rail is now the only way back on screen, and the header keeps only the collapse button, shown while the column is open. The shortcut and the command palette still toggle both columns, and the rail is disabled for a session of another device, as the old toggle was.
 * The selected terminal takes the keyboard when the app finishes opening. The terminal could mount while the opening screen still hid the content, and the focus it asked for was lost, so typing went nowhere until a click. With reduced motion on, the stylesheet gave every property a 0.01 ms transition, visibility included, and content leaving the hidden state appeared one level per frame, keeping the terminal hidden for about fifteen frames after opening. Under reduced motion transitions are now instant

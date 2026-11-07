@@ -10,7 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
-| [0.6.0](0.6.0.md) | 06/11/2026 | `v0.6.0` | Broto ligado pelo QR do celular, grafo com seis vistas e cards recolhíveis; sai calada |
+| [0.6.0](0.6.0.md) | 07/11/2026 | `v0.6.0` | Broto ligado pelo QR do celular, grafo com seis vistas e cards recolhíveis; sai calada |
 | [0.5.4](0.5.4.md) | 01/11/2026 | `v0.5.4` | Anel de uso do Claude aceso com o limite de consultas; sai calada |
 | [0.5.3](0.5.3.md) | 31/10/2026 | `v0.5.3` | Uso do plano Ultra ao abrir, com a leitura guardada; sai calada |
 | [0.5.2](0.5.2.md) | 31/10/2026 | `v0.5.2` | Uso do plano Ultra sem o limite de cinco horas e skill do Broto 0.1.3 sem senha; sai calada |
