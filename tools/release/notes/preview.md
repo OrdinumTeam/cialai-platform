@@ -33,7 +33,7 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
 
-The Android and iPhone apps are updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website, and the iPhone build goes to TestFlight and to App Store review.
+The Android app is updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website. The iPhone build follows later through TestFlight and App Store review, and the App Store stays on 0.3.0 until then.
 
 ### Install
 
