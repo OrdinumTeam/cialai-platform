@@ -4,7 +4,8 @@
 //! tamanho animado e o interno, porque `set_size` pede a area do cliente sem a
 //! barra de titulo; a posicao e a do quadro externo. No Wayland o compositor
 //! controla a posicao: a janela salta ao tamanho final e o splash nao e
-//! centralizado.
+//! centralizado. La a barra de titulo e um `HeaderBar` do GTK, e
+//! `linux_buttons` devolve a ela a ordem de botoes do sistema.
 
 use std::env;
 
@@ -22,8 +23,14 @@ pub fn positions_window() -> bool {
     )
 }
 
-/// Linux nao tem material de fundo nativo; a janela e opaca.
-pub fn decorate(_window: &WebviewWindow, _backdrop: &str) {}
+/// Linux nao tem material de fundo nativo; a janela e opaca. No Wayland a
+/// barra de titulo volta a seguir a ordem de botoes do sistema.
+pub fn decorate(window: &WebviewWindow, _backdrop: &str) {
+    #[cfg(target_os = "linux")]
+    super::linux_buttons::follow_system_layout(window);
+    #[cfg(not(target_os = "linux"))]
+    let _ = window;
+}
 
 /// Sem material de fundo, a preferencia nao muda nada no Linux.
 pub fn apply_backdrop(_window: &WebviewWindow, _backdrop: &str) {}

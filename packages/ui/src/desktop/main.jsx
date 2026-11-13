@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import './desktop.css';
 import DesktopApp from './DesktopApp.jsx';
 import { initPlatform } from '../lib/platform.js';
+import { initTerminalTheme } from '../terminals/terminal-theme.js';
 
 // A plataforma vem de um comando do Rust. `initPlatform` trata erro, mas não
 // trata promessa que nunca resolve, e um `await` no topo do módulo trava a
@@ -17,6 +18,8 @@ await Promise.race([
   new Promise((resolve) => { setTimeout(resolve, PLATFORM_DEADLINE_MS); }),
 ]);
 if (new URLSearchParams(window.location.search).get('motion') === '0') document.documentElement.dataset.motion = 'none';
+// O tema proprio do terminal entra antes do primeiro xterm ler as cores.
+initTerminalTheme();
 // A janela separada da previa carrega a mesma pagina com `?docpreview=1`: so
 // o documento renderizado, sem estudio nem rede por tras.
 if (new URLSearchParams(window.location.search).get('docpreview') === '1') {

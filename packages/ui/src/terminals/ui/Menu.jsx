@@ -8,10 +8,13 @@
 // sendo um item para o teclado. `{ heading }` e um titulo de secao e
 // `{ node }` um bloco solto, nenhum dos dois focavel. Um item com
 // `keepOpen` roda sem fechar o menu, para escolher cor e icone de uma vez.
-// `style` e `className` deixam o menu de uma sessao herdar o tom dela.
+// Um item com `current` definido vira opcao de escolha unica, com a marca na
+// opcao em uso. `style` e `className` deixam o menu de uma sessao herdar o
+// tom dela.
 
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { Check } from 'lucide-react';
 import { translate, useI18n } from '../../shared/i18n.js';
 
 const SWATCH_COLUMNS = 6;
@@ -162,12 +165,14 @@ export default function Menu({ anchor, items, onClose, label, style, className =
         runningIndex += 1;
         const active = runningIndex === index;
         const Icon = item.icon;
+        const choice = item.current !== undefined;
         return (
           <button
             key={item.id || item.label}
             type="button"
-            role="menuitem"
-            className={`terminais-menu__item${active ? ' is-active' : ''}${item.danger ? ' is-danger' : ''}`}
+            role={choice ? 'menuitemradio' : 'menuitem'}
+            aria-checked={choice ? Boolean(item.current) : undefined}
+            className={`terminais-menu__item${active ? ' is-active' : ''}${item.danger ? ' is-danger' : ''}${item.current ? ' is-current' : ''}`}
             disabled={item.disabled}
             onMouseEnter={() => setIndex(enabled.indexOf(item))}
             onClick={() => activate(item)}
@@ -175,6 +180,7 @@ export default function Menu({ anchor, items, onClose, label, style, className =
             {Icon ? <Icon size={14} strokeWidth={1.75} aria-hidden="true" /> : <span className="terminais-menu__spacer" />}
             <span className="terminais-menu__label">{item.label}</span>
             {item.hint ? <span className="terminais-menu__hint">{item.hint}</span> : null}
+            {choice ? <Check className="terminais-menu__check" size={13} strokeWidth={2} aria-hidden="true" style={{ visibility: item.current ? 'visible' : 'hidden' }} /> : null}
           </button>
         );
       })}

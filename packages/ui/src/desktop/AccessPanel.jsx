@@ -32,7 +32,7 @@ export function ReserveValue({ tor }) {
 export default function AccessPanel({ onPair, onDiagnostics, heading = true }) {
   const tunnel = useTunnel();
   const { snapshot, status } = tunnel;
-  const connected = connectedCount(tunnel.devices);
+  const connected = connectedCount(tunnel.devices.filter(device => device.kind !== 'broto'));
   const tor = snapshot.tor || snapshot.net?.tor || null;
 
   return <section className="mac-access" aria-labelledby={heading ? 'access-title' : undefined} aria-label={heading ? undefined : translate('desktop.access.title')}>

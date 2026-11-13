@@ -6,6 +6,7 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 ## Unreleased
 
+
 ### Added
 
 * A cross platform Tauri desktop application for project workspaces, terminal sessions, files, previews, Git tools and local integrations
@@ -72,6 +73,112 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 ### Release status
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
+
+## 0.6.0 · 2026-11-07
+
+### Added
+
+* Session cards collapse to a single line with the icon, the name, the activity dot and an arrow to expand again. Each card collapses from its arrow or from the three dot menu, the sessions header collapses or expands all of them at once, and Preferences can make new cards join the list collapsed. The choice stays on this computer and is not shared with the phone, whose cards are already a summary.
+* A folder remembers the color and the icon last chosen for a session in it. Close the session, open a new terminal in the same folder the next day, and the card comes back as it was. Choosing the default on purpose makes the folder forget, restoring saved sessions never changes their look, sessions of a Broto stay out because their folders belong to another machine, and the memory keeps the 200 folders used most recently.
+* The terminal can have its own theme. Preferences › Appearance › Terminal theme picks Match window, Light or Dark, so a dark terminal can live in a light window and the reverse. The choice applies right away, stays on this computer and is also in the command palette. The session color, the cursor, the selection and the search marks follow the terminal theme, while the editor, the graph and the rest of the window keep the window theme. The phone terminal stays dark as before.
+* The editor opens more formats. Audio and video play inside the editor, served in byte ranges, so a long recording seeks without being loaded into memory and has no size cap; a format the system cannot play says so and offers the default app. Fonts show the alphabet, the digits, the accented letters and a sample sentence at six sizes, with a field to try any text. Jupyter notebooks open read only, with the Markdown rendered, the code in the editor colours and the outputs below each cell: text, images, tables as text and errors, with progress bars reduced to their final state. Lockfiles such as `Cargo.lock` now open as text, `.env`, `.editorconfig`, the ignore files, Makefile and the shell profiles get highlighting, and the explorer has its own icons for audio, video, fonts, notebooks and spreadsheets. `.markdown` and `.mdx` count as Markdown in the documentation graph too, as they already did in the editor.
+* The documentation graph has six views, picked from a selector in its bar. Map is the force layout as before. Tree and Radial draw the folders in layers and in rings, Blocks gives each file an area by its bytes to show where the project weighs, Neighbors shows one file with the files it links to and the ones that link to it, up to three steps away, and 3D turns the map in three axes with a drag, drawn on the same canvas as the other views, without WebGL. A new options panel reads the documentation or the whole project, up to 20,000 files, and draws the links between files over the folders: Markdown links, images and wikilinks, and the imports of JavaScript, TypeScript, CSS, HTML, Python, Rust and Go. The links come from the first 512 KiB of each file, within 3 seconds, and are cached, so the next scan only reads what changed; a read cut short says Links incomplete without marking the file list as partial. The colour can show the group, the top folder, the file type, the size, the date of change or rules of your own, each rule a path search with one of the 18 organisation colours, in four palettes: Safe, the default, tested for colour blindness, Neon, Pastel and Monochrome. The legend follows the language of the app. The view and the options are saved per project, and a project opened for the first time starts with the last choice. The graph commands stay off the phone bridge.
+* A Broto can be connected from the phone, with nothing to copy. The Broto window shows a QR code, valid once and for ten minutes, and on the phone the three dot menu of a computer gains Connect a Broto, which reads it with the camera. The computer publishes a temporary onion derived from the QR and announces a mark on the local network, and the Broto finds it and dials, as always: nothing listens on the Broto and the phone never talks to it. The phone shows the Broto's name, its system and four digits to confirm, and the person types the same digits on the Broto, so a photo of the QR is not enough to pair another machine or to take this one over. On the same network it connects in seconds; over Tor it takes a minute or two, while the temporary onion is published. Pasting a code still works. A computer older than 0.6.0 serves the old phone page, which ignores the QR and leaves the Broto waiting until it expires, so the computer has to be updated first.
+
+### Fixed
+
+* The Windows terminal no longer mixes lines after long use or a change of window size. The size kept by the control renewal is now the size of the last fit, so after maximizing, opening a panel or changing the font the terminal no longer went back to the old size within 5 seconds. The pseudo console is only asked for a new size when the size changes, the xterm knows it runs on ConPTY and which Windows build, a terminal leaving the screen gives its WebGL context back right away, and a terminal whose WebGL context is lost fits again on the DOM renderer. On a Windows 11 virtual machine, 0.4.0 went back to the old size after maximizing and after restoring, and this build kept the size through ten steps of maximizing, restoring, closing and opening the side columns and changing the font. That machine has no real GPU, so the WebGL part still needs long use on a Windows machine with one.
+* On Linux with Wayland the window buttons follow the system layout again. The title bar drew minimize, maximize and close on the right in a fixed order, ignoring the GNOME or KDE setting, so a desktop with the buttons on the left or in another order got a Cialai window unlike every other. The buttons now take the order and the side chosen in the system and follow a change made while the app is open. X11 and the AppImage already used the window manager frame and keep it.
+* A collapsed side column had two buttons that brought it back, the rail at the edge and a toggle in the work area header, side by side. The rail is now the only way back on screen, and the header keeps only the collapse button, shown while the column is open. The shortcut and the command palette still toggle both columns, and the rail is disabled for a session of another device, as the old toggle was.
+* The selected terminal takes the keyboard when the app finishes opening. The terminal could mount while the opening screen still hid the content, and the focus it asked for was lost, so typing went nowhere until a click. With reduced motion on, the stylesheet gave every property a 0.01 ms transition, visibility included, and content leaving the hidden state appeared one level per frame, keeping the terminal hidden for about fifteen frames after opening. Under reduced motion transitions are now instant
+
+## 0.5.0 · 2026-10-29
+
+### Added
+
+* Cialai Broto preview for Windows and Linux, with approved pairing, remote terminals, AI permissions, streamed execution and file transfers.
+* Host CLI and optional skill for AI tools, global approvals and a dedicated AI activity card for each Broto.
+* Separate Broto installers and signed integrity manifests, without changing the desktop update channel.
+
+### Fixed
+
+* Host IPC failures report their cause and endpoint, and independent app instances use separate sockets.
+* Windows execution and ConPTY prepare UTF-8 consoles and preserve Ctrl C across inherited process groups.
+* Polling no longer consumes the operational info log; MCP descriptions explain process deadlines, terminal echo and the Windows graphical-session limitation.
+
+
+## 0.4.4 preview
+
+Preview dated 2026-10-27 for macOS, Windows and Linux. A quiet fix for the first run on Windows, where the PTY test stayed on Opening and the shell step could not be passed. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* The onboarding PTY test answers the cursor position query the Windows console is born with and keeps reading its output until the end before closing it. It used to read a single chunk and drop the console with no reader, and before Windows 11 24H2 closing the console waits for that output to be read, so the test never returned
+* The test waits for the prompt to settle, up to four seconds, and the onboarding strips the window title the Windows console sends before it
+* A test opens a real shell through the PTY and requires the probe to return with the prompt and without the cursor query, on every system
+
+## 0.4.3 preview
+
+Preview dated 2026-10-27 for macOS, Windows and Linux. A quiet fix for the clickable terminal path shipped in 0.4.2: accented and spaced file names now become links. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* A file name with an accent, like `Apresentação.pptx` or `Logística.csv`, is recognized whole instead of being cut at the accented letter. The path matcher now treats any Unicode letter as part of the name
+* A file name with spaces, like `Desafio Logística.pptx`, becomes a single link. The match is grown leftward over the spaces and only the span that is a real file on disk is linked, so a run of words that is not a file is never underlined
+* The feature is now covered by a test against real files on disk with accented and spaced names, the gap that let 0.4.2 ship without recognizing these names
+
+## 0.4.2 preview
+
+Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet addition on top of 0.4.1: a file path in the terminal output is clickable. No Discord announcement. The phone apps are unchanged.
+
+### Added
+
+* A file path in the terminal output is a link: a click opens the file in the session editor, like the VS Code terminal. It recognizes absolute, relative, `~` and Windows paths, and the `:line`, `:line:column`, `(line,column)` and Python `File "...", line N` suffixes. The path resolves against the live directory of the foreground process, then the shell, then the session folder, and only becomes a link when it exists on disk and is a file, checked on hover. A plain click opens it, the same as the http links the app already recognizes
+
+## 0.4.1 preview
+
+Preview dated 2026-10-26 for macOS, Windows and Linux. A quiet fix for the account menu and the session card shipped in 0.4.0. No Discord announcement. The phone apps are unchanged.
+
+### Fixed
+
+* The account menu picks the account with the arrow keys, or j and k, with the chosen one highlighted; Enter opens it. A number from 1 to 9 still opens its account directly, and Esc cancels. Before only a number worked
+* The session card shows the agent and the account again instead of the shell. The agent now runs in the shell itself, never in a subshell that became the foreground group, and the card finds the agent even when a shell or a launcher leads the foreground group
+* A process whose executable changes through an `exec`, like a script that turns into the agent, has its command line read again instead of staying cached
+
+### Changed
+
+* The account menu tutorial in the Agent profiles window teaches the arrow keys instead of the number
+
+## 0.4.0 preview
+
+Preview dated 2026-10-25 for macOS, Windows and Linux. Agent profiles get their own window and a shell menu to pick the account, the file explorer moves close to the VS Code one, and every agent card shows only the state of its own session. The phone apps are unchanged and receive the new page from the updated computer.
+
+### Added
+
+* An Agent profiles window with the Codex and Claude Code accounts, the quota of each one and an animated tutorial of the account menu, in a 60 and 40 split. A new profile links the instructions and copies the configuration of the default one, and the login runs in a new session typed by the computer. It opens from the command palette, the app menu, Preferences and the terminal accounts
+* An account menu in the shells opened by Cialai. Typing `codex` or `claude` with more than one account lists them with their quota; Enter repeats the last account of the folder, a number switches, an exhausted account is skipped and `codex +name` goes straight to one. It covers zsh, bash and PowerShell, only with default arguments, and `CIALAI_AGENT_MENU=0` turns it off
+* Cut, copy and paste in the explorer, from the menu and the keyboard. Pasting over an existing name picks a free one and never overwrites
+* Multiple selection in the explorer with Cmd or Ctrl, Shift and Cmd A, with batch cut, copy, copy path and move to Trash, the count shown in the dialog
+* Undo and redo of rename, move, copy and create in the explorer. Moving to Trash stays out, because the system does not give the item back by its original path. F2 renames
+* Dragging a multiple selection out of the app hands every file to the system, for Finder, a folder or WhatsApp
+* The file that becomes active in the editor is revealed and selected in the explorer
+
+### Changed
+
+* The Codex turn comes from the `OSC 7501` sequence Codex writes in its own terminal, read from the PTY output of each session, so Codex can show as waiting when it asks for permission
+* The shared `codex app-server` daemon never proves who owns a conversation and stays out of the session process tree, together with what it spends and runs
+* The AI Bar lists every live Codex conversation of a profile instead of only the most recent file
+* Profile names accept underscore, so existing profile folders with it can be selected
+
+### Fixed
+
+* Several Codex cards in the same folder no longer show the same state. Since Codex 0.163 one daemon serves every tab of a profile and is born in the tree of the first one; its open rollout gave that tab the conversation of another, and the wrong id reached the resume record
+* Metrics that arrive after a reconnection are discarded instead of passing for fresh, and a live PTY without a tag is adopted by folder only when the folder points to a single session
+* The New session and Pair phone buttons of the empty screen were misaligned by 7 px and touching; they now share the centre line with space between them and between wrapped lines
+
+### Compatibility
+
+* New commands `agent_menu_publish`, outside the bridge, and the `login` field of `pty_launch_agent`, so the desktop front end and the Rust core ship in the same build. A Codex session served by the daemon has no conversation id and therefore no automatic resume until Codex exposes that link
 
 ## 0.3.0 preview
 

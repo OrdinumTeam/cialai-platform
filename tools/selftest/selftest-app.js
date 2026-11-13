@@ -246,7 +246,7 @@ async function run() {
   progress.stepStartedAt = new Date().toISOString();
   await until(() => {
     const found = row('destino');
-    if (!found) document.querySelector('.terminais-edge--right .terminais-edge__btn')?.click();
+    if (!found) document.querySelector('.terminais-edge--right')?.click();
     return found;
   }, 'a árvore listar a pasta destino');
   // Na primeira abertura, WebKitGTK e WebView2 ainda criam caches de fonte e de

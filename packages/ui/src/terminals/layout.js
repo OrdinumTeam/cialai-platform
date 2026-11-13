@@ -33,6 +33,9 @@ const DEFAULTS = {
   // onde ela foi.
   noticedSessions: false,
   noticedExplorer: false,
+  // Cards novos de sessao nascem recolhidos, so com icone e nome. Quem abre
+  // muitos terminais ao mesmo tempo liga nas Preferencias.
+  cardsCompact: false,
 };
 
 function clamp(value, limits) {
@@ -51,6 +54,7 @@ function sanitize(raw) {
   next.explorerCollapsed = Boolean(raw.explorerCollapsed);
   next.noticedSessions = Boolean(raw.noticedSessions);
   next.noticedExplorer = Boolean(raw.noticedExplorer);
+  next.cardsCompact = raw.cardsCompact === true;
   // Modo foco nao sobrevive a reabertura: o app volta com a navegacao.
   next.focus = false;
   return next;

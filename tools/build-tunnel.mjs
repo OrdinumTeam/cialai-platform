@@ -82,12 +82,19 @@ export function buildSidecar(triple) {
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`go build failed for ${triple}`);
+  if (goos === 'windows') {
+    const launcher = spawnSync('go', ['build', '-trimpath', '-mod=readonly', '-ldflags=-s -w', '-o', `${OUTPUT_DIR}/cialai-command-${triple}.exe`, './cmd/cialai-command'], {
+      cwd: `${root}packages/tunnel-core`,
+      env: { ...process.env, CGO_ENABLED: '0', GOOS: goos, GOARCH: goarch },
+      stdio: 'inherit',
+    });
+    if (launcher.status !== 0) throw new Error('Native Windows command build failed');
+  }
   return { triple, output, bytes: statSync(output).size };
 }
 
 export function writeChecksums() {
-  const lines = Object.keys(TARGETS)
-    .map(binaryName)
+  const lines = [...Object.keys(TARGETS).map(binaryName), 'cialai-command-x86_64-pc-windows-msvc.exe']
     .filter((name) => existsSync(`${OUTPUT_DIR}/${name}`))
     .map((name) => `${sha256(`${OUTPUT_DIR}/${name}`)}  ${name}`);
   writeFileSync(CHECKSUMS, `${lines.join('\n')}\n`);
@@ -101,6 +108,11 @@ export function verifySidecar(triple) {
     .find((match) => match?.[2] === name)?.[1];
   if (!expected) throw new Error(`SHA256SUMS has no entry for ${name}`);
   if (sha256(`${OUTPUT_DIR}/${name}`) !== expected) throw new Error(`Checksum mismatch for ${name}`);
+  if (TARGETS[triple].goos === 'windows') {
+    const command = 'cialai-command-x86_64-pc-windows-msvc.exe';
+    const checksum = readFileSync(CHECKSUMS, 'utf8').split('\n').find(line => line.endsWith(`  ${command}`))?.slice(0, 64);
+    if (!checksum || sha256(`${OUTPUT_DIR}/${command}`) !== checksum) throw new Error('Native command checksum mismatch');
+  }
   return expected;
 }
 

@@ -3,6 +3,10 @@
 // catálogo que o Rust embute a partir destas chaves.
 
 export default Object.freeze({
+  "native.broto.execFailed": "Command interrupted · {error}",
+  "native.broto.execTimedOut": "Command timed out",
+  "native.broto.execFinished": "Exited with {code} in {duration} s",
+
   'native.browser.downloading': 'Downloading {name}',
   'native.browser.downloadingProgress': 'Downloading {name}, {percent}% of {size}',
   'native.browser.preparingDownload': 'Preparing the Chromium download',
@@ -73,10 +77,11 @@ export default Object.freeze({
   'native.error.openFile': 'Could not open the file',
   'native.error.openImage': 'Could not open the image',
   'native.error.originRefused': 'Origin refused',
+  'native.error.pairedPhoneOnly': 'Only a paired phone can do this.',
   'native.error.pathEmpty': 'Empty path',
   'native.error.pathNotAbsolute': 'The path must be absolute: {path}',
   'native.error.pathRelative': 'Relative path',
-  'native.error.profileNameInvalid': 'Invalid profile name. Use lowercase letters, digits and hyphen, up to 32 characters.',
+  'native.error.profileNameInvalid': 'Invalid profile name. Use lowercase letters, digits, hyphen and underscore, up to 32 characters.',
   'native.error.profileExists': 'A folder with that name already exists.',
   'native.error.profileUnknown': 'Unknown profile.',
   'native.error.agentUnknown': 'Unknown agent.',
@@ -148,6 +153,7 @@ export default Object.freeze({
   'native.notch.windowSession': 'current session',
   'native.notch.windowWeekly': 'weekly',
   'native.notch.windowWeeklyAll': 'all models',
+  'native.command.hostClosed': 'Cialai is not open on this computer.',
   'native.command.missing': 'Cialai not found. Open the app once to fix the command.',
   'native.quit.cancel': 'Cancel',
   'native.quit.confirm': 'Quit',

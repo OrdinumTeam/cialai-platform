@@ -8,7 +8,7 @@
    ============================================================ */
 *{margin:0;padding:0;box-sizing:border-box}
 *:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
-:root{
+:root,:where(html[data-terminal-theme]) [data-terminal-scope]{
 /* Layout shell */
 --sidebar-w:260px;
 --sidebar-w-collapsed:72px;
@@ -76,7 +76,7 @@
 --info:#3b82f6;
 --info-bg:rgba(59,130,246,.10);
 }
-[data-theme="dark"]{
+[data-theme="dark"],:where(html[data-terminal-theme="dark"]) [data-terminal-scope]{
 --bg:#0f1219;
 --bg-card:rgba(22,27,45,.92);
 --bg-card-alt:rgba(30,35,55,.85);
@@ -101,7 +101,7 @@
 --info-bg:rgba(59,130,246,.15);
 }
 @media (prefers-reduced-motion: reduce){
-*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:0s!important;transition-delay:0s!important;scroll-behavior:auto!important}
 }
 html,body{height:100%;overflow:hidden}
 body{font-family:var(--font);background:var(--bg);color:var(--text);display:flex;transition:background .3s,color .3s;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;font-feature-settings:"cv11","ss01";letter-spacing:-.005em}

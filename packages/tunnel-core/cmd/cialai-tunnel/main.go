@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotocli"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/mdns"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/sidecar"
@@ -38,6 +39,10 @@ func run(args []string, stdio streams, alive func(int) bool) int {
 		return 2
 	}
 	switch args[0] {
+	case "broto":
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return brotocli.Run(ctx, args[1:], stdio.out, stdio.err)
 	case "version":
 		if len(args) != 1 {
 			return 2
@@ -108,7 +113,8 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	return sidecar.Serve(ctx, sidecar.Options{
-		Paths: paths, Input: stdio.in, Output: stdio.out, Logger: logger,
+		EnableBrotoIPC: true,
+		Paths:          paths, Input: stdio.in, Output: stdio.out, Logger: logger,
 		ParentPID: *parentPID, Alive: alive, HandshakeTimeout: 5 * time.Second,
 		TorExecutable: *torBin, Network: sidecar.NetworkConfig{NewAnnouncer: announceLocal},
 	})

@@ -105,3 +105,12 @@ func TestServeRequiresAnAbsoluteTorPath(t *testing.T) {
 		t.Fatalf("relative tor path was accepted: code %d stderr %q", code, stderr.String())
 	}
 }
+
+func TestBrotoSubcommandRequiresRunningHost(t *testing.T) {
+	t.Setenv("CIALAI_BROTO_HOST_SOCKET", filepath.Join(t.TempDir(), "missing.sock"))
+	var out, errout bytes.Buffer
+	code := run([]string{"broto", "listar", "--json"}, streams{out: &out, err: &errout}, func(int) bool { return true })
+	if code != 120 || !strings.Contains(out.String(), `"failure"`) {
+		t.Fatalf("code %d output %s err %s", code, out.String(), errout.String())
+	}
+}

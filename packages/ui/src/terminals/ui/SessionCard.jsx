@@ -14,15 +14,16 @@
 // atividade so animam com um processo rodando de verdade.
 
 import React, { memo, useEffect, useRef, useState } from 'react';
-import { Bell, CheckCircle2, MoreHorizontal, Pin, Power, Sparkles, XCircle } from 'lucide-react';
+import { Bell, CheckCircle2, ChevronDown, ChevronUp, MoreHorizontal, Pin, Power, Sparkles, XCircle } from 'lucide-react';
 import { fmtCost, fmtCpu, fmtElapsed, fmtMemory, fmtPlan, fmtResetAt, shortPath } from '../files.js';
-import { describe, runningLabel, sessionPlan, sessionProfileLabel, sessionUsage } from '../runtime.js';
+import { describe, runningLabel, sessionPlan, sessionProfileLabel, sessionUsage, toggleCollapsed } from '../runtime.js';
 import { sessionAccentStyle } from '../session-accent.js';
 import { wasDragged } from '../drag.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { useToast } from '../../components/ui.jsx';
 import { invoke, isTauri } from '../../lib/native.js';
 import { platform } from '../../lib/platform.js';
+import BrotoApprovals from '../../desktop/BrotoApprovals.jsx';
 import ActivityIndicator from './ActivityIndicator.jsx';
 import SessionIcon from './SessionIcon.jsx';
 import { claudeHookMissingTitle } from '../claude-hook-help.js';
@@ -136,6 +137,13 @@ export function accentStyle(session) {
   return sessionAccentStyle(session);
 }
 
+// Simbolo do Broto no card. Aberto, fica solto no canto de baixo; recolhido,
+// entra na linha do nome, porque o canto de baixo deixa de existir.
+function BrotoMark({ session, inline = false }) {
+  const label = translate('desktop.brotos.origin', { name: session.brotoName || session.deviceId });
+  return <span className={`terminais-card__broto${inline ? ' is-inline' : ''}`} role="img" aria-label={label} title={label} />;
+}
+
 function SessionCard({
   order = 0,
   touch = false,
@@ -187,6 +195,10 @@ function SessionCard({
   const profileLabel = sessionProfileLabel(activity);
   const elapsed = session.jobStartedAt && session.status === 'running' ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
   const attention = session.attention;
+  // Recolhido, o card fica com icone, nome e o botao de expandir. O ponto de
+  // atividade continua na linha, para um agente que espera resposta nao
+  // sumir da vista. O celular nao recolhe: o card dele ja e o resumo.
+  const collapsed = Boolean(session.collapsed) && !touch;
 
   const classes = ['terminais-card', 'session-scope'];
   if (selected) classes.push('is-selected');
@@ -197,6 +209,7 @@ function SessionCard({
   if (attention) classes.push('has-attention', `has-attention--${attention.kind}`);
   if (session.pinned) classes.push('is-pinned');
   if (session.color) classes.push('has-color');
+  if (collapsed) classes.push('is-collapsed');
 
   const commit = () => onRenameDone(draft);
 
@@ -230,6 +243,8 @@ function SessionCard({
       }}
       title={shortPath(session.cwd)}
     >
+      {session.deviceId && session.id?.endsWith(':ia') ? <BrotoApprovals deviceId={session.deviceId} /> : null}
+      {session.deviceId && !collapsed ? <BrotoMark session={session} /> : null}
       <div className="terminais-card__row">
         <SessionIcon session={session} size={15} className="terminais-card__icon" />
         {renaming ? (
@@ -251,6 +266,22 @@ function SessionCard({
           <span className="terminais-card__name" onDoubleClick={touch ? undefined : (event) => { event.stopPropagation(); onRename(session); }}>{session.name}</span>
         )}
         {session.pinned ? <Pin size={11} strokeWidth={2} className="terminais-card__pin" role="img" aria-label={translate('terminal.session.pinned')} /> : null}
+        {session.deviceId && collapsed ? <BrotoMark session={session} inline /> : null}
+        {collapsed ? (
+          <span className="terminais-card__glance" role="img" aria-label={status.label} title={status.label}>
+            <ActivityIndicator tone={status.tone} animated={status.animated} />
+          </span>
+        ) : null}
+        {!touch ? <button
+          type="button"
+          className="terminais-card__expand"
+          aria-expanded={!collapsed}
+          aria-label={translate(collapsed ? 'terminal.session.expandCard' : 'terminal.session.collapseCard', { name: session.name })}
+          title={translate(collapsed ? 'terminal.session.expandCard' : 'terminal.session.collapseCard', { name: session.name })}
+          onClick={(event) => { event.stopPropagation(); toggleCollapsed(session.id); }}
+        >
+          {collapsed ? <ChevronDown size={14} strokeWidth={2} aria-hidden="true" /> : <ChevronUp size={14} strokeWidth={2} aria-hidden="true" />}
+        </button> : null}
         {onMenu ? <button
           type="button"
           className="terminais-card__menu"
@@ -265,6 +296,7 @@ function SessionCard({
           <MoreHorizontal size={touch ? 20 : 14} strokeWidth={2} aria-hidden="true" />
         </button> : null}
       </div>
+      {collapsed ? null : <>
       {session.subtitle ? <div className="terminais-card__subtitle">{session.subtitle}</div> : null}
       {running ? (
         <div className="terminais-card__running-row">
@@ -308,6 +340,7 @@ function SessionCard({
           {!activity ? <span className="terminais-card__metrics-off">{translate('terminal.session.measuring')}</span> : null}
         </div>
       ) : null}
+      </>}
     </div>
   );
 }

@@ -73,6 +73,7 @@ function findBrowserTab(session) {
 // Chromium se ainda nao esta vivo; sem, a aba mostra "Abrir browser".
 export function openBrowserTab(sessionId, { start = true, url } = {}) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   if (!session) return null;
   let tab = findBrowserTab(session);
   if (!tab) {
@@ -210,6 +211,7 @@ function canvasSize(session) {
 // conecta o CDP. Idempotente: uma segunda chamada enquanto abre nao faz nada.
 export async function startBrowser(sessionId, { url } = {}) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   if (!session) return null;
   const browser = session.browser;
   if (browser.status === 'starting' || browser.status === 'ready') return browser.info;
@@ -271,6 +273,7 @@ export async function startBrowser(sessionId, { url } = {}) {
 // caso quando a sessao e encerrada.
 export async function stopBrowser(sessionId, { purge = false, silent = false } = {}) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   if (!session) return;
   const browser = session.browser;
   browser.epoch = (browser.epoch || 0) + 1;
@@ -306,6 +309,7 @@ export async function reconcileBrowsers() {
 
 export function attachCanvas(sessionId, canvas, handlers = {}) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   if (!session || !canvas) return;
   const browser = session.browser;
   browser.canvas = canvas;
@@ -332,6 +336,7 @@ export function attachCanvas(sessionId, canvas, handlers = {}) {
 
 export function detachCanvas(sessionId) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   if (!session) return;
   session.browser.canvas = null;
   session.browser.canvasHandlers = null;
@@ -357,6 +362,7 @@ function active(sessionId) {
 
 export async function navigate(sessionId, raw) {
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   const url = resolveInput(raw);
   if (!session || !url) return;
   const current = active(sessionId);
@@ -396,6 +402,7 @@ export async function recoverTab(sessionId) {
   const current = active(sessionId);
   if (!current) return;
   const session = getSession(sessionId);
+  if (session?.deviceId) return null;
   await current.controller.session.recoverTarget(current.targetId);
   if (session) { session.browser.error = null; emit(session); }
 }

@@ -9,7 +9,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDown, ArrowUp, Bell, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
+  ArrowDown, ArrowUp, Bell, ChevronsDownUp, ChevronsUpDown, Copy, FileSearch, Files, FolderOpen, FolderSearch, Globe, Maximize2, Palette, PanelLeft, PanelLeftOpen, PanelRightOpen, Pin, PinOff,
   FilePlus2, Network, Plus, Power, RotateCcw, SquareTerminal, Tag, TextCursorInput, UserRound,
 } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
@@ -21,7 +21,7 @@ import {
   SESSION_COLORS, activateTab, canMoveSession, changeDirectory, clearAttention, closeSession, describe, focusSelected, getRecent, getSession,
   getState, hydrate, insertPaths, insertText, isDemo, localizeDemo, moveSessionBy, onCloseRequest, onNewFileRequest, onNewTerminalRequest, openSession, orderedSessions, pickAndOpen,
   renameSession, reopen, restart, runningLabel, selectNext, selectNextAttention, selectSession, sessionsNeedingAttention,
-  setSessionColor, setSessionIcon, setSessionSubtitle, subscribe, togglePinned, viewMounted,
+  setSessionColor, setSessionIcon, setSessionSubtitle, subscribe, toggleCollapsed, togglePinned, viewMounted,
 } from '../runtime.js';
 import { SESSION_ICONS } from '../session-icons.js';
 import { closeTab, installEditorWatch, newUntitled, openDiff, openFile, reconvertTab, refreshPreview, reloadTab, restoreTabs, saveTab, setTabMode, viewAsPdf } from '../editor.js';
@@ -30,7 +30,7 @@ import { closeDocGraphPreview, docGraphTabId, openDocGraphPreview, openDocGraphT
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
 import { INITIAL_PANELS, choosePanel, panelCollapsed, resizePanels } from '../panels.js';
-import { baseName, fs, isPreviewable, shortPath } from '../files.js';
+import { baseName, fs, isInside, isPreviewable, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import AgentProfiles from './AgentProfiles.jsx';
 import SessionsPane from './SessionsPane.jsx';
@@ -64,6 +64,7 @@ export default function Workbench() {
   const { locale } = useI18n();
   useRuntimeEvents(['sessions', 'editor', 'theme']);
   const layout = useLayout();
+  const { selected, hydrated } = getState();
   const [picker, setPicker] = useState(null);
   const [menu, setMenu] = useState(null);
   const [renamingId, setRenamingId] = useState(null);
@@ -83,7 +84,7 @@ export default function Workbench() {
   const newButtonRef = useRef(null);
   const focusRestore = useRef(null);
   const sessionsCollapsed = panelCollapsed(auto, 'sessions', { preferred: layout.sessionsCollapsed, focus: layout.focus });
-  const explorerCollapsed = panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
+  const explorerCollapsed = Boolean(selected?.deviceId) || panelCollapsed(auto, 'explorer', { preferred: layout.explorerCollapsed, focus: layout.focus });
   // Mostrar ou esconder uma coluna grava a preferencia e, em janela estreita,
   // vence o recolhimento automatico. Na primeira vez que cada coluna recolhe,
   // um aviso diz onde reabri-la: `display: none` some com a lista inteira, e
@@ -106,11 +107,20 @@ export default function Workbench() {
   showPanelRef.current = showPanel;
   const native = hasBridge() || isDemo();
 
-  const { selected, hydrated } = getState();
   const sessions = orderedSessions();
   const selectedId = selected?.id || null;
   const tabs = selected ? selected.editor.tabs : [];
   const activeTab = selected ? tabs.find((tab) => tab.id === selected.editor.activeId) || null : null;
+
+  // Revelar automático, como o autoReveal do VS Code: o arquivo que fica ativo
+  // no editor aparece e é destacado na árvore. Não força o painel a abrir; se
+  // ele estiver oculto, a árvore já fica revelada para quando for mostrada.
+  const activePath = activeTab?.path || null;
+  useEffect(() => {
+    if (!selected || !activePath) return;
+    if (!isInside(selected.explorer.root, activePath)) return;
+    setRevealRequest({ sessionId: selected.id, path: activePath, at: Date.now() });
+  }, [activePath, selectedId]);
 
   /* ── ciclo de vida ───────────────────────────────────────────────── */
 
@@ -135,6 +145,7 @@ export default function Workbench() {
   newFileRef.current = newFile;
 
   const closeShortcutRef = useRef(() => false);
+  const openPathRef = useRef(null);
 
   useEffect(() => {
     hydrate().then(() => reconcileBrowsers()).catch(() => {});
@@ -146,6 +157,12 @@ export default function Workbench() {
         // Aviso de uma sessao leva o icone e o tom dela, para dizer de onde veio.
         const source = event.sessionId ? getSession(event.sessionId) : null;
         notify(event.message, 'info', source ? { icon: <SessionIcon session={source} size={16} />, className: 'session-scope mac-toast--session', style: accentStyle(source) } : undefined);
+      }
+      if (event?.type === 'open-file' && event.path) {
+        // Clique num caminho da saida do terminal: abre o arquivo na sessao de
+        // onde o clique veio, que e sempre a selecionada.
+        const current = getState().selected;
+        if (current && (!event.id || event.id === current.id)) openPathRef.current?.(event.path);
       }
     });
     const releaseNew = onNewTerminalRequest(() => openPickerRef.current?.());
@@ -315,10 +332,11 @@ export default function Workbench() {
       { id: 'subtitle', label: translate(session.subtitle ? 'terminal.menu.editSubtitle' : 'terminal.menu.setSubtitle'), icon: Tag, run: () => setNameRequest({ kind: 'subtitle', sessionId: session.id, title: translate('terminal.menu.subtitleTitle'), description: translate('terminal.menu.subtitleDescription'), initial: session.subtitle, placeholder: translate('terminal.menu.subtitlePlaceholder'), confirmLabel: translate('terminal.common.save') }) },
       { id: 'color', label: translate('terminal.menu.sessionAppearance'), icon: Palette, run: () => setTimeout(() => appearanceMenu(session, anchor), 0) },
       { id: 'pin', label: translate(session.pinned ? 'terminal.menu.unpin' : 'terminal.menu.pin'), icon: session.pinned ? PinOff : Pin, run: () => togglePinned(session.id) },
+      { id: 'collapse', label: translate(session.collapsed ? 'terminal.menu.expandCard' : 'terminal.menu.collapseCard'), icon: session.collapsed ? ChevronsUpDown : ChevronsDownUp, run: () => toggleCollapsed(session.id) },
       { id: 'up', label: translate('terminal.menu.moveUp'), icon: ArrowUp, hint: shortcutLabel('Alt+ArrowUp'), disabled: !canMoveSession(session.id, -1), run: () => moveSessionBy(session.id, -1) },
       { id: 'down', label: translate('terminal.menu.moveDown'), icon: ArrowDown, hint: shortcutLabel('Alt+ArrowDown'), disabled: !canMoveSession(session.id, 1), run: () => moveSessionBy(session.id, 1) },
       { separator: true },
-      { id: 'browser', label: translate('terminal.browser.openDevBrowser'), icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
+      { id: 'browser', disabled: Boolean(session.deviceId), label: translate('terminal.browser.openDevBrowser'), icon: Globe, hint: shortcutLabel('Mod+Shift+B'), run: () => openBrowserTab(session.id) },
       session.browser?.status === 'ready' || session.browser?.status === 'starting'
         ? { id: 'browser-stop', label: translate('terminal.browser.stopDevBrowser'), icon: Globe, run: () => stopBrowser(session.id).catch(() => {}) }
         : null,
@@ -328,8 +346,8 @@ export default function Workbench() {
         const ok = await copyToClipboard(session.saved.resume.sessionId);
         notify(translate(ok ? 'terminal.restore.idCopied' : 'terminal.common.copyFailed'), ok ? 'success' : 'warning');
       } } : null,
-      { id: 'finder', label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
-      { id: 'clone', label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
+      { id: 'finder', disabled: Boolean(session.deviceId), label: translate('terminal.menu.openFolder'), icon: FolderOpen, run: () => fs.reveal(session.cwd).catch((error) => notify(error.message, 'warning')) },
+      { id: 'clone', disabled: Boolean(session.deviceId), label: translate('terminal.menu.newSessionDirectory'), icon: Plus, run: () => openSession(session.cwd) },
       {
         id: 'launch',
         label: translate('terminal.profiles.launchHere'),
@@ -403,6 +421,7 @@ export default function Workbench() {
     if (!current || !path) return;
     openFile(current.id, path).then(() => setEditorFocusKey((value) => value + 1)).catch((error) => notify(error?.message || String(error), 'warning'));
   }, [notify]);
+  openPathRef.current = openPath;
 
   const previewPath = useCallback((path) => {
     const current = getState().selected;
@@ -459,20 +478,13 @@ export default function Workbench() {
   }, [selected, activeTab, requestCloseTab, requestCloseSession]);
   closeShortcutRef.current = closeShortcut;
 
-  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
-  // proprio programa, num terminal ja aberto naquele perfil. O Cialai nunca
-  // toca em credencial. E o mesmo caminho do celular.
-  const createAgentProfile = useCallback(async (request, name) => {
-    try {
-      const id = await invoke('agent_profile_create', { agent: request.agent, name });
-      request.reload?.();
-      notify(translate('terminal.profiles.created', { name }), 'success');
-      const current = getState().selected;
-      if (current?.ptyId != null) await invoke('pty_launch_agent', { id: current.ptyId, agent: request.agent, profile: id });
-    } catch (error) {
-      notify(error?.message || String(error), 'warning');
-    }
-  }, [notify]);
+  // Conta nova de um agente: o modal Perfis de agentes cria a pasta e abre o
+  // login numa sessao nova, com o tutorial do menu de contas ao lado. O
+  // Cialai nunca toca em credencial.
+  const createAgentProfile = useCallback((agent) => {
+    setAccountsOpen(false);
+    window.dispatchEvent(new CustomEvent('cialai:agent-profiles', { detail: { agent } }));
+  }, []);
 
   const openInEditor = useCallback((path) => {
     const current = getState().selected;
@@ -538,7 +550,7 @@ export default function Workbench() {
       else if (action === 'open-browser') openBrowserTab(selected.id);
       else if (action === 'next-session') selectNext(1);
       else if (action === 'previous-session') selectNext(-1);
-      else if (action === 'quick-open') setQuickOpen(true);
+      else if (action === 'quick-open' && !selected?.deviceId) setQuickOpen(true);
       else if (action === 'find') setFindOpen(true);
       else if (action === 'font-increase') setLayout({ fontSize: Math.min(LAYOUT_LIMITS.fontSize.max, layout.fontSize + 1) });
       else if (action === 'font-decrease') setLayout({ fontSize: Math.max(LAYOUT_LIMITS.fontSize.min, layout.fontSize - 1) });
@@ -644,12 +656,19 @@ export default function Workbench() {
     const request = deleteRequest;
     setDeleteRequest(null);
     if (!request) return;
+    const paths = request.paths || [request.path];
     try {
-      await fs.trash(request.path);
-      orderedSessions().forEach((session) => {
-        session.editor.tabs.filter((tab) => tab.path && (tab.path === request.path || tab.path.startsWith(`${request.path}/`))).forEach((tab) => closeTab(session.id, tab));
-      });
-      notify(translate('terminal.session.trashed', { name: request.name }), 'success');
+      for (const path of paths) {
+        // eslint-disable-next-line no-await-in-loop
+        await fs.trash(path);
+        orderedSessions().forEach((session) => {
+          session.editor.tabs.filter((tab) => tab.path && (tab.path === path || tab.path.startsWith(`${path}/`))).forEach((tab) => closeTab(session.id, tab));
+        });
+      }
+      const message = paths.length > 1
+        ? translate('terminal.session.trashedMany', { count: paths.length.toLocaleString(getLocale()) })
+        : translate('terminal.session.trashed', { name: request.name });
+      notify(message, 'success');
     } catch (error) {
       notify(error?.message || String(error), 'warning');
     }
@@ -805,6 +824,7 @@ export default function Workbench() {
         <button
           type="button"
           className="terminais-edge terminais-edge--right"
+          disabled={Boolean(selected?.deviceId)}
           onClick={() => { showPanel('explorer', true); if (layout.focus) toggleFocus(); }}
           aria-label={translate('terminal.work.showFiles')}
           aria-expanded={false}
@@ -819,7 +839,7 @@ export default function Workbench() {
       )}
       {pickerNode}
       {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={menu.label || translate('terminal.menu.sessionActions')} style={menu.style} className={menu.className} /> : null}
-      {quickOpen && selected ? (
+      {quickOpen && selected && !selected.deviceId ? (
         <QuickOpen
           root={selected.explorer.root}
           onClose={() => { setQuickOpen(false); setTimeout(focusSelected, 30); }}
@@ -851,8 +871,7 @@ export default function Workbench() {
         onConfirm={(value) => {
           const request = nameRequest;
           setNameRequest(null);
-          if (request?.kind === 'subtitle') { setSessionSubtitle(request.sessionId, value); return; }
-          if (request?.kind === 'profile') createAgentProfile(request, value);
+          if (request?.kind === 'subtitle') setSessionSubtitle(request.sessionId, value);
         }}
       />
       <AppModal
@@ -862,17 +881,7 @@ export default function Workbench() {
         maxWidth="md"
         footer={<button type="button" className="btn btn-quiet" onClick={() => setAccountsOpen(false)}>{translate('terminal.common.close')}</button>}
       >
-        <AgentProfiles
-          onCreate={(agent, reload) => setNameRequest({
-            kind: 'profile',
-            agent,
-            reload,
-            title: translate('terminal.profiles.createTitle'),
-            description: translate('terminal.profiles.createDescription'),
-            required: true,
-            confirmLabel: translate('terminal.profiles.create'),
-          })}
-        />
+        <AgentProfiles onCreate={createAgentProfile} />
       </AppModal>
     </div>
   );

@@ -11,7 +11,7 @@
 :is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page{display:flex;height:100%;min-height:0;max-width:none;margin:0;animation:macFade var(--mac-normal) var(--mac-ease) both}
 :is([data-shell="desktop"],[data-platform="macos"]) .view.terminais-page--empty{display:block;padding:24px 32px 56px;overflow:auto}
 
-:is([data-shell="desktop"],[data-platform="macos"]){
+:is([data-shell="desktop"],[data-platform="macos"]),:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme]) [data-terminal-scope]{
   --terminais-editor-line:rgba(226,59,132,.045);
   --terminais-editor-match:rgba(226,59,132,.16);
   --terminais-editor-search:rgba(194,122,0,.22);
@@ -25,7 +25,7 @@
   --terminais-syn-tag:#b23b3b;
   --terminais-syn-regexp:#c25e00;
 }
-:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"]{
+:is([data-shell="desktop"],[data-platform="macos"])[data-theme="dark"],:where(:is([data-shell="desktop"],[data-platform="macos"])[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope]{
   --terminais-editor-line:rgba(255,122,178,.10);
   --terminais-editor-match:rgba(255,122,178,.26);
   --terminais-syn-keyword:#d09aee;
@@ -71,6 +71,7 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-edge{position:relative;flex:0 0 28px;width:28px;display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 0;border:0;background:var(--mac-surface-2);color:var(--mac-label-2);cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-edge:hover{background:var(--mac-surface-3,var(--mac-fill));color:var(--mac-label)}
 .terminais-edge:focus-visible{outline:none;box-shadow:inset 0 0 0 2px var(--mac-accent-ring)}
+.terminais-edge:disabled,.terminais-edge:disabled:hover{background:var(--mac-surface-2);color:var(--mac-label-4)}
 .terminais-edge__summary{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10.5px;font-variant-numeric:tabular-nums;line-height:1.2}
 .terminais-edge__count{color:var(--mac-label-3)}
 .terminais-edge__badge{min-width:16px;padding:0 4px;border-radius:999px;background:var(--mac-warn-bg);color:var(--mac-warn);font-weight:600}
@@ -143,6 +144,46 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
   --terminais-accent:var(--session-accent);
   --terminais-accent-text:var(--session-accent-text);
 }
+/* Terminal com tema proprio, de terminals/terminal-theme.js: o contenedor
+   repete o conjunto de tokens do esquema escolhido, inclusive o acento da
+   casca, entao o tom da sessao e escolhido e aplicado de novo ali, na
+   variante clara ou escura do terminal. A especificidade empata com o bloco
+   mais forte de solid.css e esta folha vem por ultimo, entao o tom vence. */
+:where(html[data-terminal-theme="light"] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --session-accent:var(--session-accent-light);
+  --session-accent-text:var(--session-accent-text-light);
+  --session-on-accent:var(--session-on-accent-light);
+  --session-accent-soft:var(--session-accent-soft-light);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-light);
+  --session-accent-ring:var(--session-accent-ring-light);
+  --session-accent-border:var(--session-accent-border-light);
+}
+:where(html[data-terminal-theme="dark"] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --session-accent:var(--session-accent-dark);
+  --session-accent-text:var(--session-accent-text-dark);
+  --session-on-accent:var(--session-on-accent-dark);
+  --session-accent-soft:var(--session-accent-soft-dark);
+  --session-accent-soft-hover:var(--session-accent-soft-hover-dark);
+  --session-accent-ring:var(--session-accent-ring-dark);
+  --session-accent-border:var(--session-accent-border-dark);
+}
+:where(html[data-terminal-theme] .session-scope) div[data-terminal-scope][data-terminal-scope]{
+  --mac-accent:var(--session-accent);
+  --mac-accent-hover:color-mix(in srgb,var(--session-accent) 86%,#000);
+  --mac-accent-text:var(--session-accent-text);
+  --mac-accent-soft:var(--session-accent-soft);
+  --mac-accent-soft-hover:var(--session-accent-soft-hover);
+  --mac-accent-row:var(--session-accent-soft);
+  --mac-accent-ring:var(--session-accent-ring);
+  --mac-on-accent:var(--session-on-accent);
+  --terminais-accent:var(--session-accent);
+  --terminais-accent-text:var(--session-accent-text);
+}
+/* O texto herdado vem do body, calculado com o tema da janela; o contenedor
+   refaz a regra do body com os tokens dele. */
+:where(html[data-terminal-theme]) [data-terminal-scope]{color:var(--text)}
+:where(html[data-terminal-theme="light"]) [data-terminal-scope]{color-scheme:light}
+:where(html[data-terminal-theme="dark"]) [data-terminal-scope]{color-scheme:dark}
 
 /* Icone da sessao: o escolhido ou o padrao, sempre no tom da sessao. */
 .session-icon{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--mac-accent-text)}
@@ -166,6 +207,9 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
    que todo card mostra. O indicador de atividade acompanha o estado escrito,
    na linha dele. */
 .terminais-card{position:relative;display:flex;flex-direction:column;gap:3px;padding:11px 10px 11px 14px;border:1px solid var(--mac-separator);border-radius:16px;background:var(--mac-surface);box-shadow:var(--mac-shadow-card,none);cursor:default;transition:background var(--mac-fast) var(--mac-ease),border-color var(--mac-fast) var(--mac-ease);animation:macRowIn 240ms var(--mac-ease) both}
+/* Sessão de um Broto: o símbolo dele no canto de baixo do card, solto, sem
+   placa, como o ícone da sessão. A arte é da marca, por isso entra pelo CSS. */
+.terminais-card__broto{position:absolute;right:10px;bottom:9px;width:18px;height:17px;background:url('../assets/broto-mark.png') center/contain no-repeat}
 .terminais-card::before{content:'';position:absolute;left:-1px;top:14px;bottom:14px;width:4px;border-radius:0 3px 3px 0;background:var(--session-accent,var(--terminais-accent))}
 .terminais-card:hover{background:color-mix(in srgb,var(--mac-accent) 4%,var(--mac-surface));border-color:var(--mac-separator-strong)}
 .terminais-card.is-selected{background:color-mix(in srgb,var(--mac-accent) 9%,var(--mac-surface));border-color:var(--session-accent-border,var(--mac-accent))}
@@ -182,6 +226,18 @@ body.is-row-resizing,body.is-row-resizing *{cursor:row-resize!important}
 .terminais-card__menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:26px;height:26px;margin:-2px -2px -2px 0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
 .terminais-card:hover .terminais-card__menu,.terminais-card.is-selected .terminais-card__menu,.terminais-card__menu:focus-visible{opacity:1}
 .terminais-card__menu:hover{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+/* Seta de recolher: aparece junto com o menu, no passar do mouse e na
+   selecao. No card recolhido fica sempre a vista, porque e o caminho de volta. */
+.terminais-card__expand{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;width:22px;height:22px;margin:-2px 0;padding:0;border:0;border-radius:999px;background:transparent;color:var(--mac-label-3);opacity:0;cursor:default;transition:opacity var(--mac-fast) var(--mac-ease),background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-card:hover .terminais-card__expand,.terminais-card.is-selected .terminais-card__expand,.terminais-card.is-collapsed .terminais-card__expand,.terminais-card__expand:focus-visible{opacity:1}
+.terminais-card__expand:hover{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+.terminais-card__expand:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+/* Card recolhido: so a linha do nome, com o ponto de atividade e o simbolo do
+   Broto dentro dela, e a barra de cor acompanhando a altura menor. */
+.terminais-card.is-collapsed{padding-top:6px;padding-bottom:6px}
+.terminais-card.is-collapsed::before{top:9px;bottom:9px}
+.terminais-card__glance{display:inline-flex;align-items:center;flex:0 0 auto}
+.terminais-card__broto.is-inline{position:static;flex:0 0 auto;width:15px;height:14px}
 .terminais-card__subtitle{font-size:12px;color:var(--mac-label-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .terminais-card__running-row{display:flex;align-items:baseline;gap:6px;min-width:0;font-size:12px;white-space:nowrap;overflow:hidden}
 .terminais-card__running{flex:0 1 auto;min-width:0;font-weight:500;color:var(--mac-label);overflow:hidden;text-overflow:ellipsis}
@@ -336,9 +392,54 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-docgraph__issues li{display:flex;flex-direction:column;gap:1px;min-width:0}
 .terminais-docgraph__issues li span{font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label);overflow-wrap:anywhere}
 .terminais-docgraph__issues li em{font-style:normal;font-size:11px;color:var(--mac-label-3)}
+/* Seletor de vista: discreto, com o nome da vista em uso. */
+.terminais-docgraph__viewbtn{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;height:24px;padding:0 7px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12px;font-weight:500;color:var(--mac-label-2);white-space:nowrap;cursor:default;transition:background var(--mac-fast) var(--mac-ease),color var(--mac-fast) var(--mac-ease)}
+.terminais-docgraph__viewbtn:hover:not(:disabled){background:var(--mac-hover);color:var(--mac-label)}
+.terminais-docgraph__viewbtn:disabled{opacity:.45}
+.terminais-docgraph__viewbtn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-docgraph__options-toggle.is-on{background:var(--mac-accent-soft);color:var(--mac-accent-text)}
+/* Painel de opcoes, no molde das ocorrencias, alinhado pela direita. */
+.terminais-docgraph__options{position:absolute;top:calc(100% + 6px);right:0;z-index:30;width:min(300px,86cqw);max-height:min(560px,70vh);overflow:auto;overscroll-behavior:contain;padding:10px 12px 12px;border-radius:12px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);animation:macPop 160ms var(--mac-ease);transform-origin:top right}
+.terminais-docgraph__options-section+.terminais-docgraph__options-section{margin-top:12px;padding-top:10px;border-top:1px solid var(--mac-separator)}
+.terminais-docgraph__options-title{margin-bottom:6px;font-size:11px;font-weight:600;color:var(--mac-label-3)}
+.terminais-docgraph__options-hint{margin:0 0 6px;font-size:11.5px;line-height:1.35;color:var(--mac-label-2);text-wrap:pretty}
+.terminais-docgraph__options-action{display:inline-flex;align-items:center;gap:4px;margin-top:6px}
+.terminais-docgraph__segmented{display:flex}
+.terminais-docgraph__segmented .segmented__option{flex:1;justify-content:center}
+.terminais-docgraph__choices{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:2px}
+.terminais-docgraph__choice{height:26px;padding:0 8px;border:0;border-radius:6px;background:transparent;font:inherit;font-size:12px;color:var(--mac-label);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:default}
+.terminais-docgraph__choice:hover{background:var(--mac-hover)}
+.terminais-docgraph__choice.is-selected{background:var(--mac-accent-soft);color:var(--mac-accent-text);font-weight:600}
+.terminais-docgraph__palettes{display:flex;flex-direction:column;gap:2px}
+.terminais-docgraph__palette{display:grid;grid-template-columns:auto 1fr;align-items:center;column-gap:9px;row-gap:1px;padding:5px 7px;border:0;border-radius:8px;background:transparent;font:inherit;text-align:left;cursor:default}
+.terminais-docgraph__palette:hover{background:var(--mac-hover)}
+.terminais-docgraph__palette.is-selected{background:var(--mac-accent-soft)}
+.terminais-docgraph__palette-chips{display:inline-flex;gap:2px}
+.terminais-docgraph__palette-chips i{display:block;width:10px;height:10px;border-radius:3px}
+.terminais-docgraph__palette-name{font-size:12px;color:var(--mac-label)}
+.terminais-docgraph__palette.is-selected .terminais-docgraph__palette-name{font-weight:600;color:var(--mac-accent-text)}
+.terminais-docgraph__palette em{grid-column:2;font-style:normal;font-size:11px;color:var(--mac-label-3)}
+.terminais-docgraph__switch{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:default}
+.terminais-docgraph__switch>span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.terminais-docgraph__switch strong{font-size:12px;font-weight:500;color:var(--mac-label)}
+.terminais-docgraph__switch em{font-style:normal;font-size:11px;line-height:1.35;color:var(--mac-label-3)}
+.terminais-docgraph__rules{display:flex;flex-direction:column;gap:4px;margin:4px 0 0;padding:0;list-style:none}
+.terminais-docgraph__rule{display:flex;align-items:center;gap:4px}
+.terminais-docgraph__rule-swatch{flex:0 0 26px;width:26px}
+.terminais-docgraph__rule-query{flex:1;min-width:0;height:26px;padding:0 8px;border:1px solid var(--mac-separator);border-radius:6px;background:var(--mac-surface);font-family:var(--mac-font-mono);font-size:11.5px;color:var(--mac-label)}
+.terminais-docgraph__rule-query:focus{outline:none;border-color:var(--mac-accent);box-shadow:0 0 0 3px var(--mac-accent-ring)}
+.terminais-docgraph__rule-colors{grid-template-columns:repeat(9,minmax(0,1fr));margin:4px 0 2px}
+.terminais-docgraph__legend-title{padding:2px 7px 3px;font-size:11px;font-weight:600;color:var(--mac-label-3)}
+/* Avisos das vistas, no alto e no meio: o foco dos Vizinhos fica a vista. */
+.terminais-docgraph__note{position:absolute;top:10px;left:50%;z-index:4;display:flex;flex-direction:column;align-items:center;gap:3px;max-width:min(420px,calc(100% - 24px));padding:8px 12px;border-radius:10px;background:var(--mac-glass);-webkit-backdrop-filter:blur(30px) saturate(160%);backdrop-filter:blur(30px) saturate(160%);border:1px solid var(--mac-separator);box-shadow:var(--mac-shadow-popover);text-align:center;transform:translateX(-50%);animation:macFade 180ms var(--mac-ease) both}
+.terminais-docgraph__note strong{font-size:12.5px;font-weight:600;color:var(--mac-label)}
+.terminais-docgraph__note span{font-size:12px;line-height:1.35;color:var(--mac-label-2);text-wrap:balance}
+.terminais-docgraph__note .btn{margin-top:4px}
+.terminais-docgraph__note.is-quiet{padding:4px 10px;box-shadow:none;pointer-events:none}
+.terminais-docgraph__note.is-quiet span{font-size:11.5px}
 /* Paineis pequenos: o grafo fica, o que esta por cima dele sai. */
-@container docgraph (max-width:560px){.terminais-docgraph__zoom{display:none}}
-@container docgraphview (max-width:520px){.terminais-docgraph__legend{display:none}}
+@container docgraph (max-width:560px){.terminais-docgraph__zoom{display:none}.terminais-docgraph__viewbtn>span{display:none}}
+@container docgraphview (max-width:520px){.terminais-docgraph__legend{display:none}.terminais-docgraph__note{top:36px}}
 @container docgraphview (max-height:220px){.terminais-docgraph__legend{display:none}.terminais-docgraph__facts,.terminais-docgraph__card-kind,.terminais-docgraph__card-path{display:none}.terminais-docgraph__card{padding:8px 10px}.terminais-docgraph__card-actions{margin-top:6px}}
 @container docgraphview (max-height:140px){.terminais-docgraph__card,.terminais-docgraph__tip,.terminais-docgraph__counts{display:none}}
 @media (prefers-reduced-motion:reduce){.terminais-docgraph__progress.is-loading{animation:none;background:var(--mac-accent)}}
@@ -473,6 +574,48 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-doc table{max-width:100%}
 .terminais-viewer__loading{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;flex:1;padding:24px;text-align:center;font-size:12.5px;color:var(--mac-label-2)}
 
+/* ── visualizadores: audio, video, fonte e notebook ────────────────── */
+.terminais-media{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;flex:1;min-height:0;min-width:0;padding:16px;background:var(--mac-surface-2)}
+.terminais-media video{max-width:100%;max-height:100%;border-radius:8px;background:#000}
+.terminais-media audio{width:min(480px,100%)}
+.terminais-media__icon{color:var(--mac-label-3)}
+.terminais-media__name{max-width:100%;font-size:13px;font-weight:600;color:var(--mac-label);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.terminais-font{flex:1;min-height:0;overflow:auto;padding:20px 24px 48px;color:var(--mac-label)}
+.terminais-font__hero{margin-bottom:12px;font-size:96px;line-height:1.1}
+.terminais-font__try{display:block;width:min(520px,100%);height:28px;margin:0 0 16px;padding:0 10px;border:0;border-radius:7px;background:var(--mac-surface-2);font:inherit;font-size:12.5px;color:var(--mac-label);outline:none;box-shadow:none}
+.terminais-font__try::placeholder{color:var(--mac-label-3)}
+:is([data-shell="desktop"],[data-platform="macos"]) .terminais-font__try:focus-visible{box-shadow:0 0 0 3px var(--mac-accent-ring);outline:none}
+.terminais-font__glyphs{margin-bottom:20px;font-size:22px;line-height:1.4;overflow-wrap:anywhere}
+.terminais-font__glyphs p{margin:0}
+.terminais-font__sizes{margin:0;padding:0;list-style:none}
+.terminais-font__sizes li{display:grid;grid-template-columns:32px minmax(0,1fr);align-items:baseline;gap:12px;padding:8px 0;border-top:1px solid var(--mac-separator)}
+.terminais-font__size{font-size:11px;color:var(--mac-label-3);font-variant-numeric:tabular-nums;text-align:right}
+.terminais-font__sample{line-height:1.25;overflow-wrap:anywhere}
+.terminais-notebook{flex:1;min-height:0;overflow:auto;padding:12px 24px 48px 8px}
+.terminais-notebook__cell{display:grid;grid-template-columns:44px minmax(0,1fr);gap:8px;padding:6px 0}
+.terminais-notebook__count{padding-top:8px;font:11px/1.5 var(--mac-font-mono);color:var(--mac-label-3);text-align:right;font-variant-numeric:tabular-nums}
+.terminais-notebook__body{display:flex;flex-direction:column;gap:6px;min-width:0}
+.terminais-notebook .terminais-notebook__md{flex:none;min-height:auto;overflow:visible;padding:0 2px}
+.terminais-notebook__code,.terminais-notebook__raw,.terminais-notebook__output{margin:0;padding:8px 12px;border-radius:8px;font:12px/1.55 var(--mac-font-mono);color:var(--mac-label)}
+.terminais-notebook__code{background:var(--mac-surface-2);white-space:pre;overflow-x:auto}
+.terminais-notebook__raw{background:var(--mac-surface-2);color:var(--mac-label-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.terminais-notebook__output{padding:2px 12px;white-space:pre-wrap;overflow-wrap:anywhere}
+.terminais-notebook__output.is-stderr{padding:6px 12px;background:var(--mac-warn-bg)}
+.terminais-notebook__output.is-error{padding:6px 12px;background:var(--mac-bad-bg);color:var(--mac-bad)}
+.terminais-notebook__cut{display:block;margin-top:6px;font-family:var(--mac-font);font-size:11.5px;color:var(--mac-label-3)}
+.terminais-notebook__image{align-self:flex-start;max-width:100%;height:auto;border-radius:6px;background:#fff}
+.terminais-syn-keyword{color:var(--terminais-syn-keyword)}
+.terminais-syn-string{color:var(--terminais-syn-string)}
+.terminais-syn-number{color:var(--terminais-syn-number)}
+.terminais-syn-comment{color:var(--terminais-syn-comment);font-style:italic}
+.terminais-syn-function{color:var(--terminais-syn-function)}
+.terminais-syn-type{color:var(--terminais-syn-type)}
+.terminais-syn-property{color:var(--terminais-syn-property)}
+.terminais-syn-variable{color:var(--mac-label)}
+.terminais-syn-tag{color:var(--terminais-syn-tag)}
+.terminais-syn-muted{color:var(--mac-label-2)}
+.terminais-syn-regexp{color:var(--terminais-syn-regexp)}
+
 /* ── dev browser ───────────────────────────────────────────────────── */
 .terminais-tab.is-browser .terminais-tab__icon{flex:0 0 auto;color:var(--mac-label-3)}
 .terminais-tab.is-browser.is-active .terminais-tab__icon{color:var(--mac-accent-text)}
@@ -552,7 +695,8 @@ button.terminais-docgraph__legend-item:hover{background:var(--mac-hover)}
 .terminais-tree:focus-visible .terminais-row.is-focused{box-shadow:0 0 0 2px var(--mac-accent-ring) inset}
 .terminais-row{display:flex;align-items:center;gap:4px;height:24px;padding:0 6px 0 calc(6px + var(--depth,0) * 14px);border-radius:6px;font-size:12.5px;color:var(--mac-label);cursor:default;user-select:none;-webkit-user-select:none;transition:background var(--mac-fast) var(--mac-ease)}
 .terminais-row:hover{background:var(--mac-hover)}
-.terminais-row.is-focused{background:var(--mac-accent-soft)}
+.terminais-row.is-focused,.terminais-row.is-selected{background:var(--mac-accent-soft)}
+.terminais-row.is-cut .terminais-row__name,.terminais-row.is-cut .terminais-row__icon{opacity:.45}
 .terminais-row.is-hidden .terminais-row__name,.terminais-row.is-hidden .terminais-row__icon{opacity:.6}
 /* Fantasma do arraste interno, que acompanha o cursor. O arraste do HTML
    nao chega a pagina dentro do app, entao a marca e desenhada aqui. */
@@ -677,6 +821,11 @@ body.is-dragging-path *{cursor:grabbing !important}
 /* ── estado vazio ──────────────────────────────────────────────────── */
 
 .terminais-empty{min-height:calc(100vh - 220px)}
+/* Os botões são inline-flex: soltos num bloco, alinham pela linha de base, e a
+   do botão com ícone sai da borda de baixo do ícone, não do texto. Em flex o
+   alinhamento é pelo centro, com espaço entre eles e entre as linhas quando
+   a janela estreita os quebra. */
+.terminais-empty__actions{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
 .terminais-empty__recent{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin-top:14px;max-width:560px}
 .terminais-empty__recent .btn{max-width:260px}
 .terminais-empty__recent .btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -696,7 +845,7 @@ body.is-dragging-path *{cursor:grabbing !important}
 .terminais-sessions__reopen{animation:macPop 160ms var(--mac-ease) both}
 .terminais-work__branch,.terminais-work__running{animation:macFade 180ms var(--mac-ease) both}
 .terminais-tab{animation:macPop 140ms var(--mac-ease) both}
-.terminais-editor__body,.terminais-editor__none,.terminais-editor__host,.terminais-html,.terminais-markdown,.terminais-diff,.terminais-pdf,.terminais-sheet,.terminais-doc{animation:macFade 150ms var(--mac-ease) both}
+.terminais-editor__body,.terminais-editor__none,.terminais-editor__host,.terminais-html,.terminais-markdown,.terminais-diff,.terminais-pdf,.terminais-sheet,.terminais-doc,.terminais-media,.terminais-font,.terminais-notebook{animation:macFade 150ms var(--mac-ease) both}
 .terminais-terminal__disconnected{animation:macFade 180ms var(--mac-ease) both}
 .terminais-row.is-new{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}
 .terminais-result{animation:macRowIn 160ms var(--mac-ease) both;animation-delay:calc(min(var(--i,0),14) * 10ms)}
@@ -1081,6 +1230,27 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .agent-profiles__retry{min-height:44px;font-size:15px}
 [data-form-factor="phone"] .agent-profiles__refresh{margin-left:0;justify-content:center;min-height:44px;font-size:15px}
 
+/* Ligar um Broto pelo QR: o sistema do Broto embaixo do nome, os quatro
+   numeros grandes, um em cada caixa, e a espera numa linha com o giro. */
+.broto-qr-sheet{display:flex;flex-direction:column;gap:12px}
+.broto-qr-sheet p{margin:0}
+.broto-qr-sheet .broto-qr-sheet__platform{margin-top:-6px;color:var(--mac-label-2);font-size:14px}
+.broto-qr-sheet__identity{display:flex;flex-direction:column;gap:2px;min-width:0}
+.broto-qr-sheet__identity strong{color:var(--mac-label);font-size:16px;font-weight:600;overflow-wrap:anywhere}
+.broto-qr-sheet__identity span{color:var(--mac-label-2);font-size:14px}
+.broto-qr-sheet__digits{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.broto-qr-sheet__digits span{display:grid;place-items:center;width:56px;height:68px;border-radius:var(--mac-radius-card,14px);background:var(--mac-surface-2);color:var(--mac-label);font:600 34px/1 var(--mac-font-mono,ui-monospace,monospace);font-variant-numeric:tabular-nums}
+.broto-qr-sheet__digits.is-muted span{color:var(--mac-label-3)}
+.broto-qr-sheet__lead{color:var(--mac-label);font-size:15px;line-height:1.45}
+.broto-qr-sheet__hint{color:var(--mac-label-3);font-size:13px;line-height:1.45}
+.broto-qr-sheet__status{display:flex;align-items:center;gap:10px;color:var(--mac-label-2);font-size:15px;line-height:1.45}
+.broto-qr-sheet__spinner{flex:none;width:16px;height:16px;border:2px solid var(--mac-accent);border-right-color:transparent;border-radius:50%;animation:phoneSpin .8s linear infinite}
+.broto-qr-sheet__done{display:flex;align-items:center;gap:10px;color:var(--mac-label);font-size:16px;font-weight:600}
+.broto-qr-sheet__done svg{flex:none;color:var(--mac-ok)}
+.broto-qr-sheet__notice{color:var(--mac-warn);font-size:13px;line-height:1.45}
+.broto-qr-sheet__error{color:var(--mac-bad);font-size:15px;line-height:1.45}
+@media (prefers-reduced-motion: reduce){.broto-qr-sheet__spinner{animation-duration:2.4s}}
+
 /* Menu de acoes na folha inferior: uma linha por acao, alvo de 44 px. */
 [data-form-factor="phone"] .phone-menu { display: flex; flex-direction: column; margin: 0 -8px; }
 [data-form-factor="phone"] .phone-menu__item { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border: 0; border-radius: 12px; background: transparent; color: var(--mac-label); font: inherit; font-size: 16px; text-align: left; }
@@ -1263,7 +1433,7 @@ body.is-dragging-path *{cursor:grabbing !important}
    nativo (apps/mobile/src/ui/tokens.ts, projectTints). O estado vazio do
    estúdio no computador usa as mesmas capas, então os tons valem também sob
    a casca desktop. */
-:is([data-form-factor="phone"],[data-shell="desktop"]) {
+:is([data-form-factor="phone"],[data-shell="desktop"]),:where(:is([data-form-factor="phone"],[data-shell="desktop"])[data-terminal-theme]) [data-terminal-scope] {
   --phone-tint-paper: #FFFFFF; --phone-tint-ink: #DCE1EC;
   --phone-tint-pink-cover: #FDEFF5; --phone-tint-pink-back: #F7B3CF; --phone-tint-pink-front: #EF7FAE;
   --phone-tint-blue-cover: #EEF3FF; --phone-tint-blue-back: #AFC3F7; --phone-tint-blue-front: #7E9DEE;
@@ -1271,7 +1441,7 @@ body.is-dragging-path *{cursor:grabbing !important}
   --phone-tint-orange-cover: #FFF3E6; --phone-tint-orange-back: #FFCB8E; --phone-tint-orange-front: #FFA44A;
   --phone-tint-violet-cover: #F3EEFF; --phone-tint-violet-back: #C6B4F6; --phone-tint-violet-front: #9C82EE;
 }
-:is([data-form-factor="phone"],[data-shell="desktop"])[data-theme="dark"] {
+:is([data-form-factor="phone"],[data-shell="desktop"])[data-theme="dark"],:where(:is([data-form-factor="phone"],[data-shell="desktop"])[data-terminal-theme="dark"]) [data-terminal-scope][data-terminal-scope] {
   --phone-tint-paper: #3A3A40; --phone-tint-ink: #55555C;
   --phone-tint-pink-cover: rgba(255, 122, 178, .14); --phone-tint-pink-back: #A8577C; --phone-tint-pink-front: #E0679C;
   --phone-tint-blue-cover: rgba(126, 157, 238, .14); --phone-tint-blue-back: #55689E; --phone-tint-blue-front: #7E9DEE;

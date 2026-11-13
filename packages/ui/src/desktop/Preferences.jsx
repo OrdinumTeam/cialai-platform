@@ -1,12 +1,15 @@
+import CialaiSkill from './CialaiSkill.jsx';
 // SPDX-License-Identifier: Apache-2.0
 // Focused preference areas backed by the complete Rust snapshot.
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, FolderPlus, Moon, RotateCcw, Sun, SunMoon, Trash2 } from 'lucide-react';
+import { AppWindow, FolderOpen, FolderPlus, Moon, RotateCcw, Sun, SunMoon, Trash2 } from 'lucide-react';
 import { AppModal, useToast } from '../components/ui.jsx';
 import { chooseDirectory, chooseFile, invoke, isTauri } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { shortPath } from '../terminals/files.js';
+import { setLayout, useLayout } from '../terminals/layout.js';
+import { setTerminalTheme, useTerminalTheme } from '../terminals/terminal-theme.js';
 import {
   addUniquePath,
   DEFAULT_PREFERENCES,
@@ -30,6 +33,11 @@ const APPEARANCE_OPTIONS = () => [
   { value: 'light', label: translate('desktop.appearance.lightShort') },
   { value: 'dark', label: translate('desktop.appearance.darkShort') },
 ];
+const TERMINAL_THEME_OPTIONS = () => [
+  { value: 'app', label: translate('desktop.appearance.followWindowShort') },
+  { value: 'light', label: translate('desktop.appearance.lightShort') },
+  { value: 'dark', label: translate('desktop.appearance.darkShort') },
+];
 export const LANGUAGE_OPTIONS = () => [
   { value: 'pt-BR', label: translate('language.portuguese') },
   { value: 'en', label: translate('language.english') },
@@ -38,7 +46,7 @@ export const LANGUAGE_OPTIONS = () => [
 
 // Aparencia em tres blocos com icone, como nos Ajustes do celular. Continua
 // sendo um grupo de radios para o teclado e o leitor de tela.
-const THEME_ICONS = { system: SunMoon, light: Sun, dark: Moon };
+const THEME_ICONS = { system: SunMoon, app: AppWindow, light: Sun, dark: Moon };
 function ThemeTiles({ value, options, onChange, ariaLabel }) {
   return <div className="mac-theme-tiles" role="radiogroup" aria-label={ariaLabel}>
     {options.map((option) => {
@@ -87,6 +95,8 @@ const snapshotKey = (value) => JSON.stringify(sanitizePreferences(value));
 
 export default function Preferences({ open, onClose, appearance, section = null }) {
   const notify = useToast();
+  const layout = useLayout();
+  const terminalTheme = useTerminalTheme();
   const tunnel = useTunnel();
   const native = isTauri();
   const [draft, setDraft] = useState(null);
@@ -101,20 +111,10 @@ export default function Preferences({ open, onClose, appearance, section = null 
   const [workingCommand, setWorkingCommand] = useState(false);
   const [error, setError] = useState('');
 
-  // Conta nova de um agente: a pasta nasce vazia e o login e feito pelo
-  // proprio programa, num terminal aberto ja naquele perfil. O Cialai nunca
-  // toca em credencial.
-  const createProfile = async (agent) => {
-    const name = typeof window !== 'undefined'
-      ? window.prompt(translate('terminal.profiles.createDescription'), '')
-      : null;
-    if (!name) return;
-    try {
-      await invoke('agent_profile_create', { agent, name: name.trim() });
-      notify(translate('terminal.profiles.created', { name: name.trim() }), 'success');
-    } catch (createError) {
-      notify(createError?.message || String(createError), 'warning');
-    }
+  // Conta nova de um agente: o modal Perfis de agentes cria a pasta e abre o
+  // login numa sessao nova. O Cialai nunca toca em credencial.
+  const createProfile = (agent) => {
+    window.dispatchEvent(new CustomEvent('cialai:agent-profiles', { detail: { agent } }));
   };
 
   // Linha de estado do Claude Code: copia o hook para ~/.cialai e aponta o
@@ -288,6 +288,9 @@ export default function Preferences({ open, onClose, appearance, section = null 
     {draft ? <>
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.appearance')}</h3>
         <Row title={translate('desktop.preferences.windowTheme')} description={translate('desktop.preferences.windowThemeDescription')} wide><ThemeTiles value={draft.appearance} options={APPEARANCE_OPTIONS()} onChange={changeAppearance} ariaLabel={translate('desktop.preferences.windowTheme')} /></Row>
+        {/* Como o idioma, vale na hora e fica neste aparelho, fora do arquivo de
+            preferencias: Cancelar nao desfaz. */}
+        <Row title={translate('desktop.preferences.terminalTheme')} description={translate('desktop.preferences.terminalThemeDescription')} wide><ThemeTiles value={terminalTheme} options={TERMINAL_THEME_OPTIONS()} onChange={setTerminalTheme} ariaLabel={translate('desktop.preferences.terminalTheme')} /></Row>
         <Row title={translate('language.label')} description={translate('desktop.preferences.languageDescription')}><Segmented value={getLocale()} options={LANGUAGE_OPTIONS()} onChange={setLocale} ariaLabel={translate('language.label')} /></Row>
       </section>
 
@@ -296,6 +299,9 @@ export default function Preferences({ open, onClose, appearance, section = null 
         <Row title={translate('desktop.preferences.arguments')} description={hints.argsDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.args.join('\n')} placeholder={hints.argsPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ args: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.shellArguments')} /></Row>
         {hints.showLang ? <Row title={translate('language.label')} description={hints.langDescription}><input className="field__control mac-prefs__input" value={draft.terminal.lang || ''} placeholder={hints.langPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ lang: event.target.value || null })} aria-label={translate('desktop.preferences.terminalLanguage')} /></Row> : null}
         <Row title={translate('desktop.preferences.pathPrefixes')} description={hints.pathPrefixDescription} wide><textarea className="field__control field__control--area mac-prefs__textarea" rows="2" value={draft.terminal.pathPrefix.join('\n')} placeholder={hints.pathPrefixPlaceholder} spellCheck="false" onChange={(event) => updateTerminal({ pathPrefix: splitLines(event.target.value) })} aria-label={translate('desktop.preferences.pathPrefixes')} /></Row>
+        {/* Como o idioma, vale na hora e fica neste aparelho, fora do arquivo
+            de preferencias: e o jeito de mostrar a lista, nao do terminal. */}
+        <Row title={translate('desktop.preferences.compactCards')} description={translate('desktop.preferences.compactCardsDescription')}><input type="checkbox" className="mac-switch" checked={layout.cardsCompact} onChange={(event) => setLayout({ cardsCompact: event.target.checked })} aria-label={translate('desktop.preferences.compactCards')} /></Row>
         {native ? <Row title={translate('desktop.preferences.claudeHook')} description={translate('desktop.preferences.claudeHookDescription')}><button type="button" className="btn btn-secondary btn-sm" disabled={installingHook} onClick={installClaudeHook}>{translate(installingHook ? 'desktop.preferences.claudeHookInstalling' : 'desktop.preferences.claudeHookInstall')}</button></Row> : null}
         {native && command ? <Row title={translate('desktop.preferences.terminalCommand')} description={commandDescription(command)} wide>
           <div className="mac-prefs__actions">
@@ -307,6 +313,7 @@ export default function Preferences({ open, onClose, appearance, section = null 
         </Row> : null}
       </section>
 
+      <CialaiSkill />
       <section className="mac-prefs__section"><h3 className="mac-prefs__heading">{translate('desktop.preferences.projects')}</h3>
         <p className="mac-prefs__note">{translate('desktop.preferences.projectsDescription')}</p>
         <div className="mac-prefs__roots" aria-label={translate('desktop.preferences.projectFolders')}>{draft.projectRoots.map((path) => <div className="mac-prefs__root" key={path}><code>{path}</code><button type="button" className="btn btn-quiet btn-sm" disabled={draft.projectRoots.length === 1} onClick={() => setDraft((current) => ({ ...current, projectRoots: removePath(current.projectRoots, path) }))} aria-label={translate('desktop.preferences.removePath', { path })}><Trash2 aria-hidden="true" />{translate('desktop.action.remove')}</button></div>)}</div>

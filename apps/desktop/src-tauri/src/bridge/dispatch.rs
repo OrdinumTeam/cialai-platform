@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Explicit command allowlist; argument parsing never executes Tauri IPC.
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tauri::{
     AppHandle, Manager,
     ipc::{Channel, InvokeResponseBody},
@@ -11,6 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use super::{Connection, lock, protocol};
 use crate::commands;
 use crate::i18n::{t, tf};
+use crate::tunnel::{RpcProblem, Supervisor};
 use crate::workspace::pty::CursorPosition;
 use crate::workspace::terminal::TerminalManager;
 
@@ -88,6 +89,76 @@ fn prepare_binding(
         return Err(t("native.error.channelLimit"));
     }
     Ok(())
+}
+
+/// Maior texto de QR do Broto que a pagina repassa, em bytes.
+const BROTO_QR_MAX_BYTES: usize = 1200;
+const BROTO_QR_PREFIX: &str = "CIALAIQ1.";
+
+/// Ligar um Broto pelo QR lido no celular. A pagina so manda o texto lido, o
+/// id do pedido e a resposta. Quem pede e o aparelho que a borda provou nesta
+/// conexao: um `requester` vindo da pagina nunca chega ao sidecar.
+fn broto_qr_request(
+    cmd: &str,
+    args: &Value,
+    device_id: Option<&str>,
+) -> Result<(&'static str, Value), String> {
+    let requester = || {
+        device_id
+            .map(str::to_owned)
+            .ok_or_else(|| t("native.error.pairedPhoneOnly"))
+    };
+    match cmd {
+        "broto_qr_begin" => {
+            let payload: String = arg(args, "payload")?;
+            if payload.len() > BROTO_QR_MAX_BYTES || !payload.starts_with(BROTO_QR_PREFIX) {
+                return Err(tf("native.error.argumentInvalid", &[("name", &"payload")]));
+            }
+            Ok((
+                "broto.qr.begin",
+                json!({"payload": payload, "requester": requester()?}),
+            ))
+        }
+        "broto_qr_state" => Ok(("broto.qr.state", json!({"qrId": broto_qr_id(args)?}))),
+        "broto_qr_decide" => {
+            let qr_id = broto_qr_id(args)?;
+            let approve: bool = arg(args, "approve")?;
+            Ok((
+                "broto.qr.decide",
+                json!({"qrId": qr_id, "approve": approve, "requester": requester()?}),
+            ))
+        }
+        _ => Err(t("native.error.desktopOnly")),
+    }
+}
+
+/// Id do pedido: `q_` e de 1 a 64 letras, digitos, `_` ou `-`.
+fn broto_qr_id(args: &Value) -> Result<String, String> {
+    let id: String = arg(args, "qrId")?;
+    let valid = id.strip_prefix("q_").is_some_and(|rest| {
+        (1..=64).contains(&rest.len())
+            && rest
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+    });
+    if valid {
+        Ok(id)
+    } else {
+        Err(tf("native.error.argumentInvalid", &[("name", &"qrId")]))
+    }
+}
+
+/// O celular traduz o codigo estavel do sidecar. Um erro generico cujo texto
+/// traz um codigo de QR vale por esse codigo.
+fn broto_qr_error(problem: RpcProblem) -> String {
+    if problem.code.starts_with("qr_") {
+        return problem.code;
+    }
+    problem
+        .message
+        .split(|ch: char| !(ch.is_ascii_lowercase() || ch == '_'))
+        .find(|word| word.len() > 3 && word.starts_with("qr_"))
+        .map_or(problem.code, str::to_owned)
 }
 
 pub(super) fn dispatch(
@@ -207,15 +278,21 @@ pub(super) fn dispatch(
         }
         "pty_metrics" => value(commands::pty_metrics(app.state())),
         "ai_usage" => value(commands::ai_usage(app.clone(), app.state(), app.state())),
-        "pty_write" => value(commands::pty_write(
-            app.state(),
-            arg(&args, "id")?,
-            arg(&args, "data")?,
-            arg(&args, "binary")?,
-        )?),
+        "pty_write" => {
+            let data: String = arg(&args, "data")?;
+            let binary: Option<bool> = arg(&args, "binary")?;
+            let bytes = if binary.unwrap_or(false) {
+                commands::binary_bytes(&data)?
+            } else {
+                data.into_bytes()
+            };
+            app.state::<TerminalManager>()
+                .write_as(arg(&args, "id")?, &bytes, "phone")?;
+            Ok(Value::Null)
+        }
         "pty_kill" => {
             let id = arg(&args, "id")?;
-            commands::pty_kill(app.state(), id)?;
+            app.state::<TerminalManager>().kill_as(id, "phone")?;
             lock(&conn.bindings).remove(&id);
             Ok(Value::Null)
         }
@@ -256,12 +333,22 @@ pub(super) fn dispatch(
             arg(&args, "id")?,
             arg(&args, "agent")?,
             arg(&args, "profile")?,
+            arg(&args, "login")?,
         )?),
         "pty_presentation" => value(commands::pty_presentation(
             app.state(),
             arg(&args, "id")?,
             arg(&args, "presentation")?,
         )?),
+        // Cada chamada e curta: o prazo do sidecar e de 30 s e estourar reinicia
+        // o processo, entao a pagina pergunta o estado de novo em vez de esperar.
+        "broto_qr_begin" | "broto_qr_state" | "broto_qr_decide" => {
+            let (command, request) = broto_qr_request(cmd, &args, conn.device_id.as_deref())?;
+            app.try_state::<Supervisor>()
+                .ok_or("network_setup")?
+                .call(command, request)
+                .map_err(broto_qr_error)
+        }
         _ => Err(t("native.error.desktopOnly")),
     }
 }
@@ -307,6 +394,131 @@ mod tests {
                 .unwrap()
                 .__channel__,
             5
+        );
+    }
+
+    #[test]
+    fn broto_qr_requests_name_the_connection_device_and_never_the_page_requester() {
+        let payload = format!("CIALAIQ1.{}", "A".repeat(32));
+        let page = |cmd: &str, args: Value| broto_qr_request(cmd, &args, Some("dev_phone"));
+        assert_eq!(
+            page(
+                "broto_qr_begin",
+                json!({"payload": payload, "requester": "dev_page"})
+            )
+            .unwrap(),
+            (
+                "broto.qr.begin",
+                json!({"payload": payload, "requester": "dev_phone"})
+            )
+        );
+        assert_eq!(
+            page(
+                "broto_qr_state",
+                json!({"qrId": "q_AbC-1_x", "requester": "dev_page"})
+            )
+            .unwrap(),
+            ("broto.qr.state", json!({"qrId": "q_AbC-1_x"}))
+        );
+        assert_eq!(
+            page(
+                "broto_qr_decide",
+                json!({"qrId": "q_AbC-1_x", "approve": true, "requester": "dev_page"})
+            )
+            .unwrap(),
+            (
+                "broto.qr.decide",
+                json!({"qrId": "q_AbC-1_x", "approve": true, "requester": "dev_phone"})
+            )
+        );
+        // Sem o aparelho provado pela borda, nada comeca nem e respondido.
+        assert!(broto_qr_request("broto_qr_begin", &json!({"payload": payload}), None).is_err());
+        assert!(
+            broto_qr_request(
+                "broto_qr_decide",
+                &json!({"qrId": "q_x", "approve": false}),
+                None
+            )
+            .is_err()
+        );
+        assert!(broto_qr_request("broto_qr_state", &json!({"qrId": "q_x"}), None).is_ok());
+        assert!(page("pty_list", json!({})).is_err());
+    }
+
+    #[test]
+    fn broto_qr_arguments_are_bounded_before_reaching_the_sidecar() {
+        let begin = |payload: Value| {
+            broto_qr_request(
+                "broto_qr_begin",
+                &json!({"payload": payload}),
+                Some("dev_phone"),
+            )
+        };
+        let longest = format!("CIALAIQ1.{}", "A".repeat(BROTO_QR_MAX_BYTES - 9));
+        assert_eq!(longest.len(), BROTO_QR_MAX_BYTES);
+        assert!(begin(json!(longest)).is_ok());
+        assert!(begin(json!(format!("{longest}A"))).is_err());
+        for bad in [
+            json!("CIALAIB2.abc"),
+            json!("cialaiq1.abc"),
+            json!(" CIALAIQ1.abc"),
+            json!(42),
+            json!(null),
+        ] {
+            assert!(begin(bad.clone()).is_err(), "{bad}");
+        }
+        let state =
+            |id: Value| broto_qr_request("broto_qr_state", &json!({"qrId": id}), Some("dev_phone"));
+        assert!(state(json!(format!("q_{}", "a".repeat(64)))).is_ok());
+        for bad in [
+            json!("q_"),
+            json!(format!("q_{}", "a".repeat(65))),
+            json!("x_abc"),
+            json!("q_ab/c"),
+            json!("q_ab c"),
+            json!("q_\u{e1}bc"),
+            json!(7),
+        ] {
+            assert!(state(bad.clone()).is_err(), "{bad}");
+        }
+        let decide = |approve: Value| {
+            broto_qr_request(
+                "broto_qr_decide",
+                &json!({"qrId": "q_abc", "approve": approve}),
+                Some("dev_phone"),
+            )
+        };
+        assert!(decide(json!(false)).is_ok());
+        for bad in [json!("true"), json!(1), json!(null)] {
+            assert!(decide(bad.clone()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn sidecar_qr_failures_reach_the_phone_as_stable_codes() {
+        let problem = |code: &str, message: &str| RpcProblem {
+            code: code.into(),
+            message: message.into(),
+            retryable: false,
+        };
+        assert_eq!(
+            broto_qr_error(problem("qr_expired", "O QR expirou.")),
+            "qr_expired"
+        );
+        assert_eq!(
+            broto_qr_error(problem("internal", "qr_used: o QR ja foi usado")),
+            "qr_used"
+        );
+        assert_eq!(
+            broto_qr_error(problem(
+                "command_unknown",
+                "O comando solicitado não existe neste sidecar."
+            )),
+            "command_unknown"
+        );
+        assert_eq!(
+            broto_qr_error(problem("tunnel_timeout", "O túnel não respondeu.")),
+            "tunnel_timeout"
         );
     }
 }

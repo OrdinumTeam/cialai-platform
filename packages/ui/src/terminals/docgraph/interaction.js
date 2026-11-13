@@ -14,13 +14,20 @@
 // - Arrastar uma marca move o agrupamento, e so depois de 4 px acumulados, o
 //   mesmo limiar de `drag.js`. O limiar e proprio porque o `moved` da camera e
 //   por evento, e um deslocamento lento passaria por clique.
-// - A raiz fica presa na origem: o gesto sobre ela desloca a camera.
+// - A raiz fica presa na origem: o gesto sobre ela desloca a camera. Nas vistas
+//   sem simulacao, Arvore, Radial e Blocos, o arraste sobre qualquer marca
+//   tambem desloca a camera.
+// - No 3D o arraste gira a cena, e com Shift desloca a camera.
+// - Nos Vizinhos as setas andam pela vizinhanca, o clique muda o foco e o
+//   espaco centra a vizinhanca no arquivo selecionado.
 
 import { ROOT_ID } from './model.js';
 import { track } from './stats.js';
 
 const DRAG_THRESHOLD = 4;
 const HOVER_DELAY_MS = 120;
+// Radianos por pixel de arraste no 3D.
+const ORBIT_SPEED = 0.008;
 
 export function bindInteraction(host, { camera, renderer, controller, api, actions }) {
   const sessionId = controller.sessionId;
@@ -74,13 +81,35 @@ export function bindInteraction(host, { camera, renderer, controller, api, actio
     const point = local(event);
     const id = renderer.pick(point.x, point.y);
     actions.onHover(null);
-    press = { id: id && id !== ROOT_ID ? id : null, x: event.clientX, y: event.clientY, travelled: 0, dragging: false, panning: false };
+    press = {
+      id: id && id !== ROOT_ID ? id : null,
+      x: event.clientX,
+      y: event.clientY,
+      startX: event.clientX,
+      startY: event.clientY,
+      travelled: 0,
+      dragging: false,
+      panning: false,
+      rotating: controller.mode === 'space' && !event.shiftKey,
+    };
     // A captura do ponteiro recusa um id que o navegador nao conhece, que e o
     // caso de um evento montado a mao pela verificacao: o gesto segue sem ela.
     try {
-      if (!press.id) { press.panning = true; camera.handlers.onPointerDown(event); } else host.setPointerCapture?.(event.pointerId);
+      if (press.rotating || press.id) host.setPointerCapture?.(event.pointerId);
+      else { press.panning = true; camera.handlers.onPointerDown(event); }
     } catch (_error) { /* sem captura */ }
   });
+
+  // O gesto comecou sobre uma marca que nao se arrasta: vira deslocamento da
+  // camera desde o ponto em que o botao desceu.
+  const panInstead = (event) => {
+    press.panning = true;
+    try {
+      camera.handlers.onPointerDown({ button: 0, clientX: press.startX, clientY: press.startY, pointerId: event.pointerId, currentTarget: host });
+    } catch (_error) { /* sem captura */ }
+    actions.byUser();
+    camera.handlers.onPointerMove(event);
+  };
 
   on(host, 'pointermove', (event) => {
     if (!press) {
@@ -94,7 +123,11 @@ export function bindInteraction(host, { camera, renderer, controller, api, actio
     press.y = event.clientY;
     press.travelled += Math.abs(dx) + Math.abs(dy);
     if (press.panning) { if (press.travelled > DRAG_THRESHOLD) actions.byUser(); camera.handlers.onPointerMove(event); return; }
-    if (!press.dragging && press.travelled > DRAG_THRESHOLD) press.dragging = api.dragStart(sessionId, press.id);
+    if (press.rotating) { if (press.travelled > DRAG_THRESHOLD) api.rotate(sessionId, dx * ORBIT_SPEED, dy * ORBIT_SPEED); return; }
+    if (!press.dragging && press.travelled > DRAG_THRESHOLD) {
+      press.dragging = api.dragStart(sessionId, press.id);
+      if (!press.dragging) { panInstead(event); return; }
+    }
     if (press.dragging) { const scale = camera.getView().s; api.dragMove(sessionId, dx / scale, dy / scale); }
   });
 
@@ -160,11 +193,16 @@ export function bindInteraction(host, { camera, renderer, controller, api, actio
     const at = current ? order.indexOf(current) : -1;
     const node = current ? nodeOf(current) : null;
     const done = () => { event.preventDefault(); event.stopPropagation(); };
+    // Nos Vizinhos nao ha pasta para abrir nem pai a vista: as quatro setas
+    // andam pela lista.
+    const flat = controller.mode === 'neighbors';
+    const forward = key === 'ArrowDown' || (flat && key === 'ArrowRight');
+    const backward = key === 'ArrowUp' || (flat && key === 'ArrowLeft');
 
     if (meta && key.toLowerCase() === 'f') { done(); actions.focusSearch(); return; }
     if (meta) return;
-    if (key === 'ArrowDown') { done(); moveTo(order[Math.min(order.length - 1, at + 1)] || order[0]); return; }
-    if (key === 'ArrowUp') { done(); moveTo(at <= 0 ? order[0] : order[at - 1]); return; }
+    if (forward) { done(); moveTo(order[Math.min(order.length - 1, at + 1)] || order[0]); return; }
+    if (backward) { done(); moveTo(at <= 0 ? order[0] : order[at - 1]); return; }
     if (key === 'Home') { done(); moveTo(order[0]); return; }
     if (key === 'End') { done(); moveTo(order[order.length - 1]); return; }
     if (key === 'ArrowLeft') {
@@ -187,7 +225,12 @@ export function bindInteraction(host, { camera, renderer, controller, api, actio
       if (node.kind === 'doc') { if (event.altKey) actions.preview(current); else actions.open(current); } else if (current !== ROOT_ID) api.toggle(sessionId, current);
       return;
     }
-    if (key === ' ') { done(); if (node && node.kind === 'dir') api.toggle(sessionId, current); return; }
+    if (key === ' ') {
+      done();
+      if (flat) { if (node?.kind === 'doc') api.focusOn(sessionId, current); return; }
+      if (node && node.kind === 'dir') api.toggle(sessionId, current);
+      return;
+    }
     if (key === '+' || key === '=') { done(); actions.byUser(); camera.zoomBy(1.35); return; }
     if (key === '-' || key === '_') { done(); actions.byUser(); camera.zoomBy(1 / 1.35); return; }
     if (key === '0') { done(); actions.fit(); return; }

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotorpc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
@@ -24,6 +25,7 @@ import (
 const legacyRegistrySuffix = ".v1-legacy"
 
 type runtimeState struct {
+	brotos        *brotorpc.Hub
 	logger        *logx.Logger
 	writer        *rpc.Writer
 	paths         statedir.Paths
@@ -36,6 +38,9 @@ type runtimeState struct {
 	// commandMu serializes the commands that change the network, the
 	// identity or the registry.
 	commandMu sync.Mutex
+	// qrMu serializes broto.qr.changed, so events keep the order of the
+	// stages.
+	qrMu sync.Mutex
 
 	// mu guards the fields below, read by events from other goroutines.
 	mu        sync.Mutex
@@ -45,6 +50,7 @@ type runtimeState struct {
 	net       *network
 	lastError *StatusError
 	lastTor   TorStatus
+	brotoIPC  *DiagnosticCheck
 }
 
 func newRuntime(options Options, writer *rpc.Writer) *runtimeState {
@@ -53,6 +59,53 @@ func newRuntime(options Options, writer *rpc.Writer) *runtimeState {
 		torExecutable: options.TorExecutable, seams: options.Network,
 		sessions: pairing.NewSessions(nil, nil),
 	}
+	runtime.brotos = brotorpc.NewHub()
+	runtime.brotos.Event = func(name string, data any) {
+		if name == "broto.exec.started" || name == "broto.exec.queued" {
+			if v, ok := data.(map[string]any); ok {
+				if id, ok := v["deviceId"].(string); ok {
+					if reg := runtime.registry(); reg != nil {
+						if d, ok := reg.Get(id); ok {
+							v["brotoName"] = d.Name
+						}
+					}
+				}
+			}
+		}
+		runtime.emit(name, data)
+	}
+	runtime.brotos.Level = func(id string) string {
+		reg := runtime.registry()
+		if reg == nil {
+			return "read"
+		}
+		d, ok := reg.Get(id)
+		if !ok || d.Revoked {
+			return "read"
+		}
+		if d.Level == "" {
+			return "confirm"
+		}
+		return d.Level
+	}
+	runtime.brotos.Disconnect = func(id string) {
+		reg := runtime.registry()
+		if reg != nil {
+			reg.Revoke(id)
+		}
+		runtime.emit("devices.changed", map[string]any{"deviceId": id, "revoked": true})
+	}
+	runtime.brotos.Audit = func(a brotorpc.Audit) {
+		fields := logx.Fields{"deviceId": a.DeviceID, "cmd": a.Cmd, "actor": a.Actor, "ok": a.OK}
+		switch a.Cmd {
+		case "pty.list", "pty.read", "files.list", "files.stat":
+			runtime.logger.Debug("broto action", fields)
+		default:
+			runtime.logger.Info("broto action", fields)
+		}
+		runtime.emit("broto.activity", a)
+	}
+	runtime.sessions.OnQRChange(runtime.qrChanged)
 	runtime.approvals = newApprovalQueue(runtime.emit)
 	runtime.emitter = newStateEmitter(options.Network.StateInterval, runtime.status, func(status NetStatus) {
 		runtime.emit("net.state", status)
@@ -82,6 +135,7 @@ func (runtime *runtimeState) handle(ctx context.Context, request rpc.Request) (r
 
 // close stops the network, Tor included, and sends the final net.state.
 func (runtime *runtimeState) close() {
+	runtime.brotos.Close()
 	runtime.commandMu.Lock()
 	runtime.stopNetwork()
 	runtime.commandMu.Unlock()

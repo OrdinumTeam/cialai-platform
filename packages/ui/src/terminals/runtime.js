@@ -44,10 +44,13 @@ import { SearchAddon } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { isTauri, hasBridge, NATIVE_ONLY_MESSAGE, invoke, listen, createChannel, chooseDirectory } from '../lib/native.js';
 import { openExternal } from '../lib/downloads.js';
-import { buildTheme, terminalFont, watchTheme } from './theme.js';
+import { buildTheme, terminalFont, watchTerminalTheme } from './theme.js';
+import { windowsPty } from './pty-compat.js';
 import { baseName, fs, isInside, shellQuote } from './files.js';
+import { createPathLinkProvider } from './path-link-provider.js';
 import { portablePath } from '../lib/paths.js';
 import { getLayout, subscribeLayout } from './layout.js';
+import { lookKey, recallLook, rememberLook } from './directory-looks.js';
 import { platform } from '../lib/platform.js';
 import { isTerminalFocusReport } from './shortcut-actions.js';
 import { windowLabel } from '../notch/copy.js';
@@ -61,6 +64,7 @@ import { isMobileShell, isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
 import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
+import { untaggedOwner } from './pty-adoption.js';
 import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
 import { installTerminalClipboard } from './clipboard.js';
 import { currentOs } from '../lib/keys.js';
@@ -259,6 +263,8 @@ function serializeSession(session) {
     color: session.color,
     icon: session.icon,
     pinned: session.pinned,
+    // So deste aparelho: o Rust recusa campo desconhecido na apresentacao.
+    collapsed: session.collapsed,
     createdAt: session.createdAt,
     editor: {
       tabs: session.editor.tabs.filter((tab) => tab.kind !== 'diff' && tab.path).map((tab) => tab.path),
@@ -289,7 +295,7 @@ export function persist() {
   persistTimer = setTimeout(() => {
     persistTimer = null;
     const store = readStore();
-    store.sessions = state.order.map((id) => state.sessions.get(id)).filter(Boolean).map(serializeSession);
+    store.sessions = state.order.map((id) => state.sessions.get(id)).filter((session) => session && !session.deviceId).map(serializeSession);
     store.selectedId = state.selectedId;
     writeStore(store);
     // A apresentacao do card tem o Rust como fonte de verdade, e os dois
@@ -454,6 +460,7 @@ function createTerminal() {
     macOptionIsMeta: false,
     allowProposedApi: true,
     theme: buildTheme(),
+    windowsPty: windowsPty(platform(), { phone: isPhone() }),
   });
   const fit = new FitAddon();
   term.loadAddon(fit);
@@ -468,13 +475,44 @@ function validColor(color) {
   return SESSION_COLORS.some((entry) => entry.id === color) ? color : null;
 }
 
+// Diretorio vivo e lar da sessao, para resolver o caminho que o link viu na
+// tela. Vale o diretorio do processo em primeiro plano, senao o do shell,
+// senao a pasta onde a sessao nasceu.
+function linkContext(session) {
+  const activity = session.activity;
+  const live = (activity && (activity.foreground?.cwd || activity.shellCwd)) || session.cwd || null;
+  const home = platform().home || null;
+  return {
+    cwd: live ? portablePath(live) : null,
+    home: home ? portablePath(home) : null,
+  };
+}
+
+// Um caminho vira link so quando existe no disco e e um arquivo, nunca uma
+// pasta. O `fs.stat` segue o link simbolico e nao lanca em caminho ausente.
+function pathIsOpenableFile(path) {
+  return fs.stat(path).then((stat) => Boolean(stat && stat.exists && stat.kind === 'file')).catch(() => false);
+}
+
+// Liga os caminhos de arquivo da saida ao editor: um clique abre o arquivo na
+// sessao. A existencia e conferida no disco ao passar o mouse, entao so o que
+// da para abrir fica sublinhado.
+function installPathLinks(session) {
+  session.term.registerLinkProvider(createPathLinkProvider({
+    terminal: session.term,
+    context: () => linkContext(session),
+    exists: pathIsOpenableFile,
+    open: (path, location) => dispatch({ type: 'open-file', id: session.id, path, line: location?.line ?? null }),
+  }));
+}
+
 // Tema do xterm da sessao: cursor e selecao no tom dela, o resto igual para
 // todas. Reaplicado quando a cor ou a aparencia mudam.
 function applySessionTheme(session) {
   session.term.options.theme = buildTheme(resolveSessionAccent(session.color));
 }
 
-function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
+function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '', color = null, icon = null, pinned = false, collapsed = false, createdAt, editor, explorer, browser, docgraph, shellFlavor } = {}) {
   const { term, fit, search } = createTerminal();
   // Toda pasta guardada na sessao usa a forma portatil. O Rust ja devolve
   // assim; o que vem do armazenamento antigo ou de um caminho digitado pode
@@ -490,6 +528,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     color: validColor(color),
     icon: validIcon(icon),
     pinned: Boolean(pinned),
+    collapsed: Boolean(collapsed),
     createdAt: createdAt || Date.now(),
     term,
     fit,
@@ -625,8 +664,10 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   session.disposables.push(term.onResize(({ cols, rows }) => {
     if (session.applyingView) return;
     if (session.ptyId == null || session.status !== 'running') return;
-    if (isTauri()) invoke('pty_resize', { id: session.ptyId, cols, rows }).catch(() => {});
-    else session.viewport?.resize({ cols, rows }).catch(() => {});
+    if (isTauri()) {
+      session.viewport?.track({ cols, rows });
+      invoke('pty_resize', { id: session.ptyId, cols, rows }).catch(() => {});
+    } else session.viewport?.resize({ cols, rows }).catch(() => {});
   }));
   // Sino e notificacoes: o unico jeito honesto de saber que um programa no
   // terminal pediu atencao. Claude Code, WezTerm e iTerm usam estes canais.
@@ -647,7 +688,7 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
     paste: (text) => pasteText(session.id, text),
     paths: (paths) => insertPaths(session.id, paths),
     files: async (files) => {
-      if (!isTauri()) throw new Error('clipboard_files_require_desktop');
+      if (!isTauri() || session.deviceId) throw new Error('clipboard_files_require_desktop');
       const paths = [];
       for (const file of files) {
         if (file.size > 32 * 1024 * 1024) throw new Error('clipboard_file_too_large');
@@ -674,6 +715,9 @@ function createSession({ id, cwd: rawCwd, name, customName = false, subtitle = '
   });
   installWheelScroll(session);
   installTouchScroll(session);
+  // O link de caminho abre no editor do estudio, que e do computador; no
+  // celular o terminal e so toque e nao tem esse editor.
+  if (!isPhone()) installPathLinks(session);
   applySessionTheme(session);
   state.sessions.set(session.id, session);
   return session;
@@ -1044,7 +1088,14 @@ function loadWebgl(session) {
     const addon = new WebglAddon();
     addon.onContextLoss(() => {
       addon.dispose();
-      session.webgl = null;
+      if (session.webgl === addon) session.webgl = null;
+      // O xterm volta ao renderizador DOM, que mede a celula de outro jeito.
+      // Sem encaixar de novo, colunas e linhas ficavam as do WebGL e a saida
+      // quebrava fora do lugar.
+      if (session.host) {
+        fitNow(session);
+        try { session.term.refresh(0, session.term.rows - 1); } catch (_error) { /* terminal fechado */ }
+      }
     });
     session.term.loadAddon(addon);
     session.webgl = addon;
@@ -1063,7 +1114,13 @@ function unloadWebgl(session) {
   // Blur while the renderer is still attached so its cursor blink timers
   // stop before disposal. addon-webgl 0.19 does not dispose that manager.
   session.term.blur();
+  // O addon nao devolve o contexto ao descartar, e o navegador so solta um
+  // contexto no coletor de lixo. Cada troca de sessao abre um novo, e o
+  // WebView2 derruba o mais antigo ao passar do limite de contextos vivos.
+  // Perder o contexto de proposito, depois do descarte, o devolve na hora.
+  const gl = session.webgl._renderer?._gl;
   try { session.webgl.dispose(); } catch (_error) { /* contexto ja perdido */ }
+  try { gl?.getExtension('WEBGL_lose_context')?.loseContext(); } catch (_error) { /* sem a extensao */ }
   session.webgl = null;
 }
 
@@ -1576,8 +1633,12 @@ async function sampleMetrics() {
   if (state.metricsBusy || !hasBridge() || state.demo) return;
   if (![...state.sessions.values()].some(measurable)) return;
   state.metricsBusy = true;
+  // Uma resposta que volta depois de uma queda da ponte e da conexao velha: o
+  // carimbo de agora a faria passar por nova e sobrescrever o estado atual.
+  const epoch = state.connectionEpoch;
   try {
     const list = await invoke('pty_metrics');
+    if (epoch !== state.connectionEpoch) return;
     if (Array.isArray(list)) applyMetrics(list);
   } catch (_error) {
     // Kernel recusou a leitura: os cards mostram o dado como indisponivel.
@@ -1613,7 +1674,7 @@ function ensureMetrics() {
 
 function ensureWatchers() {
   if (!state.themeWatcher) {
-    state.themeWatcher = watchTheme(() => {
+    state.themeWatcher = watchTerminalTheme(() => {
       state.sessions.forEach(applySessionTheme);
       dispatch({ type: 'theme' });
     });
@@ -1728,11 +1789,14 @@ async function syncSharedSessions() {
     for (const info of alive) {
       let session = [...state.sessions.values()].find((entry) => entry.ptyId === info.id);
       if (!session && info.tag) session = state.sessions.get(info.tag);
-      if (!session && !info.tag) session = [...state.sessions.values()].find((entry) => entry.ptyId == null && !entry.spawning && entry.cwd === info.cwd);
+      // Sem tag, a pasta so identifica a dona quando aponta uma sessao so.
+      if (!session && !info.tag) session = untaggedOwner([...state.sessions.values()], info);
       // A spawn result can arrive after pty_list observed its tag.
       if (session?.spawning) continue;
       if (!session) {
-        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: baseName(info.cwd) });
+        // A sessão de um Broto leva o nome da máquina, que é o que a pessoa
+        // reconhece; a pasta inicial de lá costuma ser só o nome do usuário.
+        session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName || info.deviceId }) : (info.deviceId && info.brotoName) || baseName(info.cwd), collapsed: getLayout().cardsCompact });
         state.order.push(session.id);
         session.ptyId = info.id;
       }
@@ -1756,6 +1820,13 @@ async function syncSharedSessions() {
         session.remoteOrder = shared.order;
         adopted.push(session);
       }
+      session.deviceId = info.deviceId || null;
+      session.term.options.windowsPty = windowsPty(platform(), { phone: isPhone(), remote: Boolean(session.deviceId) });
+      if (info.brotoName && info.brotoName !== session.brotoName) {
+        const oldName = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: session.brotoName || session.deviceId }) : session.brotoName;
+        if (!session.name || session.name === oldName) session.name = info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName }) : info.brotoName;
+      }
+      session.brotoName = info.brotoName || null;
       applyTerminalInfo(session, info);
       session.ptyAliveEpoch = connectionEpoch;
       if (!session.spawnToken || session.status !== 'running') {
@@ -1858,13 +1929,20 @@ export function hydrate() {
 
 // Cria a sessao e abre o shell na hora, mesmo sem ser exibida. Devolve o
 // identificador ou null quando recusou.
+//
+// `color` e `icon` ausentes querem dizer que ninguem escolheu: a sessao herda
+// o que a pasta lembra. `null` e escolha explicita do padrao e vence a
+// memoria, que passa a lembrar a escolha nova.
 export function openSession(cwd, { name, subtitle, color, icon, select = true } = {}) {
   if (!hasBridge() && !state.demo) {
     dispatch({ type: 'error', message: translate('terminal.common.desktopOnly') });
     return null;
   }
   if (!cwd) return null;
-  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: color || null, icon: icon || null });
+  const chosen = color !== undefined || icon !== undefined;
+  const look = chosen ? { color: color || null, icon: icon || null } : recallDirectoryLook(cwd) || { color: null, icon: null };
+  const session = createSession({ cwd, name: name?.trim() || undefined, customName: Boolean(name?.trim()), subtitle: subtitle?.trim() || '', color: look.color, icon: look.icon, collapsed: getLayout().cardsCompact });
+  if (chosen) rememberDirectoryLook(session);
   state.order.push(session.id);
   if (select || !state.selectedId) state.selectedId = session.id;
   persist();
@@ -1881,9 +1959,10 @@ export function openSession(cwd, { name, subtitle, color, icon, select = true } 
 
 // Abre o agente na conta escolhida assim que o shell da sessao nova subir. O
 // computador recusa se houver processo em primeiro plano; a conta ativa dele
-// para os proximos shells continua a mesma.
+// para os proximos shells continua a mesma. Com `login`, digita o login da
+// conta no lugar do agente.
 const LAUNCH_WAIT_MS = 30_000;
-export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WAIT_MS } = {}) {
+export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WAIT_MS, login = false } = {}) {
   return new Promise((resolve, reject) => {
     let off = () => {};
     let timer = null;
@@ -1904,7 +1983,7 @@ export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WA
       done = true;
       off();
       clearTimeout(timer);
-      invoke('pty_launch_agent', { id: session.ptyId, agent, profile }).then(() => resolve(), reject);
+      invoke('pty_launch_agent', { id: session.ptyId, agent, profile, ...(login ? { login: true } : {}) }).then(() => resolve(), reject);
     };
     off = subscribe((event) => { if (event.type === 'sessions') check(); });
     timer = setTimeout(() => finish(new Error(translate('terminal.session.launchTimeout'))), timeoutMs);
@@ -1915,6 +1994,21 @@ export function launchAgentWhenReady(id, agent, profile, { timeoutMs = LAUNCH_WA
 export async function pickAndOpen(defaultPath, options) {
   const picked = await chooseDirectory({ title: translate('terminal.session.openAt'), defaultPath: defaultPath || undefined });
   return picked ? openSession(picked, options) : null;
+}
+
+// Uma sessão aberta fora da tela de Terminais, como a de um Broto, chega pelo
+// laço de sessões. Sincroniza até ela aparecer e a seleciona.
+export async function revealSession(id, { attempts = 20, delay = 300 } = {}) {
+  await hydrate();
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    await syncSharedSessions().catch(() => {});
+    if (state.sessions.has(id)) {
+      selectSession(id);
+      return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+  return false;
 }
 
 export function selectSession(id) {
@@ -2036,6 +2130,7 @@ export function focusSelected() {
 // rodava nela, a conversa volta pelo comando de retomada.
 export async function reopen(id) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (session?.status === 'running' && ['failed', 'sent'].includes(session.resumeState) && session.saved?.resume) {
     return resumeAgent(session, session.saved.resume, { retry: true });
   }
@@ -2073,6 +2168,7 @@ export async function restart(id) {
 
 export async function changeDirectory(id, cwd) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session) return;
   const picked = cwd || await chooseDirectory({ title: translate('terminal.session.changeFolderTitle'), defaultPath: session.cwd });
   if (!picked || picked === session.cwd) return;
@@ -2165,6 +2261,7 @@ export function setSessionColor(id, color) {
   if (!session) return;
   session.color = validColor(color);
   applySessionTheme(session);
+  rememberDirectoryLook(session);
   persist();
   emitSessions();
 }
@@ -2174,14 +2271,55 @@ export function setSessionIcon(id, icon) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.icon = validIcon(icon);
+  rememberDirectoryLook(session);
   persist();
   emitSessions();
+}
+
+// A pasta guarda a ultima cor e o ultimo icone escolhidos para ela, e a
+// proxima sessao aberta ali nasce igual. Sessao de Broto fica de fora: a pasta
+// e de outra maquina e o mesmo texto pode nomear uma pasta daqui.
+function directoryLookKey(cwd) {
+  return lookKey(cwd, platform().os);
+}
+
+function rememberDirectoryLook(session) {
+  if (state.demo || session.deviceId) return;
+  try { rememberLook(localStorage, directoryLookKey(session.cwd), { color: session.color, icon: session.icon }); } catch (_error) { /* sem storage */ }
+}
+
+function recallDirectoryLook(cwd) {
+  if (state.demo) return null;
+  try { return recallLook(localStorage, directoryLookKey(cwd)); } catch (_error) { return null; }
 }
 
 export function togglePinned(id) {
   const session = state.sessions.get(id);
   if (!session) return;
   session.pinned = !session.pinned;
+  persist();
+  emitSessions();
+}
+
+// Card recolhido mostra so icone, nome e o botao de expandir. E escolha
+// deste aparelho, como a ordem das abas, e nao vai para a apresentacao
+// compartilhada com o celular.
+export function toggleCollapsed(id) {
+  const session = state.sessions.get(id);
+  if (!session) return;
+  session.collapsed = !session.collapsed;
+  persist();
+  emitSessions();
+}
+
+export function setAllCollapsed(collapsed) {
+  let changed = false;
+  state.sessions.forEach((session) => {
+    if (session.collapsed === Boolean(collapsed)) return;
+    session.collapsed = Boolean(collapsed);
+    changed = true;
+  });
+  if (!changed) return;
   persist();
   emitSessions();
 }
@@ -2351,6 +2489,7 @@ export function scrollToBottom(id) {
 // caminho relativo deixava de valer assim que o shell trocava de pasta.
 export function insertPaths(id, paths) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session || session.ptyId == null || session.status !== 'running') return false;
   const valid = paths.filter((path) => typeof path === 'string' && path.length > 0 && !/[\x00-\x1f\x7f]/.test(path));
   if (!valid.length) return false;
@@ -2365,6 +2504,7 @@ export function insertPaths(id, paths) {
 // silencio; aqui ela espera o terminal ser adotado.
 export function deliverPaths(id, paths) {
   const session = state.sessions.get(id);
+  if (session?.deviceId) return false;
   if (!session || session.ptyId == null || session.status !== 'running') return false;
   selectSession(id);
   const attempt = (left) => {
@@ -2526,6 +2666,8 @@ export function markExplorerChanged(id) {
 /* ── editor por sessao ────────────────────────────────────────────── */
 
 function disposeTab(tab) {
+  // Um visualizador pode segurar recurso do documento, como a fonte.
+  try { tab.viewer?.release?.(); } catch (_error) { /* ja liberado */ }
   if (tab.view) {
     try { tab.onDispose?.(); } catch (_error) { /* sem ouvinte */ }
     try { tab.view.destroy(); } catch (_error) { /* ja destruido */ }

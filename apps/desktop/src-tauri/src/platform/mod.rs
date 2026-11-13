@@ -66,6 +66,9 @@ pub struct PlatformInfo {
     pub file_manager: String,
     pub default_shell_flavor: ShellFlavor,
     pub sep: String,
+    /// Build do Windows, para o xterm saber como o ConPTY do sistema reflui as
+    /// linhas. Nulo nos outros sistemas.
+    pub os_build: Option<u32>,
 }
 
 impl PlatformInfo {
@@ -82,8 +85,19 @@ impl PlatformInfo {
             // sempre a barra normal; para mostrar no estilo do sistema existe
             // `displayPath`.
             sep: "/".into(),
+            os_build: os_build(),
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+fn os_build() -> Option<u32> {
+    Some(crate::window::os_build()).filter(|build| *build > 0)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn os_build() -> Option<u32> {
+    None
 }
 
 #[cfg(target_os = "macos")]

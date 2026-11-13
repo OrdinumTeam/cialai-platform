@@ -1,21 +1,24 @@
 ## Cialai {{version}} preview
 
-A preview of Cialai for macOS, Windows, Linux, Android and iOS. The desktop takes on the visual language of the phone, every session gets its own colour and icon everywhere, and the phone tells you when a session needs you.
+A Broto now connects from the phone by QR, the documentation graph gains six views, and session cards collapse to one line. The phone apps are updated too.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **The desktop speaks the phone's visual language.** Solid surfaces, rounded corners and separation by tone, with no gradients, glass or glow. The sidebar stays pink, light in the light theme and plum in the dark one. Buttons, fields, menus and colour changes share the same short animation.
-* **The session colour leads what belongs to the session.** The card bar, the icon, the agent name, the usage percentage, buttons, focus, the terminal cursor and selection, the palette entry, the on screen notice and the AI Bar follow the chosen colour. Without a colour everything stays Cialai pink. Warning and error colours, ANSI colours and the output of the CLIs never change.
-* **An icon per session.** Thirty icons, picked together with the colour when the session is created or from Colour and icon. The icon sits next to the name on the card and in the header, on the computer and on the phone. Without a choice it shows the agent running there or a terminal.
-* **The weekly limit in the AI Bar.** The outer ring is the 5 hour session and the inner ring is the weekly window, drawn with the same stroke. An account without a weekly limit and a reading that has not arrived yet look different from 0%. The tooltip and the screen reader name the window, the usage and the reset.
-* **New usage bands.** Amber from 60% and red from 80%, on the computer, on the phone page and in the app. Anyone still on the old 50 and 70 defaults moves to the new ones once.
-* **The official signature.** The brand with the website lettering appears in the sidebar, the splash and the loading screen. With the sidebar closed, the lettering shows small in the toolbar.
-* **Four keys always in sight on the phone.** The terminal bar shows Enter, Esc, Ctrl C and Ctrl V, and the arrow still opens the special keyboard. Anyone who had picked their own keys keeps them.
-* **Attention notices on the phone.** The terminal bell, a notice sent by the program, a finished command, an agent waiting for you or asking for permission and a finished answer become a notice with the session name and colour. Tapping it opens the session. Turn it on in Settings, under Sessions asking for attention. Notices are local: they go out while the app has the terminal open and shortly after it moves to the background.
-* **The native app keeps pace.** Home and the Agents tab show the weekly window, the sessions of a folder show their colour and icon, the official brand replaces the old symbol and icons lost their background plates.
-* **Update the computer and the phone together.** The phone page is served by the computer and carries the attention, colour and icon of each session; a new app with an older computer works, without attention notices.
+* **Broto from the phone.** The Broto window shows a QR code, valid once and for ten minutes. On the phone, the three dot menu of a computer gains Connect a Broto, which reads it with the camera. The computer publishes a temporary onion and a mark on the local network, and the Broto dials as always: nothing listens on the Broto and the phone never talks to it. The phone shows the Broto name and four digits, and you type the same digits on the Broto, so a photo of the QR is not enough to pair another machine. Pasting a code still works.
+* **Six graph views.** A selector in the graph bar switches between Map, Tree, Radial, Blocks, Neighbors and 3D. Blocks sizes each file by its bytes, Neighbors shows one file with the files it links to and the ones that link to it, up to three steps away, and 3D turns with a drag on the same canvas, without WebGL.
+* **Links between files.** The options panel reads the documentation or the whole project, up to 20,000 files, and draws Markdown links and wikilinks and the imports of JavaScript, TypeScript, CSS, HTML, Python, Rust and Go. The next scan only reads what changed.
+* **Graph colours.** Colour by group, folder, file type, size, date of change or rules of your own, in four palettes: Safe, the default, tested for colour blindness, Neon, Pastel and Monochrome.
+* **Collapsible session cards.** A card collapses to its icon, name and activity dot, one by one or all at once, and Preferences can make new cards join collapsed.
+* **Folder looks.** A folder remembers the colour and the icon last chosen for a session in it.
+* **Terminal theme.** The terminal can be light or dark on its own, apart from the window.
+* **More formats in the editor.** Audio, video, fonts and read only Jupyter notebooks, plus highlighting for `.env`, ignore files, Makefile and shell profiles.
+* **Windows terminal size.** The terminal no longer goes back to an old size after maximizing, opening a panel or changing the font. A Windows 11 virtual machine reproduced the old behaviour with an earlier build and showed this one keeping the size. It has no real GPU, so long use on a Windows machine with one is still the final proof of the WebGL part.
+* **Window buttons on Wayland.** On Linux with Wayland the title bar buttons follow the side and order set in GNOME or KDE.
+* **One button per side column.** The edge rail is the only way back for a collapsed column.
+
+Broto has its own version, 0.2.0, and release tag `broto-v0.2.0`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
@@ -29,9 +32,8 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Debian, Ubuntu and derivatives | `Cialai_amd64.deb` |
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
-| Android 8 or newer | `Cialai_android_universal.apk` |
 
-On iPhone the preview goes through TestFlight, so there is no file to download.
+The Android and iPhone apps are updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website, and the iPhone build is on TestFlight and in App Store review.
 
 ### Install
 
@@ -40,8 +42,6 @@ On iPhone the preview goes through TestFlight, so there is no file to download.
 **Windows.** Run the setup or the MSI. On the SmartScreen warning click More info, then Run anyway.
 
 **Linux.** `sudo apt install ./Cialai_amd64.deb`, `sudo dnf install ./Cialai_x86_64.rpm`, or make the AppImage executable with `chmod +x` and run it. The app updates itself in all three formats.
-
-**Android.** Download the APK on the phone, allow installing unknown apps when Android asks, then open it.
 
 **macOS and Linux in one line.** `curl -fsSL https://cialai.com.br/install.sh | bash`
 

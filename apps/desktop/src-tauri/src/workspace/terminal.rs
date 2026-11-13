@@ -41,12 +41,15 @@ use crate::platform::{self, ShellSpec};
 use crate::prefs::{Preferences, PrefsState};
 
 use super::EVENT_PTY_EXIT;
+use super::agent_menu;
 use super::agent_profiles;
-use super::agent_state::{self, AgentTurn};
+use super::agent_state::{self, AgentTurn, CodexOsc};
 use super::journal::{self, JournalStore, JournalWriter, SavedMeta, SavedTerminal};
 use super::procs::{self, CommandCache, CommandLine, ProcSource, ProcState, SystemProcs};
 use super::pty::{self, CursorPosition, ShellFlavor};
 use super::resume::{self, AgentEvidence};
+
+mod broto;
 
 const READ_BUFFER: usize = 16 * 1024;
 const COALESCE_WINDOW: Duration = Duration::from_millis(4);
@@ -108,6 +111,10 @@ fn is_inherited_agent_marker(name: &str) -> bool {
 #[serde(rename_all = "camelCase")]
 pub struct TerminalInfo {
     pub id: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub broto_name: Option<String>,
     /// Identificador estavel da sessao, dado pelo frontend, para religar a
     /// sessao certa depois de uma recarga do webview.
     pub tag: String,
@@ -241,6 +248,18 @@ enum Message {
     Exit(Option<ExitStatus>),
 }
 
+fn send_exit_after_drain(
+    tx: mpsc::SyncSender<Message>,
+    status: Option<ExitStatus>,
+    drained: mpsc::Receiver<()>,
+) {
+    // wait() can finish before the reader publishes the final PTY bytes.
+    // A descendant may keep the PTY open after its shell exits, so EOF has a
+    // bounded wait rather than holding the session open indefinitely.
+    let _ = drained.recv_timeout(Duration::from_millis(500));
+    let _ = tx.send(Message::Exit(status));
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SubscriberKey {
     Webview,
@@ -264,6 +283,9 @@ struct OutputState {
     /// Ate onde o historico ja foi limpo de consultas; o resto pode terminar
     /// num comeco de consulta cortado entre dois trechos.
     clean: usize,
+    /// Turno que o Codex anunciou na saida deste terminal. E o estado desta
+    /// sessao e de nenhuma outra, mesmo com o daemon compartilhado.
+    codex_osc: CodexOsc,
 }
 
 /// Troca por NUL as consultas do historico a partir de `from` e devolve ate
@@ -334,6 +356,7 @@ impl OutputLink {
             let bytes = if let InvokeResponseBody::Raw(data) = &body {
                 state.sequence += data.len() as u64;
                 state.last_output = Some(Instant::now());
+                state.codex_osc.feed(data, super::ai::now_ms());
                 state.history.extend(data);
                 let overflow = state.history.len().saturating_sub(SCROLLBACK_LIMIT);
                 state.history.drain(..overflow);
@@ -362,6 +385,16 @@ impl OutputLink {
     /// Instante do ultimo lote de saida desta sessao.
     fn last_output(&self) -> Option<Instant> {
         lock(&self.state).last_output
+    }
+
+    /// Turno que o Codex anunciou neste terminal.
+    fn codex_turn(&self) -> Option<AgentTurn> {
+        lock(&self.state).codex_osc.turn()
+    }
+
+    /// Esquece o turno anunciado, quando o Codex ja nao roda nesta sessao.
+    fn clear_codex_turn(&self) {
+        lock(&self.state).codex_osc.clear();
     }
 
     /// Espera haver espaco para mais `bytes`. Devolve false se o canal foi
@@ -504,6 +537,10 @@ struct Session {
     view_owner: SubscriberKey,
     view_deadline: Option<Instant>,
     local_size: Option<(u16, u16)>,
+    /// Pedidos de tamanho que chegaram ao PTY, para os testes provarem que o
+    /// mesmo tamanho nunca vira pedido.
+    #[cfg(test)]
+    pty_resizes: u32,
     // Saved conversation stays durable until its agent is observed again.
     resume_record: Option<resume::AgentSession>,
     // Proven association belongs to this CLI process generation, not its cwd.
@@ -548,14 +585,27 @@ impl Session {
         rows: u16,
         claim: bool,
     ) -> Result<TerminalView, String> {
-        self.master
-            .resize(PtySize {
-                cols,
-                rows,
-                pixel_width: 0,
-                pixel_height: 0,
-            })
-            .map_err(|_| t("native.error.terminalResize"))?;
+        // Pedir ao PTY o tamanho que ele ja tem nao muda nada no Unix, onde o
+        // kernel so avisa o processo quando o tamanho muda, mas o ConPTY do
+        // Windows pode redesenhar a tela a cada pedido. A renovacao da posse
+        // repete o tamanho a cada 5 s e trocar de sessao devolve o tamanho
+        // local, entao esse redesenho caia no meio da saida de quem desenha a
+        // tela, como o Claude Code. O PTY nasce com o tamanho de `info`, e
+        // `info` so muda depois de um pedido aceito.
+        if (self.info.cols, self.info.rows) != (cols, rows) {
+            self.master
+                .resize(PtySize {
+                    cols,
+                    rows,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .map_err(|_| t("native.error.terminalResize"))?;
+            #[cfg(test)]
+            {
+                self.pty_resizes += 1;
+            }
+        }
         let previous = self.info.view.as_ref();
         let view = TerminalView {
             id: self.info.id,
@@ -604,6 +654,7 @@ type ExitNotifier = Arc<dyn Fn(TerminalExit) + Send + Sync>;
 
 #[derive(Clone)]
 pub struct TerminalManager {
+    broto: Option<Arc<broto::BrotoTerminals>>,
     inner: Arc<Mutex<Inner>>,
     notify_exit: ExitNotifier,
     notify_view: ViewNotifier,
@@ -623,6 +674,10 @@ pub struct TerminalManager {
     closing: Arc<AtomicBool>,
     prefs: PrefsState,
     home: PathBuf,
+    broto_host_state_dir: Option<PathBuf>,
+    /// Shells com o menu de contas do Codex e do Claude Code. So o app liga:
+    /// os testes nascem sem tocar em `~/.cialai`.
+    agent_menu: bool,
 }
 
 struct MetricsCache {
@@ -633,7 +688,18 @@ struct MetricsCache {
 const METRICS_CACHE_TTL: Duration = Duration::from_millis(250);
 
 impl TerminalManager {
+    pub fn broto_event(&self, name: &str, data: &serde_json::Value) {
+        if let Some(broto) = &self.broto {
+            broto.event(name, data);
+        }
+    }
     pub fn new(app: AppHandle, prefs: PrefsState) -> Self {
+        let broto_host_state_dir = app
+            .path()
+            .app_local_data_dir()
+            .ok()
+            .map(|dir| dir.join("tunnel"));
+        let broto = broto::BrotoTerminals::new(app.clone());
         let view_app = app.clone();
         let home = app
             .path()
@@ -644,7 +710,7 @@ impl TerminalManager {
             .app_data_dir()
             .ok()
             .map(|dir| dir.join("terminals"));
-        let manager = Self::with_environment(
+        let mut manager = Self::with_environment(
             Arc::new(move |exit| {
                 let _ = app.emit(EVENT_PTY_EXIT, exit);
             }),
@@ -655,6 +721,9 @@ impl TerminalManager {
             home,
             Arc::new(SystemProcs::default()),
         );
+        manager.broto = Some(broto);
+        manager.broto_host_state_dir = broto_host_state_dir;
+        manager.agent_menu = true;
         match journal_dir {
             Some(dir) => manager.with_journal(dir),
             None => manager,
@@ -732,6 +801,7 @@ impl TerminalManager {
         procs: Arc<dyn ProcSource>,
     ) -> Self {
         let manager = Self {
+            broto: None,
             inner: Arc::new(Mutex::new(Inner {
                 next_id: 0,
                 sessions: HashMap::new(),
@@ -748,6 +818,8 @@ impl TerminalManager {
             closing: Arc::new(AtomicBool::new(false)),
             prefs,
             home,
+            agent_menu: false,
+            broto_host_state_dir: None,
         };
         // Weak ownership prevents this watchdog from keeping a manager alive.
         let weak = Arc::downgrade(&manager.inner);
@@ -882,8 +954,14 @@ impl TerminalManager {
         let cols = cols.max(2);
         let rows = rows.max(1);
 
+        // Menu de contas ao digitar `codex` ou `claude`: o shell nasce com os
+        // arquivos de inicializacao do Cialai, que carregam os do usuario antes.
+        let menu = self
+            .agent_menu
+            .then(|| agent_menu::for_session(shell, prefs.terminal.args.is_empty(), &self.home))
+            .flatten();
         let mut command = CommandBuilder::new(&shell.path);
-        for arg in &shell.args {
+        for arg in menu.as_ref().map_or(&shell.args, |menu| &menu.args) {
             command.arg(arg);
         }
         command.cwd(&dir);
@@ -891,6 +969,9 @@ impl TerminalManager {
         command.env("COLORTERM", "truecolor");
         command.env("TERM_PROGRAM", "Cialai");
         command.env("TERM_PROGRAM_VERSION", env!("CARGO_PKG_VERSION"));
+        if let Some(dir) = &self.broto_host_state_dir {
+            command.env("CIALAI_BROTO_HOST_STATE_DIR", dir);
+        }
         command.env("PATH", platform::path_env(prefs, &self.home));
         // O app pode ter sido aberto de dentro de um agente, e ai o ambiente
         // traz marcadores de sessao filha que fariam um Claude Code novo
@@ -933,6 +1014,9 @@ impl TerminalManager {
             }
         }
         platform::child_env::sanitize(&mut command);
+        for (name, value) in menu.iter().flat_map(|menu| menu.env.iter()) {
+            command.env(name, value);
+        }
 
         let spawned = pty::spawn_shell(
             command,
@@ -966,6 +1050,8 @@ impl TerminalManager {
             guard.next_id
         };
         let info = TerminalInfo {
+            device_id: None,
+            broto_name: None,
             id,
             tag: tag.to_string(),
             cwd: cwd.clone(),
@@ -994,6 +1080,7 @@ impl TerminalManager {
 
         let (tx, rx) = mpsc::sync_channel::<Message>(QUEUE_DEPTH);
         let tx_exit = tx.clone();
+        let (drained_tx, drained_rx) = mpsc::channel();
         let (write_tx, write_rx) = mpsc::sync_channel::<Vec<u8>>(QUEUE_DEPTH);
         let mut startup = pty::StartupCursorQuery::for_platform(cursor);
         let mut answer = startup.active().then(|| write_tx.clone());
@@ -1020,10 +1107,11 @@ impl TerminalManager {
             if !held.is_empty() {
                 let _ = tx.send(Message::Data(held));
             }
+            let _ = drained_tx.send(());
         });
         thread::spawn(move || {
             let status = child.wait().ok();
-            let _ = tx_exit.send(Message::Exit(status));
+            send_exit_after_drain(tx_exit, status, drained_rx);
         });
 
         thread::spawn(move || {
@@ -1054,6 +1142,8 @@ impl TerminalManager {
                 view_owner: SubscriberKey::Webview,
                 view_deadline: None,
                 local_size: (key == SubscriberKey::Webview).then_some((cols, rows)),
+                #[cfg(test)]
+                pty_resizes: 0,
                 resume_record: resume_record.clone(),
                 observed_agent: None,
                 resume_attempts: 0,
@@ -1074,7 +1164,34 @@ impl TerminalManager {
         Ok(info)
     }
 
+    pub fn write_as(&self, id: u32, bytes: &[u8], actor: &str) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .write_as(id, bytes, actor);
+        }
+        self.write(id, bytes)
+    }
+    pub fn kill_as(&self, id: u32, actor: &str) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .kill_as(id, actor);
+        }
+        self.kill(id)
+    }
     pub fn write(&self, id: u32, bytes: &[u8]) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .write(id, bytes);
+        }
         self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let writer = {
             let mut guard = self.lock();
@@ -1217,13 +1334,29 @@ impl TerminalManager {
     /// a linha com as variaveis na frente. So escreve com o shell no prompt e
     /// sem processo em primeiro plano: no meio de um agente rodando, a linha
     /// viraria texto na conversa dele.
-    pub fn launch_agent(&self, id: u32, agent: &str, profile_id: &str) -> Result<(), String> {
+    ///
+    /// Com `login`, a linha faz o login da conta em vez de abrir o agente. Um
+    /// perfil recem-criado ainda pode nao ter marcador nenhum, e por isso o
+    /// login so exige que a pasta exista.
+    pub fn launch_agent(
+        &self,
+        id: u32,
+        agent: &str,
+        profile_id: &str,
+        login: bool,
+    ) -> Result<(), String> {
         let kind =
             agent_profiles::Agent::parse(agent).ok_or_else(|| t("native.error.agentUnknown"))?;
         let slug = agent_profiles::slug_of(kind, profile_id)
             .ok_or_else(|| t("native.error.profileUnknown"))?;
         let dir = agent_profiles::dir_of(&self.home, kind, profile_id)
-            .filter(|dir| agent_profiles::is_profile_dir(dir, kind))
+            .filter(|dir| {
+                if login {
+                    dir.is_dir()
+                } else {
+                    agent_profiles::is_profile_dir(dir, kind)
+                }
+            })
             .ok_or_else(|| t("native.error.profileUnknown"))?;
         let (flavor, busy) = {
             let guard = self.lock();
@@ -1242,6 +1375,14 @@ impl TerminalManager {
         // O perfil padrao abre o agente sem variavel nenhuma, para ele cair no
         // proprio padrao; um nomeado leva caminho e nome, citados.
         let portable = crate::platform::to_portable(&dir);
+        if login {
+            let line = agent_profiles::login_line(
+                kind,
+                slug.map(|name| (portable.as_str(), name)),
+                flavor,
+            );
+            return self.write(id, format!("{line}\r").as_bytes());
+        }
         let line = match slug {
             None => resume::launch_command(
                 if kind == agent_profiles::Agent::Claude {
@@ -1269,6 +1410,17 @@ impl TerminalManager {
     }
 
     pub fn resize(&self, id: u32, cols: u16, rows: u16) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            self.broto.as_ref().ok_or_else(closed_error)?.view(
+                id,
+                SubscriberKey::Webview,
+                cols,
+                rows,
+                false,
+                None,
+            )?;
+            return Ok(());
+        }
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         let cols = cols.clamp(2, 500);
@@ -1293,6 +1445,13 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .view(id, key, cols, rows, true, None);
+        }
         validate_view_size(cols, rows)?;
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1316,6 +1475,16 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.view(
+                id,
+                key,
+                cols,
+                rows,
+                false,
+                Some(lease),
+            );
+        }
         validate_view_size(cols, rows)?;
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1337,6 +1506,13 @@ impl TerminalManager {
         key: SubscriberKey,
         lease: u64,
     ) -> Result<TerminalView, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .release(id, key, lease);
+        }
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
         if !session.lease_matches(key, lease) {
@@ -1350,6 +1526,13 @@ impl TerminalManager {
 
     /// Grava a apresentacao e devolve a revisao atribuida.
     pub fn presentation(&self, id: u32, presentation: TerminalPresentation) -> Result<u64, String> {
+        if id >= broto::FIRST_ID {
+            return self
+                .broto
+                .as_ref()
+                .ok_or_else(closed_error)?
+                .presentation(id, presentation);
+        }
         if presentation.name.chars().count() > 120
             || presentation.subtitle.chars().count() > 240
             || presentation
@@ -1403,6 +1586,10 @@ impl TerminalManager {
     }
 
     pub fn ack(&self, id: u32, bytes: usize) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            self.output(id)?.0.ack(bytes);
+            return Ok(());
+        }
         let link = {
             let guard = self.lock();
             guard
@@ -1427,6 +1614,9 @@ impl TerminalManager {
     }
 
     fn output(&self, id: u32) -> Result<(Arc<OutputLink>, TerminalInfo), String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.output(id);
+        }
         let guard = self.lock();
         let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
         Ok((session.link.clone(), session.info.clone()))
@@ -1467,6 +1657,9 @@ impl TerminalManager {
     }
 
     pub fn detach_all(&self, key: SubscriberKey) {
+        if let Some(broto) = &self.broto {
+            broto.detach_all(key);
+        }
         let links: Vec<_> = self
             .lock()
             .sessions
@@ -1500,6 +1693,9 @@ impl TerminalManager {
     /// SIGHUP no shell, que repassa aos jobs. Se em 400 ms a sessao ainda
     /// existe, SIGKILL. O fim chega ao webview pela thread de lote.
     pub fn kill(&self, id: u32) -> Result<(), String> {
+        if id >= broto::FIRST_ID {
+            return self.broto.as_ref().ok_or_else(closed_error)?.kill(id);
+        }
         let (mut killer, pid, tree) = {
             let guard = self.lock();
             let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
@@ -1562,12 +1758,18 @@ impl TerminalManager {
     }
 
     pub fn list(&self) -> Vec<TerminalInfo> {
+        let remote = self
+            .broto
+            .as_ref()
+            .map(|broto| broto.list())
+            .unwrap_or_default();
         let guard = self.lock();
         let mut sessions: Vec<TerminalInfo> = guard
             .sessions
             .values()
             .map(|session| session.info.clone())
             .collect();
+        sessions.extend(remote);
         sessions.sort_by_key(|info| info.id);
         sessions
     }
@@ -1657,6 +1859,7 @@ impl TerminalManager {
                         self.procs.as_ref(),
                     ),
                     last_output: session.link.last_output(),
+                    link: session.link.clone(),
                 })
                 .collect()
         };
@@ -1673,6 +1876,7 @@ impl TerminalManager {
             pid,
             foreground_pgid,
             last_output,
+            link,
         } in targets
         {
             let output_age_ms = last_output.map(|at| {
@@ -1703,6 +1907,11 @@ impl TerminalManager {
             };
             let mut tree = vec![pid];
             tree.extend(source.descendants(pid));
+            // O daemon `codex app-server` e compartilhado: nasce filho da aba
+            // que abriu o Codex primeiro e atende todas. O que ele segura,
+            // gasta ou executa pode ser de qualquer aba, entao fica fora da
+            // arvore desta sessao.
+            exclude_shared_servers(source, &mut tree, &mut commands);
             alive.extend_from_slice(&tree);
 
             let mut cpu = 0f64;
@@ -1764,7 +1973,21 @@ impl TerminalManager {
                 .is_some()
                 .then(|| resume::detect_from(source, pid, &tree, &mut commands, &home))
                 .flatten();
-            let (agent_turn, agent_session_id) = agent_fields(detected);
+            let (file_turn, agent_session_id) = agent_fields(detected);
+            // O Codex anuncia o turno na saida do proprio terminal, e so esse
+            // anuncio e desta sessao com certeza. Vale o agente que o card
+            // mostra: o do primeiro plano, senao o da arvore. Sem Codex aqui o
+            // anuncio de uma execucao anterior e esquecido.
+            let shown_agent = foreground
+                .as_ref()
+                .and_then(|found| found.agent.as_deref())
+                .or(agent.as_deref());
+            let agent_turn = if shown_agent == Some(resume::CODEX) {
+                link.codex_turn().or(file_turn)
+            } else {
+                link.clear_codex_turn();
+                file_turn
+            };
 
             result.push(SessionMetrics {
                 id,
@@ -2128,6 +2351,33 @@ struct MetricsTarget {
     pid: Option<u32>,
     foreground_pgid: Option<u32>,
     last_output: Option<Instant>,
+    link: Arc<OutputLink>,
+}
+
+/// Tira da arvore o servidor compartilhado do Codex e tudo abaixo dele.
+fn exclude_shared_servers(
+    source: &dyn ProcSource,
+    tree: &mut Vec<u32>,
+    commands: &mut CommandCache,
+) {
+    let servers: Vec<u32> = tree
+        .iter()
+        .copied()
+        .filter(|&member| {
+            source
+                .info(member)
+                .and_then(|info| commands.get_from(source, member, info.start_sec))
+                .is_some_and(|command| resume::is_codex_app_server(&command))
+        })
+        .collect();
+    if servers.is_empty() {
+        return;
+    }
+    let mut excluded: HashSet<u32> = servers.iter().copied().collect();
+    for server in servers {
+        excluded.extend(source.descendants(server));
+    }
+    tree.retain(|member| !excluded.contains(member));
 }
 
 /// Turno do agente pelo arquivo que a deteccao apontou.
@@ -2177,6 +2427,7 @@ fn describe_foreground(
                 .unwrap_or(false)
         })
     }?;
+    let candidate = agent_in_group(source, candidate, pgid, tree, commands).unwrap_or(candidate);
     let info = source.info(candidate)?;
     if info.state == ProcState::Zombie {
         return None;
@@ -2208,6 +2459,35 @@ fn describe_foreground(
         config_dir: profile.as_ref().map(|value| value.config_dir.clone()),
         profile: profile.as_ref().map(|value| value.slug.clone()),
         profile_name: profile.as_ref().and_then(|value| value.name.clone()),
+    })
+}
+
+/// Agente que roda no grupo em primeiro plano quando o lider dele nao e um.
+/// Um subshell, como `( export X; claude )`, um script que abre o agente ou
+/// `make` com um agente dentro deixam o shell ou o lancador na frente do
+/// grupo; o card mostra o agente, que e o que a pessoa esta usando. Vale o
+/// primeiro achado na ordem da arvore, o mais perto do shell da sessao.
+fn agent_in_group(
+    source: &dyn ProcSource,
+    leader: u32,
+    pgid: u32,
+    tree: &[u32],
+    commands: &mut CommandCache,
+) -> Option<u32> {
+    let is_agent = |pid: u32, commands: &mut CommandCache| {
+        source
+            .info(pid)
+            .filter(|info| info.state != ProcState::Zombie)
+            .and_then(|info| commands.get_from(source, pid, info.start_sec))
+            .is_some_and(|line| procs::agent_of(&line).is_some())
+    };
+    if is_agent(leader, commands) {
+        return None;
+    }
+    tree.iter().copied().find(|&member| {
+        member != leader
+            && source.info(member).is_some_and(|info| info.pgid == pgid)
+            && is_agent(member, commands)
     })
 }
 
@@ -3082,6 +3362,71 @@ echo 'recovered-fixture'
     }
 
     #[test]
+    fn same_size_requests_never_reach_the_pty() {
+        let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        struct Cleanup(TerminalManager);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+            }
+        }
+        let _cleanup = Cleanup(manager.clone());
+        let shell = pty::TestShell::isolated();
+        let id = spawn_test_shell(
+            &manager,
+            &shell,
+            "same-size-isolated",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        )
+        .id;
+        let resizes = |manager: &TerminalManager| manager.lock().sessions[&id].pty_resizes;
+        let (cols, rows) = {
+            let list = manager.list();
+            (list[0].cols, list[0].rows)
+        };
+        let local = manager
+            .view_claim(id, SubscriberKey::Webview, cols, rows)
+            .unwrap();
+        for _ in 0..20 {
+            manager
+                .view_renew(id, SubscriberKey::Webview, local.lease_id, cols, rows)
+                .unwrap();
+        }
+        manager.resize(id, cols, rows).unwrap();
+        assert_eq!(
+            resizes(&manager),
+            0,
+            "a renovacao no mesmo tamanho nao pede nada ao PTY"
+        );
+
+        let (wide, tall) = (cols + 10, rows + 2);
+        let renewed = manager
+            .view_renew(id, SubscriberKey::Webview, local.lease_id, wide, tall)
+            .unwrap();
+        assert_eq!((renewed.cols, renewed.rows), (wide, tall));
+        assert_eq!(resizes(&manager), 1, "tamanho novo chega ao PTY");
+
+        let remote = SubscriberKey::Remote(9);
+        manager
+            .attach_for(id, remote, Channel::new(|_| Ok(())))
+            .unwrap();
+        let lease = manager.view_claim(id, remote, wide, tall).unwrap();
+        manager.view_release(id, remote, lease.lease_id).unwrap();
+        assert_eq!(
+            resizes(&manager),
+            1,
+            "posse remota e devolucao no mesmo tamanho tambem nao"
+        );
+        let size = manager.lock().sessions[&id].master.get_size().unwrap();
+        assert_eq!(
+            (size.cols, size.rows),
+            (wide, tall),
+            "o PTY tem o tamanho que a vista anuncia"
+        );
+    }
+
+    #[test]
     fn mobile_view_ownership_restores_local_size_and_rejects_stale_leases() {
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
         struct Cleanup(TerminalManager);
@@ -3796,6 +4141,621 @@ echo 'recovered-fixture'
         let _ = std::fs::remove_dir_all(dir);
     }
 
+    /// Processo falso para o primeiro plano: pid, pai, grupo, executavel,
+    /// argumentos e ambiente.
+    fn fake_proc(
+        source: &procs::FakeProcs,
+        pid: u32,
+        ppid: u32,
+        pgid: u32,
+        exe: &str,
+        argv: &[&str],
+        env: &[(&str, &str)],
+    ) {
+        source.set_info(procs::ProcInfo {
+            pid,
+            ppid,
+            pgid,
+            state: ProcState::Sleeping,
+            comm: procs::basename(exe),
+            name: procs::basename(exe),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            pid,
+            CommandLine {
+                exe: exe.into(),
+                argv: argv.iter().map(|arg| arg.to_string()).collect(),
+                env: env
+                    .iter()
+                    .map(|(key, value)| (key.to_string(), value.to_string()))
+                    .collect(),
+            },
+        );
+    }
+
+    /// De ponta a ponta, pelo mesmo caminho do app: a sessao nasce com o menu
+    /// de contas injetado no zsh, a pessoa digita `codex`, escolhe a conta com
+    /// a seta e Enter, e as metricas que o card le trazem o agente e a conta
+    /// em primeiro plano. Na 0.4.0 o card mostrava `zsh` e nenhum perfil.
+    #[cfg(unix)]
+    #[test]
+    fn the_card_reads_the_agent_and_the_account_picked_in_the_menu() {
+        use std::os::unix::fs::PermissionsExt;
+        let Ok(real_zsh) = which::which("zsh") else {
+            eprintln!("sem zsh neste sistema; o teste nao rodou");
+            return;
+        };
+        let home = scratch("menu-card");
+        let home = home.canonicalize().unwrap();
+        // Wait for this fixture's prompt before sending input. A new zsh can
+        // still be initializing its line editor when spawn returns, and an
+        // empty home can invoke the distribution's first-run setup wizard.
+        std::fs::write(
+            home.join(".zshrc"),
+            "PROMPT='CIALAI_MENU_READY> '; RPROMPT=''\n",
+        )
+        .unwrap();
+        let bin = home.join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        // O shell da sessao e um zsh de mentira que fixa o HOME da pasta de
+        // teste e vira o zsh de verdade, no mesmo pid, com o menu injetado.
+        // -d skips global startup files: the CI image's compinit can prompt
+        // about its own completion directories before our .zshrc is loaded.
+        let zsh = bin.join("zsh");
+        std::fs::write(
+            &zsh,
+            format!(
+                "#!/bin/sh\nHOME='{}'; export HOME\nunset CIALAI_USER_ZDOTDIR\nexec '{}' -d \"$@\"\n",
+                home.display(),
+                real_zsh.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&zsh, std::fs::Permissions::from_mode(0o755)).unwrap();
+        // O agente e o proprio binario de teste dormindo, com o nome do Codex no
+        // argv, que e por onde o app o reconhece. Binario do sistema nao serve:
+        // o macOS mata a copia dele e esconde o ambiente do original.
+        let Ok(bash) = which::which("bash") else {
+            return;
+        };
+        let fake = bin.join("codex");
+        std::fs::write(
+            &fake,
+            format!(
+                "#!{}\nexport CIALAI_FAKE_AGENT_SECS=30\nexec -a codex '{}' --ignored --exact workspace::terminal::tests::fake_agent_sleeps --test-threads 1 -q\n",
+                bash.display(),
+                std::env::current_exe().unwrap().display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+        for folder in [".codex", ".codex-time_b"] {
+            std::fs::create_dir_all(home.join(folder)).unwrap();
+            std::fs::write(home.join(folder).join("config.toml"), "").unwrap();
+        }
+        let entry = |id: &str, label: &str| agent_menu::MenuEntry {
+            id: id.into(),
+            label: label.into(),
+            state: "free".into(),
+            ..agent_menu::MenuEntry::default()
+        };
+        agent_menu::publish(
+            &home,
+            "codex",
+            &[entry("codex", "padrão"), entry("codex-time_b", "time_b")],
+            &agent_menu::MenuStrings {
+                question: "Qual conta?".into(),
+                enter: "↑ ↓, Enter usa {name}".into(),
+                missing: "Nenhuma conta {name}".into(),
+            },
+        )
+        .unwrap();
+
+        let mut prefs = Preferences::default();
+        prefs.terminal.path_prefix = vec![bin.to_string_lossy().into_owned()];
+        let mut manager = TerminalManager::with_environment(
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+            PrefsState::new(prefs.clone()),
+            home.clone(),
+            Arc::new(SystemProcs::default()),
+        );
+        manager.agent_menu = true;
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), home.clone());
+        let (tx, rx) = channel::<InvokeResponseBody>();
+        let sink = Channel::new(move |body| {
+            let _ = tx.send(body);
+            Ok(())
+        });
+        let spec = ShellSpec::new(zsh.to_string_lossy().into_owned(), Vec::new());
+        let info = manager
+            .spawn_for_with_spec(
+                home.to_str().unwrap(),
+                120,
+                30,
+                CursorPosition::default(),
+                "menu_card",
+                SubscriberKey::Webview,
+                sink,
+                &spec,
+                &prefs,
+            )
+            .expect("spawn");
+        let mut queries = LaterCursorQueries::new("menu-card", &manager, info.id);
+        let mut output = Vec::new();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "CIALAI_MENU_READY>"),
+            "o prompt do zsh abriu; saida: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+        manager.write(info.id, b"echo READY$((40+2))\r").unwrap();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "READY42"),
+            "o zsh com o menu respondeu; saida: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+        manager.write(info.id, b"codex 30\r").unwrap();
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "Qual conta?"),
+            "o menu apareceu"
+        );
+        assert!(
+            collect_until_printed(&rx, &mut queries, &mut output, "↑ ↓, Enter usa padrão"),
+            "a dica apareceu"
+        );
+        std::thread::sleep(Duration::from_millis(150));
+        manager.write(info.id, b"\x1b[B").unwrap();
+        std::thread::sleep(Duration::from_millis(150));
+        manager.write(info.id, b"\r").unwrap();
+
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let foreground = loop {
+            let found = manager
+                .sample_metrics()
+                .into_iter()
+                .find(|metrics| metrics.tag == "menu_card")
+                .and_then(|metrics| metrics.foreground);
+            if found.as_ref().is_some_and(|found| found.agent.is_some()) {
+                break found.unwrap();
+            }
+            if Instant::now() >= deadline {
+                let _ = collect_until_printed(&rx, &mut queries, &mut output, "nunca-aparece-xyz");
+                panic!(
+                    "o agente nao apareceu em primeiro plano: {found:?}\nsaida:\n{}",
+                    String::from_utf8_lossy(&output)
+                );
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        };
+        assert_eq!(
+            foreground.agent.as_deref(),
+            Some("Codex"),
+            "o card mostra o agente, nao o zsh"
+        );
+        assert_eq!(foreground.command, "codex");
+        assert_eq!(
+            foreground.profile.as_deref(),
+            Some("codex-time_b"),
+            "a conta escolhida com a seta"
+        );
+        assert_eq!(
+            foreground.config_dir.as_deref(),
+            Some(crate::platform::to_portable(home.join(".codex-time_b")).as_str())
+        );
+        assert_eq!(foreground.profile_name.as_deref(), Some("time_b"));
+    }
+
+    /// Agente de mentira dos testes de ponta a ponta: o binario de teste
+    /// dorme enquanto a variavel pede e sai na hora fora deles.
+    #[test]
+    #[ignore]
+    fn fake_agent_sleeps() {
+        if let Ok(secs) = std::env::var("CIALAI_FAKE_AGENT_SECS") {
+            std::thread::sleep(Duration::from_secs(secs.parse().unwrap_or(30)));
+        }
+    }
+
+    #[test]
+    fn an_agent_under_a_subshell_in_the_foreground_group_is_what_the_card_shows() {
+        // O caso da 0.4.0: o menu de contas rodava o agente num `( ... )`, e o
+        // grupo em primeiro plano tinha um zsh na frente, com o node do Claude
+        // Code e o binario dele no mesmo grupo.
+        let home = Path::new("/home/fixture");
+        let env = [
+            ("CLAUDE_CONFIG_DIR", "/home/fixture/.claude-felipe"),
+            ("CLAUDE_PROFILE", "felipe"),
+        ];
+        let source = procs::FakeProcs::default();
+        fake_proc(&source, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(&source, 200, 100, 200, "/bin/zsh", &["-zsh"], &env);
+        fake_proc(
+            &source,
+            300,
+            200,
+            200,
+            "/usr/local/bin/node",
+            &["node", "/home/fixture/.npm-global/bin/claude"],
+            &env,
+        );
+        fake_proc(
+            &source,
+            400,
+            300,
+            200,
+            "/home/fixture/.npm-global/lib/claude",
+            &["claude"],
+            &env,
+        );
+        let tree = [100, 200, 300, 400];
+        let mut commands = CommandCache::default();
+        let found =
+            describe_foreground(&source, 200, &tree, &mut commands, home).expect("primeiro plano");
+        assert_eq!(
+            found.agent.as_deref(),
+            Some("Claude Code"),
+            "o card mostra o agente, nao o zsh"
+        );
+        assert_eq!(found.pid, 300);
+        assert_eq!(
+            found.config_dir.as_deref(),
+            Some("/home/fixture/.claude-felipe")
+        );
+        assert_eq!(found.profile.as_deref(), Some("claude-felipe"));
+        assert_eq!(found.profile_name.as_deref(), Some("felipe"));
+
+        // Um agente que roda direto continua sendo o lider, sem desvio.
+        let direct = procs::FakeProcs::default();
+        fake_proc(&direct, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(
+            &direct,
+            300,
+            100,
+            300,
+            "/usr/local/bin/node",
+            &["node", "/home/fixture/.npm-global/bin/claude"],
+            &env,
+        );
+        let found = describe_foreground(
+            &direct,
+            300,
+            &[100, 300],
+            &mut CommandCache::default(),
+            home,
+        )
+        .unwrap();
+        assert_eq!(
+            (found.pid, found.agent.as_deref()),
+            (300, Some("Claude Code"))
+        );
+
+        // Um agente fora do grupo em primeiro plano, como um que ficou em
+        // segundo plano com &, nao toma o lugar do que esta na frente.
+        let background = procs::FakeProcs::default();
+        fake_proc(&background, 100, 1, 100, "/bin/zsh", &["-zsh"], &[]);
+        fake_proc(
+            &background,
+            300,
+            100,
+            300,
+            "/usr/local/bin/node",
+            &["node", "/x/bin/claude"],
+            &env,
+        );
+        fake_proc(
+            &background,
+            500,
+            100,
+            500,
+            "/usr/bin/vim",
+            &["vim", "notas.md"],
+            &[],
+        );
+        let found = describe_foreground(
+            &background,
+            500,
+            &[100, 300, 500],
+            &mut CommandCache::default(),
+            home,
+        )
+        .unwrap();
+        assert_eq!(
+            (found.pid, found.agent.as_deref(), found.command.as_str()),
+            (500, None, "vim")
+        );
+    }
+
+    /// Processo falso na arvore de uma sessao, com o perfil do Codex no
+    /// ambiente, como o `agent_profile` le.
+    #[cfg(unix)]
+    fn fake_codex(
+        source: &procs::FakeProcs,
+        pid: u32,
+        ppid: u32,
+        argv: &[&str],
+        home: &Path,
+        cwd: &Path,
+    ) {
+        source.set_info(procs::ProcInfo {
+            pid,
+            ppid,
+            pgid: pid,
+            state: ProcState::Sleeping,
+            comm: "codex".into(),
+            name: "codex".into(),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            pid,
+            CommandLine {
+                exe: "/usr/local/bin/codex".into(),
+                argv: argv.iter().map(|arg| arg.to_string()).collect(),
+                env: HashMap::from([(
+                    "CODEX_HOME".to_string(),
+                    home.to_string_lossy().into_owned(),
+                )]),
+            },
+        );
+        source.set_cwd(pid, cwd.to_string_lossy());
+    }
+
+    /// Escreve no terminal o que o Codex escreve a cada mudanca de turno.
+    #[cfg(unix)]
+    fn announce(manager: &TerminalManager, id: u32, body: &str) {
+        let line = format!("printf '\\033]7501;{body}\\007'\n");
+        manager.write(id, line.as_bytes()).unwrap();
+    }
+
+    #[cfg(unix)]
+    fn turn_by_tag(
+        manager: &TerminalManager,
+        tag: &str,
+    ) -> Option<(agent_state::TurnState, Option<String>)> {
+        manager
+            .sample_metrics()
+            .into_iter()
+            .find(|metrics| metrics.tag == tag)
+            .and_then(|metrics| metrics.agent_turn)
+            .map(|turn| (turn.state, turn.waiting_for))
+    }
+
+    #[cfg(unix)]
+    fn wait_turn(
+        manager: &TerminalManager,
+        tag: &str,
+        expected: agent_state::TurnState,
+    ) -> Option<(agent_state::TurnState, Option<String>)> {
+        for _ in 0..200 {
+            let turn = turn_by_tag(manager, tag);
+            if turn.as_ref().map(|(state, _)| *state) == Some(expected) {
+                return turn;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        turn_by_tag(manager, tag)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn three_codex_cards_in_one_folder_keep_their_own_turn_with_the_shared_daemon() {
+        use agent_state::TurnState::{Busy, Done, Idle, Waiting};
+        let dir = scratch("tres-codex");
+        let home = dir.join("perfil");
+        let project = dir.join("projeto");
+        std::fs::create_dir_all(&project).unwrap();
+        // O rollout que o daemon segura e da conversa da aba 3, ja entregue.
+        let theirs = rollout_at(
+            &home,
+            "rollout-2026-10-25T19-52-59-01a17544-6756-7161-b57f-f833f529b0e6.jsonl",
+            &["task_started", "task_complete"],
+        );
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), source.clone());
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), dir.clone());
+        let shell = pty::TestShell::isolated();
+        let tabs: Vec<TerminalInfo> = ["aba1", "aba2", "aba3"]
+            .iter()
+            .map(|tag| {
+                spawn_test_shell(
+                    &manager,
+                    &shell,
+                    tag,
+                    SubscriberKey::Webview,
+                    Channel::new(|_| Ok(())),
+                )
+            })
+            .collect();
+        // Cada aba roda o proprio Codex na mesma pasta e no mesmo perfil.
+        for (index, tab) in tabs.iter().enumerate() {
+            let cli = 40_001 + index as u32;
+            source.set_children(tab.pid.unwrap(), vec![cli]);
+            fake_codex(&source, cli, tab.pid.unwrap(), &["codex"], &home, &project);
+        }
+        // O daemon nasceu filho do Codex da aba 1 e segura o rollout da aba 3.
+        source.set_children(40_001, vec![40_900]);
+        fake_codex(
+            &source,
+            40_900,
+            40_001,
+            &["codex", "app-server", "--listen", "unix:/tmp/x.sock"],
+            &home,
+            &project,
+        );
+        source.set_open_files(40_900, vec![theirs.to_string_lossy().into_owned()]);
+
+        // Antes de qualquer anuncio a aba 1 nao herda a conversa do daemon.
+        let first = manager
+            .sample_metrics()
+            .into_iter()
+            .find(|metrics| metrics.tag == "aba1")
+            .unwrap();
+        assert!(
+            first.agent_turn.is_none(),
+            "a aba 1 nao pode ler o rollout de outra aba"
+        );
+        assert!(
+            first.agent_session_id.is_none(),
+            "o id da conversa da aba 3 nao pode ir para a aba 1"
+        );
+        assert_eq!(
+            first.processes, 2,
+            "o daemon compartilhado fica fora da arvore da aba 1"
+        );
+
+        // Uma executando, uma com resposta entregue, uma aguardando voce.
+        announce(&manager, tabs[0].id, "state=working:app=codex");
+        announce(&manager, tabs[1].id, "state=done:app=codex");
+        announce(
+            &manager,
+            tabs[2].id,
+            "state=blocked:app=codex:kind=permission",
+        );
+        assert_eq!(wait_turn(&manager, "aba1", Busy), Some((Busy, None)));
+        assert_eq!(wait_turn(&manager, "aba2", Done), Some((Done, None)));
+        assert_eq!(
+            wait_turn(&manager, "aba3", Waiting),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // Uma mensagem nova so na aba 2 muda so o card dela.
+        announce(&manager, tabs[1].id, "state=working:app=codex");
+        assert_eq!(wait_turn(&manager, "aba2", Busy), Some((Busy, None)));
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // Encerrar a aba 2 nao mexe nas outras.
+        manager.kill(tabs[1].id).unwrap();
+        for _ in 0..200 {
+            if manager
+                .sample_metrics()
+                .iter()
+                .all(|metrics| metrics.tag != "aba2")
+            {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            Some((Waiting, Some("permission".into())))
+        );
+
+        // O Codex da aba 3 sai: o anuncio da execucao anterior e esquecido e
+        // nao volta quando outro Codex abre na mesma aba.
+        source.set_children(tabs[2].pid.unwrap(), Vec::new());
+        assert_eq!(turn_by_tag(&manager, "aba3"), None);
+        source.set_children(tabs[2].pid.unwrap(), vec![40_003]);
+        assert_eq!(
+            turn_by_tag(&manager, "aba3"),
+            None,
+            "o estado antigo nao pode voltar sozinho"
+        );
+        announce(&manager, tabs[2].id, "state=idle:app=codex");
+        assert_eq!(wait_turn(&manager, "aba3", Idle), Some((Idle, None)));
+        assert_eq!(turn_by_tag(&manager, "aba1"), Some((Busy, None)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn another_agent_in_the_same_folder_ignores_what_a_codex_announced() {
+        let dir = scratch("provedores");
+        let home = dir.join("perfil");
+        let project = dir.join("projeto");
+        std::fs::create_dir_all(&project).unwrap();
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_proc_source(Arc::new(|_| {}), source.clone());
+        struct Cleanup(TerminalManager, PathBuf);
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                self.0.kill_all_blocking();
+                let _ = std::fs::remove_dir_all(&self.1);
+            }
+        }
+        let _cleanup = Cleanup(manager.clone(), dir.clone());
+        let shell = pty::TestShell::isolated();
+        let codex = spawn_test_shell(
+            &manager,
+            &shell,
+            "codex",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        let other = spawn_test_shell(
+            &manager,
+            &shell,
+            "outro",
+            SubscriberKey::Webview,
+            Channel::new(|_| Ok(())),
+        );
+        source.set_children(codex.pid.unwrap(), vec![41_001]);
+        fake_codex(
+            &source,
+            41_001,
+            codex.pid.unwrap(),
+            &["codex"],
+            &home,
+            &project,
+        );
+        // A aba vizinha roda outro agente na mesma pasta, e um Codex antigo
+        // deixou um anuncio na saida dela.
+        announce(&manager, other.id, "state=done:app=codex");
+        announce(&manager, codex.id, "state=working:app=codex");
+        assert_eq!(
+            wait_turn(&manager, "codex", agent_state::TurnState::Busy),
+            Some((agent_state::TurnState::Busy, None))
+        );
+        source.set_children(other.pid.unwrap(), vec![41_002]);
+        source.set_info(procs::ProcInfo {
+            pid: 41_002,
+            ppid: other.pid.unwrap(),
+            pgid: 41_002,
+            state: ProcState::Sleeping,
+            comm: "claude".into(),
+            name: "claude".into(),
+            start_sec: 1_790_000_000,
+        });
+        source.set_command(
+            41_002,
+            CommandLine {
+                exe: "/usr/local/bin/claude".into(),
+                argv: vec!["claude".into()],
+                env: HashMap::from([(
+                    "CLAUDE_CONFIG_DIR".to_string(),
+                    home.to_string_lossy().into_owned(),
+                )]),
+            },
+        );
+        // A espera garante que o anuncio velho ja passou pela saida.
+        std::thread::sleep(Duration::from_millis(300));
+        assert_eq!(
+            turn_by_tag(&manager, "outro"),
+            None,
+            "o Claude Code nao herda o anuncio do Codex"
+        );
+        assert_eq!(
+            turn_by_tag(&manager, "codex"),
+            Some((agent_state::TurnState::Busy, None))
+        );
+    }
+
     #[test]
     fn two_codex_rollouts_in_one_profile_get_independent_turns() {
         let dir = scratch("codex");
@@ -4152,6 +5112,74 @@ echo 'recovered-fixture'
         );
         manager.kill(info.id).ok();
         let _ = rx;
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn broto_mcp_inherits_this_hosts_state_directory() {
+        let mut manager = TerminalManager::with_notifier(Arc::new(|_| {}));
+        manager.broto_host_state_dir = Some(PathBuf::from("/private/host-state"));
+        let shell = pty::TestShell::isolated();
+        let (channel, rx) = sink();
+        let prefs = manager.prefs.get();
+        let info = manager
+            .spawn_for_with_spec(
+                shell.cwd(),
+                200,
+                24,
+                CursorPosition::default(),
+                "broto-env",
+                SubscriberKey::Webview,
+                channel,
+                shell.spec(),
+                &prefs,
+            )
+            .expect("spawn");
+        manager
+            .write(
+                info.id,
+                b"printf 'host-state=%s\\n' \"$CIALAI_BROTO_HOST_STATE_DIR\"; exit 0\n",
+            )
+            .unwrap();
+        let mut queries = LaterCursorQueries::new("broto-env", &manager, info.id);
+        let (output, exit) = collect_until_exit(&rx, &mut queries);
+        assert!(exit.is_some());
+        assert!(
+            String::from_utf8_lossy(&output).contains("host-state=/private/host-state"),
+            "output: {:?}",
+            String::from_utf8_lossy(&output)
+        );
+    }
+
+    #[test]
+    fn terminal_exit_is_published_after_the_reader_sends_final_output() {
+        let (tx, rx) = mpsc::sync_channel(8);
+        let (drained_tx, drained_rx) = mpsc::channel();
+        let exit_tx = tx.clone();
+        let waiter = thread::spawn(move || send_exit_after_drain(exit_tx, None, drained_rx));
+        assert!(rx.recv_timeout(Duration::from_millis(20)).is_err());
+        tx.send(Message::Data(b"final output".to_vec())).unwrap();
+        drained_tx.send(()).unwrap();
+        assert!(
+            matches!(rx.recv_timeout(Duration::from_secs(2)).unwrap(), Message::Data(bytes) if bytes == b"final output")
+        );
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Message::Exit(_)
+        ));
+        waiter.join().unwrap();
+    }
+
+    #[test]
+    fn terminal_exit_does_not_wait_forever_for_a_descendant_holding_the_pty() {
+        let (tx, rx) = mpsc::sync_channel(8);
+        let (_drained_tx, drained_rx) = mpsc::channel();
+        let waiter = thread::spawn(move || send_exit_after_drain(tx, None, drained_rx));
+        assert!(matches!(
+            rx.recv_timeout(Duration::from_secs(2)).unwrap(),
+            Message::Exit(_)
+        ));
+        waiter.join().unwrap();
     }
 
     #[test]

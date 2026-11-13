@@ -4,7 +4,6 @@ package pathmgr
 import (
 	"context"
 
-	"github.com/Cialai/cialai/packages/tunnel-core/internal/identity"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/rendezvous"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/candidates"
@@ -20,7 +19,7 @@ import (
 func (m *Manager) keepControl(active *activePath, session transport.ControlSession) {
 	defer m.wait.Done()
 	conn, err := rendezvous.Open(active.ctx, session, rendezvous.Config{
-		Role:     identity.RolePhone,
+		Role:     m.config.Local.Role(),
 		LocalKey: m.config.Local.PublicKeyString(),
 		Handler:  rendezvous.Handler{ReachUpdate: m.reachUpdate},
 		Logf:     m.config.Logf,

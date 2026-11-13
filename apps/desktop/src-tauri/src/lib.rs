@@ -17,6 +17,7 @@ mod menu;
 pub mod notch;
 pub mod platform;
 mod prefs;
+mod skills;
 pub mod tunnel;
 mod window;
 pub mod workspace;
@@ -90,12 +91,18 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         // Avisos de limite da Barra de IA, desligados por padrao.
         .plugin(tauri_plugin_notification::init())
-        .register_uri_scheme_protocol(workspace::preview::SCHEME, |context, request| {
-            let roots = context
-                .app_handle()
-                .state::<workspace::preview::PreviewRoots>();
-            workspace::preview::handle(&roots, request)
-        })
+        // Fora da thread principal: um video pede muitos pedacos enquanto
+        // toca, e ler disco ali travaria a janela.
+        .register_asynchronous_uri_scheme_protocol(
+            workspace::preview::SCHEME,
+            |context, request, responder| {
+                let app = context.app_handle().clone();
+                tauri::async_runtime::spawn_blocking(move || {
+                    let roots = app.state::<workspace::preview::PreviewRoots>();
+                    responder.respond(workspace::preview::handle(&roots, request));
+                });
+            },
+        )
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(
@@ -123,6 +130,16 @@ pub fn run() {
             commands::splash_ready,
             commands::window_grow,
             commands::pty_spawn,
+            commands::broto_open,
+            commands::broto_list,
+            commands::broto_rename,
+            commands::broto_grant,
+            commands::broto_pair_begin,
+            commands::broto_pair_pending,
+            commands::broto_pair_decide,
+            commands::broto_permission_set,
+            commands::broto_requests,
+            commands::broto_decide,
             commands::pty_write,
             commands::pty_resize,
             commands::pty_view_claim,
@@ -151,6 +168,7 @@ pub fn run() {
             commands::agent_profile_create,
             commands::agent_profiles_refresh,
             commands::pty_launch_agent,
+            commands::agent_menu_publish,
             commands::doc_preview_window,
             commands::doc_preview_path,
             commands::detect_project_roots,
@@ -171,6 +189,9 @@ pub fn run() {
             commands::ai_usage,
             commands::ai_install_claude_hook,
             commands::cli_status,
+            commands::skill_view,
+            commands::skill_edit,
+            commands::skill_restore,
             commands::cli_install,
             commands::cli_uninstall,
             commands::fs_read_bytes,
@@ -240,6 +261,26 @@ pub fn run() {
                 .path()
                 .app_config_dir()
                 .unwrap_or_else(|_| support.clone());
+            // Skill do Cialai para o Claude Code e o Codex, sem tela: confere na
+            // abertura e a cada cinco minutos, para voltar se for apagada e
+            // chegar a uma IA instalada depois.
+            let skill_home = home.clone();
+            let skill_dir = cli_config.clone();
+            std::thread::spawn(move || {
+                let mut last = String::new();
+                loop {
+                    let outcome = skills::sync(&skill_home, &skill_dir)
+                        .err()
+                        .unwrap_or_default();
+                    if outcome != last {
+                        if !outcome.is_empty() {
+                            diagnostics::note(&format!("[skill] indisponivel: {outcome}"));
+                        }
+                        last = outcome;
+                    }
+                    std::thread::sleep(std::time::Duration::from_secs(300));
+                }
+            });
             std::thread::spawn(move || {
                 let target = cli::Target::current();
                 let launcher = cli::launcher_from(

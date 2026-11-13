@@ -22,9 +22,10 @@ import {
   LanguageDescription,
 } from '@codemirror/language';
 import { languages } from '@codemirror/language-data';
-import { tags } from '@lezer/highlight';
+import { highlightCode, tagHighlighter, tags } from '@lezer/highlight';
 import { Marked } from 'marked';
-import { baseName, dirName, fileKind, fs, git, isViewerKind, joinPath, office, FsError } from './files.js';
+import { baseName, dirName, fileKind, fs, git, isViewerKind, joinPath, languageAlias, office, FsError } from './files.js';
+import { NotebookError, parseNotebook } from './notebook.js';
 import { addTab, allTabs, findTab, getSession, removeTab, setTabPath, subscribeChanges, touchTab } from './runtime.js';
 import { chooseSavePath, previewUrl } from '../lib/native.js';
 import { translate } from '../shared/i18n.js';
@@ -80,18 +81,27 @@ function buildEditorTheme(dark) {
   }, { dark });
 }
 
+// Cores de codigo. A mesma tabela serve ao editor e ao realce sem editor das
+// celulas de notebook, que usa a classe `terminais-syn-<nome>` do
+// Terminais.css com as mesmas variaveis.
+const SYNTAX = [
+  { name: 'keyword', tag: [tags.keyword, tags.modifier, tags.operatorKeyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword], color: 'var(--terminais-syn-keyword)' },
+  { name: 'string', tag: [tags.string, tags.special(tags.string), tags.character], color: 'var(--terminais-syn-string)' },
+  { name: 'number', tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom], color: 'var(--terminais-syn-number)' },
+  { name: 'comment', tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--terminais-syn-comment)', fontStyle: 'italic' },
+  { name: 'function', tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.macroName], color: 'var(--terminais-syn-function)' },
+  { name: 'type', tag: [tags.typeName, tags.className, tags.namespace, tags.standard(tags.typeName)], color: 'var(--terminais-syn-type)' },
+  { name: 'property', tag: [tags.propertyName, tags.attributeName, tags.definition(tags.propertyName)], color: 'var(--terminais-syn-property)' },
+  { name: 'variable', tag: [tags.variableName, tags.definition(tags.variableName), tags.local(tags.variableName)], color: 'var(--mac-label)' },
+  { name: 'tag', tag: [tags.tagName, tags.angleBracket], color: 'var(--terminais-syn-tag)' },
+  { name: 'muted', tag: [tags.operator, tags.punctuation, tags.separator, tags.bracket, tags.derefOperator], color: 'var(--mac-label-2)' },
+  { name: 'regexp', tag: [tags.regexp, tags.escape, tags.url, tags.link], color: 'var(--terminais-syn-regexp)' },
+];
+
+const staticHighlighter = tagHighlighter(SYNTAX.map(({ name, tag }) => ({ tag, class: `terminais-syn-${name}` })));
+
 const highlight = HighlightStyle.define([
-  { tag: [tags.keyword, tags.modifier, tags.operatorKeyword, tags.controlKeyword, tags.definitionKeyword, tags.moduleKeyword], color: 'var(--terminais-syn-keyword)' },
-  { tag: [tags.string, tags.special(tags.string), tags.character], color: 'var(--terminais-syn-string)' },
-  { tag: [tags.number, tags.integer, tags.float, tags.bool, tags.null, tags.atom], color: 'var(--terminais-syn-number)' },
-  { tag: [tags.comment, tags.lineComment, tags.blockComment, tags.docComment], color: 'var(--terminais-syn-comment)', fontStyle: 'italic' },
-  { tag: [tags.function(tags.variableName), tags.function(tags.propertyName), tags.macroName], color: 'var(--terminais-syn-function)' },
-  { tag: [tags.typeName, tags.className, tags.namespace, tags.standard(tags.typeName)], color: 'var(--terminais-syn-type)' },
-  { tag: [tags.propertyName, tags.attributeName, tags.definition(tags.propertyName)], color: 'var(--terminais-syn-property)' },
-  { tag: [tags.variableName, tags.definition(tags.variableName), tags.local(tags.variableName)], color: 'var(--mac-label)' },
-  { tag: [tags.tagName, tags.angleBracket], color: 'var(--terminais-syn-tag)' },
-  { tag: [tags.operator, tags.punctuation, tags.separator, tags.bracket, tags.derefOperator], color: 'var(--mac-label-2)' },
-  { tag: [tags.regexp, tags.escape, tags.url, tags.link], color: 'var(--terminais-syn-regexp)' },
+  ...SYNTAX.map(({ name: _name, ...spec }) => spec),
   { tag: tags.heading, fontWeight: '600', color: 'var(--mac-label)' },
   { tag: tags.heading1, fontSize: '1.2em' },
   { tag: tags.heading2, fontSize: '1.1em' },
@@ -119,8 +129,17 @@ function ensureThemeWatch() {
   });
 }
 
-async function languageFor(name) {
+// Descricao do language-data pelo nome do arquivo, com os apelidos de
+// kinds.js para o que a busca dele nao reconhece, como `.env` e Makefile.
+function describeLanguage(name) {
   const description = LanguageDescription.matchFilename(languages, name);
+  if (description) return description;
+  const alias = languageAlias(name);
+  return alias ? LanguageDescription.matchLanguageName(languages, alias, false) : null;
+}
+
+async function languageFor(name) {
+  const description = describeLanguage(name);
   if (!description) return null;
   try {
     const support = await description.load();
@@ -233,7 +252,7 @@ let untitledCount = 0;
 // painel de salvar do sistema.
 export function newUntitled(sessionId) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   untitledCount += 1;
   const tab = makeTab(null, 'text');
   tab.name = translate('terminal.editor.untitled', { count: untitledCount });
@@ -249,7 +268,7 @@ export function newUntitled(sessionId) {
 // Abre o arquivo numa aba da sessao, ou ativa a aba que ja existe.
 export async function openFile(sessionId, path, { activate = true } = {}) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   const existing = findTab(sessionId, path);
   if (existing) {
     if (activate) session.editor.activeId = existing.id;
@@ -413,12 +432,84 @@ async function loadOffice(tab, force) {
   tab.viewer = { kind: 'pdf', url: `${result.url}?v=${stat.modifiedMs || 0}`, converted: true, cached: Boolean(result.cached), pdfPath: result.pdfPath };
 }
 
+// Audio e video: o proprio webview toca pelo protocolo preview://, que
+// atende em faixas de bytes. Nada passa pela memoria do app, e o tamanho do
+// arquivo nao tem teto.
+async function loadMedia(tab) {
+  const stat = await statTab(tab);
+  const url = await previewUrl(dirName(tab.path), tab.name);
+  if (!url) throw new FsError('unavailable', translate('terminal.common.desktopOnly'));
+  tab.viewer = { kind: tab.kind, url: `${url}?v=${stat.modifiedMs || 0}` };
+}
+
+let nextFontFace = 0;
+
+// Fonte: os bytes viram uma FontFace com nome proprio desta leitura, que sai
+// do documento quando a aba fecha ou recarrega.
+async function loadFont(tab) {
+  await statTab(tab);
+  const buffer = await fs.readBytes(tab.path);
+  nextFontFace += 1;
+  const family = `cialai-preview-font-${nextFontFace}`;
+  const face = new FontFace(family, buffer);
+  try {
+    await face.load();
+  } catch (_error) {
+    throw new FsError('unsupported', translate('terminal.editor.fontUnreadable'));
+  }
+  document.fonts.add(face);
+  tab.viewer = { kind: 'font', family, release: () => document.fonts.delete(face) };
+}
+
+// Linhas de uma celula com o realce do editor, em pedacos de texto e
+// classe. Null quando a linguagem nao tem analisador que rode sem editor.
+function highlightLines(source, support) {
+  if (!support) return null;
+  try {
+    const tree = support.language.parser.parse(source);
+    const lines = [[]];
+    highlightCode(source, tree, staticHighlighter, (text, classes) => {
+      lines[lines.length - 1].push(classes ? [text, classes] : [text]);
+    }, () => { lines.push([]); });
+    return lines;
+  } catch (_error) {
+    return null;
+  }
+}
+
+// Notebook Jupyter, so leitura: Markdown pelo mesmo renderizador da previa e
+// codigo com o realce do editor, tudo montado uma vez aqui.
+async function loadNotebook(tab) {
+  await statTab(tab);
+  const buffer = await fs.readBytes(tab.path);
+  let notebook;
+  try {
+    notebook = parseNotebook(new TextDecoder().decode(buffer));
+  } catch (error) {
+    if (error instanceof NotebookError) throw new FsError('unsupported', translate('terminal.editor.notebookInvalid'));
+    throw error;
+  }
+  const description = notebook.language ? LanguageDescription.matchLanguageName(languages, notebook.language, false) : null;
+  const support = description ? await description.load().catch(() => null) : null;
+  const cells = notebook.cells.map((cell) => ({
+    ...cell,
+    html: cell.type === 'markdown' ? renderMarkdown(cell.source) : null,
+    lines: cell.type === 'code' ? highlightLines(cell.source, support) : null,
+    outputs: cell.outputs.map((output) => (output.type === 'markdown' ? { ...output, html: renderMarkdown(output.source) } : output)),
+  }));
+  tab.viewer = { kind: 'notebook', language: description?.name || notebook.language, cells };
+}
+
 async function loadViewer(tab, force) {
+  try { tab.viewer?.release?.(); } catch (_error) { /* ja liberado */ }
   tab.viewer = null;
   if (tab.kind === 'pdf') await loadPdf(tab);
   else if (tab.kind === 'sheet') await loadSheet(tab);
   else if (tab.kind === 'docx') await loadDocx(tab);
   else if (tab.kind === 'office') await loadOffice(tab, force);
+  else if (tab.kind === 'audio' || tab.kind === 'video') await loadMedia(tab);
+  else if (tab.kind === 'font') await loadFont(tab);
+  else if (tab.kind === 'notebook') await loadNotebook(tab);
 }
 
 // Botao "Reconverter" ou "Tentar de novo": volta ao visualizador de origem e
@@ -611,7 +702,7 @@ export async function restoreTabs(sessionId) {
 
 export async function openDiff(sessionId, root, path) {
   const session = getSession(sessionId);
-  if (!session) return null;
+  if (!session || session.deviceId) return null;
   const existing = session.editor.tabs.find((tab) => tab.kind === 'diff' && tab.path === path);
   if (existing) {
     session.editor.activeId = existing.id;

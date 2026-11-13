@@ -39,6 +39,9 @@ type Config struct {
 	// Role is identity.RolePhone or identity.RoleDesktop; the peer must
 	// announce the other one.
 	Role identity.Role
+	// PeerRole pins the registered peer role. Desktop callers must set Broto
+	// explicitly; the compatibility default remains Phone.
+	PeerRole identity.Role
 	// LocalKey is the canonical public key of this device, sent in hello.
 	LocalKey string
 	// PeerKey is the key proven by the transport handshake. When the stream
@@ -259,8 +262,17 @@ func (config *Config) fromStream(stream io.ReadWriteCloser) error {
 }
 
 func (config *Config) normalize() error {
-	if config.Role != identity.RolePhone && config.Role != identity.RoleDesktop {
+	if config.Role != identity.RolePhone && config.Role != identity.RoleDesktop && config.Role != identity.RoleBroto {
 		return fmt.Errorf("rendezvous role %q is unknown", config.Role)
+	}
+	if config.PeerRole == "" {
+		config.PeerRole = identity.RoleDesktop
+		if config.Role == identity.RoleDesktop {
+			config.PeerRole = identity.RolePhone
+		}
+	}
+	if (config.Role == identity.RoleDesktop && config.PeerRole != identity.RolePhone && config.PeerRole != identity.RoleBroto) || (config.Role != identity.RoleDesktop && config.PeerRole != identity.RoleDesktop) {
+		return fmt.Errorf("rendezvous peer role is invalid")
 	}
 	if _, err := identity.ParsePublicKey(config.LocalKey); err != nil {
 		return fmt.Errorf("rendezvous local key: %w", err)
@@ -293,10 +305,7 @@ func (config *Config) normalize() error {
 }
 
 func newConn(stream io.ReadWriteCloser, config Config) *Conn {
-	peerRole := identity.RoleDesktop
-	if config.Role == identity.RoleDesktop {
-		peerRole = identity.RolePhone
-	}
+	peerRole := config.PeerRole
 	peerPublic, _ := identity.ParsePublicKey(config.PeerKey)
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Conn{

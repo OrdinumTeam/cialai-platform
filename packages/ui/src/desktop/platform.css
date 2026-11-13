@@ -9,15 +9,15 @@
 @font-face{font-family:"Cialai JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/JetBrainsMono-Regular.woff2") format("woff2")}
 @font-face{font-family:"Cialai JetBrains Mono";font-style:normal;font-weight:700;font-display:swap;src:url("../fonts/JetBrainsMono-Bold.woff2") format("woff2")}
 
-[data-shell="desktop"][data-platform="macos"]{
+[data-shell="desktop"][data-platform="macos"],:where([data-shell="desktop"][data-platform="macos"][data-terminal-theme]) [data-terminal-scope][data-terminal-scope]{
   --mac-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",Helvetica,Arial,sans-serif;
   --mac-font-mono:"SF Mono",SFMono-Regular,ui-monospace,Menlo,monospace;
 }
-[data-shell="desktop"][data-platform="windows"]{
+[data-shell="desktop"][data-platform="windows"],:where([data-shell="desktop"][data-platform="windows"][data-terminal-theme]) [data-terminal-scope][data-terminal-scope]{
   --mac-font:"Segoe UI Variable Text","Segoe UI",system-ui,sans-serif;
   --mac-font-mono:"Cascadia Mono","Cascadia Code",Consolas,ui-monospace,monospace;
 }
-[data-shell="desktop"][data-platform="linux"]{
+[data-shell="desktop"][data-platform="linux"],:where([data-shell="desktop"][data-platform="linux"][data-terminal-theme]) [data-terminal-scope][data-terminal-scope]{
   --mac-font:system-ui,"Inter",Cantarell,Ubuntu,"Noto Sans",sans-serif;
   --mac-font-mono:ui-monospace,"JetBrains Mono","Fira Code","DejaVu Sans Mono","Noto Sans Mono","Cialai JetBrains Mono",monospace;
 }

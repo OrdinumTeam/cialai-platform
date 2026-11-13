@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const workflow = readFileSync(`${root}/.github/workflows/ci.yml`, 'utf8');
 
-for (const runner of ['ubuntu-22.04', 'windows-2022', 'macos-14']) {
+for (const runner of ['ubuntu-22.04', 'windows-2022', 'macos-15']) {
   assert.match(workflow, new RegExp(`\\b${runner.replaceAll('.', '\\.')}\\b`), `runner ausente: ${runner}`);
 }
 
@@ -134,7 +134,7 @@ const mobile = yaml.load(mobileSource);
 assert.deepEqual(Object.keys(mobile.on), ['workflow_dispatch'], 'os bindings móveis só rodam por disparo manual');
 assert.equal(mobile.permissions.contents, 'read');
 const bindings = mobile.jobs.bindings;
-assert.equal(bindings['runs-on'], 'macos-14');
+assert.equal(bindings['runs-on'], 'macos-15');
 const codemagic = yaml.load(readFileSync(`${root}/codemagic.yaml`, 'utf8'));
 assert.equal(mobile.env.ANDROID_NDK_VERSION, codemagic.workflows['android-play'].environment.ndk, 'o NDK dos bindings acompanha o Codemagic');
 const mobileRuns = bindings.steps.map((step) => step.run || '').join('\n');
@@ -226,14 +226,24 @@ const OWNER_GUARD = `contains(fromJSON('["ordinum-br","focoamorim"]'), github.tr
 const workflowsDir = `${root}/.github/workflows`;
 for (const file of readdirSync(workflowsDir).filter((name) => /\.ya?ml$/.test(name))) {
   const flow = yaml.load(readFileSync(`${workflowsDir}/${file}`, 'utf8'));
-  const release = file === 'release.yml';
+  const broto = file === 'release-broto.yml';
+  const release = file === 'release.yml' || broto;
   assert.deepEqual(Object.keys(flow.on).sort(), release ? ['push', 'workflow_dispatch'] : ['workflow_dispatch'], `${file} só roda por disparo manual`);
-  if (release) assert.deepEqual(flow.on.push, { tags: ['v*'] }, 'a release só dispara sozinha pela tag');
+  if (release) assert.deepEqual(flow.on.push, { tags: [broto ? 'broto-v*' : 'v*'] }, 'a release só dispara sozinha pela tag própria');
   for (const [name, job] of Object.entries(flow.jobs)) {
-    if (job.needs) {
+    if (broto && name === 'publish') {
+      // Publication-only dispatch reuses two previously verified builds.
+      assert.equal(job.needs, 'build');
+      assert.equal(job.if, `always() && ${OWNER_GUARD} && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.publish_run != '' && startsWith(inputs.tag, 'broto-v')))`);
+      const validation = job.steps.find((step) => step.name === 'Validate the existing build run before reusing its artifacts');
+      assert.equal(validation?.if, "inputs.publish_run != ''");
+      for (const guard of ['.headSha == $expected', '.workflowName == "Release Broto"', '($builds | length) == 2', 'all($builds[]; .conclusion == "success")']) {
+        assert.ok(validation.run.includes(guard), `a publicação reutilizada precisa conferir ${guard}`);
+      }
+    } else if (job.needs) {
       assert.doesNotMatch(job.if ?? '', /always\(\)|cancelled\(\)|failure\(\)/, `${file} ${name} não pode rodar com o job anterior pulado`);
     } else {
-      assert.equal(job.if, OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
+      assert.equal(job.if, broto ? `inputs.publish_run == '' && startsWith(github.ref, 'refs/tags/broto-v') && ${OWNER_GUARD}` : OWNER_GUARD, `${file} ${name} precisa conferir quem disparou`);
     }
   }
 }

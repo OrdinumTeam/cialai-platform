@@ -10,11 +10,14 @@ import ContentArea from '../components/ContentArea.jsx';
 import { closeCurrentWindow, invoke, isTauri, watchFullscreen } from '../lib/native.js';
 import { platform } from '../lib/platform.js';
 import { AppearanceContext, useAppearance } from './appearance.js';
+import { startAgentMenuPublisher } from './agent-menu.js';
+import AgentProfilesDialog from './AgentProfilesDialog.jsx';
 import CommandPalette from './CommandPalette.jsx';
 import { installDomShortcuts, installNativeMenu } from './menu.js';
 import NotchBar from '../notch/NotchBar.jsx';
 import { ensureSubscribed as ensureNotchSubscribed, notchActions, onFocusSession, onOpenSettings } from './notch-runtime.js';
 import Preferences from './Preferences.jsx';
+import BrotoApprovals from './BrotoApprovals.jsx';
 import Onboarding, { shouldShowOnboarding } from './Onboarding.jsx';
 import PairingDialog from './PairingDialog.jsx';
 import Sidebar from './Sidebar.jsx';
@@ -117,9 +120,25 @@ function DesktopShell() {
     return section && section !== '1' ? section : null;
   });
   const [pairOpen, setPairOpen] = useState(() => queryFlag('pair') === '1');
+  // Perfis de agentes: `agent` escolhe a ferramenta que o formulário abre
+  // marcada, quando quem abre já sabe, como o botão de perfil novo do Codex.
+  const [agentsOpen, setAgentsOpen] = useState(() => Boolean(queryFlag('agents')));
+  const [agentsAgent, setAgentsAgent] = useState(() => queryFlag('agents'));
   const [onboardingOpen, setOnboardingOpen] = useState(shouldShowOnboarding);
   const { boot, runtimeStatus, splashMounted } = useBoot();
   useEscapeGuard();
+
+  // O terminal selecionado pode montar durante a abertura, com o conteúdo
+  // ainda escondido, e aí o foco que ele pede se perde. Quando o conteúdo
+  // aparece, ele recebe o teclado, desde que nada mais tenha o foco e a
+  // apresentação inicial não esteja na frente.
+  const booting = boot === 'splash';
+  useEffect(() => {
+    if (booting || onboardingOpen) return;
+    const focused = document.activeElement;
+    if (focused && focused !== document.body) return;
+    import('../terminals/runtime.js').then((runtime) => runtime.focusSelected()).catch(() => {});
+  }, [booting, onboardingOpen]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarHidden((hidden) => {
@@ -140,6 +159,10 @@ function DesktopShell() {
     setPrefsOpen(true);
   }, []);
   const openPair = useCallback(() => setPairOpen(true), []);
+  const openAgentProfiles = useCallback((agent) => {
+    setAgentsAgent(typeof agent === 'string' ? agent : null);
+    setAgentsOpen(true);
+  }, []);
   const newTerminal = useCallback(() => {
     navigate('terminais');
     import('../terminals/runtime.js').then((runtime) => runtime.requestNewTerminal()).catch(() => {});
@@ -169,11 +192,11 @@ function DesktopShell() {
   }, [navigate]);
 
   const actions = useMemo(() => ({
-    navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair,
+    navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, openAgentProfiles,
     setAppearance: appearance.setMode, newTerminal, newFile,
     closeActiveTerminalOrWindow, closeWindow, quitApp,
     showNotch, hideNotch, toggleNotch,
-  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp, showNotch, hideNotch, toggleNotch]);
+  }), [navigate, toggleSidebar, reloadData, openPalette, openPreferences, openPair, openAgentProfiles, appearance.setMode, newTerminal, newFile, closeActiveTerminalOrWindow, closeWindow, quitApp, showNotch, hideNotch, toggleNotch]);
   const actionsRef = useRef(actions);
   actionsRef.current = actions;
 
@@ -188,6 +211,8 @@ function DesktopShell() {
   useEffect(() => {
     installShellBridge({ setSidebarHidden: setSidebarHiddenTransient, openPalette, navigate }, { sidebarHidden });
   }, [setSidebarHiddenTransient, openPalette, navigate, sidebarHidden]);
+  // Contas do menu que o shell das sessões mostra ao digitar codex ou claude.
+  useEffect(() => startAgentMenuPublisher(), []);
   useEffect(() => {
     let disposed = false;
     let off = null;
@@ -216,10 +241,26 @@ function DesktopShell() {
     const pair = () => setPairOpen(true);
     // Preferências e o painel de acesso levam ao diagnóstico avançado em Dispositivos.
     const diagnostics = () => { setPrefsOpen(false); navigate('dispositivos'); setAdvancedOpen(true); };
+    // Os botões de perfil novo das telas de contas abrem o modal Perfis de agentes.
+    const agents = (event) => { setPrefsOpen(false); openAgentProfiles(event?.detail?.agent); };
+    // Abrir terminal num Broto leva à tela de Terminais com a sessão dele selecionada.
+    const brotoSession = (event) => {
+      const tag = event?.detail?.tag;
+      if (typeof tag !== 'string') return;
+      navigate('terminais');
+      import('../terminals/runtime.js').then((runtime) => runtime.revealSession(tag)).catch(() => {});
+    };
     window.addEventListener('cialai:pair-device', pair);
     window.addEventListener('cialai:network-diagnostics', diagnostics);
-    return () => { window.removeEventListener('cialai:pair-device', pair); window.removeEventListener('cialai:network-diagnostics', diagnostics); };
-  }, [navigate, setAdvancedOpen]);
+    window.addEventListener('cialai:agent-profiles', agents);
+    window.addEventListener('cialai:open-broto-session', brotoSession);
+    return () => {
+      window.removeEventListener('cialai:pair-device', pair);
+      window.removeEventListener('cialai:network-diagnostics', diagnostics);
+      window.removeEventListener('cialai:agent-profiles', agents);
+      window.removeEventListener('cialai:open-broto-session', brotoSession);
+    };
+  }, [navigate, setAdvancedOpen, openAgentProfiles]);
 
   const active = getDesktopView(view, views);
   const ViewComponent = DESKTOP_VIEW_COMPONENTS[active.id];
@@ -233,6 +274,7 @@ function DesktopShell() {
             <Sidebar views={views} active={active.id} onNavigate={navigate} hidden={sidebarHidden} tunnelStatus={tunnel.status} onOpenPair={openPair} onOpenPreferences={openPreferences} />
             <div className="mac-main">
               <Toolbar view={active} sidebarHidden={sidebarHidden} onToggleSidebar={toggleSidebar} onOpenPalette={openPalette} onReload={reloadData} appearance={appearance} onOpenPreferences={openPreferences} tunnelStatus={tunnel.status} onOpenPair={openPair} menuActions={actions} views={views} />
+              <BrotoApprovals />
               <div className="mac-body">
                 <main className="mac-content" id="content"><ContentArea ViewComponent={ViewComponent} viewId={active.id} /></main>
                 <NotchBar />
@@ -240,6 +282,7 @@ function DesktopShell() {
             </div>
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} views={views} actions={actions} appearance={appearance} />
             <Preferences open={prefsOpen} section={prefsSection} onClose={() => setPrefsOpen(false)} appearance={appearance} />
+            <AgentProfilesDialog open={agentsOpen} agent={agentsAgent} onClose={() => setAgentsOpen(false)} onOpenTerminals={() => navigate('terminais')} />
             <PairingDialog open={pairOpen} onClose={() => setPairOpen(false)} onDevices={() => navigate('dispositivos')} />
             {onboardingOpen && boot === 'ready' ? <Onboarding onComplete={completeOnboarding} /> : null}
             {splashMounted ? <Splash status={runtimeStatus} leaving={boot !== 'splash'} /> : null}

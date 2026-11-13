@@ -112,6 +112,15 @@ type Desktop struct {
 	state   State
 	changed chan struct{}
 	pid     int
+	// control is the connection of the running Tor once register added the
+	// services, nil otherwise. ephemeral holds the temporary services by
+	// service id; every new Tor gets them again.
+	control   *controlConn
+	ephemeral map[string]*ephemeralOnion
+
+	// ephemeralMu orders the commands for temporary services with their
+	// registration on a new Tor, so a restart never misses one being added.
+	ephemeralMu sync.Mutex
 
 	// stopErr is written by the supervisor before done closes.
 	stopErr   error
@@ -136,14 +145,15 @@ func StartDesktop(config DesktopConfig) (*Desktop, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	desktop := &Desktop{
-		config:   config,
-		key:      key,
-		listener: listener,
-		ctx:      ctx,
-		cancel:   cancel,
-		done:     make(chan struct{}),
-		changed:  make(chan struct{}),
-		state:    State{Phase: PhaseStarting, Address: key.Address()},
+		config:    config,
+		key:       key,
+		listener:  listener,
+		ctx:       ctx,
+		cancel:    cancel,
+		done:      make(chan struct{}),
+		changed:   make(chan struct{}),
+		state:     State{Phase: PhaseStarting, Address: key.Address()},
+		ephemeral: make(map[string]*ephemeralOnion),
 	}
 	go desktop.supervise()
 	return desktop, nil
@@ -346,6 +356,12 @@ func (desktop *Desktop) runOnce(restarts int) error {
 	desktop.pid = running.pid
 	desktop.mu.Unlock()
 	defer func() {
+		desktop.mu.Lock()
+		desktop.control = nil
+		for _, service := range desktop.ephemeral {
+			service.published = false
+		}
+		desktop.mu.Unlock()
 		stopErr := running.stop(desktop.config.shutdownGrace)
 		desktop.mu.Lock()
 		desktop.pid = 0
@@ -396,6 +412,9 @@ func (desktop *Desktop) register(ctx context.Context, control *controlConn) (str
 	if serviceID != desktop.key.ServiceID() {
 		return "", Bootstrap{}, fmt.Errorf("%w: tor returned %s.onion, key is %s", ErrAddressMismatch, serviceID, desktop.key.Address())
 	}
+	if err := desktop.restoreEphemerals(ctx, control); err != nil {
+		return "", Bootstrap{}, err
+	}
 	if _, err := control.do(ctx, "SETCONF DisableNetwork=0"); err != nil {
 		return "", Bootstrap{}, fmt.Errorf("enable tor network: %w", err)
 	}
@@ -422,7 +441,15 @@ func (desktop *Desktop) handleEvent(event string) {
 		})
 	case "HS_DESC":
 		words, _ := parseArguments(body)
-		if len(words) < 2 || words[0] != "UPLOADED" || words[1] != desktop.key.ServiceID() {
+		if len(words) < 2 || words[0] != "UPLOADED" {
+			return
+		}
+		if words[1] != desktop.key.ServiceID() {
+			desktop.mu.Lock()
+			if service := desktop.ephemeral[words[1]]; service != nil {
+				service.published = true
+			}
+			desktop.mu.Unlock()
 			return
 		}
 		desktop.update(func(state *State) {
@@ -431,4 +458,157 @@ func (desktop *Desktop) handleEvent(event string) {
 			state.Err = nil
 		})
 	}
+}
+
+// ephemeralOnion is a temporary onion service published next to the desktop
+// one for a Broto pairing by QR.
+type ephemeralOnion struct {
+	key       *OnionKey
+	published bool
+}
+
+// errEphemeralMismatch reports a temporary service published under another
+// address. Unlike ErrAddressMismatch it does not stop the desktop service.
+var errEphemeralMismatch = errors.New("tor published a temporary onion service under another address")
+
+// AddEphemeral publishes the temporary onion service of seed next to the
+// desktop one: single hop, with port 443 to the same listener, so its
+// connections reach the edge like the others. It returns "<id>.onion" without
+// waiting for the descriptor upload, which EphemeralPublished reports. Every
+// restart of Tor adds the service again until RemoveEphemeral. Adding it
+// twice is harmless.
+func (desktop *Desktop) AddEphemeral(seed [32]byte) (string, error) {
+	key, err := OnionKeyFromSeed(seed[:])
+	if err != nil {
+		return "", err
+	}
+	id := key.ServiceID()
+	if id == desktop.key.ServiceID() {
+		return "", errors.New("a temporary onion service cannot reuse the desktop key")
+	}
+	desktop.ephemeralMu.Lock()
+	defer desktop.ephemeralMu.Unlock()
+	if desktop.ctx.Err() != nil {
+		return "", ErrDesktopClosed
+	}
+	desktop.mu.Lock()
+	_, exists := desktop.ephemeral[id]
+	if !exists {
+		desktop.ephemeral[id] = &ephemeralOnion{key: key}
+	}
+	control := desktop.control
+	desktop.mu.Unlock()
+	if exists || control == nil {
+		// Without a registered Tor, register adds it on the next start.
+		return key.Address(), nil
+	}
+	ctx, cancel := context.WithTimeout(desktop.ctx, desktop.config.controlWait)
+	defer cancel()
+	if err := desktop.addEphemeralOnion(ctx, control, key); err != nil && refusedByTor(err) {
+		desktop.mu.Lock()
+		delete(desktop.ephemeral, id)
+		desktop.mu.Unlock()
+		return "", err
+	}
+	// Any other failure lost the control connection: Tor restarts and
+	// register adds the service again.
+	return key.Address(), nil
+}
+
+// RemoveEphemeral withdraws a temporary service. address is "<id>.onion",
+// with or without the port; an address that was not added is ignored.
+func (desktop *Desktop) RemoveEphemeral(address string) error {
+	id, err := ephemeralServiceID(address)
+	if err != nil {
+		return err
+	}
+	desktop.ephemeralMu.Lock()
+	defer desktop.ephemeralMu.Unlock()
+	desktop.mu.Lock()
+	_, exists := desktop.ephemeral[id]
+	delete(desktop.ephemeral, id)
+	control := desktop.control
+	desktop.mu.Unlock()
+	if !exists || control == nil {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(desktop.ctx, desktop.config.controlWait)
+	defer cancel()
+	_, err = control.do(ctx, "DEL_ONION "+id)
+	var refused *ControlError
+	if errors.As(err, &refused) && refused.Status != 552 {
+		return fmt.Errorf("DEL_ONION: %w", err)
+	}
+	// 552 means this Tor does not know the service; a lost connection means
+	// Tor is restarting without it.
+	return nil
+}
+
+// EphemeralPublished reports whether the running Tor uploaded the descriptor
+// of a temporary service.
+func (desktop *Desktop) EphemeralPublished(address string) bool {
+	id, err := ephemeralServiceID(address)
+	if err != nil {
+		return false
+	}
+	desktop.mu.Lock()
+	defer desktop.mu.Unlock()
+	service := desktop.ephemeral[id]
+	return service != nil && service.published
+}
+
+// restoreEphemerals adds the temporary services to a new Tor, which knows
+// nothing of the previous one, and then hands control to AddEphemeral and
+// RemoveEphemeral. A service this Tor refuses stays unpublished; a lost
+// connection fails the run like any other setup command.
+func (desktop *Desktop) restoreEphemerals(ctx context.Context, control *controlConn) error {
+	desktop.ephemeralMu.Lock()
+	defer desktop.ephemeralMu.Unlock()
+	desktop.mu.Lock()
+	keys := make([]*OnionKey, 0, len(desktop.ephemeral))
+	for _, service := range desktop.ephemeral {
+		service.published = false
+		keys = append(keys, service.key)
+	}
+	desktop.mu.Unlock()
+	for _, key := range keys {
+		if err := desktop.addEphemeralOnion(ctx, control, key); err != nil && !refusedByTor(err) {
+			return err
+		}
+	}
+	desktop.mu.Lock()
+	desktop.control = control
+	desktop.mu.Unlock()
+	return nil
+}
+
+func (desktop *Desktop) addEphemeralOnion(ctx context.Context, control *controlConn, key *OnionKey) error {
+	serviceID, err := control.addOnion(ctx, onionRequest{
+		key: key, virtualPort: OnionPort, target: desktop.listener.Addr().String(), nonAnonymous: true,
+	})
+	if err != nil {
+		return err
+	}
+	if serviceID != key.ServiceID() {
+		return fmt.Errorf("%w: %s.onion instead of %s", errEphemeralMismatch, serviceID, key.Address())
+	}
+	return nil
+}
+
+// refusedByTor tells a reply of a working Tor apart from a lost connection.
+func refusedByTor(err error) bool {
+	var refused *ControlError
+	return errors.As(err, &refused) || errors.Is(err, errEphemeralMismatch)
+}
+
+func ephemeralServiceID(address string) (string, error) {
+	host := address
+	if withoutPort, _, err := net.SplitHostPort(address); err == nil {
+		host = withoutPort
+	}
+	canonical, _, err := ParseOnionAddress(host)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(canonical, onionSuffix), nil
 }

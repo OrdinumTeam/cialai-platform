@@ -229,8 +229,8 @@ assert.equal((workflow.match(/releaseAssetNamePattern: "\[name\]_\[arch\]\[setup
 assert.equal((workflow.match(/--config src-tauri\/tauri\.release\.conf\.json/g) ?? []).length, 3, 'both tauri-action steps and the Linux build use the release config');
 assert.equal((workflow.match(/uploadUpdaterJson: false/g) ?? []).length, 2, 'parallel jobs must not race on latest.json');
 assert.match(workflow, /node tools\/release\/signing-mode\.mjs\n\s+--target \$\{\{ matrix\.target \}\}\n\s+--config-out apps\/desktop\/src-tauri\/tauri\.release\.conf\.json/);
-assert.match(workflow, /- os: macos-14\n\s+target: aarch64-apple-darwin\n\s+- os: macos-14\n\s+target: x86_64-apple-darwin/);
-assert.doesNotMatch(workflow, /macos-13/, 'macos-13 runners are retired');
+assert.match(workflow, /- os: macos-15\n\s+target: aarch64-apple-darwin\n\s+- os: macos-15\n\s+target: x86_64-apple-darwin/);
+assert.doesNotMatch(workflow, /macos-1[34]\b/, 'macos-13 and macos-14 runners are retired');
 const developerStep = workflow.slice(workflow.indexOf('- name: Build and upload with Developer ID'), workflow.indexOf('- name: Build and upload\n'));
 const defaultStep = workflow.slice(workflow.indexOf('- name: Build and upload\n'), workflow.indexOf('- name: Build the Linux bundles'));
 assert.match(developerStep, /if: steps\.signing\.outputs\.macos == 'developer-id'/);

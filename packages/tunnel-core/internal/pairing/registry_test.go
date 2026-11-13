@@ -292,9 +292,9 @@ func TestRegistryRejectsInvalidInputAndCorruptState(t *testing.T) {
 		return bytes.Replace(valid, []byte(old), []byte(replacement), 1)
 	}
 	for name, raw := range map[string][]byte{
-		"version-3":          replace(`"version": 2`, `"version": 3`),
-		"version-missing":    replace(`"version": 2,`, ``),
-		"unknown-field":      replace(`"version": 2,`, `"version": 2, "headscale": true,`),
+		"version-unknown":    replace(`"version": 3`, `"version": 4`),
+		"version-missing":    replace(`"version": 3,`, ``),
+		"unknown-field":      replace(`"version": 3,`, `"version": 3, "headscale": true,`),
 		"id-not-derived":     replace(`"deviceKey": "`+testDeviceInput(0x44).DeviceKey+`"`, `"deviceKey": "`+otherKey+`"`),
 		"transport-invalid":  replace(`"lastTransport": "direct"`, `"lastTransport": "tailnet"`),
 		"remote-invalid":     replace(`"lastRemoteAddr": "192.168.15.40:51234"`, `"lastRemoteAddr": "nowhere"`),

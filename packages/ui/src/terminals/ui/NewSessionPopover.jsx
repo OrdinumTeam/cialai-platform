@@ -100,8 +100,10 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
   const { locale } = useI18n();
   const [query, setQuery] = useState('');
   const [name, setName] = useState('');
-  const [look, setLook] = useState({ open: false, color: null, icon: null });
-  const chosen = customize ? { color: look.color, icon: look.icon } : undefined;
+  // `touched` separa nao mexeu de escolheu o padrao: sem toque nenhum a
+  // sessao herda a cor e o icone que a pasta lembra.
+  const [look, setLook] = useState({ open: false, touched: false, color: null, icon: null });
+  const chosen = customize && look.touched ? { color: look.color, icon: look.icon } : undefined;
   const [repos, setRepos] = useState(null);
   const [index, setIndex] = useState(0);
   // `null` fora do modo navegar. Dentro dele, o que `list_dirs` devolveu.
@@ -148,7 +150,7 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
   const flat = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   useEffect(() => { setIndex(0); }, [query]);
 
-  const pick = useCallback((path) => { onPick(path, name.trim(), chosen); }, [onPick, name, chosen?.color, chosen?.icon]);
+  const pick = useCallback((path) => { onPick(path, name.trim(), chosen); }, [onPick, name, Boolean(chosen), chosen?.color, chosen?.icon]);
 
   const onKeyDown = (event) => {
     if (event.key === 'Escape') { event.preventDefault(); onClose(); }
@@ -275,8 +277,8 @@ export default function NewSessionPopover({ anchor, onClose, onPick, onBrowse, s
           onToggle={() => setLook((value) => ({ ...value, open: !value.open }))}
           color={look.color}
           icon={look.icon}
-          onColor={(color) => setLook((value) => ({ ...value, color }))}
-          onIcon={(icon) => setLook((value) => ({ ...value, icon }))}
+          onColor={(color) => setLook((value) => ({ ...value, touched: true, color }))}
+          onIcon={(icon) => setLook((value) => ({ ...value, touched: true, icon }))}
         />
       ) : null}
       <div className="terminais-pop__foot">

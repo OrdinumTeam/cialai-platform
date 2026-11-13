@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { FilePlus2, Monitor, Moon, PanelLeft, PanelRight, PanelRightClose, RefreshCw, Search, Settings, SquareTerminal, Sun } from 'lucide-react';
+import { AppWindow, FilePlus2, Monitor, Moon, PanelLeft, PanelRight, PanelRightClose, RefreshCw, Search, Settings, SquareTerminal, Sun, UsersRound } from 'lucide-react';
 import { collectPaletteItems } from './palette-registry.js';
 import { currentOs, shortcutLabel } from '../lib/keys.js';
 import { toggleShortcut } from '../notch/model.js';
+import { setTerminalTheme } from '../terminals/terminal-theme.js';
 import { translate } from './i18n.js';
 
 function normalize(value) { return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
@@ -33,11 +34,15 @@ export default function CommandPalette({ open, onClose, views, actions, appearan
     { id: 'notch-toggle', kind: translate('desktop.palette.action'), label: translate('desktop.notch.action.toggle'), shortcut: shortcutLabel(toggleShortcut(currentOs())), icon: PanelRight, run: actions.toggleNotch },
     { id: 'notch-hide', kind: translate('desktop.palette.action'), label: translate('desktop.notch.action.hide'), icon: PanelRightClose, run: actions.hideNotch },
     { id: 'prefs', kind: translate('desktop.palette.action'), label: translate('desktop.preferences.title'), shortcut: shortcutLabel('Mod+Comma'), icon: Settings, run: actions.openPreferences },
+    { id: 'agent-profiles', kind: translate('desktop.palette.action'), label: translate('agentProfiles.title'), icon: UsersRound, run: () => actions.openAgentProfiles() },
     { id: 'new-terminal', kind: translate('view.terminais.label'), label: translate('desktop.action.newTerminal'), shortcut: shortcutLabel('Mod+T'), icon: SquareTerminal, run: actions.newTerminal },
     { id: 'new-file', kind: translate('view.terminais.label'), label: translate('desktop.action.newTemporaryFile'), shortcut: shortcutLabel('Mod+N'), icon: FilePlus2, run: actions.newFile },
     { id: 'ap-system', kind: translate('desktop.preferences.appearance'), label: translate('desktop.appearance.system'), icon: Monitor, run: () => appearance.setMode('system') },
     { id: 'ap-light', kind: translate('desktop.preferences.appearance'), label: translate('desktop.appearance.light'), icon: Sun, run: () => appearance.setMode('light') },
     { id: 'ap-dark', kind: translate('desktop.preferences.appearance'), label: translate('desktop.appearance.dark'), icon: Moon, run: () => appearance.setMode('dark') },
+    { id: 'ap-terminal-app', kind: translate('desktop.preferences.terminalTheme'), label: translate('desktop.appearance.terminalFollowWindow'), icon: AppWindow, run: () => setTerminalTheme('app') },
+    { id: 'ap-terminal-light', kind: translate('desktop.preferences.terminalTheme'), label: translate('desktop.appearance.terminalLight'), icon: Sun, run: () => setTerminalTheme('light') },
+    { id: 'ap-terminal-dark', kind: translate('desktop.preferences.terminalTheme'), label: translate('desktop.appearance.terminalDark'), icon: Moon, run: () => setTerminalTheme('dark') },
   ], [views, actions, appearance, provided]);
   const filtered = useMemo(() => rank(items, query), [items, query]);
   useEffect(() => { if (!open) return undefined; setQuery(''); setIndex(0); setProvided(collectPaletteItems()); const timer = setTimeout(() => inputRef.current?.focus(), 20); return () => clearTimeout(timer); }, [open]);

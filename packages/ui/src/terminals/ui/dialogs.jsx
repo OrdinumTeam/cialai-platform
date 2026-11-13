@@ -92,11 +92,14 @@ export function ConflictDialog({ request, onCancel, onReload, onOverwrite }) {
 }
 
 export function DeleteDialog({ request, onCancel, onConfirm }) {
+  const many = request?.kind === 'many';
   const isDir = request?.kind === 'dir';
+  const title = many ? 'terminal.dialog.trashManyTitle' : isDir ? 'terminal.dialog.trashFolderTitle' : 'terminal.dialog.trashFileTitle';
+  const description = many ? 'terminal.dialog.trashManyDescription' : isDir ? 'terminal.dialog.trashFolderDescription' : 'terminal.dialog.trashFileDescription';
   return (
     <Sheet
       open={Boolean(request)}
-      title={translate(isDir ? 'terminal.dialog.trashFolderTitle' : 'terminal.dialog.trashFileTitle')}
+      title={translate(title)}
       onClose={onCancel}
       actions={(
         <>
@@ -105,7 +108,7 @@ export function DeleteDialog({ request, onCancel, onConfirm }) {
         </>
       )}
     >
-      {request ? translate(isDir ? 'terminal.dialog.trashFolderDescription' : 'terminal.dialog.trashFileDescription', { name: request.name }) : ''}
+      {request ? translate(description, many ? { count: request.count } : { name: request.name }) : ''}
     </Sheet>
   );
 }

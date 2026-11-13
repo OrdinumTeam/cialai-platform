@@ -33,21 +33,27 @@ type ConsumedSession struct {
 }
 
 type session struct {
+	broto     bool
+	claim     *BrotoPending
+	approved  bool
 	secret    []byte
 	expiresAt time.Time
 	desktop   Desktop
 	consumed  bool
 	failures  int
+	// qr is set for a Broto pairing by QR, opened by BeginQR.
+	qr *qrSession
 }
 
 // Sessions holds the one-use pairing authorizations. No Headscale pre-auth key
 // exists any more: possession of the QR secret plus the phone's TLS key is the
 // whole authorization.
 type Sessions struct {
-	mu     sync.Mutex
-	now    func() time.Time
-	random io.Reader
-	items  map[string]*session
+	mu         sync.Mutex
+	now        func() time.Time
+	random     io.Reader
+	items      map[string]*session
+	onQRChange func(qrID string)
 }
 
 func NewSessions(now func() time.Time, random io.Reader) *Sessions {
@@ -67,6 +73,10 @@ func NewSessions(now func() time.Time, random io.Reader) *Sessions {
 // then the lowest priority ones that do not fit in MaxJSONBytes, are left out
 // because the onion is always present.
 func (sessions *Sessions) Begin(template Payload, ttl time.Duration) (ActiveSession, error) {
+	return sessions.begin(template, ttl, false)
+}
+
+func (sessions *Sessions) begin(template Payload, ttl time.Duration, broto bool) (ActiveSession, error) {
 	if ttl <= 0 || ttl > MaxSessionTTL {
 		return ActiveSession{}, NewError("payload_invalid", "A validade da sessão de pareamento é inválida.")
 	}
@@ -96,7 +106,10 @@ func (sessions *Sessions) Begin(template Payload, ttl time.Duration) (ActiveSess
 	if err != nil {
 		return ActiveSession{}, err
 	}
-	sessions.items[pairID] = &session{secret: secret, expiresAt: expiresAt, desktop: template.Desktop}
+	if broto {
+		payload = BrotoPrefix + payload[len(Prefix):]
+	}
+	sessions.items[pairID] = &session{secret: secret, expiresAt: expiresAt, desktop: template.Desktop, broto: broto}
 	return ActiveSession{PairID: pairID, Payload: payload, ExpiresAt: expiresAt}, nil
 }
 
@@ -162,6 +175,9 @@ func (sessions *Sessions) Consume(pairID, encodedSecret string) (ConsumedSession
 	if err != nil {
 		return ConsumedSession{}, err
 	}
+	if current.broto || current.qr != nil {
+		return ConsumedSession{}, NewError("pair_role", "Use o fluxo de Broto.")
+	}
 	current.consumed = true
 	return sessionResult(pairID, current), nil
 }
@@ -174,6 +190,9 @@ func (sessions *Sessions) Verify(pairID, encodedSecret string) (ConsumedSession,
 	current, err := sessions.checkLocked(pairID, encodedSecret)
 	if err != nil {
 		return ConsumedSession{}, err
+	}
+	if current.broto || current.qr != nil {
+		return ConsumedSession{}, NewError("pair_role", "Use o fluxo de Broto.")
 	}
 	return sessionResult(pairID, current), nil
 }
@@ -203,10 +222,13 @@ func sessionResult(pairID string, current *session) ConsumedSession {
 	return ConsumedSession{PairID: pairID, ExpiresAt: current.expiresAt, Desktop: current.desktop}
 }
 
+// Cancel drops a session. QR sessions are not cancelled here: they end by the
+// decision of the phone and stay known until pruned, so the same QR cannot
+// open a second session.
 func (sessions *Sessions) Cancel(pairID string) error {
 	sessions.mu.Lock()
 	defer sessions.mu.Unlock()
-	if _, exists := sessions.items[pairID]; !exists {
+	if current, exists := sessions.items[pairID]; !exists || current.qr != nil {
 		return NewError("pair_unknown", "O pareamento já não está ativo.")
 	}
 	delete(sessions.items, pairID)

@@ -24,6 +24,11 @@ const ACCESS = Object.freeze({
   agent_profile_select: 'session',
   agent_profile_create: 'session',
   pty_launch_agent: 'terminal',
+  // Ligar um Broto pelo QR. Comecar e responder mudam o computador e pedem a
+  // sessao aberta; acompanhar o estado so le, a cada poucos segundos.
+  broto_qr_begin: 'session',
+  broto_qr_state: 'read',
+  broto_qr_decide: 'session',
 });
 
 export const REMOTE_COMMANDS = Object.freeze(Object.keys(ACCESS));

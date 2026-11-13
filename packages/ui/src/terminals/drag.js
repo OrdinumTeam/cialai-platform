@@ -49,6 +49,7 @@ function emit(type, event) {
     kind: current.kind,
     id: current.id,
     path: current.path,
+    paths: current.paths,
     dir: current.dir,
     x: event.clientX,
     y: event.clientY,
@@ -94,14 +95,16 @@ function outsideWindow(event) {
   return event.clientX <= 0 || event.clientY <= 0 || event.clientX >= window.innerWidth || event.clientY >= window.innerHeight;
 }
 
-async function handOff(path) {
-  nativeOut = { path, since: Date.now() };
+async function handOff(paths) {
+  const list = (paths || []).filter(Boolean);
+  if (!list.length) return;
+  nativeOut = { path: list[0], paths: list, since: Date.now() };
   if (!nativeEndBound) {
     nativeEndBound = true;
     onNativeDragEnd(() => { nativeOut = null; }).catch(() => { nativeEndBound = false; });
   }
   try {
-    const started = await startNativeDrag([path]);
+    const started = await startNativeDrag(list);
     if (!started) nativeOut = null;
   } catch (error) {
     nativeOut = null;
@@ -113,11 +116,12 @@ async function handOff(path) {
 // explorador, 'session' para um card de sessao. Quem recebe confere o kind
 // e ignora o que nao lhe cabe. `dir` acompanha um caminho de pasta, para
 // destinos que so aceitam arquivo.
-export function beginDrag(event, { path = null, label, kind = 'path', id = null, dir = false }) {
+export function beginDrag(event, { path = null, paths = null, label, kind = 'path', id = null, dir = false }) {
   if (event.button !== 0 || current) return;
   const startX = event.clientX;
   const startY = event.clientY;
-  current = { path, label, kind, id, dir: Boolean(dir), active: false, ghost: null };
+  const list = paths && paths.length ? paths : (path ? [path] : []);
+  current = { path, paths: list, label, kind, id, dir: Boolean(dir), active: false, ghost: null };
 
   const finish = (type, moveEvent) => {
     const wasActive = current?.active;
@@ -147,10 +151,10 @@ export function beginDrag(event, { path = null, label, kind = 'path', id = null,
       current.ghost = ghostFor(current.label);
       document.body.classList.add('is-dragging-path');
     }
-    if (current.kind === 'path' && current.path && outsideWindow(moveEvent)) {
-      const { path } = current;
+    if (current.kind === 'path' && current.paths.length && outsideWindow(moveEvent)) {
+      const { paths } = current;
       finish('cancel', moveEvent);
-      handOff(path);
+      handOff(paths);
       return;
     }
     moveEvent.preventDefault();

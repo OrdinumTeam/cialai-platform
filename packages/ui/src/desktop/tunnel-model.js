@@ -299,6 +299,7 @@ export const DIAGNOSTIC_CHECK_KEYS = Object.freeze({
   onion_published: 'desktop.access.check.onionPublished',
   mdns: 'desktop.access.check.mdns',
   edge: 'desktop.access.check.edge',
+  broto_ipc: 'desktop.access.check.brotoIPC',
 });
 
 export function normalizeDiagnostics(result) {

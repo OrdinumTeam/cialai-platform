@@ -37,9 +37,13 @@ use self::macos as backend;
 mod windows;
 #[cfg(target_os = "windows")]
 use self::windows as backend;
+#[cfg(target_os = "windows")]
+pub(crate) use self::windows::os_build;
 
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 mod generic;
+#[cfg(target_os = "linux")]
+mod linux_buttons;
 #[cfg(not(any(target_os = "macos", target_os = "windows")))]
 use self::generic as backend;
 

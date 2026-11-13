@@ -122,6 +122,22 @@ func (client *Client) DialTLS(ctx context.Context, onion string, local *identity
 	return client.dialTLS(ctx, onion, config)
 }
 
+// DialTLSRecord is DialTLS without a pin, for the first contact of a Broto
+// that pairs by QR: it accepts any valid host key and returns it, so the
+// caller pins it from then on.
+func (client *Client) DialTLSRecord(ctx context.Context, onion string, local *identity.Identity) (*tls.Conn, ed25519.PublicKey, error) {
+	var recorded ed25519.PublicKey
+	config, err := identity.RecordingClientConfig(local, func(key ed25519.PublicKey) { recorded = key })
+	if err != nil {
+		return nil, nil, err
+	}
+	conn, err := client.dialTLS(ctx, onion, config)
+	if err != nil {
+		return nil, nil, err
+	}
+	return conn, recorded, nil
+}
+
 // DialControlTLS is DialTLS for a connection dedicated to the rendezvous
 // control channel: it negotiates identity.ControlALPN, so the onion listener
 // of the desktop hands it to the control channel instead of the edge.
@@ -165,4 +181,29 @@ func (client *Client) Bootstrap(ctx context.Context) (Bootstrap, error) {
 		return Bootstrap{}, fmt.Errorf("tor control authentication: %w", err)
 	}
 	return control.bootstrap(ctx)
+}
+
+// Newnym sends SIGNAL NEWNYM: Tor stops using its current circuits and forgets
+// what it learned about onion services, such as a descriptor that was still
+// missing a moment ago, so the next dial looks it up again. Tor applies the
+// signal at most once every ten seconds. Like Bootstrap it never takes
+// ownership of the Tor.
+func (client *Client) Newnym(ctx context.Context) error {
+	endpoints, ok := client.TorEndpoints()
+	if !ok {
+		return ErrNoEndpoints
+	}
+	if endpoints.Control == "" {
+		return ErrNoControlEndpoint
+	}
+	control, err := dialControl(ctx, endpoints.Control)
+	if err != nil {
+		return err
+	}
+	defer control.Close()
+	if err := control.authenticate(ctx, endpoints.CookiePath); err != nil {
+		return fmt.Errorf("tor control authentication: %w", err)
+	}
+	_, err = control.do(ctx, "SIGNAL NEWNYM")
+	return err
 }

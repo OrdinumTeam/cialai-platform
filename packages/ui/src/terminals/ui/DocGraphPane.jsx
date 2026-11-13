@@ -11,13 +11,21 @@
 // A visao interna e montada de novo quando a raiz do projeto muda. O painel
 // assina a raiz por conta propria porque `changeDirectory` escreve a raiz sem
 // emitir o evento `editor`, que e o unico que o `EditorPane` memoizado ouve.
+//
+// A barra tem o seletor de vista, discreto, com o nome da vista em uso, e o
+// botao das opcoes: escopo, cor, paleta, regras, links e profundidade.
 
 import React, { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronsDownUp, ChevronsUpDown, LocateFixed, Minus, Palette, Plus, RefreshCw, Scan } from 'lucide-react';
+import {
+  AlertTriangle, Box, ChevronDown, ChevronsDownUp, ChevronsUpDown, LayoutDashboard, ListTree, LocateFixed, Minus, Network, Orbit, Plus, RefreshCw, Scan,
+  SlidersHorizontal, Waypoints,
+} from 'lucide-react';
 import { useCamera } from '../docgraph/camera.js';
 import { useToast } from '../../components/ui.jsx';
 import { copyToClipboard } from '../../lib/helpers.js';
-import { STRINGS, countsAnnouncement, issuesCount } from '../docgraph/copy.js';
+import { STRINGS, countsAnnouncement, issuesCount, viewName } from '../docgraph/copy.js';
+import { VIEW_MODES } from '../docgraph/options.js';
+import { translate } from '../../shared/i18n.js';
 import { baseName, fs, joinPath, nativeAvailable } from '../files.js';
 import { useRuntimeEvents, useRuntimeValue } from '../hooks.js';
 import { motionOff } from '../motion.js';
@@ -28,9 +36,10 @@ import DocGraphPreview from './DocGraphPreview.jsx';
 import Splitter from './Splitter.jsx';
 import { LAYOUT_LIMITS, setLayout, useLayout } from '../layout.js';
 import { closeDocGraphPreview } from '../docgraph/tab.js';
-import { DetailCard, GraphState, HoverTip, IssuesPopover, Legend, SearchBox, TreeMirror, countsLabel } from './DocGraphOverlays.jsx';
+import { DetailCard, GraphOptions, GraphState, HoverTip, IssuesPopover, Legend, SearchBox, TreeMirror, ViewNote, countsLabel } from './DocGraphOverlays.jsx';
 
 const WORLD = { w: 1, h: 1 };
+const VIEW_ICONS = { map: Network, tree: ListTree, radial: Orbit, blocks: LayoutDashboard, neighbors: Waypoints, space: Box };
 const SCALE_RANGE = [0.03, 3.2];
 
 let enginePromise = null;
@@ -57,12 +66,19 @@ function DocGraphView({ engine, session, root, actions }) {
   const [hover, setHover] = useState(null);
   const [menu, setMenu] = useState(null);
   const [issuesOpen, setIssuesOpen] = useState(false);
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  // A dica do 3D some no primeiro gesto sobre o grafo.
+  const [orbitSeen, setOrbitSeen] = useState(false);
   const [stat, setStat] = useState(null);
   const [dark, setDark] = useState(isDarkTheme);
   const [zoom, setZoom] = useState(100);
   const zoomTimer = useRef(0);
   const viewRef = useRef(null);
   const cameraRef = useRef(null);
+  // O tema do canvas depende da paleta escolhida; a troca de tema da janela
+  // le a paleta daqui.
+  const paletteRef = useRef(controller.palette);
+  paletteRef.current = controller.palette;
 
   const onFrame = useCallback((view) => {
     rendererRef.current?.setView(view);
@@ -128,7 +144,7 @@ function DocGraphView({ engine, session, root, actions }) {
     if (!host || !canvas) return undefined;
     const renderer = new engine.DocGraphRenderer({ stats: engine.track });
     rendererRef.current = renderer;
-    renderer.theme = engine.readGraphTheme();
+    renderer.theme = engine.readGraphTheme(paletteRef.current);
     renderer.view = { ...camera.getView() };
     renderer.attach(canvas, host, {
       onResize: () => { const current = api.peekController(sessionId); if (current?.needsFit || current?.autoFit) api.fitToArea(sessionId, { animate: false }); },
@@ -163,7 +179,7 @@ function DocGraphView({ engine, session, root, actions }) {
       },
     });
     engine.track.on('observer');
-    const offTheme = watchTheme(() => { setDark(isDarkTheme()); renderer.setTheme(engine.readGraphTheme()); });
+    const offTheme = watchTheme(() => { setDark(isDarkTheme()); renderer.setTheme(engine.readGraphTheme(paletteRef.current)); });
     return () => {
       offTheme();
       engine.track.off('observer');
@@ -176,6 +192,12 @@ function DocGraphView({ engine, session, root, actions }) {
     // A visao e remontada por `key` quando a raiz muda; as acoes sao estaveis.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [engine, sessionId]);
+
+  // Paleta nova: o canvas troca as cores sem esperar a troca de tema.
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    if (renderer && renderer.theme?.palette !== controller.palette) renderer.setTheme(engine.readGraphTheme(controller.palette));
+  }, [engine, controller.palette]);
 
   // Selecao, busca e foco do teclado chegam ao canvas por aqui.
   useEffect(() => {
@@ -194,11 +216,13 @@ function DocGraphView({ engine, session, root, actions }) {
     const renderer = rendererRef.current;
     if (!view || !renderer) return;
     const origin = view.getBoundingClientRect();
-    const rects = [...view.querySelectorAll('.terminais-docgraph__card, .terminais-docgraph__legend, .terminais-docgraph__counts')].map((element) => {
+    const rects = [...view.querySelectorAll('.terminais-docgraph__card, .terminais-docgraph__legend, .terminais-docgraph__counts, .terminais-docgraph__note')].map((element) => {
       const rect = element.getBoundingClientRect();
       return { x: rect.left - origin.left, y: rect.top - origin.top, w: rect.width, h: rect.height };
     }).filter((rect) => rect.w > 0 && rect.h > 0);
     renderer.setOccluded(rects);
+    const legend = view.querySelector('.terminais-docgraph__legend')?.getBoundingClientRect();
+    api.setReserve(sessionId, legend && legend.width > 0 ? legend.width + 16 : 0);
   });
 
   // Tamanho e data do documento selecionado, lidos na hora: o indice guarda
@@ -237,9 +261,22 @@ function DocGraphView({ engine, session, root, actions }) {
   const idFor = useCallback((id) => `docgraph-${sessionId}-${encodeURIComponent(id)}`, [sessionId]);
   const announcement = useMemo(() => {
     if (!ready || !controller.tree) return '';
-    const base = countsAnnouncement(controller.tree.docCount, controller.tree.dirCount);
+    const base = countsAnnouncement(controller.tree.docCount, controller.tree.dirCount, controller.scope);
     return meta?.partial ? `${base}. ${STRINGS.partialTitle}` : base;
-  }, [ready, controller.tree, meta]);
+  }, [ready, controller.tree, controller.scope, meta]);
+
+  const ViewIcon = VIEW_ICONS[controller.mode] || Network;
+  const currentView = viewName(controller.mode);
+  const openViews = (event) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setOptionsOpen(false);
+    setMenu({
+      anchor: { x: rect.left, y: rect.bottom + 4, align: 'left', flipOffset: rect.height + 8 },
+      label: STRINGS.view,
+      items: VIEW_MODES.map((mode) => ({ id: mode, label: viewName(mode), icon: VIEW_ICONS[mode], current: controller.mode === mode, run: () => api.setMode(sessionId, mode) })),
+    });
+  };
+  const readProject = () => api.setScope(sessionId, 'project');
 
   return (
     <div className="terminais-docgraph">
@@ -254,6 +291,7 @@ function DocGraphView({ engine, session, root, actions }) {
         />
         {controller.refreshing ? <span className="terminais-docgraph__chip">{STRINGS.refreshing}</span> : null}
         {controller.stale ? <span className="terminais-docgraph__chip terminais-docgraph__chip--warn">{STRINGS.stale}</span> : null}
+        {ready && controller.refs && meta?.linksPartial ? <span className="terminais-docgraph__chip terminais-docgraph__chip--warn" title={STRINGS.linksPartialHint}>{STRINGS.linksPartial}</span> : null}
         {ready && meta?.partial ? (
           <span className="terminais-docgraph__anchor">
             <button type="button" className="terminais-docgraph__chip terminais-docgraph__chip--warn" onClick={() => setIssuesOpen((value) => !value)} aria-expanded={issuesOpen} aria-haspopup="dialog">
@@ -264,6 +302,20 @@ function DocGraphView({ engine, session, root, actions }) {
           </span>
         ) : null}
         <span className="terminais-pane__spacer" />
+        <button
+          type="button"
+          className="terminais-docgraph__viewbtn"
+          onClick={openViews}
+          disabled={!ready}
+          aria-haspopup="menu"
+          aria-label={translate('terminal.docgraph.viewTitle', { view: currentView })}
+          title={translate('terminal.docgraph.viewTitle', { view: currentView })}
+        >
+          <ViewIcon size={13} strokeWidth={1.75} aria-hidden="true" />
+          <span>{currentView}</span>
+          <ChevronDown size={11} strokeWidth={2} aria-hidden="true" />
+        </button>
+        <span className="terminais-work__sep" aria-hidden="true" />
         <button type="button" className="terminais-pane__tool" onClick={() => { byUser.current = true; camera.zoomBy(1 / 1.35); }} disabled={!ready} aria-label={STRINGS.zoomOut} title={`${STRINGS.zoomOut}, −`}><Minus size={14} strokeWidth={1.75} /></button>
         <span className="terminais-docgraph__zoom" aria-live="off">{zoom}%</span>
         <button type="button" className="terminais-pane__tool" onClick={() => { byUser.current = true; camera.zoomBy(1.35); }} disabled={!ready} aria-label={STRINGS.zoomIn} title={`${STRINGS.zoomIn}, +`}><Plus size={14} strokeWidth={1.75} /></button>
@@ -272,7 +324,35 @@ function DocGraphView({ engine, session, root, actions }) {
         <span className="terminais-work__sep" aria-hidden="true" />
         <button type="button" className="terminais-pane__tool" onClick={() => api.expandAll(sessionId)} disabled={!ready} aria-label={STRINGS.expandAll} title={STRINGS.expandAll}><ChevronsUpDown size={13} strokeWidth={1.75} /></button>
         <button type="button" className="terminais-pane__tool" onClick={() => api.collapseAll(sessionId)} disabled={!ready} aria-label={STRINGS.collapseAll} title={STRINGS.collapseAll}><ChevronsDownUp size={13} strokeWidth={1.75} /></button>
-        <button type="button" className="terminais-pane__tool" onClick={() => api.regroupColors(sessionId)} disabled={!ready || !controller.groups.length} aria-label={STRINGS.regroup} title={STRINGS.regroup}><Palette size={13} strokeWidth={1.75} /></button>
+        <span className="terminais-docgraph__anchor">
+          <button
+            type="button"
+            className={`terminais-pane__tool terminais-docgraph__options-toggle${optionsOpen ? ' is-on' : ''}`}
+            onClick={() => setOptionsOpen((value) => !value)}
+            disabled={!native}
+            aria-expanded={optionsOpen}
+            aria-haspopup="dialog"
+            aria-label={STRINGS.options}
+            title={STRINGS.options}
+          >
+            <SlidersHorizontal size={13} strokeWidth={1.75} />
+          </button>
+          {optionsOpen ? (
+            <GraphOptions
+              controller={controller}
+              engine={engine}
+              dark={dark}
+              onClose={() => setOptionsOpen(false)}
+              onScope={(scope) => api.setScope(sessionId, scope)}
+              onColorBy={(mode) => api.setColorBy(sessionId, mode)}
+              onPalette={(palette) => api.setPalette(sessionId, palette)}
+              onRules={(rules) => api.setRules(sessionId, rules)}
+              onRefs={(on) => api.setRefs(sessionId, on)}
+              onDepth={(depth) => api.setDepth(sessionId, depth)}
+              onRegroup={() => api.regroupColors(sessionId)}
+            />
+          ) : null}
+        </span>
         <button type="button" className="terminais-pane__tool" onClick={() => api.refresh(sessionId)} disabled={controller.status === 'broad' || !native} aria-label={STRINGS.refresh} title={STRINGS.refreshTitle}><RefreshCw size={13} strokeWidth={1.75} /></button>
       </div>
       <div className={`terminais-docgraph__progress${controller.refreshing ? ' is-loading' : ''}`} aria-hidden="true" />
@@ -282,7 +362,8 @@ function DocGraphView({ engine, session, root, actions }) {
           className="terminais-docgraph__host"
           tabIndex={0}
           role="tree"
-          aria-label={STRINGS.treeLabel}
+          aria-label={controller.mode === 'neighbors' ? STRINGS.neighborsLabel : STRINGS.treeLabel}
+          onPointerDown={() => { if (!orbitSeen && controller.mode === 'space') setOrbitSeen(true); }}
           aria-activedescendant={ready && controller.selected ? idFor(controller.selected) : undefined}
         >
           <canvas ref={canvasRef} className="terminais-docgraph__canvas" aria-hidden="true" />
@@ -290,7 +371,9 @@ function DocGraphView({ engine, session, root, actions }) {
         </div>
         <div className="sr-only" aria-live="polite">{announcement}</div>
         {ready ? <div className="terminais-docgraph__counts" title={root}>{countsLabel(controller)}</div> : null}
-        {ready ? <Legend controller={controller} dark={dark} onFocus={(id) => api.reveal(sessionId, id)} /> : null}
+        {ready ? <Legend controller={controller} engine={engine} dark={dark} onFocus={(id) => api.reveal(sessionId, id)} /> : null}
+        {ready ? <ViewNote controller={controller} onReadProject={readProject} /> : null}
+        {ready && controller.mode === 'space' && !orbitSeen ? <div className="terminais-docgraph__note is-quiet" role="note"><span>{STRINGS.orbitHint}</span></div> : null}
         {ready ? (
           <DetailCard
             controller={controller}
@@ -313,10 +396,11 @@ function DocGraphView({ engine, session, root, actions }) {
             onChangeDir={() => changeDirectory(sessionId).catch((error) => notify(error.message, 'warning'))}
             onConfirmBroad={() => api.confirmBroad(sessionId)}
             onCreateReadme={createReadme}
+            onReadProject={readProject}
           />
         ) : null}
       </div>
-      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={STRINGS.name} /> : null}
+      {menu ? <Menu anchor={menu.anchor} items={menu.items} onClose={() => setMenu(null)} label={menu.label || STRINGS.name} /> : null}
     </div>
   );
 }

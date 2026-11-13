@@ -94,7 +94,7 @@ var senders = map[messageType]identity.Role{
 
 func maySend(kind messageType, sender identity.Role) bool {
 	required, restricted := senders[kind]
-	return !restricted || required == sender
+	return !restricted || required == sender || (required == identity.RolePhone && sender == identity.RoleBroto)
 }
 
 // message is one frame. Exactly the body named by Type is present; ping has
@@ -298,7 +298,7 @@ func (body *hello) validate() error {
 	if body.Proto < 1 {
 		return invalid("hello protocol version must be positive")
 	}
-	if role := identity.Role(body.Role); role != identity.RolePhone && role != identity.RoleDesktop {
+	if role := identity.Role(body.Role); role != identity.RolePhone && role != identity.RoleDesktop && role != identity.RoleBroto {
 		return invalid("hello role %q is unknown", body.Role)
 	}
 	if _, err := identity.ParsePublicKey(body.Key); err != nil {

@@ -95,6 +95,7 @@ type NetworkConfig struct {
 
 // startConfig is everything one network run needs from the runtime.
 type startConfig struct {
+	broto           func(string, net.Conn)
 	paths           statedir.Paths
 	logger          *logx.Logger
 	identity        *identity.Identity
@@ -113,6 +114,9 @@ type startConfig struct {
 	onEvent         func(name string, data any)
 	onChange        func()
 	onTorState      func(TorStatus)
+	// onQRChanged sends broto.qr.changed with the current stage of a QR
+	// session.
+	onQRChanged func(qrID string)
 }
 
 // network is one run of the direct listener, candidates, Tor and edge, from
@@ -137,6 +141,8 @@ type network struct {
 	first        chan struct{}
 	firstOnce    sync.Once
 	torLog       *lineLogger
+	// qrWG counts the watches of the pairings by QR; close waits for them.
+	qrWG sync.WaitGroup
 
 	mu        sync.Mutex
 	stopped   bool
@@ -147,6 +153,7 @@ type network struct {
 	live      map[string]map[string]int
 	counts    SessionCounts
 	controls  map[*controlPeer]struct{}
+	qrs       map[string]*qrWatch
 }
 
 // startNetwork opens the direct socket, the candidates collector, Tor when
@@ -161,6 +168,7 @@ func startNetwork(config startConfig) (*network, error) {
 		desktop: config.desktop, edgeState: "stopped", mdnsState: "disabled",
 		torState: TorStatus{State: torDisabled},
 		live:     make(map[string]map[string]int), controls: make(map[*controlPeer]struct{}),
+		qrs: make(map[string]*qrWatch),
 	}
 	fail := func(code, message string, err error) (*network, error) {
 		config.logger.Error("network start failed", logx.Fields{"code": code, "error": err.Error()})
@@ -180,7 +188,7 @@ func startNetwork(config startConfig) (*network, error) {
 	// The edge is built before any socket opens, so an invalid static
 	// directory or bridge URL fails without touching the network.
 	server, err := edge.New(edge.Config{
-		StaticDir: config.staticDir, BridgeURL: config.bridgeURL, ProxySecret: config.proxySecret,
+		Broto: config.broto, StaticDir: config.staticDir, BridgeURL: config.bridgeURL, ProxySecret: config.proxySecret,
 		Desktop: config.desktop, Reach: n.reach, Sessions: config.sessions, Devices: config.devices,
 		RequireApproval: config.requireApproval, Approver: config.approver, OnEvent: config.onEvent,
 	})
@@ -454,7 +462,13 @@ func (n *network) apply(name string, requireApproval bool) {
 	n.config.onChange()
 }
 
+// reannounce republishes the desktop and the markers of the pairings by QR.
 func (n *network) reannounce() {
+	for _, marker := range n.qrMarkers() {
+		if err := marker.Refresh(); err != nil {
+			n.config.logger.Debug("broto pairing marker not refreshed", logx.Fields{"error": err.Error()})
+		}
+	}
 	if n.announcer == nil {
 		return
 	}
@@ -603,8 +617,12 @@ func (n *network) acceptOnionControls(listener *onion.Listener) {
 // control connection. Restricted direct sessions never get one and end the
 // wait when they close.
 func (n *network) acceptControl(session transport.ControlSession) {
+	device, ok := n.config.devices.RegisteredDevice(session.PeerKey())
+	if !ok {
+		return
+	}
 	conn, err := rendezvous.Accept(n.ctx, session, rendezvous.Config{
-		Role: identity.RoleDesktop, LocalKey: n.config.identity.PublicKeyString(), Puncher: n.endpoint,
+		Role: identity.RoleDesktop, PeerRole: device.Kind, LocalKey: n.config.identity.PublicKeyString(), Puncher: n.endpoint,
 		Handler: rendezvous.Handler{
 			PathReport: func(report rendezvous.PathReport) { n.pathReport(session, report) },
 			PunchServed: func(result rendezvous.PunchResult) {
@@ -697,7 +715,8 @@ func (peer *controlPeer) send() {
 }
 
 // close stops the run in the order of net.stop: edge, listeners, mDNS,
-// mapping and Tor. It waits for Tor to exit.
+// mapping and Tor. It waits for Tor to exit and for the pairings by QR to
+// close their paths.
 func (n *network) close() {
 	n.mu.Lock()
 	if n.stopped {
@@ -742,6 +761,9 @@ func (n *network) close() {
 			n.config.logger.Warn("tor did not stop cleanly", logx.Fields{"error": err.Error()})
 		}
 	}
+	// The watches of the pairings by QR stopped with the context; a temporary
+	// service still being added returns once Tor is closed.
+	n.qrWG.Wait()
 	if n.torLog != nil {
 		n.torLog.flush()
 	}

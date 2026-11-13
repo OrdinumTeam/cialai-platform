@@ -1,5 +1,8 @@
 #!/bin/sh
-# cialai-command v1
+# cialai-command v2
+if [ "${1:-}" = "broto" ]; then
+  exec @CIALAI_SIDECAR@ "$@"
+fi
 # Abre o Cialai. Gerado pelo proprio app, apague este arquivo para remover.
 #
 # `open -b` resolve pelo identificador do pacote, entao sobrevive a renomear

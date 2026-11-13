@@ -61,6 +61,14 @@ export class TerminalViewport {
     return pending;
   }
 
+  // O encaixe local mudou o tamanho por `pty_resize`, sem passar pela
+  // concessao. A renovacao repete o tamanho guardado: sem esta anotacao ela
+  // devolvia o terminal ao tamanho de antes do encaixe a cada 5 s, e quem
+  // desenha a tela redesenhava em larguras alternadas.
+  track(size) {
+    this.size = size;
+  }
+
   async resize(size) {
     this.size = size;
     if (!this.owned) return;

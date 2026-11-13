@@ -18,7 +18,7 @@ const mocks = {
   renderer: `const off = () => ({dispose(){}}); export class Terminal {
     constructor(options) { this.options=options; this.cols=options.cols; this.rows=options.rows; this.parser={registerOscHandler:off}; this.buffer={active:{}}; }
     onData=off; onBinary=off; onBell=off; onResize(){return {dispose(){}};}
-    open(){} loadAddon(addon){addon.term=this;} attachCustomKeyEventHandler(){} write(_data,done){done?.();}
+    open(){} loadAddon(addon){addon.term=this;} registerLinkProvider(){return off();} attachCustomKeyEventHandler(){} write(_data,done){done?.();}
     resize(){} reset(){} focus(){} dispose(){}
   } export class FitAddon {fit(){} proposeDimensions(){return {cols:80,rows:24};}} export class SearchAddon {} export class WebglAddon {onContextLoss(){} dispose(){}} export class WebLinksAddon {}`,
   native: `export const isTauri = () => fixture.desktop; export const hasBridge = () => true;
@@ -26,7 +26,7 @@ const mocks = {
     export const listen = async () => () => {}; export const createChannel = async (onmessage) => ({onmessage});
     export const chooseDirectory = async () => null;`,
   downloads: 'export const openExternal = async () => {};',
-  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {};',
+  theme: 'export const buildTheme = () => ({}); export const terminalFont = () => "mono"; export const watchTheme = () => () => {}; export const watchTerminalTheme = () => () => {};',
   layout: 'export const getLayout = () => ({fontSize:13}); export const subscribeLayout = () => () => {};',
   remote: 'export const state = () => ({status:"connected",features:[]}); export const subscribeState = () => () => {};',
   shell: 'export const isPhone = () => !fixture.desktop; export const onShellLock = () => () => {}; export const isMobileShell = () => false;',
@@ -93,6 +93,39 @@ function render({ touch = false, session = sample(), menu = true, close = true }
     session, touch, selected: false, dragging: false, renaming: false,
     onSelect() {}, onMenu: menu ? () => {} : undefined, onClose: close ? () => {} : undefined, onRename() {}, onRenameDone() {},
   }));
+}
+
+// Varios cards no mesmo runtime, como na lista de sessoes: um modulo so,
+// carregado uma vez, para provar que um card nao le o estado de outro.
+function renderMany(sessions) {
+  const fixture = { desktop: true };
+  const context = vm.createContext({
+    fixture, console, URLSearchParams, Uint8Array, ArrayBuffer,
+    setTimeout: () => 0, clearTimeout: () => {}, setInterval: () => 0, clearInterval: () => {},
+    localStorage: { getItem: () => null, setItem: () => {} },
+    window: { location: { search: '' }, addEventListener() {}, devicePixelRatio: 1, matchMedia: () => ({ addEventListener() {}, removeEventListener() {} }) },
+    document: { hasFocus: () => true, visibilityState: 'visible', addEventListener() {}, body: { appendChild() {} }, createElement: () => ({ isConnected: true, setAttribute() {}, appendChild() {} }) },
+    module: { exports: {} }, exports: {}, require: createRequire(import.meta.url),
+  });
+  vm.runInContext(bundle.outputFiles[0].text, context);
+  const Card = context.module.exports.default;
+  return sessions.map((session) => renderToStaticMarkup(React.createElement(Card, {
+    session, touch: false, selected: false, dragging: false, renaming: false,
+    onSelect() {}, onMenu() {}, onClose() {}, onRename() {}, onRenameDone() {},
+  })));
+}
+
+// Sessao Codex na pasta de sempre, com o turno que o Rust publicou para ela.
+function codexSession(id, agentTurn) {
+  const base = sample({ agentTurn, agentSessionId: null, sessions: [] });
+  return {
+    ...base, id, name: id,
+    activity: {
+      ...base.activity, agent: 'Codex', profile: 'codex', profileName: 'codex', configDir: '/fixture/.codex',
+      foreground: { pid: 5000, agent: 'Codex', command: 'codex', stopped: false, cwd: CWD, profile: 'codex' },
+      agentSessionId: null, usage: null,
+    },
+  };
 }
 
 const EFFORT_WORDS = /Esforço|Esfuerzo|effort|reasoning/i;
@@ -181,6 +214,23 @@ test('com a resposta entregue o card para de animar', () => {
   assert.match(html, /Resposta entregue/);
 });
 
+test('tres cards Codex na mesma pasta mostram cada um o turno da propria sessao', () => {
+  const [busy, done, waiting] = renderMany([
+    codexSession('aba1', { state: 'busy', sinceMs: NOW - 4000 }),
+    codexSession('aba2', { state: 'done', sinceMs: NOW - 9000 }),
+    codexSession('aba3', { state: 'waiting', sinceMs: NOW - 1000, waitingFor: 'permission' }),
+  ]);
+  assert.match(busy, /Processando/);
+  assert.doesNotMatch(busy, /Resposta entregue|Aguardando você/);
+  assert.match(done, /Resposta entregue/);
+  assert.doesNotMatch(done, /Processando|Aguardando você/);
+  assert.match(waiting, /Aguardando você/);
+  assert.doesNotMatch(waiting, /Processando|Resposta entregue/);
+  // Sem turno publicado, o card nao empresta o de um vizinho na mesma pasta.
+  const [quiet] = renderMany([codexSession('aba4', null)]);
+  assert.doesNotMatch(quiet, /Processando|Resposta entregue|Aguardando você/);
+});
+
 test('o agente que parou para perguntar nao anima e sobe de tom', () => {
   const html = render({ session: sample({ agentTurn: { state: 'waiting', sinceMs: NOW - 1000, waitingFor: 'permission' } }) });
   assert.doesNotMatch(html, /terminais-activity/);
@@ -228,4 +278,52 @@ test('leitura velha do plano fica a vista e apagada, com o aviso na dica', () =>
   assert.match(card, /terminal\.profiles\.stale/);
   const css = source('../src/views/Terminais.css');
   assert.match(css, /\.terminais-card__plan\.is-stale\{opacity:/);
+});
+
+/* ── card recolhido ────────────────────────────────────────────────── */
+
+test('recolhido, o card fica com icone, nome, ponto de atividade e o botao de expandir', () => {
+  const session = { ...sample(), subtitle: 'servidor de testes', collapsed: true };
+  const html = render({ session });
+  assert.match(html, /class="terminais-card session-scope[^"]*\bis-collapsed\b/);
+  assert.match(html, /terminais-card__name[^>]*>projeto</, 'o nome fica');
+  assert.match(html, /terminais-card__expand[^>]*aria-expanded="false"/, 'o botao diz que o card esta recolhido');
+  assert.match(html, /Expandir card de projeto/, 'o rotulo nomeia a sessao');
+  assert.match(html, /terminais-card__glance/, 'o estado continua a vista num ponto');
+  assert.match(html, /terminais-card__menu/, 'o menu de tres pontos continua');
+  for (const hidden of ['terminais-card__subtitle', 'terminais-card__running', 'terminais-card__agent-row', 'terminais-card__state', 'terminais-card__metrics']) {
+    assert.doesNotMatch(html, new RegExp(hidden), `${hidden} sai do card recolhido`);
+  }
+});
+
+test('aberto, o card oferece recolher e mostra tudo como antes', () => {
+  const html = render();
+  assert.doesNotMatch(html, /is-collapsed/);
+  assert.match(html, /terminais-card__expand[^>]*aria-expanded="true"/);
+  assert.match(html, /Recolher card de projeto/);
+  assert.doesNotMatch(html, /terminais-card__glance/, 'aberto, o estado ja tem a linha dele');
+  assert.match(html, /terminais-card__state/);
+  assert.match(html, /terminais-card__metrics/);
+});
+
+test('o celular nao recolhe o card nem mostra o botao', () => {
+  const html = render({ touch: true, session: { ...sample(), collapsed: true } });
+  assert.doesNotMatch(html, /is-collapsed|terminais-card__expand/);
+  assert.match(html, /terminais-card__state/);
+});
+
+test('recolher e escolha deste aparelho e nao vai para a apresentacao do Rust', () => {
+  const runtime = source('../src/terminals/runtime.js');
+  const serialize = runtime.slice(runtime.indexOf('function serializeSession'), runtime.indexOf('let persistTimer'));
+  assert.match(serialize, /collapsed: session\.collapsed/, 'o armazenamento local guarda o card recolhido');
+  const persisted = runtime.slice(runtime.indexOf('export function persist()'), runtime.indexOf('function rememberRecent'));
+  const presentation = persisted.match(/const presentation = \{[^}]*\}/)?.[0] || '';
+  assert.ok(presentation, 'a apresentacao continua sendo publicada');
+  assert.doesNotMatch(presentation, /collapsed/, 'TerminalPresentation recusa campo desconhecido');
+  assert.match(runtime, /export function toggleCollapsed\(id\)/);
+  assert.match(runtime, /export function setAllCollapsed\(collapsed\)/);
+  assert.match(runtime, /collapsed: getLayout\(\)\.cardsCompact/, 'cards novos seguem a preferencia de nascer recolhidos');
+  const layout = source('../src/terminals/layout.js');
+  assert.match(layout, /cardsCompact: false/);
+  assert.match(layout, /next\.cardsCompact = raw\.cardsCompact === true/);
 });

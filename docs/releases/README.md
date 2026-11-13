@@ -10,6 +10,17 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.6.0](0.6.0.md) | 07/11/2026 | `v0.6.0` | Broto ligado pelo QR do celular, grafo com seis vistas e cards recolhíveis; sai calada |
+| [0.5.4](0.5.4.md) | 01/11/2026 | `v0.5.4` | Anel de uso do Claude aceso com o limite de consultas; sai calada |
+| [0.5.3](0.5.3.md) | 31/10/2026 | `v0.5.3` | Uso do plano Ultra ao abrir, com a leitura guardada; sai calada |
+| [0.5.2](0.5.2.md) | 31/10/2026 | `v0.5.2` | Uso do plano Ultra sem o limite de cinco horas e skill do Broto 0.1.3 sem senha; sai calada |
+| [0.5.1](0.5.1.md) | 29/10/2026 | `v0.5.1` | Skill do Cialai automática e editável em Preferências, instalação no Windows pelo cmd; sai calada |
+| [0.5.0](0.5.0.md) | 29/10/2026 | `v0.5.0` | Cialai Broto em prévia para Windows e Linux |
+| [0.4.4](0.4.4.md) | 27/10/2026 | `v0.4.4` | `OrdinumTeam/cialai-platform`, teste do PTY do primeiro uso não trava mais no Windows; sai calada |
+| [0.4.3](0.4.3.md) | 27/10/2026 | `v0.4.3` | `OrdinumTeam/cialai-platform`, caminho clicável agora pega nome com acento e com espaço; sai calada |
+| [0.4.2](0.4.2.md) | 26/10/2026 | `v0.4.2` | `OrdinumTeam/cialai-platform`, caminho de arquivo clicável no terminal, abre no editor; sai calada |
+| [0.4.1](0.4.1.md) | 26/10/2026 | `v0.4.1` | `OrdinumTeam/cialai-platform`, correção do menu de contas com setas e do card mostrando o agente; sai calada |
+| [0.4.0](0.4.0.md) | 25/10/2026 | `v0.4.0` | `OrdinumTeam/cialai-platform`, perfis de agentes, explorador perto do VS Code e estado próprio em cada card |
 | [0.3.0](0.3.0.md) | 19/10/2026 | `v0.3.0` | `OrdinumTeam/cialai-platform`, visual novo, cor e ícone por sessão e avisos de atenção no celular |
 | [0.2.16](0.2.16.md) | 17/10/2026 | Sem tag | Site e curl, apelidos dos perfis e ação para sessões com falha |
 | [0.2.15](0.2.15.md) | 16/10/2026 | Sem tag | Site e curl, associação das conversas nos três desktops |

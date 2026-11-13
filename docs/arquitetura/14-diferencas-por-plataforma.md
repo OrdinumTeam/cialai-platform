@@ -54,6 +54,16 @@ No Wayland, o compositor controla a posição. Restaurar posição e centralizar
 splash podem não produzir efeito. Os controles da toolbar e as bordas de
 redimensionamento usam as operações do compositor, sem simular posicionamento.
 
+Se a recuperação ativar a moldura nativa no Wayland, a barra de título é um
+`HeaderBar` do GTK criado pelo tao, que fixa
+nele minimizar, maximizar e fechar à direita e reaplica essa ordem a cada troca
+de `resizable`. `window/linux_buttons.rs` tira a ordem fixa na abertura e depois
+de cada troca, e a barra passa a seguir `gtk-decoration-layout`, o reflexo do
+`button-layout` do GNOME e do ajuste equivalente do KDE, inclusive quando a
+pessoa muda o ajuste com o app aberto. Se a moldura nativa for ativada no X11,
+e na AppImage, que força o X11, quem a desenha é o gerenciador de janelas, que
+já segue o sistema. Esse ajuste não altera a ordem dos controles da toolbar.
+
 O terminal usa JetBrains Mono empacotada somente como último recurso no Linux.
 A licença OFL acompanha a fonte no pacote. macOS e Windows priorizam as fontes
 nativas dos respectivos sistemas.
@@ -84,6 +94,25 @@ redimensionamento e PowerShell 5.1 não oferece todos os modos de colagem do
 PowerShell 7. A preferência Terminal guarda shell, argumentos, `LANG` e prefixos
 de `PATH`; a escolha padrão muda por sistema.
 
+Três cuidados evitam linhas misturadas na saída de quem desenha a tela, como o
+Claude Code, depois de horas de uso. O xterm de cada sessão deste computador
+nasce com `windowsPty`, o ConPTY e o build que `app_platform` lê por
+`RtlGetVersion`: o xterm passa a tratar o ganho de linhas como o ConPTY e só
+reflui as linhas sozinho a partir do build 21376, em que o ConPTY deixou de
+refluir. A sessão de um Broto não leva a informação, porque o PTY dela pode ser
+de outro sistema. O Rust só pede tamanho ao PTY quando o tamanho muda, então a
+renovação da posse a cada 5 s e a devolução do tamanho local ao trocar de
+sessão não chegam ao ConPTY, que pode redesenhar a tela a cada pedido. E a
+renovação repete o tamanho do último encaixe: antes ela levava o tamanho do
+momento da posse, e depois de maximizar a janela, abrir um painel ou trocar a
+fonte o terminal voltava ao tamanho antigo em até 5 s e voltava de novo na
+tecla seguinte. A causa foi deduzida do código e da documentação do xterm. Em
+06/11/2026, numa máquina virtual com Windows 11 e WebView2 156, a 0.4.0 voltou
+ao tamanho antigo depois de maximizar e de restaurar, e o build da 0.6.0
+manteve o tamanho em dez passos de maximizar, restaurar, recolher as colunas e
+trocar a fonte. A máquina não tem GPU real, então a parte do WebGL só se prova
+com uso contínuo num Windows com GPU.
+
 O ConPTY nasce perguntando a posição do cursor e só inicia o shell depois da
 resposta. O Rust responde com a posição que o xterm tinha ao abrir a sessão e
 tira a pergunta da saída, então nenhum xterm responde de novo e a sessão abre
@@ -107,6 +136,14 @@ ponto de não responder ao WebDriver. Na máquina virtual Windows 11 sem driver
 de vídeo dedicado, com WebView2 137, o addon nem chega a carregar e o xterm
 roda no renderizador DOM sem travar; o app registra a GPU do contexto do xterm
 para diagnóstico. A medição com uma GPU real continua pendente.
+
+Cada troca de sessão abre um contexto WebGL para o terminal exibido. O addon
+não devolve o contexto ao ser descartado e o navegador só o solta no coletor
+de lixo, então o contexto da sessão que sai da tela é perdido de propósito, por
+`WEBGL_lose_context`, logo depois do descarte. Quando o contexto do terminal em
+tela se perde, por troca de monitor ou queda do driver, o xterm volta ao
+renderizador DOM, que mede a célula de outro jeito; o terminal é encaixado e
+redesenhado na hora, em vez de ficar com as colunas do WebGL.
 
 ### Foco, CSP e PATH no Windows
 
@@ -176,6 +213,7 @@ transferência.
 | Gerenciador de arquivos | Finder | Gerenciador padrão | Explorer |
 | Observação de arquivos | kqueue | notify | notify |
 | Lixeira | API do sistema | API do sistema | API do sistema |
+| Áudio e vídeo no editor | O que o WebKit do sistema toca: MP4, MOV, M4A, AAC, MP3, WAV e FLAC; WebM e Ogg dependem da versão do macOS | O que os plugins do GStreamer instalados tocam; H.264 e AAC costumam pedir o `gst-libav` | O que o WebView2 toca: MP4, WebM, Ogg, M4A, MP3, WAV e FLAC |
 | Comando `cialai` | `~/.local/bin/cialai` | `~/.local/bin/cialai` | `%LOCALAPPDATA%\Programs\Cialai\bin\cialai.cmd` |
 
 ### Comando cialai no terminal

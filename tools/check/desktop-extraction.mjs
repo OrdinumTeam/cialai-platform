@@ -58,6 +58,19 @@ for (const command of REMOTE_COMMANDS) {
   assert.ok(allowed.includes(command), `sensitive.js dá nível a ${command}, que a ponte não libera`);
 }
 
+// Ligar um Broto pelo QR passa pelo sidecar em nome do aparelho que a borda
+// provou na conexão. A página nunca escolhe quem pede, e do Broto o celular só
+// alcança os três comandos do QR.
+for (const command of ['broto_qr_begin', 'broto_qr_state', 'broto_qr_decide']) {
+  assert.ok(allowed.includes(command), `Ponte não libera ${command}`);
+}
+for (const command of ['broto.qr.begin', 'broto.qr.state', 'broto.qr.decide']) {
+  assert.match(dispatch, new RegExp(`"${command.replaceAll('.', '\\.')}"`), `Despacho não encaminha ${command} ao sidecar`);
+}
+assert.match(dispatch, /broto_qr_request\(cmd, &args, conn\.device_id\.as_deref\(\)\)/, 'o QR do Broto precisa levar o aparelho da conexão');
+assert.doesNotMatch(dispatch, /arg[^(]*\([^)]*"requester"\)/, 'o requester nunca vem da página');
+assert.ok(!allowed.some((command) => command.startsWith('broto_') && !command.startsWith('broto_qr_')), 'o celular só liga Broto pelo QR');
+
 // A rede sobe numa função só, e a falha de qualquer peça vira registro e
 // estado em vez de derrubar o `setup` com um `panic` que ninguém vê.
 assert.match(lib, /fn start_network\(app: &tauri::AppHandle, awake: tunnel::Awake\) -> Result<Network, String>/);

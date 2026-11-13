@@ -4,7 +4,10 @@ module github.com/Cialai/cialai/packages/tunnel-core
 go 1.26.5
 
 require (
+	aead.dev/minisign v0.3.0
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/coder/websocket v1.8.14
+	github.com/creack/pty v1.1.24
 	github.com/cretz/bine v0.2.0
 	github.com/mitchellh/go-ps v1.0.0
 	github.com/pion/logging v0.2.4

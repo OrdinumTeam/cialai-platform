@@ -349,9 +349,33 @@ func (tor *fakeTor) serve(conn net.Conn) {
 				id = other.ServiceID()
 			}
 			tor.mu.Lock()
-			tor.services = append(tor.services, id)
+			duplicate := slices.Contains(tor.services, id)
+			if !duplicate {
+				tor.services = append(tor.services, id)
+			}
+			network := tor.network
 			tor.mu.Unlock()
+			if duplicate {
+				write("550 Onion address collision")
+				continue
+			}
 			write("250-ServiceID="+id, "250 OK")
+			// A service added once the network runs is uploaded at once.
+			if network {
+				tor.upload(write, events, id)
+			}
+		case "DEL_ONION":
+			tor.mu.Lock()
+			index := slices.Index(tor.services, rest)
+			if index >= 0 {
+				tor.services = slices.Delete(tor.services, index, index+1)
+			}
+			tor.mu.Unlock()
+			if index < 0 {
+				write("552 Unknown Onion Service id")
+				continue
+			}
+			write("250 OK")
 		case "SETCONF":
 			write("250 OK")
 			if rest == "DisableNetwork=0" {
@@ -380,15 +404,22 @@ func (tor *fakeTor) enableNetwork(write func(...string), events string) {
 			`650 STATUS_CLIENT NOTICE BOOTSTRAP PROGRESS=45 TAG=requesting_descriptors SUMMARY="Asking for relay descriptors"`,
 			`650 STATUS_CLIENT NOTICE BOOTSTRAP PROGRESS=100 TAG=done SUMMARY="Done"`)
 	}
-	if slices.Contains(subscribed, "HS_DESC") {
-		const relay = " UNKNOWN $0000000000000000000000000000000000000000~relay"
-		for _, id := range services {
-			other, _ := GenerateOnionKey(nil)
-			write("650 HS_DESC UPLOAD "+id+relay, "650 HS_DESC UPLOADED "+other.ServiceID()+relay)
-			if !tor.behavior.noUpload {
-				write("650 HS_DESC UPLOADED " + id + relay)
-			}
-		}
+	for _, id := range services {
+		tor.upload(write, events, id)
+	}
+}
+
+// upload reports the descriptor upload of id, preceded by the upload of
+// another service that must be ignored.
+func (tor *fakeTor) upload(write func(...string), events, id string) {
+	if !slices.Contains(strings.Fields(events), "HS_DESC") {
+		return
+	}
+	const relay = " UNKNOWN $0000000000000000000000000000000000000000~relay"
+	other, _ := GenerateOnionKey(nil)
+	write("650 HS_DESC UPLOAD "+id+relay, "650 HS_DESC UPLOADED "+other.ServiceID()+relay)
+	if !tor.behavior.noUpload {
+		write("650 HS_DESC UPLOADED " + id + relay)
 	}
 }
 

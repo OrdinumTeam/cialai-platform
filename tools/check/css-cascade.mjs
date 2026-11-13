@@ -15,14 +15,31 @@ const sheets = [...html.matchAll(/<link rel="stylesheet"[^>]*href="\.\/([^"]+\.c
 assert.ok(sheets.length > 0, 'index.html sem folhas de estilo');
 const css = sheets.map((sheet) => readFileSync(`${dist}/${sheet}`, 'utf8')).join('\n');
 
+// Partes de uma lista de seletores, sem cortar dentro de parenteses. Os blocos
+// de tokens repetem o seletor para o contenedor do terminal com tema proprio.
+function selectorParts(selector) {
+  const parts = [];
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selector.length; index += 1) {
+    const char = selector[index];
+    if (char === '(') depth += 1;
+    else if (char === ')') depth -= 1;
+    else if (char === ',' && depth === 0) { parts.push(selector.slice(start, index).trim()); start = index + 1; }
+  }
+  parts.push(selector.slice(start).trim());
+  return parts;
+}
+
 // Regras de primeiro nível com o seletor normalizado, na ordem efetiva.
 const rules = [];
 for (const match of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
-  rules.push({ selector: match[1].trim().replace(/["']/g, ''), body: match[2], index: match.index });
+  const selector = match[1].trim().replace(/["']/g, '');
+  rules.push({ selector, parts: selectorParts(selector), body: match[2], index: match.index });
 }
 const SHELL = ':is([data-shell=desktop],[data-platform=macos])';
 const lastDefinition = (token, selectors) => {
-  const found = rules.filter((rule) => selectors.includes(rule.selector) && rule.body.includes(`${token}:`));
+  const found = rules.filter((rule) => rule.parts.some((part) => selectors.includes(part)) && rule.body.includes(`${token}:`));
   assert.ok(found.length > 0, `nenhuma definição de ${token} em ${selectors.join(' ou ')}`);
   const last = found.at(-1);
   return last.body.split(`${token}:`)[1].split(';')[0].trim();
@@ -39,14 +56,30 @@ assert.equal(lastDefinition('--mac-accent', [':root[data-theme=dark]', `${SHELL}
 const DESKTOP = 'html[data-shell=desktop]';
 assert.doesNotMatch(lastDefinition('--mac-sidebar-bg', [DESKTOP]), /gradient/, 'solid.css perdeu a lateral sólida');
 assert.doesNotMatch(lastDefinition('--mac-sidebar-bg', [`${DESKTOP}[data-theme=dark]`]), /gradient/, 'solid.css perdeu a lateral sólida no escuro');
-const brandBlock = rules.findLast((rule) => rule.selector === ':root' && rule.body.includes('--mac-sidebar-bg:'));
-const solidBlock = rules.findLast((rule) => rule.selector === DESKTOP && rule.body.includes('--mac-sidebar-bg:'));
+const brandBlock = rules.findLast((rule) => rule.parts.includes(':root') && rule.body.includes('--mac-sidebar-bg:'));
+const solidBlock = rules.findLast((rule) => rule.parts.includes(DESKTOP) && rule.body.includes('--mac-sidebar-bg:'));
 assert.ok(brandBlock && solidBlock && solidBlock.index > brandBlock.index, 'solid.css precisa vir depois de brand.css');
 
 // O estúdio troca o padding padrão da área de conteúdo depois da casca.
 const contentRule = rules.findLast((rule) => rule.selector === '.mac-content');
 const studioRule = rules.findLast((rule) => rule.selector.includes('.mac-content:has(>.terminais-page)') || rule.selector.includes('.mac-content:has(> .terminais-page)'));
 assert.ok(contentRule && studioRule && studioRule.index > contentRule.index, 'Terminais.css precisa vir depois de shell.css');
+
+// O tema proprio do terminal depende do seletor espelhado com o atributo
+// repetido, que iguala a especificidade do bloco escuro. Um minificador que
+// juntasse a repeticao faria o terminal perder para a janela. O build pode
+// repetir folhas entre pedacos, entao a conta e por seletor, nao por ocorrencia.
+const compact = (selector) => selector.replace(/["'\s]/g, '');
+const sourceSheets = [...readFileSync(`${root}packages/ui/src/desktop/desktop.css`, 'utf8').matchAll(/@import '([^']+)';/g)]
+  .map((match) => readFileSync(fileURLToPath(new URL(match[1], `file://${root}packages/ui/src/desktop/`)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, ''))
+  .join('\n');
+const mirrors = new Set([...sourceSheets.matchAll(/([^{}@]+)\{[^{}]*\}/g)]
+  .flatMap((match) => selectorParts(match[1].trim()))
+  .filter((part) => part.includes('[data-terminal-scope][data-terminal-scope]'))
+  .map(compact));
+const built = new Set(rules.flatMap((rule) => rule.parts.map(compact)));
+assert.ok(mirrors.size > 0, 'as folhas perderam o espelho do tema do terminal');
+for (const mirror of mirrors) assert.ok(built.has(mirror), `o build mudou o espelho do tema do terminal: ${mirror}`);
 
 // O CSS do xterm vem num chunk carregado depois das folhas da página e pinta
 // o viewport de preto. O fundo do terminal precisa vencer por especificidade
@@ -59,4 +92,4 @@ for (const host of ['.terminais-terminal__host', '.phone-terminal__host']) {
   assert.ok(xtermViewport.some((rule) => rule.selector.includes(host)), `fundo do viewport do xterm sem regra específica para ${host}`);
 }
 
-console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand, solid surfaces and studio order in production, and the terminal viewport outranks the xterm black on desktop and phone`);
+console.log(`PASS css cascade: ${sheets.length} desktop stylesheets keep shell, platform, brand, solid surfaces and studio order in production, the terminal theme mirrors keep their weight, and the terminal viewport outranks the xterm black on desktop and phone`);

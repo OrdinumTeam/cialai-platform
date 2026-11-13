@@ -133,6 +133,147 @@ pub fn codex_turn(path: &Path) -> Option<AgentTurn> {
     })
 }
 
+/* ── estado que o Codex escreve no proprio terminal ────────────────── */
+
+/// Inicio da sequencia que o Codex escreve no terminal a cada mudanca de
+/// turno: `ESC ] 7501 ; state=<estado>:app=codex`, terminada por BEL ou ST.
+const CODEX_OSC: &[u8] = b"\x1b]7501;";
+/// Teto de uma sequencia ainda sem terminador guardada entre dois lotes.
+const CODEX_OSC_MAX: usize = 512;
+
+/// Turno do Codex lido da saida do PTY de uma sessao.
+///
+/// A sequencia viaja dentro da saida daquele terminal, entao ela identifica a
+/// sessao sem depender de qual processo segura o rollout. Com o daemon
+/// `codex app-server`, quem segura os rollouts de todas as abas e um processo
+/// so, filho da aba que o abriu primeiro; o arquivo aberto deixa de provar de
+/// quem e a conversa, e este sinal continua certo. Le em pedacos, porque a
+/// sequencia pode chegar cortada entre dois lotes de saida.
+#[derive(Debug, Default)]
+pub struct CodexOsc {
+    pending: Vec<u8>,
+    turn: Option<AgentTurn>,
+}
+
+impl CodexOsc {
+    /// Consome um lote de saida. `now_ms` carimba a mudanca de estado.
+    pub fn feed(&mut self, bytes: &[u8], now_ms: u64) {
+        let mut data = std::mem::take(&mut self.pending);
+        data.extend_from_slice(bytes);
+        let mut index = 0;
+        loop {
+            let Some(start) = find(&data[index..], CODEX_OSC).map(|at| index + at) else {
+                // O lote pode terminar no meio do comeco da sequencia.
+                if let Some(from) = partial_prefix(&data, index) {
+                    self.pending = data[from..].to_vec();
+                }
+                return;
+            };
+            let body = start + CODEX_OSC.len();
+            let Some(end) = data[body..]
+                .iter()
+                .position(|byte| *byte == 0x07 || *byte == 0x1b)
+                .map(|at| body + at)
+            else {
+                if data.len() - start <= CODEX_OSC_MAX {
+                    self.pending = data[start..].to_vec();
+                }
+                return;
+            };
+            if data[end] == 0x07 {
+                self.apply(&data[body..end], now_ms);
+                index = end + 1;
+                continue;
+            }
+            // ESC so termina a sequencia como ST, `ESC \`.
+            match data.get(end + 1) {
+                None => {
+                    self.pending = data[start..].to_vec();
+                    return;
+                }
+                Some(b'\\') => {
+                    self.apply(&data[body..end], now_ms);
+                    index = end + 2;
+                }
+                Some(_) => index = end,
+            }
+        }
+    }
+
+    /// Ultimo turno que o terminal anunciou, se algum.
+    pub fn turn(&self) -> Option<AgentTurn> {
+        self.turn.clone()
+    }
+
+    /// Esquece o que foi anunciado. Chamado quando o Codex sai da sessao, para
+    /// o estado de uma execucao anterior nao valer para a proxima.
+    pub fn clear(&mut self) {
+        self.pending.clear();
+        self.turn = None;
+    }
+
+    fn apply(&mut self, payload: &[u8], now_ms: u64) {
+        let Some((state, waiting_for)) = codex_osc_state(payload) else {
+            return;
+        };
+        let unchanged = self
+            .turn
+            .as_ref()
+            .is_some_and(|turn| turn.state == state && turn.waiting_for == waiting_for);
+        if !unchanged {
+            self.turn = Some(AgentTurn {
+                state,
+                since_ms: now_ms,
+                waiting_for,
+            });
+        }
+    }
+}
+
+/// Estado de um corpo `state=...:app=codex[:kind=...]`. So vale com
+/// `app=codex`, porque o numero 7501 nao e reservado a ninguem; um estado
+/// desconhecido nao muda nada.
+fn codex_osc_state(payload: &[u8]) -> Option<(TurnState, Option<String>)> {
+    let text = std::str::from_utf8(payload).ok()?;
+    let mut state = None;
+    let mut app = None;
+    let mut kind = None;
+    for field in text.split(':') {
+        let (key, value) = field.split_once('=')?;
+        match key.trim() {
+            "state" => state = Some(value.trim().to_ascii_lowercase()),
+            "app" => app = Some(value.trim().to_ascii_lowercase()),
+            "kind" => kind = Some(value.trim().to_string()).filter(|value| !value.is_empty()),
+            _ => {}
+        }
+    }
+    if app.as_deref() != Some("codex") {
+        return None;
+    }
+    let turn = match state.as_deref()? {
+        "working" | "busy" | "running" => (TurnState::Busy, None),
+        "done" | "complete" | "completed" => (TurnState::Done, None),
+        "idle" | "ready" => (TurnState::Idle, None),
+        "blocked" | "waiting" => (TurnState::Waiting, kind),
+        _ => return None,
+    };
+    Some(turn)
+}
+
+fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    haystack
+        .windows(needle.len())
+        .position(|window| window == needle)
+}
+
+/// Onde comeca, no fim de `data`, um pedaco do inicio da sequencia.
+fn partial_prefix(data: &[u8], from: usize) -> Option<usize> {
+    (1..CODEX_OSC.len())
+        .rev()
+        .find(|&size| data.len() >= from + size && data.ends_with(&CODEX_OSC[..size]))
+        .map(|size| data.len() - size)
+}
+
 /* ── registro de sessao do Claude Code ─────────────────────────────── */
 
 #[derive(Clone, Debug, PartialEq)]
@@ -357,5 +498,87 @@ mod tests {
         assert_eq!(state_of(&path), Some(SessionState::Busy));
         assert!(modified_ms(&path).is_some());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn osc(state: &str) -> Vec<u8> {
+        format!("\x1b]7501;state={state}:app=codex\x07").into_bytes()
+    }
+
+    #[test]
+    fn the_codex_terminal_announces_each_turn_in_order() {
+        let mut tracker = CodexOsc::default();
+        assert!(tracker.turn().is_none());
+        // Sequencia vista no Codex 0.163: abre parado, trabalha, entrega.
+        tracker.feed(&osc("idle"), 1);
+        assert_eq!(tracker.turn().map(|turn| turn.state), Some(TurnState::Idle));
+        tracker.feed(&osc("working"), 2);
+        assert_eq!(tracker.turn().map(|turn| turn.state), Some(TurnState::Busy));
+        tracker.feed(&osc("done"), 3);
+        let done = tracker.turn().unwrap();
+        assert_eq!((done.state, done.since_ms), (TurnState::Done, 3));
+        // Repetir o mesmo estado nao muda o carimbo.
+        tracker.feed(&osc("done"), 9);
+        assert_eq!(tracker.turn().unwrap().since_ms, 3);
+    }
+
+    #[test]
+    fn a_permission_request_is_waiting_with_its_reason() {
+        let mut tracker = CodexOsc::default();
+        tracker.feed(
+            b"\x1b]7501;state=blocked:app=codex:kind=permission\x1b\\",
+            5,
+        );
+        let turn = tracker.turn().unwrap();
+        assert_eq!(turn.state, TurnState::Waiting);
+        assert_eq!(turn.waiting_for.as_deref(), Some("permission"));
+    }
+
+    #[test]
+    fn a_sequence_cut_between_two_batches_is_still_read() {
+        let full = osc("working");
+        for cut in 1..full.len() {
+            let mut tracker = CodexOsc::default();
+            tracker.feed(b"saida comum ", 1);
+            tracker.feed(&full[..cut], 1);
+            assert!(tracker.turn().is_none(), "corte em {cut} leu cedo demais");
+            tracker.feed(&full[cut..], 2);
+            assert_eq!(
+                tracker.turn().map(|turn| turn.state),
+                Some(TurnState::Busy),
+                "corte em {cut}"
+            );
+        }
+        // Terminador ST cortado entre o ESC e a barra.
+        let mut tracker = CodexOsc::default();
+        tracker.feed(b"\x1b]7501;state=done:app=codex\x1b", 1);
+        assert!(tracker.turn().is_none());
+        tracker.feed(b"\\", 2);
+        assert_eq!(tracker.turn().map(|turn| turn.state), Some(TurnState::Done));
+    }
+
+    #[test]
+    fn other_apps_unknown_states_and_noise_change_nothing() {
+        let mut tracker = CodexOsc::default();
+        tracker.feed(&osc("working"), 1);
+        tracker.feed(b"\x1b]7501;state=done:app=outro\x07", 2);
+        tracker.feed(b"\x1b]7501;state=sonhando:app=codex\x07", 3);
+        tracker.feed(b"\x1b]0;titulo\x07\x1b]9;aviso\x07texto com 7501; solto", 4);
+        assert_eq!(tracker.turn().map(|turn| turn.state), Some(TurnState::Busy));
+        // Uma sequencia que nunca termina nao cresce sem fim.
+        tracker.feed(b"\x1b]7501;", 5);
+        tracker.feed(&vec![b'x'; CODEX_OSC_MAX * 2], 5);
+        assert!(tracker.pending.len() <= CODEX_OSC_MAX);
+    }
+
+    #[test]
+    fn clearing_forgets_the_previous_run() {
+        let mut tracker = CodexOsc::default();
+        tracker.feed(&osc("done"), 1);
+        tracker.feed(b"\x1b]7501;sta", 1);
+        tracker.clear();
+        assert!(tracker.turn().is_none());
+        // O pedaco pendente tambem some: o resto dele nao vira estado depois.
+        tracker.feed(b"te=working:app=codex\x07", 2);
+        assert!(tracker.turn().is_none());
     }
 }

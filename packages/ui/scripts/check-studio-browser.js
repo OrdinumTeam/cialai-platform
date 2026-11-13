@@ -122,8 +122,15 @@ async function assertTerminalFind(session) {
   window.addEventListener('error', onError);
   try {
     session.term.focus();
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true, cancelable: true }));
-    const input = await until(() => document.querySelector('.terminais-find input'), 'terminal find bar');
+    // Guardado antes da tecla: se a barra não abrir, a falha diz se o foco
+    // estava no terminal e se algum atalho tratou a tecla.
+    const focused = document.activeElement;
+    const inTerminal = Boolean(focused?.closest?.('.xterm'));
+    const handled = !window.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', metaKey: true, bubbles: true, cancelable: true }));
+    const input = await until(() => document.querySelector('.terminais-find input'), 'terminal find bar').catch((error) => {
+      const selected = runtime.getState().selected;
+      throw new Error(`${error.message}: focus ${focused?.tagName || 'none'}.${String(focused?.className || '').slice(0, 40)}, in terminal ${inTerminal}, handled ${handled}, same session ${selected?.id === session.id}, host ${Boolean(session.host?.isConnected)}, platform ${document.documentElement.dataset.platform}`);
+    });
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'claude');
     input.dispatchEvent(new Event('input', { bubbles: true }));
     await until(() => results > 0, 'terminal find results');
@@ -158,7 +165,11 @@ if (document.documentElement.dataset.formFactor === 'phone') {
   await assertImeTyping(runtime.getState().selected.term);
   document.title = 'PASS: Cialai phone terminal list, single pane, themed terminal surface, responsive viewport and fast IME typing';
 } else {
+  // A abertura esconde o conteúdo, e nada nele pega foco antes dela acabar.
+  // Depois dela, o terminal selecionado já está com o teclado, sem clique.
+  await until(() => document.querySelector('.mac-window.is-booted'), 'desktop boot');
   await until(() => document.querySelector('.terminais-terminal__host .xterm'), 'desktop terminal');
+  await until(() => document.activeElement?.closest?.('.terminais-terminal__host .xterm'), 'terminal focus after boot');
   assertTerminalSurface(document.querySelector('.terminais-terminal__host'));
   await assertBrandLockup(dark);
   // Barra lateral rosa e solida, sem gradiente: rosa clarinho no claro e o

@@ -17,8 +17,12 @@ assert.equal(common.bundle.resources['resources/mobile/'], 'mobile/');
 assert.deepEqual(common.bundle.externalBin, ['binaries/cialai-tunnel']);
 assert.deepEqual(Object.keys(common.app.security.csp).sort(), [
   'connect-src', 'default-src', 'font-src', 'frame-src', 'img-src',
-  'script-src', 'style-src', 'worker-src',
+  'media-src', 'script-src', 'style-src', 'worker-src',
 ]);
+// Audio e video do editor tocam pelo protocolo preview://, como o PDF.
+for (const csp of [common.app.security.csp, common.app.security.devCsp]) {
+  assert.equal(csp['media-src'], csp['frame-src'], 'media-src segue as origens do preview');
+}
 
 const platforms = {
   macos: { transparent: true, decorations: undefined, targets: ['app', 'dmg'] },

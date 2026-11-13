@@ -377,9 +377,13 @@ pub fn basename(path: &str) -> String {
         .to_string()
 }
 
+/// Linha de comando por processo, lida uma vez. A chave e o pid, a hora de
+/// inicio e o executavel: um `exec`, como o de um script que vira o agente,
+/// mantem o pid e a hora e so muda o executavel, e a leitura de antes dele
+/// ficaria valendo para sempre.
 #[derive(Default)]
 pub struct CommandCache {
-    entries: HashMap<u32, (u64, Option<CommandLine>)>,
+    entries: HashMap<u32, (u64, Option<String>, Option<CommandLine>)>,
 }
 
 impl CommandCache {
@@ -393,13 +397,14 @@ impl CommandCache {
         pid: u32,
         start_sec: u64,
     ) -> Option<CommandLine> {
-        if let Some((known_start, command)) = self.entries.get(&pid) {
-            if *known_start == start_sec {
+        let exe = source.exe_path(pid);
+        if let Some((known_start, known_exe, command)) = self.entries.get(&pid) {
+            if *known_start == start_sec && *known_exe == exe {
                 return command.clone();
             }
         }
         let command = source.command_line(pid);
-        self.entries.insert(pid, (start_sec, command.clone()));
+        self.entries.insert(pid, (start_sec, exe, command.clone()));
         command
     }
 
@@ -524,6 +529,29 @@ impl ProcSource for FakeProcs {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_exec_in_the_same_pid_reads_the_command_line_again() {
+        let line = |exe: &str, argv: &[&str]| CommandLine {
+            exe: exe.into(),
+            argv: argv.iter().map(|arg| arg.to_string()).collect(),
+            env: HashMap::new(),
+        };
+        let source = FakeProcs::default();
+        source.set_command(7, line("/bin/bash", &["bash", "codex"]));
+        source.set_exe_path(7, "/bin/bash");
+        let mut cache = CommandCache::default();
+        assert_eq!(cache.get_from(&source, 7, 100).unwrap().argv[0], "bash");
+        // O script fez exec no agente: mesmo pid e mesma hora, outro executavel.
+        source.set_command(7, line("/bin/sleep", &["codex", "30"]));
+        source.set_exe_path(7, "/bin/sleep");
+        assert_eq!(cache.get_from(&source, 7, 100).unwrap().argv[0], "codex");
+        // Sem exec, a leitura continua vindo do cache.
+        source.set_command(7, line("/bin/sleep", &["outro"]));
+        assert_eq!(cache.get_from(&source, 7, 100).unwrap().argv[0], "codex");
+        // Um pid reaproveitado, com outra hora de inicio, le de novo.
+        assert_eq!(cache.get_from(&source, 7, 200).unwrap().argv[0], "outro");
+    }
 
     struct TestChild(std::process::Child);
 

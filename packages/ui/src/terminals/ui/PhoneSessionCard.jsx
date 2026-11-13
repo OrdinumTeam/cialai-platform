@@ -100,6 +100,7 @@ function PhoneSessionCard({ session, onSelect, onMenu, onClose }) {
           <EllipsisVertical size={20} strokeWidth={2} aria-hidden="true" />
         </button>
       </div>
+      {session.deviceId ? <span className="terminais-card__broto" role="img" aria-label={translate('desktop.brotos.origin', { name: session.brotoName || session.deviceId })} title={translate('desktop.brotos.origin', { name: session.brotoName || session.deviceId })} /> : null}
       {session.subtitle ? <div className="phone-session__subtitle">{session.subtitle}</div> : null}
       <div className={`phone-session__agent${running?.agent ? ' is-agent' : ''}`}>{agent}</div>
       {profileLabel ? <div className="phone-session__profile"><span className="terminais-card__profile" title={translate('terminal.session.profile', { profile: profileLabel })}>{profileLabel}</span></div> : null}

@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Comandos invocaveis pelo frontend via `invoke`.
 
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 
-use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+use portable_pty::{CommandBuilder, PtySize};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -30,7 +26,7 @@ use crate::workspace::git::{self, GitDiff, GitStatus};
 use crate::workspace::journal::SavedTerminal;
 use crate::workspace::office::{self, ConvertResult, OfficeQueue};
 use crate::workspace::preview::PreviewRoots;
-use crate::workspace::pty::CursorPosition;
+use crate::workspace::pty::{self, CursorPosition};
 use crate::workspace::repos::{self, RepoListing, RepoRoot};
 use crate::workspace::terminal::{
     SessionMetrics, SubscriberKey, TerminalInfo, TerminalManager, TerminalPresentation,
@@ -151,6 +147,71 @@ pub async fn tunnel_call(
         .map_err(tunnel_join_error)?
 }
 
+#[tauri::command]
+pub async fn broto_open(
+    app: AppHandle,
+    device_id: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.call".into(), serde_json::json!({"deviceId":device_id,"cmd":"pty.open","args":{"cols":80,"rows":24},"actor":"human"})).await
+}
+
+// Broto host actions stay native and use the supervised sidecar.
+#[tauri::command]
+pub async fn broto_list(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.list".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_begin(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.pair.begin".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_pending(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.pair.pending".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_pair_decide(
+    app: AppHandle,
+    pair_id: String,
+    approve: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.pair.decide".into(),
+        serde_json::json!({"pairId":pair_id,"approve":approve}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_permission_set(
+    app: AppHandle,
+    device_id: String,
+    level: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.permission.set".into(),
+        serde_json::json!({"deviceId":device_id,"level":level}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_requests(app: AppHandle) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(app, "broto.requests".into(), serde_json::json!({})).await
+}
+#[tauri::command]
+pub async fn broto_decide(
+    app: AppHandle,
+    id: u64,
+    approve: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.decide".into(),
+        serde_json::json!({"id":id,"approve":approve}),
+    )
+    .await
+}
+
 /// Apaga a chave da API do Headscale deixada por versões anteriores; a
 /// conectividade v2 não usa servidor de controle.
 #[tauri::command(async)]
@@ -226,7 +287,7 @@ pub fn pty_metrics(terminals: State<'_, TerminalManager>) -> Vec<SessionMetrics>
 /// eventos `onBinary` do xterm: a pagina so usa esse caminho para os relatos
 /// de mouse X10, que cabem em um byte por char. Qualquer char acima de U+00FF
 /// e recusado em vez de truncado, para texto nunca perder acentos por ali.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_write(
     terminals: State<'_, TerminalManager>,
     id: u32,
@@ -241,7 +302,7 @@ pub fn pty_write(
 }
 
 /// Bytes do caminho `binary`: um por char, somente ate U+00FF.
-fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
     data.chars()
         .map(|char| {
             u8::try_from(u32::from(char)).map_err(|_| {
@@ -254,7 +315,7 @@ fn binary_bytes(data: &str) -> Result<Vec<u8>, String> {
         .collect()
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_resize(
     terminals: State<'_, TerminalManager>,
     id: u32,
@@ -309,7 +370,7 @@ pub fn pty_ack(terminals: State<'_, TerminalManager>, id: u32, bytes: usize) -> 
     terminals.ack(id, bytes)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_kill(terminals: State<'_, TerminalManager>, id: u32) -> Result<(), String> {
     terminals.kill(id)
 }
@@ -325,7 +386,7 @@ pub fn pty_attach(
     terminals.attach(id, on_output)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn pty_list(terminals: State<'_, TerminalManager>) -> Vec<TerminalInfo> {
     terminals.list()
 }
@@ -595,14 +656,6 @@ pub fn shell_probe(
     if shell.path.trim().is_empty() {
         return Err(t("native.error.shellPathRequired"));
     }
-    let pair = native_pty_system()
-        .openpty(PtySize {
-            rows: 12,
-            cols: 80,
-            pixel_width: 0,
-            pixel_height: 0,
-        })
-        .map_err(|error| tf("native.error.ptyOpen", &[("error", &error)]))?;
     let mut command = CommandBuilder::new(&shell.path);
     for arg in &shell.args {
         command.arg(arg);
@@ -617,27 +670,15 @@ pub fn shell_probe(
         command.env("LANG", lang);
     }
     platform::child_env::sanitize(&mut command);
-    let mut child = pair
-        .slave
-        .spawn_command(command)
-        .map_err(|error| tf("native.error.shellStart", &[("error", &error)]))?;
-    drop(pair.slave);
-    let mut reader = pair
-        .master
-        .try_clone_reader()
-        .map_err(|error| error.to_string())?;
-    let (send, receive) = mpsc::sync_channel(1);
-    thread::spawn(move || {
-        let mut bytes = vec![0_u8; 4096];
-        let size = reader.read(&mut bytes).unwrap_or(0);
-        bytes.truncate(size);
-        let _ = send.send(bytes);
-    });
-    let bytes = receive
-        .recv_timeout(Duration::from_millis(1600))
-        .unwrap_or_default();
-    let _ = child.kill();
-    let _ = child.wait();
+    let bytes = pty::probe_shell(
+        command,
+        PtySize {
+            rows: 12,
+            cols: 80,
+            pixel_width: 0,
+            pixel_height: 0,
+        },
+    )?;
     // Sem texto inicial a interface mostra o aviso no idioma dela.
     let output = String::from_utf8_lossy(&bytes).into_owned();
     Ok(ShellProbe { shell, output })
@@ -875,9 +916,12 @@ pub fn ai_usage(
 
 /* ── grafo da documentação ────────────────────────────────────────── */
 
-/// Varre a raiz do projeto atrás de arquivos Markdown, para o grafo da
-/// documentação do estúdio. `key` é a sessão e `token` identifica o pedido: um
-/// pedido novo da mesma chave cancela o anterior. Pode durar até o prazo de
+/// Varre a raiz do projeto para o grafo do estúdio e lê as ligações entre os
+/// arquivos. `scope` é `docs`, só Markdown e o padrão quando falta ou é
+/// desconhecido, ou `project`, todo arquivo até o teto. `key` é a sessão e
+/// `token` identifica o pedido: um pedido novo da mesma chave cancela o
+/// anterior. As referências de cada arquivo ficam no cache do registro, então
+/// a próxima varredura só relê o que mudou. Pode durar até o prazo de
 /// [`docgraph::SCAN_TIME_BUDGET`], por isso roda numa thread de bloqueio e não
 /// num worker do runtime.
 #[tauri::command]
@@ -886,10 +930,12 @@ pub async fn docgraph_scan(
     key: String,
     token: String,
     root: String,
+    scope: Option<String>,
 ) -> FsResult<DocScan> {
     let guard = scans.begin(&key, &token);
+    let options = ScanOptions::for_scope(scope.as_deref());
     let outcome = tauri::async_runtime::spawn_blocking(move || {
-        let result = docgraph::scan(&root, guard.flag(), &ScanOptions::default());
+        let result = docgraph::scan_cached(&root, guard.flag(), &options, guard.cache());
         drop(guard);
         result
     })
@@ -1083,15 +1129,31 @@ pub fn agent_profile_create(app: AppHandle, agent: String, name: String) -> Resu
 }
 
 /// Abre o agente numa conta escolhida, no terminal já aberto. Só escreve com o
-/// shell no prompt e sem processo em primeiro plano.
+/// shell no prompt e sem processo em primeiro plano. Com `login`, digita o
+/// login da conta no lugar do agente.
 #[tauri::command(async)]
 pub fn pty_launch_agent(
     terminals: State<'_, TerminalManager>,
     id: u32,
     agent: String,
     profile: String,
+    login: Option<bool>,
 ) -> Result<(), String> {
-    terminals.launch_agent(id, &agent, &profile)
+    terminals.launch_agent(id, &agent, &profile, login.unwrap_or(false))
+}
+
+/// Contas de um agente com a cota já traduzida, para o menu que o shell das
+/// sessões mostra ao digitar `codex` ou `claude`. A interface manda o id de
+/// cada conta; a pasta sai da pasta pessoal.
+#[tauri::command(async)]
+pub fn agent_menu_publish(
+    app: AppHandle,
+    agent: String,
+    entries: Vec<crate::workspace::agent_menu::MenuEntry>,
+    strings: crate::workspace::agent_menu::MenuStrings,
+) -> Result<(), String> {
+    let home = app.path().home_dir().map_err(|error| error.to_string())?;
+    crate::workspace::agent_menu::publish(&home, &agent, &entries, &strings)
 }
 
 /// Instala a linha de estado do Claude Code nos perfis da pasta pessoal. E
@@ -1459,4 +1521,59 @@ pub fn cli_uninstall(app: AppHandle) -> Result<cli::CliReport, String> {
         .map_err(|error| error.to_string())?;
     let shell = platform::system_shell();
     cli::uninstall(&home, &config, cli::Target::current(), Some(shell.as_str()))
+}
+
+#[tauri::command]
+pub async fn broto_rename(
+    app: AppHandle,
+    device_id: String,
+    name: String,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        "broto.rename".into(),
+        serde_json::json!({"deviceId":device_id,"name":name}),
+    )
+    .await
+}
+#[tauri::command]
+pub async fn broto_grant(
+    app: AppHandle,
+    device_id: String,
+    end: bool,
+) -> Result<serde_json::Value, RpcProblem> {
+    tunnel_call(
+        app,
+        if end {
+            "broto.grant.end"
+        } else {
+            "broto.grant"
+        }
+        .into(),
+        serde_json::json!({"deviceId":device_id}),
+    )
+    .await
+}
+
+fn skill_dirs(app: &AppHandle) -> Result<(std::path::PathBuf, std::path::PathBuf), String> {
+    let path = app.path();
+    Ok((
+        path.home_dir().map_err(|e| e.to_string())?,
+        path.app_config_dir().map_err(|e| e.to_string())?,
+    ))
+}
+#[tauri::command(async)]
+pub fn skill_view(app: AppHandle) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::view(&home, &dir)
+}
+#[tauri::command(async)]
+pub fn skill_edit(app: AppHandle, content: String) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::edit(&home, &dir, content)
+}
+#[tauri::command(async)]
+pub fn skill_restore(app: AppHandle) -> Result<crate::skills::SkillView, String> {
+    let (home, dir) = skill_dirs(&app)?;
+    crate::skills::restore(&home, &dir)
 }

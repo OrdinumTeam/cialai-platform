@@ -45,7 +45,8 @@ apps/desktop/
       workspace/watch/{mod,kqueue,notify}.rs
       workspace/{files,git,journal,resume,ai,preview,office,browser,repos,dragout,mobile_files}.rs
       workspace/agent_state.rs       leitores do turno do agente, reexportados pela Barra de IA
-      workspace/agent_profiles.rs    conta ativa de cada agente, sem tocar em credencial
+      workspace/agent_profiles.rs    conta ativa de cada agente, perfil novo e linha de login, sem tocar em credencial
+      workspace/agent_menu.rs        menu de contas ao digitar codex ou claude, com os scripts em workspace/agent_menu/
       workspace/dirs.rs              navegação de pastas do seletor, só nomes
       workspace/docgraph.rs          varredura de Markdown do grafo, documento 16
       notch/{mod,commands,prefs,profiles,alerts}.rs, notch/usage/*, notch/sessions/*   Barra de IA, documento 15
@@ -82,11 +83,11 @@ Não adotados: `dirs`, porque a API `path()` do Tauri cobre todos os diretórios
 | Árvore de processos | `proc_listchildpids` em `procs.rs:62-82` | `/proc/<pid>/task/*/children` quando existe, senão mapa de ppid por uma leitura do `sysinfo`; mesmos `MAX_TREE` 512 e `MAX_DEPTH` 16 | Lista de pids do Job Object por `QueryInformationJobObject` unida ao mapa de ppid, porque o shell entra num job ao nascer | No Windows a árvore inclui processos que se desprenderam do pai |
 | CPU da árvore | `proc_pid_rusage` com `mach_timebase_info` em `procs.rs:110-127`; delta sobre tempo de parede em `terminal.rs:928-944` | `accumulated_cpu_time` do `sysinfo` em `cpu_nanos`; algoritmo inalterado | `GetProcessTimes` pelo `sysinfo` | Resolução de 10 ms no Linux e 15,6 ms no Windows contra nanossegundos no macOS |
 | Memória da árvore | `ri_phys_footprint` | `Pss` de `/proc/<pid>/smaps_rollup` quando legível, senão `VmRSS` | `PrivateWorkingSetSize` de `PROCESS_MEMORY_COUNTERS_EX2`, senão `WorkingSetSize` | Números não comparáveis entre sistemas; o rótulo continua memória |
-| Primeiro plano do PTY | `master.process_group_leader()` em `terminal.rs:890-894` | Mesmo; reserva `tpgid` de `/proc/<shell>/stat` | Heurística: processo mais novo do job que é folha e não é o shell; nulo só com o shell vivo | No Windows é a melhor estimativa, dito na dica do card; sem Ctrl+Z |
+| Primeiro plano do PTY | `master.process_group_leader()` em `terminal.rs:890-894`; quando o líder do grupo não é um agente, como um subshell ou um script que abre o agente, vale o agente que roda no mesmo grupo | Mesmo; reserva `tpgid` de `/proc/<shell>/stat` | Heurística: processo mais novo do job que é folha e não é o shell; nulo só com o shell vivo | No Windows é a melhor estimativa, dito na dica do card; sem Ctrl+Z |
 | Processo parado | `pbi_status == SSTOP` em `terminal.rs:1138` | Estado `T` ou `t` em `/proc/<pid>/stat` | Nunca | Windows nunca mostra Processo parado |
 | Diretório do shell | `PROC_PIDVNODEPATHINFO` em `procs.rs:197-222` | `readlink /proc/<pid>/cwd` | PEB por `sysinfo::cwd()` | Processo elevado devolve nulo; card mostra `n/d` e Acompanhar pausa |
 | Argv e ambiente permitido | `KERN_PROCARGS2` em `procs.rs:312-397` | `/proc/<pid>/cmdline` e `environ`, legíveis do mesmo usuário; Yama não bloqueia `PTRACE_MODE_READ` | `sysinfo::cmd()` e `environ()` por `ReadProcessMemory` | Falha em agente elevado ou de bitness diferente, cai em `~/.claude` e `~/.codex` |
-| Arquivos abertos para retomar o Codex | `PROC_PIDLISTFDS` e `proc_pidfdinfo` em `procs.rs:247-300` | `readlink /proc/<pid>/fd/*` | Não implementado; reserva nova em `resume.rs::codex_session`: `rollout-*.jsonl` mais recente em `<CODEX_HOME>/sessions` cujo `session_meta.cwd` da primeira linha bate com o cwd e mtime posterior ao início do processo | Dois Codex na mesma pasta podem confundir |
+| Arquivos abertos para retomar o Codex | `PROC_PIDLISTFDS` e `proc_pidfdinfo` em `procs.rs:247-300` | `readlink /proc/<pid>/fd/*` | Não implementado; a conversa só é achada pelo UUID que a retomada nomeia, conferido pelo `session_meta` e pelo cwd em `resume.rs::find_codex_rollout`, nunca por pasta nem por data | O turno do Codex vem da sequência `OSC 7501` do próprio terminal, igual nos três sistemas. O daemon `codex app-server` segura os rollouts de todas as abas e nunca prova de quem é a conversa |
 | Lixeira | `NSFileManager.trashItemAtURL` em `files.rs:510-519` | `trash::delete` com `.Trash-<uid>` por montagem | `trash::delete` com `FOF_ALLOWUNDO` | Montagem sem lixeira devolve erro `trash` com o item intacto, contrato de `files.rs:838-843` |
 | Revelar e abrir | plugin opener | plugin opener por D-Bus `ShowItems`, reserva `xdg-open` da pasta | plugin opener por `SHOpenFolderAndSelectItems`; `ShellExecute` | Só os textos mudam: Finder, Arquivos, Explorer |
 | Observador | kqueue com `NOTE_WRITE`, `DELETE`, `RENAME`, `ATTRIB`, `EXTEND` | `notify` inotify por caminho, sem recursão; `Remove` e `Rename(From)` em arquivo observado viram `replaced` ou `removed` após stat | `notify` ReadDirectoryChangesW pela pasta pai filtrando o nome | Limite `max_user_watches` do inotify, muito acima do uso |
@@ -207,6 +208,10 @@ Dois números aparecem no card com um agente reconhecido, e eles medem coisas di
 
 O esforço de raciocínio continua publicado pelo hook e lido pelo Rust em `UsageSession.effort`, mas não é mostrado no card: o Codex nunca o publica, então a tag contradizia metade das sessões. `packages/ui/scripts/check-session-card.mjs` renderiza o card real com uma amostra que contém o esforço e reprova se algum rótulo dele voltar à interface.
 
+O card recolhe para uma linha com ícone, nome, alfinete, indicador de atividade, seta de expandir e menu; a barra de cor e o aviso de atenção continuam à vista. O estado `collapsed` fica só em `cialai_terminals`, fora da `TerminalPresentation` do Rust, que recusa campo desconhecido, então não chega ao celular. A seta e o menu de três pontos alternam um card, o cabeçalho da coluna recolhe ou expande todos, e `cardsCompact`, em `cialai_terminals_layout`, faz as sessões novas nascerem recolhidas. Em tela de toque o card aparece sempre inteiro.
+
+Cor e ícone escolhidos ficam lembrados por pasta em `cialai_terminals_looks`, por `terminals/directory-looks.js`: a sessão aberta depois na mesma pasta nasce com a última escolha. A chave é o caminho portátil sem barra final, em minúsculas no Windows, e o armazenamento guarda as 200 pastas usadas mais recentemente. Só a escolha da pessoa grava, ao trocar cor ou ícone ou ao escolher no popover de sessão nova; voltar ao padrão esquece a pasta. Restaurar uma sessão salva ou adotar um terminal vivo não lê nem grava a memória, e a demonstração e as sessões de Broto ficam de fora.
+
 ### Estados da sessão
 
 O computador é a fonte única do estado de atividade. `pty_metrics` leva `agentTurn`, lido dos arquivos do próprio agente, e `outputAgeMs`, medido no relógio do computador. A interface deriva rótulo, tom e animação de uma função pura só, `deriveActivity` em `packages/ui/src/terminals/activity-state.js`, e `describe`, `runningLabel` e o indicador de atividade passam por ela.
@@ -228,7 +233,7 @@ Depois de reconectar, o vínculo do fluxo de saída continua sendo assunto de ca
 
 ### Colunas laterais
 
-`sessionsCollapsed` e `explorerCollapsed` ficam em `cialai_terminals_layout`, e `panels.js` recolhe sozinho abaixo de 720 px para as sessões e 980 px para os arquivos, sem tocar na preferência. Todo mostrar e esconder passa por `showPanel` em `Workbench.jsx`, que grava a preferência, vence o recolhimento automático e, na primeira vez de cada coluna, mostra o aviso de onde reabrir. Os caminhos de volta são três e coexistem: a faixa da lateral, os dois alternadores do cabeçalho da área de trabalho e os atalhos Mod Shift J e Mod Shift E.
+`sessionsCollapsed` e `explorerCollapsed` ficam em `cialai_terminals_layout`, e `panels.js` recolhe sozinho abaixo de 720 px para as sessões e 980 px para os arquivos, sem tocar na preferência. Todo mostrar e esconder passa por `showPanel` em `Workbench.jsx`, que grava a preferência, vence o recolhimento automático e, na primeira vez de cada coluna, mostra o aviso de onde reabrir. Cada coluna mostra um botão por vez. Recolhida, só a faixa da lateral a reabre, com a contagem do Git ou das sessões; a faixa dos arquivos fica desligada na sessão de outro aparelho, como o alternador antigo. Aberta, só o alternador do cabeçalho da área de trabalho a recolhe. Os atalhos Mod Shift J e Mod Shift E e a paleta valem nos dois estados.
 
 ## Onboarding
 
@@ -258,6 +263,24 @@ O bloco `agents.activeProfile` guarda a conta que os terminais novos vão usar, 
 ```
 
 A chave da API do Headscale nunca entra no arquivo: fica no keychain pelo `keyring`, sob o serviço `br.com.ordinum.cialai` e a conta `headscale-api-key`.
+
+O tema do terminal, em Aparência, fica fora do arquivo, como o idioma e `cardsCompact`: vale na hora, fica neste computador e Cancelar não o desfaz. `terminals/terminal-theme.js` guarda `app`, `light` ou `dark` em `cialai_terminal_theme` e marca o html com `data-terminal-theme`, ausente quando o terminal segue a janela. Cada bloco de tokens de tema das folhas do desktop repete o seletor para `[data-terminal-scope]` com a mesma especificidade do original, e o contenedor do terminal em `WorkArea.jsx` leva esse atributo, então recebe o conjunto inteiro do esquema escolhido com o mesmo resultado de cascata do html, sem cópia de valor. O tom da sessão é escolhido de novo ali, na variante do esquema do terminal. O xterm lê os tokens de uma sonda escondida com o mesmo atributo, presa ao body e fora de qualquer `session-scope`, e é reaplicado por `watchTerminalTheme`. `packages/ui/scripts/check-terminal-theme.mjs` reprova bloco de tokens sem espelho de mesma especificidade, e `tools/check/css-cascade.mjs` confere que o build não juntou o atributo repetido. O celular não usa: o terminal dele é sempre escuro.
+
+## Perfis de agentes
+
+O modal Perfis de agentes abre pela paleta, pelo menu do app e pelos botões de perfil novo das telas de contas, em Preferências e ao lado das sessões. À esquerda ficam as contas do Codex e do Claude Code com a cota de cada uma e o formulário de perfil novo; à direita, um tutorial animado com contas de exemplo, que segue o nome e a ferramenta digitados. Um perfil é uma pasta na pasta pessoal: `~/.codex` e `~/.claude` são os padrões, e `~/.codex-<nome>` ou `~/.claude-<nome>` guarda outra conta, achada pelo agente em `CODEX_HOME` ou `CLAUDE_CONFIG_DIR`.
+
+| Peça | Onde | O que faz |
+| --- | --- | --- |
+| Modal | `desktop/AgentProfilesDialog.jsx`, `desktop/AgentProfilesTutorial.jsx` e `desktop/agent-profiles-model.js` | Lista as contas de `agent_profiles`, a mesma leitura da Barra de IA. A cota da linha é a da janela que mais apertou entre a do anel e a semanal |
+| Perfil novo | `agent_profiles::create` | Cria a pasta com as instruções do padrão por link, ou cópia onde o sistema não deixa criar link, e a configuração do padrão por cópia. Credencial nenhuma vem junto |
+| Login | `pty_launch_agent` com `login` | Abre uma sessão na pasta pessoal e digita o login da conta quando o shell sobe, porque o login do Claude Code pergunta coisas no terminal. A linha sai de `agent_profiles::login_line` |
+| Menu de contas | `workspace/agent_menu.rs` e `workspace/agent_menu/` | Com mais de um perfil do mesmo agente, digitar `codex` ou `claude` numa sessão pergunta qual conta usar. As setas ou `j` e `k` escolhem, Enter abre, a última conta da pasta já vem marcada, a esgotada fica para trás, um número de 1 a 9 abre a conta dele direto, Esc desiste e `codex +nome` escolhe sem perguntar. O agente roda no próprio shell, nunca num subshell, para ser o grupo em primeiro plano que o card lê |
+| Contas do menu | `desktop/agent-menu.js` e o comando `agent_menu_publish` | A interface publica a cada minuto, em `~/.cialai/agents`, as contas com a cota já traduzida. A interface manda o id de cada conta, e o Rust tira a pasta da pasta pessoal |
+
+O menu entra depois dos arquivos de inicialização do usuário. No zsh o shell nasce com `ZDOTDIR` em `~/.cialai/shell/zsh`, cujos arquivos carregam os do usuário, corrigem o `HISTFILE` que o `/etc/zshrc` do macOS monta com esse `ZDOTDIR` e devolvem o `ZDOTDIR` original no fim. No bash o shell nasce com `--init-file`, que repete a leitura de login ou do `~/.bashrc`. No PowerShell o script vai por `-NoExit -EncodedCommand`, sem comentários e sem recuo para caber no limite da linha de comando do Windows, que roda depois do perfil e não depende da política de execução. Fish, cmd e shells com argumentos próprios nas preferências nascem como sempre, e `CIALAI_AGENT_MENU=0` no ambiente do app desliga a injeção.
+
+O menu não aparece quando a pasta do perfil já vem no ambiente, o que inclui uma conta nomeada escolhida para os terminais novos; sem terminal; em `--version` e `--help`; no login; e na retomada com id que `resume.rs` digita. Uma função do usuário com o nome do agente, como um `claude()` do `.zshrc`, continua valendo e roda depois do menu.
 
 ## Telas de rede
 

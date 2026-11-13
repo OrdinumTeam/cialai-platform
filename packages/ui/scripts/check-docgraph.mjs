@@ -4,8 +4,9 @@
 // Por que existe: a interface nao tem typecheck nem lint, e as regras que o
 // grafo nao pode errar sao todas puras. A poda por Markdown, as contagens que
 // nao mudam ao recolher, a diferenca entre dois indices, o descarte da
-// resposta de uma raiz anterior e a regra de texto do produto sao conferidas
-// aqui, sem DOM e sem Tauri. O esperado de cada cenario e escrito a mao, nao
+// resposta de uma raiz anterior, as vistas, os modos de cor, os links entre
+// arquivos e a regra de texto do produto sao conferidas aqui, sem DOM e sem
+// Tauri. O esperado de cada cenario e escrito a mao, nao
 // recalculado pela mesma funcao que esta sendo testada.
 
 import assert from 'node:assert/strict';
@@ -13,12 +14,23 @@ import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
-  GROUP_TONES, ROOT_ID, absPath, ancestorsOf, attachIssues, buildTree, computeColorGroups, defaultExpansion,
-  diffIndex, effectiveExpanded, foldKey, groupOf, idOfPath, isBroadRoot, parentId, pickWatchDirs, revealSet,
+  GROUP_TONES, ROOT_ID, absPath, ancestorsOf, attachIssues, buildTree, carryLinks, computeColorGroups, defaultExpansion, degreeOf,
+  diffIndex, effectiveExpanded, foldKey, groupOf, idOfPath, isBroadRoot, neighborsOf, parentId, pickWatchDirs, revealSet,
   shouldAdopt, visibleScene,
 } from '../src/terminals/docgraph/model.js';
 import { matchSet, searchDocs } from '../src/terminals/docgraph/search.js';
-import { OVERRIDE_LIMIT, ROOT_LIMIT, STORAGE_KEY, loadUi, saveUi } from '../src/terminals/docgraph/persist.js';
+import { OVERRIDE_LIMIT, ROOT_LIMIT, STORAGE_KEY, latestOptions, loadUi, saveUi } from '../src/terminals/docgraph/persist.js';
+import {
+  BLOCK_HEADER, MIN_BLOCK, RING_GAP, TREE_COLUMN, TREE_ROW, blocksLayout, folderBytes, neighborFocus, neighborhood, radialLayout,
+  treeLayout, visibleRefs,
+} from '../src/terminals/docgraph/views.js';
+import {
+  COLOR_MODES, PALETTES, ageBin, assignTones, cleanColorMode, cleanPalette, cleanRules, colorize, paletteColors, sizeBin, toneColor,
+  typeKey,
+} from '../src/terminals/docgraph/colors.js';
+import { DEPTH_LIMIT, VIEW_MODES, cleanDepth, cleanScope, cleanViewMode } from '../src/terminals/docgraph/options.js';
+import { PITCH_LIMIT, orbitBy, project, rotationOf, seedSpace } from '../src/terminals/docgraph/space.js';
+import { buildDemoScan } from '../src/terminals/docgraph/fixture.js';
 import { DEBOUNCE_MS, MAX_WAIT_MS, createIndexer } from '../src/terminals/docgraph/indexer.js';
 import * as copy from '../src/terminals/docgraph/copy.js';
 import { LAYOUT_LIMITS } from '../src/terminals/layout.js';
@@ -347,7 +359,10 @@ test('estado por raiz: ida e volta, tetos e conteudo invalido', () => {
   const storage = memoryStorage();
   assert.equal(loadUi(storage, '/p'), null);
   saveUi(storage, '/p', { expanded: ['a', 7, ''], collapsed: ['b'], view: { x: 1, y: 2, s: 0.5 }, selected: 'a/x.md', tones: { a: 'ciano', b: 3 } }, 100);
-  assert.deepEqual(loadUi(storage, '/p'), { bulk: null, expanded: ['a'], collapsed: ['b'], view: { x: 1, y: 2, s: 0.5 }, selected: 'a/x.md', tones: { a: 'ciano' }, updatedAt: 100 });
+  assert.deepEqual(loadUi(storage, '/p'), {
+    bulk: null, expanded: ['a'], collapsed: ['b'], view: { x: 1, y: 2, s: 0.5 }, selected: 'a/x.md', tones: { a: 'ciano' },
+    folderTones: {}, typeTones: {}, rules: [], mode: 'map', scope: 'docs', colorBy: 'group', palette: 'safe', depth: 1, refs: true, updatedAt: 100,
+  });
   saveUi(storage, '/tudo', { bulk: 'all' }, 100);
   assert.equal(loadUi(storage, '/tudo').bulk, 'all');
   saveUi(storage, '/tudo', { bulk: 'qualquer' }, 100);
@@ -541,6 +556,334 @@ test('a previa trata documento apagado e leitura que falhou', () => {
   assert.match(preview, /unwatchPathAs\(owner, path\)/);
 });
 
+/* ── links entre arquivos ─────────────────────────────────────────── */
+
+test('links por indice: sem repeticao, sem laco e sem indice invalido', () => {
+  const tree = treeOf(['a.md', 'b.md', 'c/d.md'], { links: [[0, 1], [0, 1], [1, 1], [2, 0], [5, 0], [0, -1], 'x', [0.5, 1]], linksPartial: true });
+  assert.equal(tree.links.count, 2);
+  assert.deepEqual(tree.links.out.get('a.md'), ['b.md']);
+  assert.deepEqual(tree.links.out.get('c/d.md'), ['a.md']);
+  assert.deepEqual(tree.links.into.get('a.md'), ['c/d.md']);
+  assert.equal(tree.links.partial, true);
+  assert.equal(degreeOf(tree, 'a.md'), 2);
+  assert.deepEqual([...neighborsOf(tree, 'a.md')].sort(), ['b.md', 'c/d.md']);
+  assert.equal(treeOf(['a.md']).links.count, 0, 'varredura antiga, sem links, vira grafo sem links');
+});
+
+test('links cortados pelo prazo guardam os da leitura anterior entre arquivos que ficaram', () => {
+  const before = treeOf(['a.md', 'b.md', 'c.md'], { links: [[0, 1], [1, 2], [2, 0]] });
+  // A leitura nova parou no prazo: leu so a.md, e c.md saiu do indice.
+  const cut = treeOf(['a.md', 'b.md', 'd.md'], { links: [[0, 2]], linksPartial: true });
+  assert.equal(carryLinks(cut, before), 1, 'so a->b volta: b->c e c->a apontam para quem saiu');
+  assert.deepEqual(cut.links.out.get('a.md'), ['d.md', 'b.md']);
+  assert.deepEqual(cut.links.into.get('b.md'), ['a.md']);
+  assert.equal(cut.links.count, 2);
+  // Leitura completa nao herda nada: o que sumiu sumiu de verdade.
+  const full = treeOf(['a.md', 'b.md'], { links: [] });
+  assert.equal(carryLinks(full, before), 0);
+  assert.equal(full.links.count, 0);
+  // O controlador herda so no mesmo escopo e volta logo quando a leitura avanca.
+  const controller = source('../src/terminals/docgraph/controller.js');
+  assert.match(controller, /if \(controller\.tree && sameScope\) carryLinks\(next, controller\.tree\)/);
+  assert.match(controller, /meta\.linksPartial && !meta\.stopped && Number\(scan\.linksRead\) > 0/);
+});
+
+test('links na cena: a ponta vai para a pasta recolhida que a contem, com peso', () => {
+  // x/a cita y/c e x/b; x/b cita y/c; z cita x/a.
+  const tree = treeOf(['x/a.md', 'x/b.md', 'y/c.md', 'z.md'], { links: [[0, 2], [1, 2], [0, 1], [3, 0]] });
+  const visible = new Set(['.', 'x', 'y', 'z.md']);
+  const result = visibleRefs(tree, (id) => visible.has(id));
+  assert.equal(result.total, 2, 'x/a para x/b cai dentro de x e some');
+  assert.deepEqual(result.refs.find((ref) => ref.b === 'y'), { a: 'x', b: 'y', weight: 2 });
+  assert.deepEqual(result.refs.find((ref) => ref.b === 'z.md'), { a: 'x', b: 'z.md', weight: 1 });
+  assert.deepEqual(visibleRefs(tree, (id) => visible.has(id), { cap: 1 }).refs, [{ a: 'x', b: 'y', weight: 2 }], 'acima do teto fica o mais pesado');
+  const open = new Set(['.', 'x', 'x/a.md', 'x/b.md', 'y', 'z.md']);
+  assert.equal(visibleRefs(tree, (id) => open.has(id)).total, 4);
+});
+
+/* ── vistas ───────────────────────────────────────────────────────── */
+
+test('vistas: nome valido, escopo e profundidade limpos', () => {
+  assert.deepEqual(VIEW_MODES, ['map', 'tree', 'radial', 'blocks', 'neighbors', 'space']);
+  assert.equal(cleanViewMode('tree'), 'tree');
+  assert.equal(cleanViewMode('pizza'), 'map');
+  assert.equal(cleanScope('project'), 'project');
+  assert.equal(cleanScope(undefined), 'docs');
+  assert.equal(DEPTH_LIMIT, 3);
+  assert.equal(cleanDepth(0), 1);
+  assert.equal(cleanDepth('2'), 2);
+  assert.equal(cleanDepth(9), 3);
+  assert.equal(cleanDepth('nada'), 1);
+});
+
+test('arvore: camadas da esquerda para a direita e pasta recolhida como folha', () => {
+  const tree = treeOf(['a/x.md', 'a/y.md', 'b/z.md', 'r.md']);
+  const layout = treeLayout(tree, new Set(['.', 'a']));
+  const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+  assert.deepEqual([...byId.keys()].sort(), ['.', 'a', 'a/x.md', 'a/y.md', 'b', 'r.md']);
+  assert.equal(byId.get('.').x, 0);
+  assert.equal(byId.get('a').x, TREE_COLUMN);
+  assert.equal(byId.get('a/x.md').x, 2 * TREE_COLUMN);
+  assert.equal(byId.get('a').side, 'left', 'pasta aberta leva o rotulo a esquerda');
+  assert.equal(byId.get('b').side, 'right', 'pasta recolhida e folha, rotulo a direita');
+  assert.equal(Math.abs(byId.get('a/y.md').y - byId.get('a/x.md').y), TREE_ROW, 'irmaos a uma linha de distancia');
+  assert.equal(layout.edges.length, 5);
+  assert.ok(layout.nodes.every((node) => node.x > layout.bounds.x && node.x < layout.bounds.x + layout.bounds.w && node.y > layout.bounds.y && node.y < layout.bounds.y + layout.bounds.h));
+});
+
+test('radial: raiz no centro e um anel por nivel', () => {
+  const tree = treeOf(['a/x.md', 'b/y.md']);
+  const layout = radialLayout(tree, new Set(['.', 'a', 'b']));
+  const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+  assert.equal(byId.get('.').x, 0);
+  assert.equal(byId.get('.').y, 0);
+  assert.equal(byId.get('a').r, RING_GAP);
+  assert.equal(byId.get('a/x.md').r, 2 * RING_GAP);
+  layout.nodes.forEach((node) => {
+    assert.ok(Math.abs(Math.hypot(node.x, node.y) - node.r) < 1e-6, node.id);
+    if (node.id !== '.') assert.equal(node.side, node.x < -0.5 ? 'left' : 'right', node.id);
+  });
+});
+
+test('blocos: area pelos bytes, piso por arquivo e pasta recolhida inteira', () => {
+  const scan = {
+    docs: [
+      { relative: 'a/grande.md', size: 30000, modifiedMs: 1 },
+      { relative: 'a/pequeno.md', size: 10, modifiedMs: 1 },
+      { relative: 'b/medio.md', size: 10000, modifiedMs: 1 },
+    ],
+    fingerprint: 'blocos',
+  };
+  const tree = buildTree(scan, { rootName: 'p' });
+  const bytes = folderBytes(tree);
+  assert.equal(bytes.get('a'), 30000 + MIN_BLOCK);
+  assert.equal(bytes.get('.'), 30000 + MIN_BLOCK + 10000);
+  const layout = blocksLayout(tree, new Set(['.', 'a']), { width: 1000, height: 600 });
+  const byId = new Map(layout.nodes.map((node) => [node.id, node]));
+  assert.equal(byId.has('b/medio.md'), false, 'pasta recolhida nao abre os arquivos');
+  assert.equal(byId.get('b').open, false);
+  assert.equal(byId.get('b').value, 10000);
+  assert.equal(byId.get('a').value, 30000 + MIN_BLOCK);
+  assert.equal(byId.get('a/pequeno.md').value, MIN_BLOCK);
+  assert.equal(byId.get('.').header, true, 'a raiz sempre tem a faixa do nome');
+  assert.ok(byId.get('a').rect.y0 >= BLOCK_HEADER);
+  const area = (id) => { const rect = byId.get(id).rect; return (rect.x1 - rect.x0) * (rect.y1 - rect.y0); };
+  assert.ok(area('a') > area('b'), 'quem pesa mais ocupa mais');
+  layout.nodes.forEach((node) => {
+    const rect = node.rect;
+    assert.ok(rect.x0 >= 0 && rect.y0 >= 0 && rect.x1 <= 1000 && rect.y1 <= 600, node.id);
+  });
+});
+
+test('vizinhos: foco, passos, teto e quem trouxe cada arquivo', () => {
+  // a cita b e e; b cita c; c cita d; f nao tem link.
+  const tree = treeOf(['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'f.md', 'g/h.md'], { links: [[0, 1], [1, 2], [2, 3], [0, 4]] });
+  assert.equal(neighborFocus(tree, 'c.md'), 'c.md', 'arquivo selecionado e o foco');
+  assert.equal(neighborFocus(tree, null), 'a.md', 'empate de grau fica com o primeiro caminho');
+  assert.equal(neighborFocus(tree, 'g'), null, 'pasta sem arquivo ligado nao tem foco');
+  assert.equal(neighborFocus(treeOf(['a.md']), null), null);
+  const ids = (hood) => hood.nodes.map((node) => node.id);
+  assert.deepEqual(ids(neighborhood(tree, 'a.md', 1)), ['a.md', 'b.md', 'e.md'], 'no mesmo passo entra antes o mais ligado');
+  const two = neighborhood(tree, 'a.md', 2);
+  assert.deepEqual(ids(two), ['a.md', 'b.md', 'e.md', 'c.md']);
+  assert.equal(two.nodes.find((node) => node.id === 'c.md').via, 'b.md');
+  assert.equal(two.nodes.find((node) => node.id === 'c.md').ring, 2);
+  assert.deepEqual(two.edges, [{ source: 'a.md', target: 'b.md' }, { source: 'a.md', target: 'e.md' }, { source: 'b.md', target: 'c.md' }]);
+  assert.deepEqual(ids(neighborhood(tree, 'a.md', 9)), ['a.md', 'b.md', 'e.md', 'c.md', 'd.md'], 'profundidade passa pelo teto de tres');
+  const capped = neighborhood(tree, 'a.md', 3, 2);
+  assert.deepEqual(ids(capped), ['a.md', 'b.md']);
+  assert.equal(capped.capped, true);
+  assert.deepEqual(neighborhood(tree, 'f.md', 2), { nodes: [{ id: 'f.md', ring: 0, via: null }], edges: [], capped: false });
+});
+
+test('3D: giro com teto no angulo vertical, projecao e semente estavel', () => {
+  assert.deepEqual(orbitBy({ yaw: 0, pitch: 0 }, 0.5, 9), { yaw: 0.5, pitch: PITCH_LIMIT });
+  assert.deepEqual(orbitBy({ yaw: 0, pitch: 0 }, 0, -9), { yaw: 0, pitch: -PITCH_LIMIT });
+  const flat = project(10, 20, 0, rotationOf({ yaw: 0, pitch: 0 }), 300);
+  assert.deepEqual(flat, { x: 10, y: 20, depth: 0, k: 1 }, 'sem giro e sem profundidade, o ponto fica onde esta');
+  const far = project(0, 0, 100, rotationOf({ yaw: 0, pitch: 0 }), 300);
+  assert.equal(far.depth, 100);
+  assert.equal(far.k, 0.75, 'longe da camera fica menor');
+  const turned = project(10, 0, 0, rotationOf({ yaw: Math.PI / 2, pitch: 0 }), 300);
+  assert.ok(Math.abs(turned.x) < 1e-9 && Math.abs(turned.depth + 10) < 1e-9, 'um quarto de volta leva o eixo x para a profundidade');
+  const tree = treeOf(['a/x.md', 'b.md']);
+  const seed = () => {
+    const nodes = new Map([['.', { kind: 'root' }], ['a', { kind: 'dir' }], ['a/x.md', { kind: 'doc' }], ['b.md', { kind: 'doc' }]]);
+    seedSpace(tree, nodes);
+    return [...nodes.values()].map((node) => [node.x, node.y, node.z]);
+  };
+  assert.deepEqual(seed(), seed(), 'a mesma arvore nasce sempre igual');
+  assert.deepEqual(seed()[0], [0, 0, 0], 'a raiz nasce na origem');
+});
+
+/* ── cores ────────────────────────────────────────────────────────── */
+
+const DAY = 24 * 60 * 60 * 1000;
+const NOW = 1_800_000_000_000;
+
+test('cores: faixas de tamanho e de idade, e tipo pelo nome', () => {
+  assert.deepEqual([0, 1023, 1024, 10 * 1024 - 1, 10 * 1024, 100 * 1024, 1024 * 1024, 5e9].map(sizeBin), [0, 0, 1, 1, 2, 3, 4, 4]);
+  assert.deepEqual([NOW - 1000, NOW - 2 * DAY, NOW - 10 * DAY, NOW - 100 * DAY, NOW - 400 * DAY, NOW + 5000].map((ms) => ageBin(ms, NOW)), [0, 1, 2, 3, 4, 0]);
+  assert.equal(ageBin(null, NOW), null);
+  assert.equal(ageBin(0, NOW), null);
+  assert.equal(typeKey('README.md'), 'md');
+  assert.equal(typeKey('App.JSX'), 'jsx');
+  assert.equal(typeKey('.gitignore'), '.gitignore');
+  assert.equal(typeKey('Makefile'), '');
+  assert.equal(typeKey('nota.'), '');
+});
+
+test('vagas de cor: quem tinha fica, a livre vai para a maior e reagrupar refaz', () => {
+  assert.deepEqual(assignTones(['md', 'js', 'py', 'rs', 'go'], { js: 'ciano' }), { js: 'ciano', md: 'rosa', py: 'indigo', rs: 'lima' });
+  assert.deepEqual(assignTones(['md', 'js', 'py', 'rs', 'go'], { js: 'ciano' }, { regroup: true }), { md: 'ciano', js: 'rosa', py: 'indigo', rs: 'lima' });
+  assert.deepEqual(assignTones(['md'], { velho: 'ciano' }), { md: 'ciano' }, 'vaga de categoria que sumiu fica livre');
+  assert.deepEqual(assignTones(['a', 'b'], { a: 'ciano', b: 'ciano' }), { a: 'ciano', b: 'rosa' }, 'vaga repetida no estado gravado vale uma vez');
+  assert.deepEqual(assignTones(['a'], { a: 'roxo' }), { a: 'ciano' }, 'vaga que nao existe e descartada');
+});
+
+test('modos de cor: tipo, tamanho, data e regras, cada um com a sua legenda', () => {
+  const tree = buildTree({
+    docs: [
+      { relative: 'src/app.js', size: 500, modifiedMs: NOW - 1000 },
+      { relative: 'src/util.js', size: 20000, modifiedMs: NOW - 3 * DAY },
+      { relative: 'docs/guia.md', size: 2048, modifiedMs: NOW - 40 * DAY },
+      { relative: 'Makefile', size: 2_000_000, modifiedMs: null },
+    ],
+    fingerprint: 'cores',
+  }, { rootName: 'p' });
+  assert.deepEqual(COLOR_MODES, ['group', 'folder', 'type', 'size', 'modified', 'rules']);
+  assert.equal(cleanColorMode('arco-iris'), 'group');
+
+  const type = colorize(tree, { mode: 'type', now: NOW });
+  assert.deepEqual(type.legend.map((entry) => [entry.ext, entry.key, entry.count]), [['js', 'ciano', 2], ['', 'rosa', 1], ['md', 'indigo', 1]]);
+  assert.equal(type.toneOf.get('src/app.js'), 'ciano');
+  assert.equal(type.toneOf.has('src'), false, 'no modo tipo a pasta fica neutra');
+  assert.equal(type.other, 0);
+  assert.deepEqual(type.saved, { js: 'ciano', '': 'rosa', md: 'indigo' });
+
+  const size = colorize(tree, { mode: 'size', now: NOW });
+  assert.deepEqual(size.legend.map((entry) => [entry.key, entry.count]), [['q0', 1], ['q1', 1], ['q2', 1], ['q3', 0], ['q4', 1]]);
+  assert.equal(size.toneOf.get('Makefile'), 'q4');
+
+  const age = colorize(tree, { mode: 'modified', now: NOW });
+  assert.deepEqual(age.legend.map((entry) => [entry.bin, entry.key, entry.count]), [[0, 'q4', 1], [1, 'q3', 1], [2, 'q2', 0], [3, 'q1', 1], [4, 'q0', 0]]);
+  assert.equal(age.toneOf.get('src/app.js'), 'q4', 'o mais recente fica no fim da rampa, que chama o olho');
+  assert.equal(age.other, 1, 'arquivo sem data vai para o neutro');
+
+  const rules = colorize(tree, {
+    mode: 'rules',
+    rules: [{ query: 'SRC util', color: 'verde' }, { query: 'src', color: 'azul' }, { query: '   ', color: 'rosa' }, { query: 'x', color: 'naoexiste' }],
+  });
+  assert.equal(rules.toneOf.get('src/util.js'), 'c:verde', 'vale a primeira regra que combina');
+  assert.equal(rules.toneOf.get('src/app.js'), 'c:azul');
+  assert.equal(rules.toneOf.get('src'), 'c:azul', 'a regra pinta a pasta tambem');
+  assert.equal(rules.toneOf.has('docs/guia.md'), false);
+  assert.deepEqual(rules.legend.map((entry) => [entry.query, entry.key, entry.count]), [['SRC util', 'c:verde', 1], ['src', 'c:azul', 1]]);
+  assert.equal(rules.other, 2);
+  assert.deepEqual(cleanRules([{ query: 'a'.repeat(300), color: 'azul' }, { query: 1, color: 'azul' }, null]), [{ query: 'a'.repeat(120), color: 'azul' }]);
+  assert.equal(cleanRules(Array.from({ length: 20 }, () => ({ query: 'x', color: 'azul' }))).length, 8);
+});
+
+test('paletas: quatro vagas, rampa de cinco degraus e mono sem identidade', () => {
+  const luminance = (hex) => {
+    const value = Number.parseInt(hex.slice(1), 16);
+    const channel = (raw) => { const part = raw / 255; return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4; };
+    return 0.2126 * channel((value >> 16) & 255) + 0.7152 * channel((value >> 8) & 255) + 0.0722 * channel(value & 255);
+  };
+  assert.deepEqual(PALETTES, ['safe', 'neon', 'pastel', 'mono']);
+  PALETTES.forEach((palette) => [false, true].forEach((dark) => {
+    const colors = paletteColors(palette, dark);
+    assert.equal(colors.slots.length, 4, palette);
+    assert.equal(colors.ramp.length, 5, palette);
+    [...colors.slots, ...colors.ramp, colors.neutral].forEach((hex) => assert.match(hex, /^#[0-9a-f]{6}$/i, `${palette} ${hex}`));
+    // A rampa sai de perto da superficie e vai para longe dela.
+    const steps = colors.ramp.map(luminance);
+    steps.slice(1).forEach((value, at) => assert.ok(dark ? value > steps[at] : value < steps[at], `${palette} ${dark ? 'escuro' : 'claro'} degrau ${at + 1}`));
+  }));
+  const mono = paletteColors('mono', false);
+  assert.ok(mono.slots.every((hex) => hex === mono.neutral));
+  const safe = paletteColors('safe', false);
+  assert.equal(toneColor('ciano', safe), '#0891b2', 'a Segura e a paleta compartilhada de sempre');
+  assert.equal(toneColor('q0', safe), '#62bfde');
+  assert.equal(toneColor('c:verde', safe), '#1f9d5b');
+  assert.equal(toneColor('c:verde', paletteColors('safe', true)), '#3ccf76');
+  assert.equal(toneColor(null, safe), safe.neutral);
+  assert.equal(toneColor('q9', safe), safe.neutral);
+  assert.equal(toneColor('ciano', paletteColors('neon', false)), toneColor('ciano', safe), 'trocar de paleta nao muda que pasta ocupa qual vaga');
+  assert.equal(cleanPalette('arco-iris'), 'safe');
+});
+
+/* ── opcoes gravadas ──────────────────────────────────────────────── */
+
+test('opcoes do grafo: gravadas por raiz, limpas e herdadas por uma raiz nova', () => {
+  const storage = memoryStorage();
+  assert.deepEqual(latestOptions(storage), { mode: 'map', scope: 'docs', colorBy: 'group', palette: 'safe', depth: 1, refs: true });
+  saveUi(storage, '/a', {
+    mode: 'space', scope: 'project', colorBy: 'rules', palette: 'neon', depth: 9, refs: false,
+    rules: [{ query: 'src', color: 'verde' }, { query: 7, color: 'azul' }], folderTones: { x: 'rosa' }, typeTones: { md: 'ciano', '': 'lima' },
+  }, 100);
+  const loaded = loadUi(storage, '/a');
+  assert.deepEqual(
+    [loaded.mode, loaded.scope, loaded.colorBy, loaded.palette, loaded.depth, loaded.refs],
+    ['space', 'project', 'rules', 'neon', 3, false],
+  );
+  assert.deepEqual(loaded.rules, [{ query: 'src', color: 'verde' }]);
+  assert.deepEqual(loaded.folderTones, { x: 'rosa' });
+  assert.deepEqual(loaded.typeTones, { md: 'ciano', '': 'lima' });
+  saveUi(storage, '/b', { mode: 'nada', palette: 'arco-iris', colorBy: 'magia', scope: 'tudo' }, 200);
+  const bad = loadUi(storage, '/b');
+  assert.deepEqual([bad.mode, bad.palette, bad.colorBy, bad.scope], ['map', 'safe', 'group', 'docs']);
+  saveUi(storage, '/c', { mode: 'tree', palette: 'pastel', rules: [{ query: 'x', color: 'azul' }] }, 300);
+  assert.deepEqual(latestOptions(storage), { mode: 'tree', scope: 'docs', colorBy: 'group', palette: 'pastel', depth: 1, refs: true }, 'regras e vagas nao passam para a raiz nova');
+});
+
+/* ── demonstracao ─────────────────────────────────────────────────── */
+
+test('demonstracao: links por indice dentro da lista, e codigo so no projeto inteiro', () => {
+  ['small', 'real', 'partial'].forEach((scenario) => {
+    const docs = buildDemoScan('/p', scenario, 'docs');
+    const project = buildDemoScan('/p', scenario, 'project');
+    assert.equal(docs.scope, 'docs');
+    assert.equal(project.scope, 'project');
+    assert.ok(docs.docs.every((doc) => doc.relative.endsWith('.md')), scenario);
+    assert.ok(project.docs.length > docs.docs.length, scenario);
+    [docs, project].forEach((scan) => {
+      assert.ok(scan.links.length > 0, scenario);
+      scan.links.forEach(([from, to]) => {
+        assert.ok(Number.isInteger(from) && Number.isInteger(to) && from !== to && from < scan.docs.length && to < scan.docs.length, `${scenario} ${from} ${to}`);
+      });
+      assert.equal(buildTree(scan, { rootName: 'p' }).links.count, scan.links.length, `${scenario} sem par repetido`);
+    });
+    assert.ok(docs.links.every(([from, to]) => docs.docs[from].relative.endsWith('.md') && docs.docs[to].relative.endsWith('.md')));
+    assert.notEqual(docs.fingerprint, project.fingerprint);
+  });
+  assert.deepEqual(buildDemoScan('/p', 'empty', 'project').links, []);
+});
+
+test('o painel tem o seletor de vista, as opcoes e o giro do 3D', () => {
+  const pane = source('../src/terminals/ui/DocGraphPane.jsx');
+  assert.match(pane, /VIEW_MODES\.map/);
+  assert.match(pane, /<GraphOptions/);
+  assert.doesNotMatch(pane, /controller\.groups/, 'os grupos agora moram em controller.colors');
+  // A cor de uma regra e escolhida, nao sai da paleta: a legenda das regras
+  // fica na monocromatica, e o seletor de paleta some no modo de regras.
+  const overlays = source('../src/terminals/ui/DocGraphOverlays.jsx');
+  assert.match(overlays, /palette === 'mono' && CATEGORICAL\.includes\(mode\)\) return null/);
+  assert.match(overlays, /colorBy === 'rules' \? \(\s*<RulesEditor[^]*?\) : \(\s*<Section title=\{STRINGS\.palette\}/);
+  const interaction = source('../src/terminals/docgraph/interaction.js');
+  assert.match(interaction, /api\.rotate\(sessionId/);
+  assert.match(interaction, /panInstead\(event\)/, 'vista sem arraste de marca desloca a camera');
+  const renderer = source('../src/terminals/docgraph/renderer.js');
+  ['drawLayout()', 'drawBlocks()', 'drawSpace()', 'pickLayout(sx, sy)', 'locateLayout(at)'].forEach((name) => assert.ok(renderer.includes(name), name));
+  // O 3D desenha no proprio canvas 2D: WebGL disputaria contexto com os terminais.
+  assert.doesNotMatch(renderer, /getContext\('webgl/);
+  // O painel, como o motor, fica fora da primeira pintura do estudio, que tem
+  // orcamento de payload em tools/check/performance.mjs.
+  const editor = source('../src/terminals/ui/EditorPane.jsx');
+  assert.match(editor, /lazy\(\(\) => import\('\.\/DocGraphPane\.jsx'\)\)/);
+  assert.doesNotMatch(editor, /^import DocGraphPane/m);
+});
+
 /* ── texto visivel ────────────────────────────────────────────────── */
 
 test('texto visivel sem parenteses, sem travessao separador e com plural certo', () => {
@@ -555,6 +898,12 @@ test('texto visivel sem parenteses, sem travessao separador e com plural certo',
     copy.nodeAnnouncement({ kind: 'root', name: '', docCount: 1 }, { rootName: 'projeto' }),
     copy.countsAnnouncement(977, 204), copy.fmtSize(1), copy.fmtSize(2048), copy.fmtSize(5 * 1024 * 1024), copy.fmtModified(1789000000000),
     copy.previewOf('README.md'),
+    copy.filesCount(1), copy.filesCount(3), copy.itemsCount(2, 'project'), copy.linksCount(1), copy.linksCount(40), copy.neighborsCapped(300), copy.rulesLimit(8),
+    ...VIEW_MODES.map(copy.viewName), ...COLOR_MODES.map(copy.colorModeName), ...PALETTES.map(copy.paletteName),
+    ...[0, 1, 2, 3, 4].map((bin) => copy.sizeBinLabel(bin, [1024, 10240, 102400, 1048576])), ...[0, 1, 2, 3, 4].map(copy.ageBinLabel),
+    copy.typeLabel('md'), copy.typeLabel(''), copy.typeLabel('.gitignore'), copy.indexingProgress(1, 'project'),
+    copy.nodeAnnouncement({ kind: 'doc', name: 'app.js', parent: 'src' }, { scope: 'project' }),
+    copy.countsAnnouncement(10, 2, 'project'),
     ...['preview', 'previewWidth', 'previewReload', 'previewClose', 'previewCloseTitle', 'previewDetach', 'previewDetachTitle', 'previewLoading', 'previewMissing', 'previewFailed'].map((key) => copy.STRINGS[key]),
   ];
   samples.forEach((text) => {
@@ -569,4 +918,11 @@ test('texto visivel sem parenteses, sem travessao separador e com plural certo',
   assert.equal(copy.badgeCount(1204), '1.204');
   assert.equal(copy.badgeCount(12400), '12 mil');
   assert.equal(copy.countsAnnouncement(1, 1), '1 documento em 1 pasta');
+  assert.equal(copy.countsAnnouncement(3, 1, 'project'), '3 arquivos em 1 pasta');
+  assert.equal(copy.sizeBinLabel(0, [1024, 10240, 102400, 1048576]), 'Até 1 KB');
+  assert.equal(copy.sizeBinLabel(4, [1024, 10240, 102400, 1048576]), 'Acima de 1 MB');
+  assert.equal(copy.typeLabel('md'), 'MD');
+  assert.equal(copy.typeLabel(''), 'Sem extensão');
+  assert.equal(copy.viewName('space'), '3D');
+  assert.equal(copy.viewName('nada'), 'Mapa');
 });

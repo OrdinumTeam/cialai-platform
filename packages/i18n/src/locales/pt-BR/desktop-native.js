@@ -3,6 +3,10 @@
 // catálogo que o Rust embute a partir destas chaves.
 
 export default Object.freeze({
+  "native.broto.execFailed": "Comando interrompido · {error}",
+  "native.broto.execTimedOut": "Prazo do comando esgotado",
+  "native.broto.execFinished": "Saiu com {code} em {duration} s",
+
   'native.browser.downloading': 'Baixando {name}',
   'native.browser.downloadingProgress': 'Baixando {name}, {percent}% de {size}',
   'native.browser.preparingDownload': 'Preparando o download do Chromium',
@@ -73,10 +77,11 @@ export default Object.freeze({
   'native.error.openFile': 'Não foi possível abrir o arquivo',
   'native.error.openImage': 'Não foi possível abrir a imagem',
   'native.error.originRefused': 'Origem recusada',
+  'native.error.pairedPhoneOnly': 'Só um celular vinculado pode fazer isso.',
   'native.error.pathEmpty': 'Caminho vazio',
   'native.error.pathNotAbsolute': 'Caminho precisa ser absoluto: {path}',
   'native.error.pathRelative': 'Caminho relativo',
-  'native.error.profileNameInvalid': 'Nome de perfil inválido. Use letras minúsculas, dígitos e hífen, até 32 caracteres.',
+  'native.error.profileNameInvalid': 'Nome de perfil inválido. Use letras minúsculas, dígitos, hífen e sublinhado, até 32 caracteres.',
   'native.error.profileExists': 'Já existe uma pasta com esse nome.',
   'native.error.profileUnknown': 'Perfil desconhecido.',
   'native.error.agentUnknown': 'Agente desconhecido.',
@@ -148,6 +153,7 @@ export default Object.freeze({
   'native.notch.windowSession': 'da sessão atual',
   'native.notch.windowWeekly': 'semanal',
   'native.notch.windowWeeklyAll': 'de todos os modelos',
+  'native.command.hostClosed': 'O Cialai não está aberto neste computador.',
   'native.command.missing': 'Cialai não encontrado. Abra o app uma vez para consertar o comando.',
   'native.quit.cancel': 'Cancelar',
   'native.quit.confirm': 'Sair',

@@ -23,7 +23,6 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
         fn WSAStartup(version: u16, data: *mut c_void) -> i32;
         fn WSACleanup() -> i32;
         fn WSAGetLastError() -> i32;
-        fn socket(family: i32, kind: i32, protocol: i32) -> usize;
         fn bind(socket: usize, address: *const c_void, length: i32) -> i32;
         fn listen(socket: usize, backlog: i32) -> i32;
         fn accept(socket: usize, address: *mut c_void, length: *mut i32) -> usize;
@@ -96,6 +95,13 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
     assert_eq!(fs::read_dir(&root.0).unwrap().count(), 1);
 
     for case in ["running", "draining", "stalled"] {
+        // Successful handshakes test protocol behavior, not scheduler speed.
+        // Only the unresponsive peer uses the strict 100 ms caller budget.
+        let probe_timeout = if case == "stalled" {
+            timeout
+        } else {
+            Duration::from_secs(2)
+        };
         let control = root.0.join("app-server-control");
         fs::create_dir(&control).unwrap();
         let socket_path = control.join("app-server-control.sock");
@@ -109,7 +115,20 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
             path: [0; 108],
         };
         address.path[..path_text.len()].copy_from_slice(path_text.as_bytes());
-        let raw = unsafe { socket(1, 1, 0) }; // AF_UNIX, SOCK_STREAM.
+        // Keep the fixture listener out of concurrently spawned shell tests.
+        let raw = unsafe {
+            use windows_sys::Win32::Networking::WinSock::{
+                WSA_FLAG_NO_HANDLE_INHERIT, WSA_FLAG_OVERLAPPED, WSASocketW,
+            };
+            WSASocketW(
+                1, // AF_UNIX.
+                1, // SOCK_STREAM.
+                0,
+                std::ptr::null(),
+                0,
+                WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT,
+            )
+        };
         assert_ne!(
             raw,
             usize::MAX,
@@ -159,13 +178,16 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
             };
             stream.set_nonblocking(false).unwrap();
             stream
-                .set_read_timeout(Some(Duration::from_millis(500)))
+                .set_read_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
             stream
-                .set_write_timeout(Some(Duration::from_millis(500)))
+                .set_write_timeout(Some(Duration::from_secs(2)))
                 .unwrap();
-            let mut websocket = accept_websocket(stream).expect("WebSocket handshake");
-            let first = websocket.read().expect("initialize request");
+            let mut websocket = accept_websocket(stream)
+                .unwrap_or_else(|error| panic!("{case}: WebSocket handshake: {error:?}"));
+            let first = websocket
+                .read()
+                .unwrap_or_else(|error| panic!("{case}: initialize request: {error:?}"));
             let Message::Text(text) = first else {
                 panic!("expected initialize JSON");
             };
@@ -234,7 +256,7 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
                         closed = true;
                         break;
                     }
-                    other => panic!("unexpected passive probe frame or failure: {other:?}"),
+                    other => panic!("{case}: unexpected passive probe frame or failure: {other:?}"),
                 }
             }
             assert!(closed, "probe did not close its connection");
@@ -242,7 +264,7 @@ fn windows_passive_probe_uses_only_profile_local_initialize_and_obeys_timeout() 
         })));
 
         let started = Instant::now();
-        let health = super::check(&root.0, timeout);
+        let health = super::check(&root.0, probe_timeout);
         let elapsed = started.elapsed();
         worker.finish();
         match case {

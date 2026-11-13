@@ -4,10 +4,17 @@
 // grupos de cor. Nada aqui toca o disco, o DOM ou o Tauri, entao o script
 // `scripts/check-docgraph.mjs` importa e testa tudo direto no Node.
 //
-// A regra de poda mora em `buildTree`: os nos sao os Markdown devolvidos pela
-// varredura do Rust mais os ancestrais de cada um ate a raiz. Uma pasta sem
-// Markdown em nenhum descendente nunca vira no, porque ninguem a cita. Recolher
-// uma pasta so muda a cena visivel; o indice e as contagens nao mudam.
+// A regra de poda mora em `buildTree`: os nos sao os arquivos devolvidos pela
+// varredura do Rust mais os ancestrais de cada um ate a raiz. No escopo
+// Documentacao os arquivos sao so os Markdown; no escopo Projeto inteiro sao
+// todos. Uma pasta sem arquivo em nenhum descendente nunca vira no, porque
+// ninguem a cita. Recolher uma pasta so muda a cena visivel; o indice e as
+// contagens nao mudam. O nome `doc` dos nos de arquivo ficou da primeira
+// versao, que so lia Markdown.
+//
+// As ligacoes entre arquivos chegam do Rust como pares de posicoes na lista
+// ordenada de arquivos. `buildTree` troca as posicoes pelos ids e descarta o
+// par que aponta para uma entrada recusada.
 //
 // Ids: o caminho relativo com `/`, exatamente como esta no disco, e `.` para a
 // raiz, como `relativePath()` de `files.js`. Nada de minusculas nem de NFC no
@@ -92,7 +99,9 @@ export function buildTree(scan, { rootName = '' } = {}) {
   nodes.set(ROOT_ID, makeDir(ROOT_ID, null, 0, rootName));
   let rejected = 0;
   const docs = Array.isArray(scan?.docs) ? scan.docs : [];
-  docs.forEach((entry) => {
+  // Id de cada posicao da lista, para as ligacoes. Entrada recusada fica vazia.
+  const idAt = new Array(docs.length).fill(null);
+  docs.forEach((entry, position) => {
     const relative = entry?.relative;
     if (!validRelative(relative) || nodes.has(relative)) { rejected += 1; return; }
     const parts = relative.split('/');
@@ -118,6 +127,7 @@ export function buildTree(scan, { rootName = '' } = {}) {
       key: foldKey(name), pathKey: foldKey(relative),
     });
     nodes.get(cursor).docs.push(relative);
+    idAt[position] = relative;
   });
 
   // Contagem total de descendentes, de baixo para cima, e ordem estavel.
@@ -143,9 +153,73 @@ export function buildTree(scan, { rootName = '' } = {}) {
     stopped: scan?.stopped || null,
     issuesTotal: Number(scan?.issuesTotal) || 0,
     rejected,
+    links: readLinks(scan?.links, idAt, Boolean(scan?.linksPartial)),
   };
   attachIssues(tree, scan?.issues, tree.issuesTotal, tree.stopped);
   return tree;
+}
+
+/* ── ligacoes entre arquivos ──────────────────────────────────────── */
+
+// Pares `[origem, destino]` em posicoes da lista de arquivos viram mapas de
+// id para id nos dois sentidos. Par repetido, par de um arquivo com ele mesmo
+// e posicao sem arquivo ficam de fora.
+export function readLinks(raw, idAt, partial = false) {
+  const out = new Map();
+  const into = new Map();
+  const seen = new Set();
+  let count = 0;
+  (Array.isArray(raw) ? raw : []).forEach((pair) => {
+    if (!Array.isArray(pair)) return;
+    const from = Number.isInteger(pair[0]) ? idAt[pair[0]] : null;
+    const to = Number.isInteger(pair[1]) ? idAt[pair[1]] : null;
+    if (!from || !to || from === to) return;
+    // NUL nao aparece em caminho, entao nao ha par ambiguo.
+    const key = `${from}\u0000${to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    if (out.has(from)) out.get(from).push(to); else out.set(from, [to]);
+    if (into.has(to)) into.get(to).push(from); else into.set(to, [from]);
+    count += 1;
+  });
+  return { out, into, count, partial: Boolean(partial) };
+}
+
+// Uma leitura de ligacoes que parou no prazo nao apaga o que a anterior tinha:
+// as ligacoes entre arquivos que continuam no indice ficam ate uma leitura
+// completa. Sem isso as arestas piscariam a cada leitura cortada. Devolve
+// quantas vieram da anterior.
+export function carryLinks(next, previous) {
+  const links = next?.links;
+  if (!links?.partial || !previous?.links?.count) return 0;
+  const isDoc = (id) => next.nodes.get(id)?.kind === 'doc';
+  let carried = 0;
+  previous.links.out.forEach((targets, from) => {
+    if (!isDoc(from)) return;
+    targets.forEach((to) => {
+      if (from === to || !isDoc(to)) return;
+      const list = links.out.get(from);
+      if (list?.includes(to)) return;
+      if (list) list.push(to); else links.out.set(from, [to]);
+      if (links.into.has(to)) links.into.get(to).push(from); else links.into.set(to, [from]);
+      carried += 1;
+    });
+  });
+  links.count += carried;
+  return carried;
+}
+
+export function degreeOf(tree, id) {
+  return (tree?.links?.out.get(id)?.length || 0) + (tree?.links?.into.get(id)?.length || 0);
+}
+
+// Vizinhos de um arquivo nos dois sentidos, sem repetir.
+export function neighborsOf(tree, id) {
+  const out = tree?.links?.out.get(id) || [];
+  const into = tree?.links?.into.get(id) || [];
+  if (!into.length) return out;
+  if (!out.length) return into;
+  return [...new Set([...out, ...into])];
 }
 
 // A pasta que falhou nunca e um no, porque dela nada foi lido. O aviso vai

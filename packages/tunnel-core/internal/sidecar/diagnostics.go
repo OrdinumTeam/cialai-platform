@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/pairing"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/transport/candidates"
 )
@@ -49,7 +50,14 @@ func (runtime *runtimeState) diagnosticsRun(ctx context.Context, raw json.RawMes
 		wait.Wait()
 		cancel()
 	}
-	return buildDiagnostics(runtime.status(), probe), nil
+	result := buildDiagnostics(runtime.status(), probe)
+	runtime.mu.Lock()
+	if runtime.brotoIPC != nil {
+		result.Checks = append(result.Checks, *runtime.brotoIPC)
+		result.OK = result.OK && runtime.brotoIPC.OK
+	}
+	runtime.mu.Unlock()
+	return result, nil
 }
 
 func probeGateway(ctx context.Context, mapper candidates.PortMapper) string {
@@ -141,4 +149,16 @@ func countKind(list []CandidateStatus, kind string) int {
 		}
 	}
 	return count
+}
+
+func (runtime *runtimeState) setBrotoIPC(path string, err error) {
+	check := DiagnosticCheck{ID: "broto_ipc", OK: err == nil, Detail: path}
+	if err != nil {
+		check.Detail = err.Error()
+		runtime.logger.Warn("Broto host IPC unavailable", logx.Fields{"path": path, "error": err.Error()})
+	}
+	runtime.mu.Lock()
+	runtime.brotoIPC = &check
+	runtime.mu.Unlock()
+	runtime.emit("broto.ipc.state", check)
 }

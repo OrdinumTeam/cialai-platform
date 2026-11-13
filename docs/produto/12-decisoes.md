@@ -48,13 +48,32 @@ O estado abaixo se refere à aplicação da decisão nesta linha, não à conclu
 | 040 | Implementado | Apresentação do card com o Rust como fonte de verdade, e `list_dirs` devolvendo só nomes de pasta dentro de limites do servidor |
 | 041 | Implementado | O app móvel abre sempre no início, substituindo o trecho Abertura do app da decisão 037 |
 | 042 | Implementado | Troca de conta dos agentes por escolha de pasta, sem tocar em credencial, valendo para sessões novas |
-| 043 | Implementado | Grafo da documentação numa aba do estúdio, só com Markdown e as pastas que levam até eles |
+| 043 | Implementado | Grafo da documentação numa aba do estúdio, só com Markdown e as pastas que levam até eles; vistas, escopo e ligações revistos pela 076 |
 | 044 | Implementado | Comando `cialai` instalado pelo app; desde a 0.2.9 o Linux recebe um bloco guardado no arquivo do shell |
 | 045 | Implementado | No Windows o app não pede foco ao webview em evento de foco e o `style-src` fica sem hash |
 | 046 | Preparado | Início do celular com retrato enviado pela página, pedido ao abrir o terminal, favoritos no aparelho e ícones lucide por `react-native-svg`; testes passam, conferência em aparelho pendente de novo build nativo |
 | 047 | Preparado | Projetos com atalhos por computador e sessão nova em três etapas na página, com agente e conta escolhidos para a sessão; testes e capturas passam, fluxo completo em aparelho pendente de novo build nativo |
 | 048 | Preparado | Teclado especial e comandos rápidos na página do terminal, com sequências conferidas contra o xterm e em PTY local com bash, less, vim, Claude Code e Codex; conferência em aparelho pendente |
 | 051 | Preparado | Primeiro acesso no início com convite ilustrado e as abas que dependem de computador travadas por uma guarda única na navegação; testes passam, conferência em aparelho pendente |
+| 053 | Pendente | Escopo inicial do Cialai Pro registrado no documento 17; Multi-Device Sessions e Agents Manager sem código |
+| 058 | Preparado | Cialai Broto como terceira persona; execução em docs/broto/08-roteiro.md |
+| 059 | Preparado | Identidade e pareamento próprios do Broto; execução em docs/broto/08-roteiro.md |
+| 060 | Preparado | O hospedeiro não recebe ordens de um Broto; execução em docs/broto/08-roteiro.md |
+| 061 | Preparado | Windows do Broto sem Authenticode; execução em docs/broto/08-roteiro.md |
+| 062 | Preparado | Todo celular pareado comanda os Brotos; execução em docs/broto/08-roteiro.md |
+| 063 | Preparado | Lista Brotos ligando e janela de acompanhamento; execução em docs/broto/08-roteiro.md |
+| 064 | Preparado | Confirmação do Broto segura só a IA; a pessoa opera direto; execução em docs/broto/08-roteiro.md |
+| 065 | Preparado | CLI e skill do hospedeiro; aceite integrado em BRO-022 |
+| 066 | Preparado | Execução em fluxo e card IA por Broto; prova visual remota pendente |
+| 067 | Preparado | Transferência por blocos com hash e acesso conforme os poderes da conta; prova remota pendente |
+| 068 | Preparado | Aprovação global e liberação temporária em memória; aceite integrado pendente |
+| 069 | Proposta | Lançador gráfico do Broto Windows aguarda escolha do usuário, sem implementação |
+| 070 | Proposta | Espera por saída com fronteira de comando aguarda definição de contrato, sem filtro de eco |
+| 071 | Preparado | Prévia Broto Windows e Linux autorizada junto do Cialai 0.5.0; publicação em validação |
+| 074 | Implementado | Broto 0.1.2 publicado para Windows e Linux, com testes nativos, assinaturas, instaladores e espelho público verificados em BRO-023 |
+| 075 | Implementado | Broto 0.1.3 publicado em 31/10/2026 com o serviço do Windows como LocalSystem, sem pedir senha; instalação, pareamento e comandos provados na VM |
+| 076 | Preparado | Grafo com seis vistas, escopo do projeto inteiro, ligações lidas pelo Rust e cores por modo e paleta; testes e modo de demonstração passam, conferência no app empacotado na validação da 0.6.0 |
+| 077 | Preparado | Broto pareado por QR lido pelo celular, com confirmação no celular e no Broto; testes locais passam e o onion temporário foi provado no Tor público, falta o pareamento com aparelhos |
 
 ## 001 Nome Cialai
 
@@ -398,3 +417,323 @@ Decisão: o glifo do agente usa a tinta de texto para os dois, no app e na pági
 Alternativa rejeitada: manter os dois cabeçalhos e só encolher o nativo. O usuário escolheu o da sessão, que já tem o voltar e o nome da sessão; o nome do computador continua na lista, onde a troca de computador faz sentido. Também ficou fora reordenar a lista de Agentes a cada troca de conta em uso: a ordem muda só quando o retrato muda.
 
 Consequência: `mobile.agents.default`, `switch`, `switchFor` e `count` saem dos três dicionários e `mobile.agents.inUse`, `mobile.projects.viewList` e `mobile.projects.viewGrid` entram. A ponte ganha a mensagem `view`, só da página para a casca; páginas antigas não a mandam e a barra fica sempre visível, como antes. Testes cobrem a ordem da lista, a conta do card do Início, a mensagem `view`, a barra escondida e a lista de Projetos; a conferência no aparelho fica pendente de novo build.
+
+## 053 Escopo inicial do Cialai Pro
+
+Data: 13/10/2026. Contexto: a Ordinum quer uma modalidade premium do Cialai que dê mais funções ao estúdio de terminais e ao app, sem mudar a proposta original de ambiente de desenvolvimento remoto, open source e com conectividade que não depende de servidor da pessoa, da Ordinum ou do projeto. Era preciso fixar o que entra nessa modalidade antes de qualquer desenvolvimento.
+
+Decisão: o escopo inicial planejado do Cialai Pro é composto exclusivamente por Multi-Device Sessions e Agents Manager, descritos no documento 17. Multi-Device Sessions leva uma mesma sessão a vários computadores e celulares, com troca de aparelho sem perder o contexto. Agents Manager é um painel dentro do espaço do terminal, que a pessoa expande ou recolhe, com os agentes, subagentes e processos paralelos da sessão. As duas funções ficam como planejadas. O layout visual do Agents Manager não é definido agora.
+
+Alternativa rejeitada: um Pro feito de serviços hospedados pela Ordinum, como push remoto e relé próprio. Ele exigiria servidor e conta, contrariando a conectividade sem servidor do produto. Também ficou fora antecipar outras funções Pro sem definição.
+
+Consequência: tudo que a edição aberta faz hoje continua nela, e o Pro usa a mesma conectividade direta e pelo Tor. Preço, licenciamento e regras comerciais ficam fora da documentação do produto neste momento. Uma função nova no Pro exige decisão nova neste registro e atualiza a tabela de escopo do documento 17. As tarefas de desenvolvimento entram no documento 11 só quando o desenvolvimento for aprovado.
+
+## 054 Perfis de agentes com tutorial e menu de contas no shell
+
+Data: 21/10/2026, incorporada em 25/10/2026. Contexto: criar uma conta nova pedia um nome numa caixa solta e abria o agente no terminal selecionado, com a pasta vazia. Quem tem várias contas do mesmo agente ainda precisava escolher a conta antes de abrir a sessão, ou exportar a variável na mão. O desenho foi aprovado num rascunho no navegador em 21/10/2026 e implementado naquele dia numa cópia antiga do repositório, parada na 0.2.2; aqui ele foi encaixado na conta ativa da decisão 042.
+
+Decisão: o modal Perfis de agentes reúne as contas com a cota, o formulário Criar e entrar e, ao lado, um tutorial animado do menu de contas, em 60% e 40% da largura. Um perfil novo recebe do padrão as instruções por link e a configuração por cópia, e o login roda numa sessão nova na pasta pessoal, digitado pelo computador. Nas sessões do Cialai, digitar `codex` ou `claude` com mais de uma conta pergunta qual usar: Enter repete a última conta da pasta, um número troca, a esgotada fica para trás e `codex +nome` vai direto. O nome de perfil passa a aceitar sublinhado, porque pastas já existentes com sublinhado no nome não podiam ser escolhidas.
+
+Alternativa rejeitada: um menu para o sistema inteiro, por função no `.zshrc` da pessoa. Ele mexeria em arquivo do usuário fora do Cialai e valeria em terminal onde o Cialai não publica a cota. Também ficou fora o menu interativo de setas, que pediria um programa próprio no PATH.
+
+Consequência: a decisão 042 deixa de criar a pasta vazia, e continua valendo que nenhuma credencial é copiada. Uma conta nomeada escolhida para os terminais novos vem no ambiente e dispensa o menu. Entram `agent_menu_publish`, fora da ponte, e o campo `login` de `pty_launch_agent`. Testes cobrem a injeção nos três shells, a publicação, os scripts reais de zsh e bash com um agente falso, a cópia do perfil padrão e a linha de login. O PowerShell 5.1, o Windows real, o Linux real e a janela do Tauri ainda não foram conferidos.
+
+## 055 Estado do Codex pelo terminal da sessão, e nunca pelo daemon compartilhado
+
+Data: 25/10/2026. Contexto: com várias sessões Codex na mesma pasta, os cards passavam a mostrar o mesmo estado, como Resposta entregue. Desde a 0.163 o Codex atende todas as abas do mesmo perfil por um daemon `codex app-server`, que nasce filho do Codex da primeira aba e segura os rollouts de todas. O estúdio tratava o rollout aberto por um processo da árvore como prova de que a conversa era daquela sessão, então a primeira aba herdava a conversa de outra, as outras ficavam sem estado, e o id errado entrava no registro de retomada e se espalhava depois de reiniciar. Reproduzido com três abas reais e um turno só na terceira.
+
+Decisão: o turno do Codex vem da sequência `OSC 7501` que ele escreve no próprio terminal a cada mudança, `state=working`, `done`, `idle` ou `blocked` com `kind`, lida da saída do PTY de cada sessão. Ela só vale enquanto o agente mostrado no card é o Codex e é esquecida quando ele sai, para o estado de uma execução anterior não valer na próxima. O daemon compartilhado nunca prova de quem é uma conversa e fica fora da árvore da sessão, com o que ele gasta e executa. Na Barra de IA, cada rollout vivo do perfil vira uma sessão, em vez de só o mais recente.
+
+Alternativa rejeitada: escolher o rollout pela pasta ou pela data, que daria a mesma conversa a todas as abas da pasta. Também ficou fora perguntar ao daemon qual aba está em qual conversa, que dependeria de um protocolo interno do Codex.
+
+Consequência: o Codex passa a aparecer como aguardando você no estúdio, quando pede permissão. Uma sessão atendida pelo daemon fica sem id de conversa, e por isso sem retomada automática, até o Codex expor esse vínculo; antes ela recebia o id de outra aba. A UI descarta métricas que voltam depois de uma reconexão e só adota um PTY sem tag pela pasta quando ela aponta uma sessão e mais nenhuma. Testes cobrem a leitura da sequência cortada entre lotes, três abas na mesma pasta com o daemon na árvore da primeira, a saída e a volta do Codex, outro agente na mesma pasta, os cards no mesmo runtime e a Barra de IA com duas conversas.
+
+## 056 Menu de contas com setas e agente fora de subshell
+
+Data: 25/10/2026. Contexto: na 0.4.0 o menu de contas pedia o número da conta, e depois da escolha o zsh e o bash rodavam o agente num subshell `( ... )`. O subshell vira o grupo em primeiro plano do terminal, então o card lia `zsh` no lugar do Claude Code ou do Codex e perdia o perfil e o uso do plano. Os testes da 0.4.0 rodavam o menu sem terminal e nunca chegavam a esse caminho.
+
+Decisão: a conta se escolhe com as setas, ou com `j` e `k`, e Enter abre; o número continua abrindo a conta dele direto, e Esc, `q` ou Ctrl+C desistem. Tudo em shell puro, no zsh, no bash 3.2 do macOS e no PowerShell 5.1 e 7, sem programa novo no PATH. O agente roda no próprio shell, com a pasta da conta numa variável local exportada no zsh e no bash; no bash a conta padrão tira as variáveis do ambiente e devolve depois, porque lá `local` seguido de `unset` ainda entrega o valor de fora ao filho. No Windows o menu desenha pelas APIs do console e troca a saída para UTF-8 só enquanto está aberto. Por segurança, o card também acha o agente dentro do grupo em primeiro plano quando o líder do grupo é um shell ou um lançador, e a leitura da linha de comando de um processo é refeita quando o executável dele muda num `exec`.
+
+Alternativa rejeitada: um programa de menu próprio no PATH, que resolveria as setas com uma biblioteca de terminal mas pediria um binário por sistema e mais um arquivo para manter atualizado.
+
+Consequência: a decisão 054 deixa de ter o menu por número e a recusa às setas. O script do PowerShell vai sem comentários e sem recuo no `-EncodedCommand`, para caber no limite da linha de comando do Windows. Testes novos dirigem o menu num terminal de verdade no zsh, no bash e no PowerShell, com setas, número, Enter e Esc, e conferem que o agente é filho do shell e lidera o próprio grupo; outro abre uma sessão como o app, escolhe a conta com a seta e confere nas métricas o agente e o perfil em primeiro plano.
+
+## 057 Caminho de arquivo clicável na saída do terminal
+
+Data: 26/10/2026. Contexto: o terminal só tornava clicável link `http`, que abria no navegador. Um caminho de arquivo na saída, como o `temp/.../relatorio.json` que uma ferramenta imprime, não fazia nada no clique, ao contrário do terminal do VS Code, onde o caminho abre o arquivo. A base já existia: o app sabe o diretório vivo de cada sessão e já abre arquivo no editor pela ação `openPath`.
+
+Decisão: a saída ganha um provedor de link de caminho no xterm. A varredura do texto é pura: reconhece caminho absoluto, relativo, com `~` e do Windows, mais os sufixos de local `:linha`, `:linha:coluna`, `(linha,coluna)` e o `File "...", line N` do Python. O caminho se resolve contra o diretório do processo em primeiro plano, senão o do shell, senão a pasta da sessão, e só vira link quando existe no disco e é um arquivo, conferido ao passar o mouse com um cache curto. O clique simples abre, igual ao link `http` que o app já reconhece, e abre o arquivo no editor da sessão de onde o clique veio. O provedor fala com o editor por um evento `open-file` no barramento do runtime, sem importar o editor de volta e criar ciclo.
+
+Alternativa rejeitada: exigir Cmd ou Ctrl no clique, como o VS Code. O app já abre link `http` no clique simples, então pedir modificador só para caminho seria incoerente e menos descoberto.
+
+Consequência: a conta de célula e de linha quebrada é a mesma do `WebLinkProvider` do xterm, que trabalha só com a API pública do terminal. Um teste unitário cobre a varredura e a resolução, inclusive o caminho do Windows; um teste de integração dirige o provedor com um buffer de células fiel, cobrindo range, quebra de linha, filtro pela existência e a linha e a coluna no clique. A paridade com o xterm de verdade e o clique que abre a aba foram conferidos no app em dev.
+
+Correção na 0.4.3, 27/10/2026: a 0.4.2 saiu com dois buracos porque foi provada só no app em dev, onde o `fs.stat` do demo sempre diz que o arquivo existe, e com caminhos em ASCII. No app real, letra acentuada cortava o token, `Logística.pptx` virava `stica.pptx`, e nome com espaço não era tratado. O reconhecedor passou a usar `\p{L}` e `\p{N}` com a flag `u`, então qualquer letra conta como parte do nome; para o espaço, o âncora com a extensão é esticado para a esquerda por cima dos espaços e só o trecho que é um arquivo de verdade no disco vira link, decidido pelo próprio disco. O teste que faltava foi escrito: cria arquivos reais com acento e espaço no nome e confere a resolução, no lugar do mock permissivo.
+
+## 058 Cialai Broto como terceira persona
+
+Data: 28/10/2026.
+
+Contexto: A execução em outra máquina precisa de uma ponta separada do estúdio.
+
+Decisão: Programa gratuito e aberto, com um hospedeiro por Broto e vários Brotos por hospedeiro. Não equivale ao Multi-Device Sessions do Pro.
+
+Alternativa rejeitada: Transformar o Broto em outro estúdio completo.
+
+Consequência: A implementação segue o checklist único em docs/broto/08-roteiro.md.
+
+## 059 Identidade e pareamento próprios do Broto
+
+Data: 28/10/2026.
+
+Contexto: Uma identidade de celular teria acesso aos terminais do hospedeiro.
+
+Decisão: Papel broto, id bro_, token cbt1 e payload CIALAIB2. O registro v3 guarda kind e lê registros v2 sem kind como phone.
+
+Alternativa rejeitada: Usar o mesmo papel e código do celular.
+
+Consequência: A chave tem um único papel no registro; o payload próprio e a aprovação obrigatória estão preparados em BRO-003.
+
+## 060 O hospedeiro não recebe ordens de um Broto
+
+Data: 28/10/2026.
+
+Contexto: A ponte atual permite controlar terminais locais.
+
+Decisão: O papel persistido limita o Broto à rota /broto de RPC reversa. Celulares não acessam essa rota.
+
+Alternativa rejeitada: Confiar no papel declarado pelo cliente ou numa guarda da interface.
+
+Consequência: A borda recusa acesso cruzado antes de encaminhar à ponte. A RPC negocia hello versão 1 e só aceita comandos sujeitos às permissões do hospedeiro e ao teto local.
+
+## 061 Windows do Broto sem Authenticode
+
+Data: 28/10/2026.
+
+Contexto: O desenho aprovado prevê distribuição Windows sem certificado de código.
+
+Decisão: Distribuir sem Authenticode com somas assinadas, atestado de proveniência, SBOM e actions fixadas por SHA.
+
+Alternativa rejeitada: Distribuir somente com soma sem assinatura.
+
+Consequência: O pipeline e sua comprovação continuam pendentes; nenhuma release é autorizada pela execução local.
+
+## 062 Todo celular pareado comanda os Brotos
+
+Data: 28/10/2026.
+
+Contexto: O celular espelha o estúdio do hospedeiro.
+
+Decisão: Celulares vinculados podem comandar os Brotos pelas permissões do hospedeiro, sem conexão direta entre celular e Broto.
+
+Alternativa rejeitada: Criar pareamento separado de cada celular com cada Broto.
+
+Consequência: O roteamento de sessões remotas depende de BRO-008.
+
+## 063 Lista Brotos ligando e janela de acompanhamento
+
+Data: 28/10/2026.
+
+Contexto: O código precisa ser levado até outra máquina e a aprovação pode demorar.
+
+Decisão: Código aleatório de uso único válido por dez minutos, preso ao primeiro aparelho. Aprovação obrigatória na lista Brotos ligando. Pausar recusa novas ordens sem desfazer vínculo; Desconectar esquece o hospedeiro e exige código novo.
+
+Alternativa rejeitada: Aprovação automática pelo código e espera HTTP longa como no celular.
+
+Consequência: Pedido guardado até decisão ou expiração, com janela de monitoramento e controle local. Desenvolvimento local autorizado em 28/10/2026 pelo pedido de execução do plano.
+
+## 064 Confirmação do Broto segura a IA, não a pessoa
+
+Data: 28/10/2026.
+
+Contexto: No primeiro teste entre o Mac e a VM, o Abrir terminal da própria pessoa caiu na lista de comandos aguardando confirmação, e cada tecla digitada também cairia.
+
+Decisão: No nível pedir confirmação, só o que a IA pede espera o sim da pessoa no hospedeiro. A pessoa no hospedeiro ou no celular opera direto, e redimensionar terminal nunca pede confirmação. Abrir terminal leva à tela de Terminais com a sessão do Broto selecionada, marcada pelo símbolo do Broto no card.
+
+Alternativa rejeitada: Confirmar cada ação de qualquer autor, inclusive cada tecla da pessoa.
+
+Consequência: O nível só leitura continua recusando a pessoa e a IA. A atividade do Broto deixa de registrar as consultas de leitura do hospedeiro e junta a digitação seguida numa linha.
+
+## 065 CLI e skill para comandar Brotos
+
+Data: 28/10/2026.
+
+Contexto: A IA precisa comandar aparelhos sem configuração obrigatória de servidor MCP.
+
+Decisão: O caminho principal é cialai broto, ensinado por uma skill cialai instalada a pedido. O MCP continua disponível.
+
+Alternativa rejeitada: Registrar MCP obrigatoriamente ou injetar instruções fixas em toda conversa.
+
+Consequência: O comando usa o IPC privado, sempre com autor IA, e exige o Cialai aberto.
+
+## 066 Execução em fluxo e card IA
+
+Data: 28/10/2026.
+
+Contexto: A pessoa precisa acompanhar comandos da IA sem disputar o terminal interativo.
+
+Decisão: Cada Broto tem uma sessão virtual de leitura com comandos e saída em fluxo; Ctrl C cancela a execução.
+
+Alternativa rejeitada: Injetar comandos e marcadores no terminal da pessoa.
+
+Consequência: Execução ganha eventos e cancelamento, mantendo resumo limitado na resposta final e histórico apenas em memória.
+
+## 067 Arquivos pelo túnel
+
+Data: 28/10/2026.
+
+Contexto: a transferência de arquivos precisa de progresso, integridade e operações próprias pelo túnel.
+
+Decisão: verbos próprios transferem blocos com SHA256 nos caminhos acessíveis à conta do Broto, sob as permissões de operação escolhidas pela pessoa. O contrato de acesso está na decisão 074.
+
+Alternativa rejeitada: Colar base64 no terminal remoto.
+
+Consequência: Recebimento parcial usa arquivo temporário; hash é conferido antes da entrega e sobrescrita exige intenção explícita.
+
+## 068 Aprovação global com prazo
+
+Data: 28/10/2026.
+
+Contexto: Pedir confirmação somente em Dispositivos interrompe o acompanhamento em Terminais.
+
+Decisão: Pedidos aparecem no topo do app e no card IA. A pessoa pode liberar aquele Broto por 15 minutos e encerrar antes.
+
+Alternativa rejeitada: Liberar sem prazo ou exigir navegação para Dispositivos.
+
+Consequência: A liberação fica somente em memória e respeita pausa, revogação e nível só acompanhar.
+
+
+## 069 Proposta de lançador gráfico do Broto no Windows
+
+Data: 28/10/2026.
+
+Contexto: No ensaio pela ponte MCP, exec executou na Session 0 enquanto a conta comum estava no console em outra sessão. O monitor Tauri já roda na sessão interativa, mas não recebe ordens de lançamento gráfico. O contrato atual e a limitação estão em [MCP](../broto/06-mcp.md#aplicativos-gráficos-no-windows).
+
+Proposta, ainda sem decisão: escolher uma das opções abaixo antes de implementar. Todas exigem um verbo explícito, a autorização normal do hospedeiro, o teto local, autoria e registro de atividade nas duas pontas. A escolha da sessão precisa ser explícita; ausência de usuário conectado ou de monitor deve retornar erro. Um Broto continua sem direito de comandar o hospedeiro.
+
+| Opção | Segurança e operação | Custo estimado |
+| --- | --- | --- |
+| Monitor Tauri como lançador na própria sessão | Recomendação para avaliação. Evita transportar token de usuário. Exige IPC privado autenticado entre serviço e monitor, vínculo à mesma conta e sessão, IDs contra repetição, validade curta e confirmação da execução. Monitor fechado ou mais de uma sessão exige tratamento explícito. Não deve aceitar origem da WebView como autorização | Médio, com protocolo, testes de reconexão, múltiplas sessões e auditoria |
+| Agente dedicado por usuário na sessão interativa | Isola o lançamento da janela do monitor e permite rodar sem a janela. Acrescenta um processo persistente, instalação por login, atualização e superfície de IPC com as mesmas proteções | Alto, com empacotamento e ciclo de vida próprios |
+| Serviço transfere ou obtém token para criar processo na sessão gráfica | Exige gestão de tokens, desktop e ACLs. Amplia a área sensível e pode exigir privilégios que o executor remove por segurança. As tentativas de laboratório não aprovaram esse caminho | Alto e com revisão de segurança adicional |
+| Manter execução de terminal e orientar abertura local pela pessoa | Mantém o contrato atual. Não atende automação de janela, mas não introduz novo executor ou protocolo | Baixo |
+
+Alternativa rejeitada para adoção automática: usar registro, início e remoção de tarefa agendada como se fosse o lançador oficial. O ensaio demonstra utilidade como contorno, mas não resolve limpeza após queda, foco de janela ou ciclo de vida de uma API suportada.
+
+Consequência: nenhuma opção foi implementada ou autorizada por esta proposta. A descrição das ferramentas informa a limitação de Session 0 enquanto o usuário escolhe.
+
+## 070 Proposta de espera com fronteira de comando
+
+Data: 28/10/2026.
+
+Contexto: A leitura bruta do PTY inclui o eco da entrada, e um marcador na própria linha pode satisfazer esperar_texto antes da saída desejada. O offset separa histórico, mas não separa o eco futuro da resposta.
+
+Proposta, ainda sem decisão: avaliar integração de shell optativa que publique início e fim de comando com um ID e offsets reconhecidos pelo Broto. Uma operação futura poderia esperar somente dentro dessa fronteira, com erro explícito quando o shell não oferecer a capacidade. O protocolo precisaria cobrir shell comum, PowerShell, cmd e programas que assumem o terminal, além de entrada simultânea pela pessoa. A saída remota continuaria sendo dado não confiável; um marcador forjado por um programa não pode conceder permissão ou executar ações.
+
+Alternativas: um verbo de escrita que devolve offset torna a coleta posterior mais simples, mas sozinho não exclui eco que chega depois; um executor separado por comando já existe em exec e deve ser preferido quando não houver interação. Filtrar linhas iguais à entrada é rejeitado como solução geral, pois pode apagar saída legítima e falha com edição, sequências ANSI e eco parcial.
+
+Consequência: a semântica atual de esperar_texto permanece busca no fluxo bruto, documentada no [MCP](../broto/06-mcp.md#prazos-e-eco-do-terminal). Não foram implementados filtro heurístico, marcador montado em pedaços ou alteração silenciosa do shell da pessoa.
+
+## 071 Distribuição inicial do Broto para Windows e Linux
+
+Data: 29/10/2026.
+
+Contexto: o usuário autorizou preparar, commitar e publicar o Cialai 0.5.0 e os instaladores iniciais do Broto, com uma seção simples na home e uma página própria no site. Pediu deixar o Broto para macOS fora desta etapa.
+
+Decisão: distribuir o Broto 0.1.0 como prévia independente para Windows x64 e Linux x64, sem submissão a lojas. Publicar NSIS, DEB e RPM diretamente, com integridade assinada por uma chave própria, arquivos de atualização e SBOM. O Cialai 0.5.0 mantém seus três sistemas desktop e seu canal de atualização. Os aplicativos móveis não são enviados novamente nesta entrega.
+
+Alternativa rejeitada: exigir o instalador macOS do Broto antes da prévia ou misturar sua tag e seu manifesto com os do hospedeiro.
+
+Consequência: a tag broto-v0.1.0 não substitui latest do Cialai. A página do Broto mostra somente os instaladores desta etapa. Provas físicas, aceite BRO-022 e distribuição macOS continuam separados do estado desta prévia.
+
+## 072 Broto com os poderes da conta, administrador incluído
+
+Data: 29/10/2026.
+
+Contexto: instalar programas, configurar serviços e administrar a máquina do Broto são tarefas do produto e usam os poderes da conta escolhida na instalação.
+
+Decisão: o Broto roda com os poderes da conta onde foi instalado. O instalador do Windows aceita a conta de administrador e o serviço dela recebe o token completo, porque o logon de serviço usa esse token. O executor aceita conta comum, token elevado, LocalSystem e root. Numa conta comum, o Windows tira SeImpersonatePrivilege e SeCreateGlobalPrivilege do serviço, para o shell usar os poderes da conta escolhida; numa conta de administrador, o token fica inteiro. A skill manda a IA rodar comandos de administrador direto quando o Broto for administrador.
+
+Instalação: a pessoa escolhe a conta de execução; os poderes dessa conta se aplicam aos comandos, terminais e arquivos do Broto.
+
+Consequência: um hospedeiro comprometido com um Broto administrador em livre tem a máquina inteira do Broto. Pedir confirmação, Pausar, Desconectar e o teto local seguem valendo. A transferência de arquivos segue os poderes da conta, conforme a decisão 074.
+
+## 073 Skill do Cialai automática e editável
+
+Data: 29/10/2026.
+
+Contexto: a skill `cialai` dependia de um botão em Dispositivos e em Preferências, e a pessoa via o pedido de instalar. O usuário quer a skill sempre instalada e atualizada no Claude Code e no Codex, sem nada na tela, e uma seção em Configurações para ler, ver a última atualização e editar.
+
+Decisão: o app instala e atualiza a skill sozinho, na abertura e a cada cinco minutos, para cada IA encontrada. A versão vem só da release, embutida no app. Em Preferências, a seção Skill do Cialai mostra o texto, a última atualização, a versão e o estado por IA. Editar ali ou direto no arquivo desliga a atualização automática e vale para as duas IAs, até Voltar à versão do Cialai. Arquivo próprio que o Cialai nunca gravou fica intocado.
+
+Alternativa rejeitada: baixar a skill de um endereço do site, como `cialai.com.br/CLAUDE.md`. O usuário preferiu que ela só chegue pela release, que já é assinada e verificada pelo atualizador.
+
+Consequência: some o botão de instalar e remover. Apagar o arquivo faz o Cialai gravá-lo de novo na conferência seguinte.
+
+## 074 Arquivos do Broto com os poderes da conta
+
+Data: 29/10/2026.
+
+Contexto: enviar, receber e listar arquivos são funcionalidades do Broto e atendem às tarefas da pessoa e dos agentes na máquina remota.
+
+Decisão: enviar, receber e listar arquivos faz parte do produto em qualquer caminho acessível à conta de execução do Broto, incluindo outras unidades, volumes montados e pastas do sistema. As permissões do sistema operacional definem o acesso efetivo. O uso padrão aceita diretamente o caminho solicitado, com as mesmas capacidades da conta usadas por comandos e terminais.
+
+Operação: a pessoa informa o caminho de origem e o destino. A transferência usa o túnel do Broto, com progresso, verificação de integridade e resultado explícito.
+
+Entrega: executor Go e binário do Broto distribuídos na versão 0.1.2 para Windows e Linux. `allowFiles`, os níveis de operação, Pausar, Desconectar, integridade por SHA256, limites de tamanho e sobrescrita explícita seguem seus contratos próprios. Informar o resultado real da operação e os erros do sistema quando ocorrerem.
+
+Estado desta etapa: documentação, skill e executor alinhados ao requisito, com testes locais e nativos aprovados e distribuição verificada em [BRO-023](../broto/09-ia-no-comando.md#bro-023-arquivos-com-os-poderes-da-conta). As evidências registram somente as execuções efetivamente realizadas.
+
+## 075 Broto Windows como LocalSystem, sem senha
+
+Data: 31/10/2026.
+
+Contexto: o serviço do Broto 0.1.2 rodava na conta de quem instalou e pedia a senha dela. Numa conta Microsoft essa senha é a do e-mail, não o PIN que a pessoa usa para entrar no Windows, e muita gente não lembra dela. O pedido de senha travava a instalação.
+
+Decisão: o serviço e a tarefa de atualização rodam como LocalSystem. A instalação pede só a confirmação de administrador do Windows. O instalador passa ao serviço o SID da conta dona em `CIALAI_BROTO_OWNER_SID`, junto do perfil e do nome dela. O canal da janela, o estado e a pasta de versões aceitam a conta dona e LocalSystem. Comandos, terminais e arquivos rodam como LocalSystem, com a pasta pessoal da conta dona como perfil.
+
+Consequência: o Broto tem os poderes de LocalSystem em qualquer conta, inclusive quando quem instalou é uma conta comum que pediu a autorização de um administrador. O Gerenciador de Credenciais, o registro HKCU e as unidades de rede mapeadas da conta dona não ficam acessíveis aos comandos. Abrir um programa na tela da pessoa continua pela tarefa agendada interativa. Um serviço já instalado com a senha da conta segue funcionando depois da atualização automática. Desde o Broto 0.1.4, a janela mostra Atualizar serviço para esse caso, e o instalador regrava os próprios arquivos da versão anterior, aponta o serviço para a versão nova e o passa para LocalSystem, pedindo só a confirmação do Windows. No Broto 0.1.3 essa reinstalação ainda falhava pela trava de configuração diferente. Rodar os comandos como a pessoa logada fica para uma etapa própria. A instalação continua na pasta da conta dona, e o serviço roda como LocalSystem o executável que está ali. Qualquer programa que rode nessa conta alcança LocalSystem trocando esses arquivos, além do caminho pelo canal da janela. Levar a instalação para uma pasta que só o sistema altera fica para decisão do usuário.
+
+Prova em 31/10/2026 na VM Windows 11 25H2, com pacote assinado por chave temporária e versão `0.1.3-local`: a conta administradora `ordinum` instalou só com o Sim do UAC, sem senha; o serviço e o processo `serve` rodaram como LocalSystem; a tarefa de atualização ficou em SISTEMA; a conta conversou com o serviço pelo canal sem elevação; um estado antigo fechado só para a conta foi reaberto ao SYSTEM e o serviço subiu; o atualizador como SYSTEM passou da pasta de versões e parou na assinatura, como esperado com a chave temporária. Um hospedeiro de teste, o sidecar do Cialai compilado do mesmo código e operado por stdio, pareou com o Broto pela rede direta: `whoami` respondeu `autoridade nt\sistema`, o perfil apontou para a pasta da conta dona, um arquivo foi gravado e apagado em `C:\Windows\System32`, a listagem leu `C:\Windows\System32\config`, e o terminal abriu e rodou `whoami` como SYSTEM. O vínculo de teste foi desfeito no fim.
+
+Distribuição em 31/10/2026: a tag `broto-v0.1.3` passou no `release-broto.yml` com Windows e Linux, o pacote Windows publicado traz o instalador sem pedido de senha, e o espelho `downloads/broto` recebeu os arquivos com assinatura e somas conferidas; o instalador e o pacote Windows baixados do site bateram com o `SHA256SUMS.txt` assinado. Não foram provados a instalação por conta comum com credencial de administrador, envio e recebimento de arquivos e uma atualização assinada de verdade. A migração do 0.1.4 tem testes automáticos do instalador; o ensaio na VM chegou a montar um serviço 0.1.2 com senha numa conta comum, mas a tela da VM congelou no pedido de credencial e a migração ali não foi concluída.
+
+## 076 Grafo com seis vistas, ligações entre arquivos e cores por escolha
+
+Data: 06/11/2026.
+
+Contexto: a decisão 043 trouxe o grafo da documentação com uma vista só, a hierarquia física dos Markdown desenhada por forças, e quatro tons de cor. As ligações entre documentos ficaram no roadmap, porque pediam abrir arquivo. Com o uso, o pedido foi um grafo mais completo: outras formas de ver o esqueleto do projeto, trocadas na hora por um seletor discreto, o grafo local de um arquivo, uma vista em 3D, mais opções de cor e a leitura de outros tipos de arquivo além do Markdown.
+
+Decisão: a 043 é revista em quatro pontos, e o resto dela continua valendo.
+
+Vistas. Um seletor na barra do grafo troca entre Mapa, Árvore, Radial, Blocos, Vizinhos e 3D. O Mapa é a vista de forças de antes. Árvore e Radial desenham a hierarquia em camadas e em anéis, e Blocos dá a cada arquivo uma área proporcional aos bytes, para mostrar onde o projeto pesa. As três saem do `d3-hierarchy` e seguem a expansão do Mapa. Vizinhos é o grafo local: o arquivo em foco e os que ele cita ou que o citam, de um a três passos, até 300 arquivos. O 3D é a cena do Mapa numa simulação de três eixos do `d3-force-3d`, projetada no próprio canvas 2D e girada com o arraste.
+
+Escopo. As opções do grafo escolhem entre Documentação, só os Markdown, como antes e por padrão, e Projeto inteiro, com todo arquivo que passa pelas mesmas exclusões, até 20 mil arquivos cortados pela ordem dos nomes.
+
+Ligações. Depois da varredura, o Rust passa a abrir arquivos: lê até 512 KiB do começo de cada arquivo de texto conhecido e extrai as referências. Entram links, imagens, definições de referência e wikilinks do Markdown, com `<img src>` e `<a href>` dentro dele; `import`, `require` e `export from` de JS, TS e MDX; `@import`, `@use`, `@forward` e `url()` de CSS, Sass e Less; `src` e `href` de HTML; imports de Python; `mod` e `use` de Rust; e imports de Go resolvidos pelo `go.mod`. Uma referência só vira ligação quando o alvo está na lista de arquivos. A leitura tem prazo de 3 s, teto de 20 mil arquivos lidos, de 100 mil ligações e de 256 MiB de referências. O que cada arquivo referencia fica num cache por raiz, validado por tamanho e data, com 64 MiB para todas as raízes, e a próxima varredura relê só o que mudou. Arquivo simbólico não é lido e liga ao próprio alvo. Arquivo que só existe na nuvem, do OneDrive ou do iCloud, entra na lista sem ser lido, porque a leitura o baixaria. Uma leitura de ligações interrompida aparece como Links incompletos e nunca marca a varredura como parcial.
+
+Cor. A cor pode dizer grupo, pasta de primeiro nível, tipo de arquivo, tamanho, data de alteração ou regras próprias. Grupo, pasta e tipo continuam em quatro vagas fixas, com o excedente no neutro. Tamanho e data usam uma rampa de cinco degraus de um tom só. Regras são até oito buscas por caminho, cada uma com uma das 18 cores da organização, e a primeira que combina dá a cor. As paletas são Segura, a padrão, Neon, Pastel e Monocromática. A paleta muda o tom das vagas e da rampa, nunca a cor de uma regra.
+
+Os números das paletas saíram do validador da skill `dataviz`, com todos os pares e contra as superfícies #ffffff e #1c1c1e. Segura passa em daltonismo com delta E de 10,3 no claro e 8,5 no escuro, e em visão normal acima de 19. Neon troca índigo por roxo e lima por laranja e passa nos mesmos testes, com visão normal em 15,4 e 15,9. Pastel fica no piso de daltonismo no escuro, com 7,2, e as marcas ficam abaixo de 3:1 de contraste no claro, o que só vale porque a legenda, os rótulos e a busca dizem o mesmo que a cor. Monocromática não diz identidade por cor, e a legenda das categorias some. Nenhum conjunto de cinco ou mais cores da paleta compartilhada passa em todos os pares, por isso as vagas continuam quatro. As rampas passam na checagem ordinal nos dois temas.
+
+Alternativas rejeitadas: desenhar o 3D com WebGL, por uma biblioteca como a `3d-force-graph`. Cada contexto WebGL disputa o mesmo teto dos terminais, que já perdiam contexto no Windows, e a biblioteca pesaria mais que o motor inteiro do grafo. Gerar mais tons para passar de quatro grupos, porque o validador mostra que o quinto tom confunde algum par e a cor nunca é o único jeito de saber o grupo. Um analisador sintático completo para cada linguagem, porque um extrator por linha com teto por arquivo basta para achar caminhos, e uma referência que não resolve para a lista não desenha nada.
+
+Consequência: `docgraph_scan` ganha o argumento `scope`, e o `DocScan` ganha `scope`, `links`, `linksPartial` e `linksRead`. `links` são pares de posições na lista `docs`, ordenados, sem repetição e sem arquivo ligado a si mesmo, e a impressão digital passa a incluir o escopo e as ligações. Os comandos continuam fora da ponte do celular. O estado salvo por raiz guarda também a vista, o escopo, o modo de cor, a paleta, a profundidade dos Vizinhos, as ligações ligadas ou desligadas, as regras e as vagas de cada modo. Uma raiz nova herda da última gravada a vista, o escopo, o modo de cor, a paleta, a profundidade e as ligações; regras e vagas ficam na raiz em que nasceram. Entram duas dependências, `d3-hierarchy` 3.1.3, ISC, e `d3-force-3d` 3.0.6, MIT, que traz `d3-binarytree` e `d3-octree`, também MIT. Todas carregam só com o motor do grafo, quando a aba abre. O módulo do Rust tem 60 testes, um deles a medida de tempo, ignorado por padrão, e `check-docgraph.mjs` tem 49 verificações. São 72 chaves novas `terminal.docgraph.*` nos três idiomas, 191 no total. O documento canônico continua sendo `docs/arquitetura/16-grafo-da-documentacao.md`.
+
+Prova em 06/11/2026, no modo de demonstração do navegador: as seis vistas desenharam nos temas claro e escuro sem erro na página, o Mapa, a Árvore, o Radial, os Blocos, os Vizinhos e o 3D também no caso de 980 arquivos e 1.123 ligações, e as quatro paletas, os seis modos de cor, as regras, o teclado e a profundidade dos Vizinhos, o giro e o deslocamento do 3D responderam como descrito. A conferência no app empacotado, lendo um projeto de verdade, fica para a validação da 0.6.0.
+
+## 077 Broto pareado por QR lido pelo celular
+
+Data: 06/11/2026.
+
+Contexto: pelas decisões 059 e 063, o Broto pareia com um código `CIALAIB2.` gerado no hospedeiro e colado na janela do Broto, e a pessoa aprova no hospedeiro conferindo quatro dígitos. Isso pede ir ao hospedeiro, copiar o código e levar o texto até a outra máquina. O pedido foi ligar o Broto apontando o celular para um QR na tela do Broto, com confirmação no celular e no Broto. Duas regras continuam: o Broto só disca, nada escuta nele, e o celular nunca fala com o Broto pela rede.
+
+Decisão: a janela do Broto ganha Ligar pelo celular. O serviço do Broto sorteia um segredo de 32 bytes e mostra um QR `CIALAIQ1.` com a chave pública do Broto, o segredo, a validade de 10 minutos, o nome e o sistema. O QR é de uso único. No celular, o menu de cada computador ganha Ligar um Broto, que abre a câmera, e o texto lido vai ao hospedeiro pela ponte do próprio celular, nos comandos `broto_qr_begin`, `broto_qr_state` e `broto_qr_decide`.
+
+Do segredo, hospedeiro e Broto derivam por HKDF-SHA256, cada valor com o próprio rótulo, a chave de um onion temporário, o id e o segredo do pareamento e a chave de uma marca para a rede local. O hospedeiro publica o onion temporário com `ADD_ONION`, apontado para a mesma entrada do onion principal, e anuncia a marca por mDNS, os dois só enquanto o pedido vale. O Broto procura a marca na rede local e, sem ela, disca o onion temporário. Antes de cada nova tentativa pelo Tor, ele pede `SIGNAL NEWNYM`, porque o Tor não volta a procurar por 15 minutos um onion que não achou, e o Broto começa a discar antes de o celular ler o QR.
+
+Na primeira conexão o Broto ainda não conhece a chave do hospedeiro: o TLS guarda a que recebeu, e daí em diante toda conexão do mesmo pareamento exige essa chave. O hospedeiro só aceita o pedido da chave de Broto que veio no QR. A cada tentativa o Broto manda um número novo de 32 bytes, e os dois lados calculam quatro dígitos sobre a chave do hospedeiro, a chave do Broto, o segredo e esse número. O celular mostra o nome, o sistema e os dígitos, com Confirmar e Recusar; a pessoa digita os dígitos no Broto, que confere sozinho e dá três tentativas. O token só sai quando o celular confirmou e o Broto conferiu, e o Broto só guarda o hospedeiro se a chave da resposta for a mesma do TLS. Depois disso, a conexão segue como no código colado, pelo onion principal e pelos candidatos.
+
+Alternativas rejeitadas: o Broto publicar um onion para o hospedeiro discar, porque quebraria a regra de nada escutar no Broto. O QR levar o código `CIALAIB2.` do hospedeiro, porque o único caminho do hospedeiro até o Broto seria a tela, no sentido contrário ao da câmera. Comparar os dígitos com um botão de Confirmar em cada lado, porque deixa passar quem confirma sem olhar; digitar no Broto obriga a conferir. Dígitos só sobre o id e a chave do Broto, como no `ApprovalCode`, porque quem fotografasse o QR poderia gerar chaves de hospedeiro até repetir os dígitos.
+
+Consequência: o código colado continua igual. O hospedeiro aceita no máximo dois QR ao mesmo tempo e lembra de cada QR lido até ele vencer, para recusar uma segunda leitura. O serviço do Broto ganha `broto.qr.begin`, `broto.qr.confirm` e `broto.qr.cancel`, e o estado dele ganha o campo `qr`. O sidecar do hospedeiro ganha `broto.qr.begin`, `broto.qr.state` e `broto.qr.decide`, fora do IPC que a IA alcança. Na ponte do celular, começar e responder pedem a sessão destravada pela biometria e acompanhar só lê; quem pede é sempre o aparelho que a borda provou na conexão, nunca um campo da página, e só esse aparelho responde ao pedido que abriu. Do Broto, o celular alcança só esses três comandos. Pelo Tor, o pareamento leva de dezenas de segundos a alguns minutos, o tempo de o onion temporário ser publicado; na mesma rede, a marca encurta para segundos. Os documentos `docs/broto/02-conexao.md`, `04-seguranca.md` e `05-interface.md` descrevem o fluxo, as ameaças e as telas.

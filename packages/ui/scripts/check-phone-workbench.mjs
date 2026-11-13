@@ -28,6 +28,8 @@ const boundaries = {
   dialogs: `export const NameDialog=()=>null; export const Sheet=()=>null;`,
   PhoneSessionCard: `export default ()=>null; export const PhoneSessionSkeleton=()=>null;`,
   PhoneFiles: `export default ()=>null;`,
+  // A folha do QR do Broto tem gate proprio, em check-broto-qr.mjs.
+  PhoneBrotoPairing: `export default ()=>null;`,
 };
 const bundle = await build({ entryPoints:['src/terminals/ui/PhoneWorkbench.jsx'], bundle:true, write:false, format:'cjs', external:['react','lucide-react'], plugins:[{
   name:'phone-workbench-boundaries', setup(api) {

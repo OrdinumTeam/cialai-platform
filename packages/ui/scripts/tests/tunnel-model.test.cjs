@@ -150,10 +150,25 @@ test('o diagnostico traduz as verificacoes conhecidas e mantem as novas', async 
   const result = normalizeDiagnostics({ ok: true, checks: [{ id: 'direct_listener', ok: true, detail: 'UDP 4740' }, { id: 'tor_bootstrap', ok: false, detail: '37%' }, { id: 'novo', ok: true }] });
   assert.equal(result.ok, false);
   assert.deepEqual(result.checks.map((check) => check.label), ['Ouvinte direto', 'Inicialização do Tor', 'novo']);
-  assert.deepEqual(Object.keys(DIAGNOSTIC_CHECK_KEYS), ['identity', 'direct_listener', 'lan_candidates', 'ipv6', 'port_mapping', 'stun', 'tor_process', 'tor_bootstrap', 'onion_published', 'mdns', 'edge']);
+  assert.deepEqual(Object.keys(DIAGNOSTIC_CHECK_KEYS), ['identity', 'direct_listener', 'lan_candidates', 'ipv6', 'port_mapping', 'stun', 'tor_process', 'tor_bootstrap', 'onion_published', 'mdns', 'edge', 'broto_ipc']);
   for (const locale of ['pt-BR', 'en', 'es']) {
     setLocale(locale);
     for (const key of Object.values(DIAGNOSTIC_CHECK_KEYS)) assert.ok(translate(key).length > 0, `${locale} ${key}`);
+  }
+  setLocale('pt-BR');
+});
+
+test('falha do IPC dos Brotos preserva causa e caminho no diagnostico em cada idioma', async () => {
+  const { normalizeDiagnostics } = await load();
+  const { setLocale, translate } = await import('../../src/shared/i18n.js');
+  const detail = 'Broto IPC "host.sock": symbolic parent refused';
+  for (const locale of ['pt-BR', 'en', 'es']) {
+    setLocale(locale);
+    const result = normalizeDiagnostics({ ok: false, checks: [{ id: 'broto_ipc', ok: false, detail }] });
+    assert.equal(result.ok, false);
+    assert.equal(result.checks[0].detail, detail);
+    assert.equal(result.checks[0].label, translate('desktop.access.check.brotoIPC'));
+    assert.notEqual(result.checks[0].label, 'broto_ipc');
   }
   setLocale('pt-BR');
 });

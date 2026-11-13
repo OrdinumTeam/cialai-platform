@@ -11,9 +11,9 @@
 // metade da altura, e abaixo do ultimo card e o fim do grupo.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
+import { Bell, ChevronsDownUp, ChevronsUpDown, Plus, RotateCcw, Search, UserRound, X } from 'lucide-react';
 import SessionCard from './SessionCard.jsx';
-import { deliverPaths, moveSession, moveSessionBy } from '../runtime.js';
+import { deliverPaths, moveSession, moveSessionBy, setAllCollapsed } from '../runtime.js';
 import { beginDrag, inside, onDrag } from '../drag.js';
 import { shortPath } from '../files.js';
 import { onNativeDragDrop } from '../../lib/native.js';
@@ -44,6 +44,7 @@ export default function SessionsPane({
 
   const filtering = query.trim().length > 0;
   stateRef.current = { filtering, sessions };
+  const anyExpanded = sessions.some((session) => !session.collapsed);
 
   const filtered = useMemo(() => {
     const needle = normalize(query.trim());
@@ -170,6 +171,19 @@ export default function SessionsPane({
           </button>
         ) : null}
         <span className="terminais-pane__spacer" />
+        {sessions.length > 1 ? (
+          // Um botao so: enquanto houver card aberto, recolhe todos; com todos
+          // recolhidos, abre todos de volta.
+          <button
+            type="button"
+            className="terminais-pane__tool"
+            onClick={() => setAllCollapsed(anyExpanded)}
+            aria-label={translate(anyExpanded ? 'terminal.session.collapseAll' : 'terminal.session.expandAll')}
+            title={translate(anyExpanded ? 'terminal.session.collapseAll' : 'terminal.session.expandAll')}
+          >
+            {anyExpanded ? <ChevronsDownUp size={15} strokeWidth={1.75} aria-hidden="true" /> : <ChevronsUpDown size={15} strokeWidth={1.75} aria-hidden="true" />}
+          </button>
+        ) : null}
         {onAccounts ? (
           <button type="button" className="terminais-pane__tool" onClick={onAccounts} aria-label={translate('terminal.profiles.title')} title={translate('terminal.profiles.title')}>
             <UserRound size={15} strokeWidth={1.75} aria-hidden="true" />

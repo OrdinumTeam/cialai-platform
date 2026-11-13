@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotohostipc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/logx"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/rpc"
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/statedir"
@@ -28,6 +29,7 @@ const (
 var Capabilities = []string{"direct", "tor", "pairing", "devices"}
 
 type Options struct {
+	EnableBrotoIPC   bool
 	Paths            statedir.Paths
 	Input            io.Reader
 	Output           io.Writer
@@ -109,6 +111,21 @@ func Serve(parent context.Context, options Options) int {
 	}
 
 	runtime := newRuntime(options, writer)
+	if options.EnableBrotoIPC {
+		path, err := brotohostipc.PathForStateDir(options.Paths.Root)
+		var done <-chan error
+		if err == nil {
+			done, err = brotohostipc.Start(ctx, path, runtime.brotoCommand)
+		}
+		runtime.setBrotoIPC(path, err)
+		if err == nil {
+			go func() {
+				if err := <-done; err != nil {
+					runtime.setBrotoIPC(path, err)
+				}
+			}()
+		}
+	}
 	// Every exit path closes the edge, the listeners, the mapping and Tor, so
 	// no tor child outlives the sidecar.
 	defer runtime.close()

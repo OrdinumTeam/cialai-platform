@@ -69,11 +69,25 @@ export type ShellIntent =
   | { id: string; kind: 'session'; sessionId: string }
   | { id: string; kind: 'new-session'; cwd?: string }
   | { id: string; kind: 'profiles' }
-  | { id: string; kind: 'pick-project' };
+  | { id: string; kind: 'pick-project' }
+  // QR lido em Ligar um Broto: a página manda o texto ao computador escolhido.
+  | { id: string; kind: 'broto-qr'; payload: string };
 export type AuthResponse = { type: 'auth'; id: number; ok: boolean };
 // O mesmo pedido, entregue com a página já aberta: o bootstrap só leva o de
 // quando ela carregou, e o toque num aviso chega depois.
 export type IntentMessage = { type: 'intent'; intent: ShellIntent };
+
+// Texto do QR que a janela do Broto mostra em Ligar pelo celular: o prefixo,
+// base64url e no máximo 1200 caracteres. A página e o computador conferem de novo.
+export const BROTO_QR_PREFIX = 'CIALAIQ1.';
+export const BROTO_QR_MAX_LENGTH = 1200;
+const BASE64URL = /^[A-Za-z0-9_-]+$/;
+export function isBrotoQrPayload(value: unknown): value is string {
+  return typeof value === 'string'
+    && value.length <= BROTO_QR_MAX_LENGTH
+    && value.startsWith(BROTO_QR_PREFIX)
+    && BASE64URL.test(value.slice(BROTO_QR_PREFIX.length));
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 // Area do editor: abas da sessao e o conteudo da aba ativa. Texto adota o
 // DOM da EditorView que vive no runtime; Markdown, HTML e CSV alternam entre
-// edicao e visualizacao; imagens tem previa simples; PDF, planilhas, Word e
-// os documentos convertidos pelo LibreOffice tem visualizador sem editor; o
-// resto abre no app padrao. Um arquivo alterado no disco mostra o aviso
+// edicao e visualizacao; imagens tem previa simples; PDF, planilhas, Word,
+// os documentos convertidos pelo LibreOffice, audio, video, fontes e
+// notebooks tem visualizador sem editor; o resto abre no app padrao. Um arquivo alterado no disco mostra o aviso
 // antes de qualquer sobrescrita.
 //
 // O painel assina so os eventos de editor da propria sessao e recebe as
 // acoes num objeto estavel, entao a saida do terminal e as metricas nunca o
 // redesenham.
 
-import React, { memo, useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, Network, RefreshCw, X } from 'lucide-react';
+import React, { Suspense, lazy, memo, useEffect, useRef, useState } from 'react';
+import { AlertTriangle, ExternalLink, FileText, FolderOpen, Globe, Music, Network, RefreshCw, X } from 'lucide-react';
 import BrowserPane from './BrowserPane.jsx';
-import DocGraphPane from './DocGraphPane.jsx';
 import { STRINGS as DOCGRAPH } from '../docgraph/copy.js';
 import { DataState } from '../../components/ui.jsx';
 import { fmtBytes } from '../../lib/helpers.js';
@@ -23,6 +22,20 @@ import { renderMarkdown, contentOf } from '../editor.js';
 import { canConvertToPdf, dirName, isInside, isPreviewable, isViewerKind, relativePath, shortPath } from '../files.js';
 import { useRuntimeEvents } from '../hooks.js';
 import { getLocale, translate, useI18n } from '../../shared/i18n.js';
+
+// O painel do grafo, como o motor dele, so carrega quando a aba do grafo
+// abre: fica fora do que o estudio baixa para a primeira pintura.
+const DocGraphPane = lazy(() => import('./DocGraphPane.jsx'));
+
+function DocGraphLoading() {
+  return (
+    <div className="terminais-docgraph">
+      <div className="terminais-docgraph__view">
+        <div className="terminais-docgraph__overlay" role="status"><strong>{DOCGRAPH.indexing}</strong></div>
+      </div>
+    </div>
+  );
+}
 
 const tabName = (tab) => (tab.kind === 'browser' ? translate('terminal.browser.tabName') : tab.kind === 'docgraph' ? DOCGRAPH.name : tab.name);
 
@@ -181,6 +194,117 @@ function DocxView({ tab }) {
   return <div className="terminais-md terminais-doc" onClick={onPreviewClick} dangerouslySetInnerHTML={{ __html: tab.viewer.html }} />;
 }
 
+// Audio e video pelo player do proprio webview. Um codec que o sistema nao
+// toca cai no aviso, com abrir fora.
+function MediaView({ tab, actions }) {
+  const viewer = tab.viewer;
+  const [failed, setFailed] = useState(false);
+  useEffect(() => { setFailed(false); }, [viewer.url]);
+  if (failed) {
+    return (
+      <DataState
+        type="error"
+        message={translate('terminal.editor.mediaFailed')}
+        action={<button type="button" className="btn btn-ghost btn-sm" onClick={() => actions.openDefault(tab)}><ExternalLink size={13} />{translate('terminal.common.openDefault')}</button>}
+      />
+    );
+  }
+  const label = translate('terminal.editor.previewOf', { name: tab.name });
+  if (viewer.kind === 'video') {
+    return (
+      <div className="terminais-media is-video">
+        <video key={viewer.url} src={viewer.url} controls preload="metadata" aria-label={label} onError={() => setFailed(true)} />
+      </div>
+    );
+  }
+  return (
+    <div className="terminais-media is-audio">
+      <Music size={40} strokeWidth={1.25} aria-hidden="true" className="terminais-media__icon" />
+      <strong className="terminais-media__name">{tab.name}</strong>
+      <audio key={viewer.url} src={viewer.url} controls preload="metadata" aria-label={label} onError={() => setFailed(true)} />
+    </div>
+  );
+}
+
+const FONT_SIZES = [12, 16, 24, 36, 48, 72];
+const FONT_GLYPHS = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ', 'abcdefghijklmnopqrstuvwxyz', '0123456789', 'ÁÂÃÀÇÉÊÍÓÔÕÚÜÑ áâãàçéêíóôõúüñ', '&@#%*+=/?!.,;:'];
+
+// Fonte: amostra das letras e de uma frase em varios tamanhos. A pessoa pode
+// trocar a frase para ver o proprio texto.
+function FontView({ tab }) {
+  const [sample, setSample] = useState('');
+  const face = { fontFamily: `"${tab.viewer.family}"` };
+  const text = sample.trim() ? sample : translate('terminal.editor.fontPangram');
+  return (
+    <div className="terminais-font">
+      <div className="terminais-font__hero" style={face} aria-hidden="true">Aa</div>
+      <input
+        type="text"
+        className="terminais-font__try"
+        value={sample}
+        onChange={(event) => setSample(event.target.value)}
+        placeholder={translate('terminal.editor.fontTry')}
+        aria-label={translate('terminal.editor.fontTry')}
+        spellCheck={false}
+      />
+      <div className="terminais-font__glyphs" style={face}>
+        {FONT_GLYPHS.map((line) => <p key={line}>{line}</p>)}
+      </div>
+      <ol className="terminais-font__sizes">
+        {FONT_SIZES.map((size) => (
+          <li key={size}>
+            <span className="terminais-font__size">{size}</span>
+            <span className="terminais-font__sample" style={{ ...face, fontSize: `${size}px` }}>{text}</span>
+          </li>
+        ))}
+      </ol>
+    </div>
+  );
+}
+
+function NotebookLines({ lines, source }) {
+  if (!lines) return source;
+  return lines.map((line, index) => (
+    <React.Fragment key={index}>
+      {line.map(([text, classes], part) => (classes ? <span key={part} className={classes}>{text}</span> : text))}
+      {index < lines.length - 1 ? '\n' : null}
+    </React.Fragment>
+  ));
+}
+
+function NotebookOutput({ output }) {
+  if (output.type === 'image') return <img className="terminais-notebook__image" src={output.src} alt="" />;
+  if (output.type === 'markdown') return <div className="terminais-md terminais-notebook__md" onClick={onPreviewClick} dangerouslySetInnerHTML={{ __html: output.html }} />;
+  const tone = output.type === 'stream' ? output.name : output.type;
+  return (
+    <pre className={`terminais-notebook__output is-${tone}`}>
+      {output.text}
+      {output.truncated ? <span className="terminais-notebook__cut">{translate('terminal.editor.outputCut')}</span> : null}
+    </pre>
+  );
+}
+
+// Notebook Jupyter, so leitura. O Markdown ja chega renderizado e sem
+// marcacao crua, e o codigo ja chega em pedacos com a classe do realce.
+const NotebookView = memo(function NotebookView({ viewer }) {
+  if (!viewer.cells.length) return <DataState type="empty" message={translate('terminal.editor.notebookEmpty')} />;
+  return (
+    <div className="terminais-notebook">
+      {viewer.cells.map((cell, index) => (
+        <section key={index} className={`terminais-notebook__cell is-${cell.type}`}>
+          <span className="terminais-notebook__count" aria-hidden="true">{cell.type === 'code' && cell.count != null ? `[${cell.count}]` : ''}</span>
+          <div className="terminais-notebook__body">
+            {cell.type === 'markdown' ? <div className="terminais-md terminais-notebook__md" onClick={onPreviewClick} dangerouslySetInnerHTML={{ __html: cell.html }} /> : null}
+            {cell.type === 'code' ? <pre className="terminais-notebook__code"><code><NotebookLines lines={cell.lines} source={cell.source} /></code></pre> : null}
+            {cell.type === 'raw' ? <pre className="terminais-notebook__raw">{cell.source}</pre> : null}
+            {cell.outputs.map((output, part) => <NotebookOutput key={part} output={output} />)}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+});
+
 // Barra dos visualizadores: nome e tamanho, origem da conversao e as acoes
 // de abrir fora, revelar, reconverter e ver como PDF.
 function ViewerBar({ tab, actions }) {
@@ -193,6 +317,9 @@ function ViewerBar({ tab, actions }) {
         {tab.size != null ? <em>{fmtBytes(tab.size)}</em> : null}
         {converted ? <em>{translate(viewer.cached ? 'terminal.editor.cachedPdf' : 'terminal.editor.convertedPdf')}</em> : null}
         {viewer?.kind === 'docx' && viewer.messages ? <em title={translate('terminal.editor.converterWarningsTitle')}>{translate(viewer.messages === 1 ? 'terminal.editor.oneWarning' : 'terminal.editor.manyWarnings', { count: viewer.messages })}</em> : null}
+        {viewer?.kind === 'notebook' && viewer.language ? <em>{viewer.language}</em> : null}
+        {viewer?.kind === 'notebook' ? <em>{translate(viewer.cells.length === 1 ? 'terminal.editor.oneCell' : 'terminal.editor.manyCells', { count: viewer.cells.length })}</em> : null}
+        {viewer?.kind === 'notebook' ? <em>{translate('terminal.editor.readOnly')}</em> : null}
       </div>
       <div className="terminais-viewer__actions">
         {converted ? <button type="button" className="terminais-pane__tool" onClick={() => actions.reconvert(tab)} title={translate('terminal.editor.reconvertTitle')} aria-label={translate('terminal.editor.reconvert')}><RefreshCw size={13} strokeWidth={1.75} /></button> : null}
@@ -204,12 +331,15 @@ function ViewerBar({ tab, actions }) {
   );
 }
 
-function ViewerBody({ tab }) {
+function ViewerBody({ tab, actions }) {
   const viewer = tab.viewer;
   if (!viewer) return <DataState type="loading" message={translate('terminal.editor.openingFile')} />;
   if (viewer.kind === 'pdf') return <PdfView tab={tab} />;
   if (viewer.kind === 'sheet') return <SheetView tab={tab} />;
   if (viewer.kind === 'docx') return <DocxView tab={tab} />;
+  if (viewer.kind === 'audio' || viewer.kind === 'video') return <MediaView tab={tab} actions={actions} />;
+  if (viewer.kind === 'font') return <FontView tab={tab} />;
+  if (viewer.kind === 'notebook') return <NotebookView viewer={viewer} />;
   if (viewer.kind === 'error') return <DataState type="error" message={viewer.message} />;
   return null;
 }
@@ -335,7 +465,7 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           ) : null}
           {viewer ? <ViewerBar tab={activeTab} actions={actions} /> : null}
           {activeTab.kind === 'browser' ? <BrowserPane session={session} /> : null}
-          {activeTab.kind === 'docgraph' ? <DocGraphPane session={session} actions={actions} /> : null}
+          {activeTab.kind === 'docgraph' ? <Suspense fallback={<DocGraphLoading />}><DocGraphPane session={session} actions={actions} /></Suspense> : null}
           <ConflictBanner tab={activeTab} actions={actions} />
           {activeTab.loading ? (
             <DataState type="loading" message={translate(activeTab.kind === 'office' ? 'terminal.editor.convertingOffice' : 'terminal.editor.openingFile')} />
@@ -349,7 +479,7 @@ function EditorPane({ session, tabs, activeTab, actions, focusKey, dropping = fa
           {previewing && activeTab.kind === 'markdown' ? <MarkdownPreview tab={activeTab} /> : null}
           {previewing && activeTab.kind === 'html' ? <HtmlPreview tab={activeTab} root={session.explorer.root} /> : null}
           {previewing && activeTab.kind === 'csv' ? <ViewerBody tab={activeTab} /> : null}
-          {viewer ? <ViewerBody tab={activeTab} /> : null}
+          {viewer ? <ViewerBody tab={activeTab} actions={actions} /> : null}
           {!activeTab.loading && activeTab.kind === 'image' && activeTab.image ? (
             <div className="terminais-image">
               <img src={activeTab.image.dataUrl} alt={activeTab.name} />

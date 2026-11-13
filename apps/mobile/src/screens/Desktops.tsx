@@ -10,6 +10,7 @@ import {
   ActionList, AppHeader, BottomSheet, ComputerCard, EmptyState, PrimaryButton, Screen, SearchInput, SegmentedControl,
   radius, space, typography, type Meta, type Tone
 } from '../ui';
+import { BrotoScan } from './BrotoScan';
 import type { IntentRequest } from './Home';
 import { TRANSPORT_DESCRIPTION_KEYS, TRANSPORT_KEYS } from './TransportBadge';
 
@@ -62,6 +63,8 @@ export function Desktops({ store, describe, keptDesktopId, onOpen, onIntent, onH
   const [menuFor, setMenuFor] = useState<DesktopEntry | null>(null);
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState('');
+  // Computador que vai controlar o Broto cujo QR a câmera está lendo.
+  const [scanFor, setScanFor] = useState<DesktopEntry | null>(null);
 
   const states = new Map(store.desktops.map(desktop => [desktop.id, describe(desktop.id)]));
   const activeId = activeDesktopId(store, keptDesktopId, describe);
@@ -137,7 +140,8 @@ export function Desktops({ store, describe, keptDesktopId, onOpen, onIntent, onH
               { key: 'open', icon: 'terminal', label: t('mobile.home.openTerminalButton'), onPress: run(() => onOpen(menuFor)),
                 disabled: states.get(menuFor.id)?.state === 'connecting' },
               { key: 'new', icon: 'plus', label: t('mobile.home.quick.newSession'), onPress: run(() => onIntent(menuFor, { kind: 'new-session' })) },
-              { key: 'agents', icon: 'bot', label: t('mobile.home.quick.agents'), onPress: run(() => onIntent(menuFor, { kind: 'profiles' })) }
+              { key: 'agents', icon: 'bot', label: t('mobile.home.quick.agents'), onPress: run(() => onIntent(menuFor, { kind: 'profiles' })) },
+              { key: 'broto', icon: 'qr-code', label: t('mobile.brotoScan.title'), onPress: run(() => setScanFor(menuFor)) }
             ],
             [
               { key: 'rename', icon: 'pencil', label: t('mobile.desktops.rename'), onPress: () => setRenaming(true) },
@@ -150,6 +154,13 @@ export function Desktops({ store, describe, keptDesktopId, onOpen, onIntent, onH
           ]} />
         ) : null}
       </BottomSheet>
+
+      <BrotoScan desktopName={scanFor?.name ?? ''} onCancel={() => setScanFor(null)} visible={scanFor !== null}
+        onScanned={payload => {
+          const desktop = scanFor;
+          setScanFor(null);
+          if (desktop) onIntent(desktop, { kind: 'broto-qr', payload });
+        }} />
     </Screen>
   );
 }

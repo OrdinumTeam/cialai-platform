@@ -1,5 +1,14 @@
 #!/bin/sh
-# cialai-command v1
+# cialai-command v2
+if [ "${1:-}" = "broto" ]; then
+  SIDECAR=@CIALAI_SIDECAR@
+  # AppImage unmounts this sidecar when the desktop closes.
+  if [ ! -x "$SIDECAR" ]; then
+    printf '%s\n' @CIALAI_CLOSED@ >&2
+    exit 120
+  fi
+  exec "$SIDECAR" "$@"
+fi
 # Abre o Cialai. Gerado pelo proprio app, apague este arquivo para remover.
 #
 # Nao ha equivalente ao `open` do macOS, entao o executavel e chamado direto.
