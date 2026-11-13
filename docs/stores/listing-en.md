@@ -75,6 +75,7 @@ What is new:
 • Terminals open faster: only the session on screen loads first.
 • New terminal bar with seven buttons, and a special keyboard with Enter on every tab.
 • Connect a Cialai Broto from your phone by scanning the QR code the Broto window shows.
+• On-screen buttons no longer sit under the Android navigation bar.
 ```
 <!-- PLAY_RELEASE_END -->
 

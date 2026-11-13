@@ -79,6 +79,7 @@ Novidades desta versão:
 • Terminais abrem mais rápido: só a sessão da tela carrega primeiro.
 • Barra do terminal nova, com sete botões, e Teclado especial com Enter em todas as abas.
 • Ligar um Cialai Broto pelo celular, lendo o QR que a janela do Broto mostra.
+• Os botões da tela não ficam mais embaixo da barra de navegação do Android.
 ```
 <!-- PLAY_RELEASE_END -->
 
