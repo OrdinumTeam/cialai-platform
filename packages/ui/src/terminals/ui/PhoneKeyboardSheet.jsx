@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Teclado especial do celular: Esc, Tab, modificadores, setas e as teclas que
-// o teclado do aparelho não tem, num painel inferior com quatro abas.
+// o teclado do aparelho não tem, num painel inferior com quatro abas. Toda aba
+// tem Enter e Backspace, e os ícones são os da barra, vindos de
+// `PhoneKeyIcons.jsx`.
 //
 // O painel fica no fluxo da coluna do terminal, e não por cima dele: abrir
 // encolhe o terminal, que se reajusta e continua mostrando o prompt e as
@@ -11,8 +13,9 @@
 // `special-keys.js`, que combina os modificadores armados, codifica a
 // sequência e evita envio duplicado.
 import React, { useState } from 'react';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, ChevronDown, ChevronLeft, ChevronUp, Keyboard, Lock, Settings2, X } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronUp, Lock, Settings2, X } from 'lucide-react';
 import { FAVORITE_CHOICES, KEYBOARD_TABS, KEY_CATALOG, MAX_FAVORITES, MODIFIER_KEYS, PASTE_KEY, SYMBOLS, moveFavorite, toggleFavorite } from '../keyboard-prefs.js';
+import { KeyIcon, hasKeyIcon } from './PhoneKeyIcons.jsx';
 import { translate } from '../../shared/i18n.js';
 
 const named = (value) => (value && value.startsWith('terminal.') ? translate(value) : value);
@@ -21,6 +24,12 @@ export function keyLabel(id) {
   const entry = KEY_CATALOG[id];
   if (!entry) return id;
   return entry.translated ? translate(entry.cap) : entry.cap;
+}
+
+// O nome curto que acompanha o ícone: a legenda da tecla, ou o rótulo dela.
+export function keyCaption(id) {
+  const entry = KEY_CATALOG[id];
+  return entry?.caption ? translate(entry.caption) : keyLabel(id);
 }
 
 export function keyName(id) {
@@ -51,35 +60,31 @@ function Key({ id, controller, disabled, onPaste, className = '' }) {
   if (!entry) return null;
   const hint = entry.hint ? translate(entry.hint) : null;
   const common = { type: 'button', disabled, 'aria-label': keyName(id), className: `phone-keys__key ${className}`.trim() };
-  if (id === PASTE_KEY) {
-    return (
-      <button {...common} onMouseDown={(event) => event.preventDefault()} onClick={onPaste}>
-        <span className="phone-keys__label">{keyLabel(id)}</span>
-        {hint ? <span className="phone-keys__hint" aria-hidden="true">{hint}</span> : null}
-      </button>
-    );
-  }
-  return (
-    <button {...common} {...keyHandlers(controller, entry.key, entry.mods)}>
-      <span className="phone-keys__label">{keyLabel(id)}</span>
-      {hint ? <span className="phone-keys__hint" aria-hidden="true">{hint}</span> : null}
-    </button>
-  );
+  // Tecla com ícone mostra o ícone e a legenda; as outras, o rótulo e a dica.
+  const face = hasKeyIcon(id) ? <>
+    <KeyIcon id={id} />
+    <span className="phone-keys__caption" aria-hidden="true">{keyCaption(id)}</span>
+  </> : <>
+    <span className="phone-keys__label">{keyLabel(id)}</span>
+    {hint ? <span className="phone-keys__hint" aria-hidden="true">{hint}</span> : null}
+  </>;
+  if (id === PASTE_KEY) return <button {...common} onMouseDown={(event) => event.preventDefault()} onClick={onPaste}>{face}</button>;
+  return <button {...common} {...keyHandlers(controller, entry.key, entry.mods)}>{face}</button>;
 }
 
 // Setas em cruz, com alvos largos e a de cima centrada, como um controle.
 export function DirectionPad({ controller, disabled }) {
-  const arrow = (id, Icon) => (
+  const arrow = (id) => (
     <button type="button" className={`phone-dpad__key phone-dpad__key--${id}`} disabled={disabled} aria-label={keyName(id)} {...keyHandlers(controller, id)}>
-      <Icon size={22} strokeWidth={2.2} aria-hidden="true" />
+      <KeyIcon id={id} />
     </button>
   );
   return (
     <div className="phone-dpad" role="group" aria-label={translate('terminal.phone.keys.arrows')}>
-      {arrow('ArrowUp', ArrowUp)}
-      {arrow('ArrowLeft', ArrowLeft)}
-      {arrow('ArrowDown', ArrowDown)}
-      {arrow('ArrowRight', ArrowRight)}
+      {arrow('ArrowUp')}
+      {arrow('ArrowLeft')}
+      {arrow('ArrowDown')}
+      {arrow('ArrowRight')}
     </div>
   );
 }
@@ -100,7 +105,8 @@ function Modifiers({ controller, state, disabled }) {
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => controller.toggleModifier(id)}
           >
-            {cap}
+            <KeyIcon id={id} />
+            <span className="phone-keys__caption">{cap}</span>
             {armed && sticky ? <Lock size={12} strokeWidth={2.4} className="phone-keys__lock" aria-hidden="true" /> : null}
           </button>
         );
@@ -145,9 +151,10 @@ export function KeyboardPreferences({ prefs, onChange, canVibrate }) {
           <ol className="phone-keys__order">
             {favorites.map((id, index) => (
               <li key={id}>
-                <span>{keyLabel(id)}</span>
-                <button type="button" className="phone-keys__icon" disabled={index === 0} aria-label={translate('terminal.phone.keys.prefs.moveUp', { name: keyLabel(id) })} onClick={() => onChange(moveFavorite(prefs, id, -1))}><ChevronUp size={18} aria-hidden="true" /></button>
-                <button type="button" className="phone-keys__icon" disabled={index === favorites.length - 1} aria-label={translate('terminal.phone.keys.prefs.moveDown', { name: keyLabel(id) })} onClick={() => onChange(moveFavorite(prefs, id, 1))}><ChevronDown size={18} aria-hidden="true" /></button>
+                <KeyIcon id={id} size={18} />
+                <span>{keyCaption(id)}</span>
+                <button type="button" className="phone-keys__icon" disabled={index === 0} aria-label={translate('terminal.phone.keys.prefs.moveUp', { name: keyCaption(id) })} onClick={() => onChange(moveFavorite(prefs, id, -1))}><ChevronUp size={18} aria-hidden="true" /></button>
+                <button type="button" className="phone-keys__icon" disabled={index === favorites.length - 1} aria-label={translate('terminal.phone.keys.prefs.moveDown', { name: keyCaption(id) })} onClick={() => onChange(moveFavorite(prefs, id, 1))}><ChevronDown size={18} aria-hidden="true" /></button>
               </li>
             ))}
           </ol>
@@ -156,7 +163,7 @@ export function KeyboardPreferences({ prefs, onChange, canVibrate }) {
           {FAVORITE_CHOICES.map((id) => {
             const selected = favorites.includes(id);
             return (
-              <button key={id} type="button" className={`phone-keys__chip${selected ? ' is-selected' : ''}`} aria-pressed={selected} disabled={!selected && full} onClick={() => onChange(toggleFavorite(prefs, id))}>{keyLabel(id)}</button>
+              <button key={id} type="button" className={`phone-keys__chip${selected ? ' is-selected' : ''}`} aria-pressed={selected} disabled={!selected && full} onClick={() => onChange(toggleFavorite(prefs, id))}><KeyIcon id={id} size={18} />{keyCaption(id)}</button>
             );
           })}
         </div>
@@ -200,6 +207,7 @@ export default function PhoneKeyboardSheet({
   const current = KEYBOARD_TABS.find((item) => item.id === tab) || KEYBOARD_TABS[0];
   const disabled = !interactive;
   const close = () => { controller.pointerUp(); setSettings(false); onClose(); };
+  const key = (id, className) => <Key key={id} id={id} controller={controller} disabled={disabled} onPaste={onPaste} className={className} />;
   return (
     <section className="phone-keys" aria-label={translate('terminal.phone.keys.title')}>
       <span className="phone-keys__grabber" aria-hidden="true" />
@@ -222,17 +230,17 @@ export default function PhoneKeyboardSheet({
           ))}
         </div>
         <div className="phone-keys__body" role="tabpanel" id="phone-keys-panel" aria-labelledby={`phone-keys-tab-${current.id}`}>
-          {current.id === 'navigation' ? <DirectionPad controller={controller} disabled={disabled} /> : null}
-          <div className={`phone-keys__grid${current.id === 'symbols' ? ' phone-keys__grid--functions' : ''}`}>
-            {current.keys.map((id) => <Key key={id} id={id} controller={controller} disabled={disabled} onPaste={onPaste} className={KEY_CATALOG[id]?.hint ? 'phone-keys__key--combo' : ''} />)}
-          </div>
+          {current.keys.length ? <div className="phone-keys__grid">
+            {current.keys.map((id) => key(id, id === PASTE_KEY ? 'phone-keys__key--wide' : ''))}
+          </div> : null}
           {current.modifiers ? <Modifiers controller={controller} state={state} disabled={disabled} /> : null}
-          {current.id === 'basic' ? <DirectionPad controller={controller} disabled={disabled} /> : null}
+          {current.dpad ? <DirectionPad controller={controller} disabled={disabled} /> : null}
+          {current.functions ? <div className="phone-keys__grid phone-keys__grid--functions">{current.functions.map((id) => key(id))}</div> : null}
           {current.symbols ? <Symbols controller={controller} disabled={disabled} /> : null}
         </div>
         <div className="phone-keys__foot">
           <button type="button" className="phone-keys__foot-button" disabled={disabled} onClick={() => { setSettings(false); onNativeKeyboard(); }}>
-            <Keyboard size={18} aria-hidden="true" />{translate(state.any ? 'terminal.phone.keys.typeCombined' : 'terminal.phone.keys.native')}
+            <KeyIcon id="native" size={18} />{translate(state.any ? 'terminal.phone.keys.typeCombined' : 'terminal.phone.keys.native')}
           </button>
           <button type="button" className="phone-keys__foot-button phone-keys__foot-button--close" onClick={close}>{translate('terminal.phone.keys.closeKeyboard')}</button>
         </div>

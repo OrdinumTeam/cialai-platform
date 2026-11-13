@@ -32,9 +32,9 @@ O Broto monta o gerenciador de caminho do celular, `internal/pathmgr`, e tenta, 
 | 1 | Rede local, pelos candidatos anunciados no pareamento | 1,5 s |
 | 2 | Direto pela internet por QUIC, em paralelo com o passo 1 | 4 s |
 | 3 | Reserva pelo Tor, discando o onion do hospedeiro | 20 s |
-| 4 | Furo de NAT por cima da reserva, para subir a direto, em segundo plano | 5 s |
+| 4 | Furo de NAT por cima da reserva, para subir a direto, em segundo plano | 30 s, com a discagem final limitada a 5 s |
 
-A histerese é a mesma do celular: 2 min para trocar de caminho e no máximo uma tentativa de subida a cada 5 min, para não oscilar.
+As regras de estabilidade são as do celular, do documento [06](../arquitetura/06-rede-e-pareamento.md): a reserva é abandonada assim que um caminho direto responde, com tentativas em 5, 10, 20 e 30 s e depois uma por minuto, e só um caminho direto que oscila devolve a histerese de 2 min e o intervalo de 5 min. Desde 13/11/2026 o cartão renovado durante o furo também chega ao gerenciador de caminho do Broto, que antes só o gravava em disco e seguia discando os endereços da rede em que o hospedeiro estava quando o processo começou.
 
 A diferença de empacotamento é o Tor. No celular, o app nativo roda o Tor e entrega o endereço SOCKS ao núcleo. O Broto não tem app nativo, então traz o próprio Tor ao lado do binário e sobe o cliente SOCKS por conta própria. O detalhe de empacotamento está no documento 07.
 

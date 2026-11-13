@@ -75,10 +75,10 @@ Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/202
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
-• Você confere os mesmos quatro dígitos no celular e no Broto antes de ligar.
-• O QR vale uma vez e por dez minutos, e uma foto dele não basta para ligar outra máquina.
-• Pede o Cialai 0.6.0 no computador e o Cialai Broto 0.2.0 na outra máquina.
+• Conexão mais rápida: o app volta ao caminho direto em segundos em vez de ficar preso na reserva Tor.
+• Terminais abrem mais rápido: só a sessão da tela carrega primeiro.
+• Barra do terminal nova, com sete botões, e Teclado especial com Enter em todas as abas.
+• Ligar um Cialai Broto pelo celular, lendo o QR que a janela do Broto mostra.
 ```
 <!-- PLAY_RELEASE_END -->
 
@@ -113,11 +113,12 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização liga um Cialai Broto pelo celular.
+Esta atualização deixa a conexão com o computador mais rápida.
 
-• Ligar um Broto: no menu de três pontos de um computador, o celular lê o QR que a janela do Broto mostra. Você confere os mesmos quatro dígitos no celular e digita esses dígitos no Broto, e ele fica ligado a este computador.
-• O QR vale uma vez e por dez minutos, e uma foto dele não basta para ligar outra máquina.
-• Pede o Cialai 0.6.0 no computador e o Cialai Broto 0.2.0 na máquina que vai ser ligada. Atualize o computador antes de ler o QR.
+• O app volta ao caminho direto em segundos em vez de ficar preso na reserva Tor.
+• Os terminais abrem mais rápido: só a sessão da tela carrega primeiro, e a reconexão continua de onde parou.
+• A barra do terminal ficou com sete botões, e o Teclado especial tem Enter em todas as abas.
+• Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
 ```
 <!-- ASC_WHATS_NEW_END -->
 

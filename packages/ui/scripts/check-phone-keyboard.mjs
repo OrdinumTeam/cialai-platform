@@ -26,6 +26,7 @@ async function load(entry) {
 }
 
 const sheet = await load('ui/PhoneKeyboardSheet.jsx');
+const icons = await load('ui/PhoneKeyIcons.jsx');
 const quick = await load('ui/PhoneQuickCommands.jsx');
 const { createKeyController } = await import('../src/terminals/special-keys.js');
 const { defaultKeyboardPrefs } = await import('../src/terminals/keyboard-prefs.js');
@@ -39,6 +40,12 @@ function renderSheet(props = {}) {
   }));
 }
 const labels = (html) => [...html.matchAll(/aria-label="([^"]+)"/g)].map((match) => match[1]);
+// O miolo do botão com este nome acessível, e o ícone do mapa central.
+const escaped = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const face = (html, label) => html.match(new RegExp(`<button[^>]*aria-label="${escaped(label)}"[^>]*>([\\s\\S]*?)</button>`))?.[1] ?? '';
+const icon = (id, size) => renderToStaticMarkup(React.createElement(icons.KeyIcon, { id, size }));
+const modifierButtons = (html) => [...html.matchAll(/<button[^>]*class="phone-keys__key phone-keys__modifier([^"]*)" aria-pressed="(true|false)"[^>]*>([\s\S]*?)<\/button>/g)]
+  .map((match) => ({ armed: match[1].includes('is-armed'), pressed: match[2] === 'true', inner: match[3], name: match[3].replace(/<svg[\s\S]*?<\/svg>/g, '').replace(/<[^>]*>/g, '') }));
 
 test('o painel fechado não renderiza nada', () => {
   assert.equal(renderSheet({ open: false }), '');
@@ -58,21 +65,41 @@ test('cabeçalho da referência: puxador, título, preferências, fechar e quatr
 
 test('Básico: Esc, Tab, Enter, Backspace, os quatro modificadores e as setas em cruz', () => {
   const html = renderSheet();
-  for (const key of ['Esc', 'Tab', 'Enter', 'Backspace', 'Seta para cima', 'Seta para a esquerda', 'Seta para baixo', 'Seta para a direita']) assert.ok(labels(html).includes(key), key);
-  const modifiers = [...html.matchAll(/phone-keys__modifier[^"]*" aria-pressed="(true|false)"[^>]*>(\w+)/g)].map((match) => `${match[2]}:${match[1]}`);
-  assert.deepEqual(modifiers, ['Ctrl:false', 'Alt:false', 'Shift:false', 'Meta:false']);
+  for (const key of ['Esc', 'Tab', 'Enter', 'Backspace, apagar', 'Seta para cima', 'Seta para a esquerda', 'Seta para baixo', 'Seta para a direita']) assert.ok(labels(html).includes(key), key);
+  assert.deepEqual(modifierButtons(html).map((button) => `${button.name}:${button.pressed}`), ['Ctrl:false', 'Alt:false', 'Shift:false', 'Meta:false']);
   assert.match(html, /class="phone-dpad" role="group" aria-label="Setas"/);
   assert.equal(html.match(/phone-dpad__key /g)?.length, 4);
   // Os comandos mais usados nos agentes já vêm na primeira aba; Colar é Ctrl V, para o agente colar no computador.
   for (const key of ['Shift Tab, modo do agente', 'Ctrl C, interromper', 'Colar no computador, Ctrl V', 'Ctrl R, buscar histórico']) assert.ok(labels(html).includes(key), key);
-  assert.match(html, /phone-keys__label">Colar<\/span><span class="phone-keys__hint" aria-hidden="true">Ctrl V</);
+});
+
+test('as teclas com ícone usam o desenho do mapa central e uma legenda pequena', () => {
+  const html = renderSheet();
+  // O mesmo ícone da barra, vindo de PhoneKeyIcons.jsx, e a legenda embaixo.
+  for (const [label, id, caption] of [
+    ['Esc', 'Escape', 'Esc'], ['Tab', 'Tab', 'Tab'], ['Enter', 'Enter', 'Enter'], ['Backspace, apagar', 'Backspace', 'Apagar'],
+    ['Shift Tab, modo do agente', 'ShiftTab', 'Shift Tab'], ['Ctrl C, interromper', 'CtrlC', 'Interromper'],
+    ['Colar no computador, Ctrl V', 'CtrlV', 'Colar'], ['Ctrl R, buscar histórico', 'CtrlR', 'Histórico'],
+  ]) assert.equal(face(html, label), `${icon(id)}<span class="phone-keys__caption" aria-hidden="true">${caption}</span>`, label);
+  for (const id of ['ArrowUp', 'ArrowLeft', 'ArrowDown', 'ArrowRight']) assert.ok(html.includes(`phone-dpad__key--${id}"`) && html.includes(icon(id)), id);
+  for (const [name, id] of [['Ctrl', 'ctrl'], ['Alt', 'alt'], ['Shift', 'shift'], ['Meta', 'meta']]) {
+    assert.equal(modifierButtons(html).find((button) => button.name === name)?.inner, `${icon(id)}<span class="phone-keys__caption">${name}</span>`, name);
+  }
+  // Esc é o ⎋ desenhado para o painel, nunca a seta de desfazer; Ctrl C é o quadrado de parar, nunca o de copiar.
+  assert.match(icon('Escape'), /class="lucide lucide-escape-key"/);
+  assert.match(icon('CtrlC'), /class="lucide lucide-square"/);
+  assert.doesNotMatch(html, /lucide-(undo|undo-2|rotate-ccw|copy)"/);
+  // Tamanho e traço iguais em todos os ícones de tecla.
+  const drawn = [...html.matchAll(/<button[^>]*class="phone-(?:keys__key|dpad__key)[^"]*"[^>]*><svg[^>]*>/g)].map((match) => match[0]);
+  assert.equal(drawn.length, 16);
+  assert.ok(drawn.every((svg) => /width="22" height="22"/.test(svg) && /stroke-width="2"/.test(svg)));
+  // O teclado do aparelho continua no rodapé, com o ícone dele.
+  assert.ok(html.includes(`${icon('native', 18)}Teclado do aparelho`));
 });
 
 test('modificador armado aparece selecionado, e o rodapé oferece digitar a próxima tecla', () => {
   const html = renderSheet({ arm: ['ctrl', 'shift'] });
-  assert.match(html, /phone-keys__modifier is-armed" aria-pressed="true"[^>]*>Ctrl/);
-  assert.match(html, /phone-keys__modifier is-armed" aria-pressed="true"[^>]*>Shift/);
-  assert.match(html, /phone-keys__modifier" aria-pressed="false"[^>]*>Alt/);
+  assert.deepEqual(modifierButtons(html).map((button) => `${button.name}:${button.armed}:${button.pressed}`), ['Ctrl:true:true', 'Alt:false:false', 'Shift:true:true', 'Meta:false:false']);
   assert.match(html, /Digitar a próxima tecla/);
   assert.doesNotMatch(html, /phone-keys__lock/, 'cadeado só no modo fixo');
 });
@@ -81,7 +108,7 @@ test('modo fixo mostra o cadeado no modificador preso', () => {
   const controller = createKeyController({ send: () => true, mode: 'sticky' });
   controller.toggleModifier('alt');
   const html = renderSheet({ controller, state: controller.getState() });
-  assert.match(html, /is-armed[^>]*>Alt<svg[^>]*phone-keys__lock/);
+  assert.match(modifierButtons(html).find((button) => button.name === 'Alt').inner, />Alt<\/span><svg[^>]*phone-keys__lock/);
 });
 
 test('Navegação, Edição e Símbolos trazem as teclas pedidas', () => {
@@ -90,8 +117,28 @@ test('Navegação, Edição e Símbolos trazem as teclas pedidas', () => {
   const editing = renderSheet({ initialTab: 'editing' });
   for (const key of ['Delete', 'Insert', 'Ctrl D, fim da entrada', 'Ctrl A, início da linha', 'Ctrl Z, suspender', 'Colar da área de transferência, do celular']) assert.ok(labels(editing).includes(key), key);
   assert.ok(!labels(editing).includes('Ctrl C, interromper'), 'o que já está no Básico não se repete');
+  // Colar do celular tem ícone próprio e legenda que o separa do Colar do computador.
+  assert.equal(face(editing, 'Colar da área de transferência, do celular'), `${icon('Paste')}<span class="phone-keys__caption" aria-hidden="true">Colar do celular</span>`);
+  assert.notEqual(icon('Paste'), icon('CtrlV'));
   const symbols = labels(renderSheet({ initialTab: 'symbols' }));
   for (const key of ['F1', 'F12', '|', '~', '/', '\\', '$', '&gt;']) assert.ok(symbols.includes(key) || symbols.includes(key.replace('&gt;', '>')), key);
+});
+
+test('toda aba tem Enter e Backspace, com o ícone da barra', () => {
+  for (const tab of ['basic', 'navigation', 'editing', 'symbols']) {
+    const html = renderSheet({ initialTab: tab });
+    for (const [label, id] of [['Enter', 'Enter'], ['Backspace, apagar', 'Backspace']]) {
+      assert.equal(labels(html).filter((item) => item === label).length, 1, `${label} em ${tab}`);
+      assert.ok(face(html, label).startsWith(icon(id)), `${label} em ${tab}`);
+    }
+  }
+  // Básico, Navegação e Edição começam pela mesma linha.
+  for (const tab of ['basic', 'navigation', 'editing']) {
+    assert.deepEqual(labels(renderSheet({ initialTab: tab }).split('class="phone-keys__grid"')[1]).slice(0, 4), ['Esc', 'Tab', 'Enter', 'Backspace, apagar'], tab);
+  }
+  // Em Símbolos os dois fecham as linhas das teclas de função.
+  const functions = labels(renderSheet({ initialTab: 'symbols' }).split('phone-keys__grid--functions')[1].split('phone-keys__grid--symbols')[0]);
+  assert.deepEqual(functions, ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'Backspace, apagar', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'Enter']);
 });
 
 test('sem terminal interativo todas as teclas ficam desabilitadas, e fechar continua valendo', () => {
@@ -105,11 +152,15 @@ test('sem terminal interativo todas as teclas ficam desabilitadas, e fechar cont
 test('preferências: favoritos em ordem, modo dos modificadores, abertura automática e vibração só se houver', () => {
   const prefs = { ...defaultKeyboardPrefs(), favorites: ['CtrlC', 'Escape', 'Tab', 'CtrlV'], modifierMode: 'sticky' };
   const without = renderToStaticMarkup(React.createElement(sheet.KeyboardPreferences, { prefs, onChange() {}, canVibrate: false }));
-  assert.deepEqual([...without.matchAll(/<li><span>([^<]+)<\/span>/g)].map((match) => match[1]), ['Ctrl C', 'Esc', 'Tab', 'Colar']);
+  // Cada favorito aparece com o ícone que tem na barra e o nome do painel.
+  assert.deepEqual([...without.matchAll(/<li>(<svg[\s\S]*?<\/svg>)<span>([^<]+)<\/span>/g)].map((match) => [match[2], match[1]]), [['Interromper', icon('CtrlC', 18)], ['Esc', icon('Escape', 18)], ['Tab', icon('Tab', 18)], ['Colar', icon('CtrlV', 18)]]);
+  const chips = [...without.matchAll(/<button[^>]*class="phone-keys__chip[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1].replace(/<svg[\s\S]*?<\/svg>/g, ''));
+  assert.deepEqual(chips, ['Esc', 'Tab', 'Enter', 'Shift Tab', 'Interromper', 'Colar', 'Ctrl D', 'Ctrl L', 'Histórico', 'Ctrl Z', 'Apagar', 'Home', 'End', 'Colar do celular']);
+  assert.equal(new Set(chips).size, chips.length, 'nenhum nome repetido entre os favoritos');
   assert.match(without, /checked="" value="sticky"/);
   assert.match(without, /Abrir ao entrar no terminal/);
   assert.doesNotMatch(without, /Vibrar ao tocar/);
-  assert.match(without, /phone-keys__chip" aria-pressed="false" disabled=""[^>]*>Enter/, 'barra cheia não aceita outro favorito');
+  assert.match(without, /phone-keys__chip" aria-pressed="false" disabled=""[^>]*><svg[\s\S]*?<\/svg>Enter</, 'barra cheia não aceita outro favorito');
   const withVibration = renderToStaticMarkup(React.createElement(sheet.KeyboardPreferences, { prefs, onChange() {}, canVibrate: true }));
   assert.match(withVibration, /Vibrar ao tocar/);
 });
@@ -237,4 +288,14 @@ test('o ícone de cada comando rápido fica solto, sem placa, no acento ou no ve
   assert.doesNotMatch(rule('.phone-quick__item-icon'), /background|border-radius/);
   assert.match(rule('.phone-quick__item-icon.is-danger'), /color: var\(--phone-danger\)/);
   assert.doesNotMatch(rule('.phone-quick__item-icon.is-danger'), /background/);
+});
+
+test('alvo de toque: a área de cada tecla avança para os lados até o meio do vão, e o painel dá retorno ao toque', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(fileURLToPath(new URL('../src/views/Terminais.css', import.meta.url)), 'utf8');
+  assert.match(css, /\.phone-keys__key::after,\n\[data-form-factor="phone"\] \.phone-dpad__key::after \{ content: ""; position: absolute; inset: 0 -5px; \}/);
+  // No telefone de 320 px a barra e o painel ganham largura para os sete alvos de 44 px.
+  assert.match(css, /@media \(max-width: 339px\) \{\n  \[data-form-factor="phone"\] \.phone-keybar \{ margin-inline: -4px; \}\n  \[data-form-factor="phone"\] \.phone-keys \{ padding-left: 8px; padding-right: 8px; \}\n/);
+  assert.match(css, /\.phone-keys__key:not\(:disabled\):active,\n\[data-form-factor="phone"\] \.phone-dpad__key:not\(:disabled\):active \{[^}]*transform: scale/);
+  assert.match(css, /\.phone-keys__tab:active,[\s\S]*?\.phone-keys__chip:not\(:disabled\):active \{ opacity: \.7; \}/);
 });

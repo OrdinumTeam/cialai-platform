@@ -71,10 +71,10 @@ Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• Connect a Cialai Broto from your phone: in a computer's three dot menu, scan the QR code the Broto window shows.
-• You check the same four digits on the phone and on the Broto before it connects.
-• The QR code works once and for ten minutes, and a photo of it is not enough to connect another machine.
-• Needs Cialai 0.6.0 on the computer and Cialai Broto 0.2.0 on the other machine.
+• Faster connection: the app goes back to the direct path in seconds instead of staying on the Tor fallback.
+• Terminals open faster: only the session on screen loads first.
+• New terminal bar with seven buttons, and a special keyboard with Enter on every tab.
+• Connect a Cialai Broto from your phone by scanning the QR code the Broto window shows.
 ```
 <!-- PLAY_RELEASE_END -->
 

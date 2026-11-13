@@ -509,17 +509,19 @@ func TestImprovementAttemptsFromTheFallback(t *testing.T) {
 		h := newHarness(t)
 		h.mustConnect(KindTor)
 
-		h.clock.AdvanceTo(16 * time.Minute)
-		every5 := []time.Duration{0, 5 * time.Minute, 10 * time.Minute, 15 * time.Minute}
-		if punches := h.puncher.callTimes(); !slices.Equal(punches, every5) {
-			t.Fatalf("punches at %v, want %v", punches, every5)
+		// The attempts come quickly at first and settle at one a minute.
+		h.clock.AdvanceTo(3*time.Minute + 10*time.Second)
+		backoff := []time.Duration{0, 5 * time.Second, 15 * time.Second, 35 * time.Second,
+			65 * time.Second, 125 * time.Second, 185 * time.Second}
+		if punches := h.puncher.callTimes(); !slices.Equal(punches, backoff) {
+			t.Fatalf("punches at %v, want %v", punches, backoff)
 		}
 		torDials := h.tor.dialCount()
 
 		// Background pauses the attempts.
 		h.manager.NotifyForeground(false)
-		h.clock.AdvanceTo(22 * time.Minute)
-		if punches := h.puncher.callTimes(); len(punches) != 4 {
+		h.clock.AdvanceTo(10 * time.Minute)
+		if punches := h.puncher.callTimes(); len(punches) != len(backoff) {
 			t.Fatalf("punches in the background: %v", punches)
 		}
 
@@ -528,22 +530,133 @@ func TestImprovementAttemptsFromTheFallback(t *testing.T) {
 		lanDials := len(h.direct.callList())
 		h.manager.NotifyForeground(true)
 		synctest.Wait()
-		if h.tor.dialCount() != torDials+1 || len(h.direct.callList()) != lanDials+2 || len(h.puncher.callTimes()) != 5 {
+		if h.tor.dialCount() != torDials+1 || len(h.direct.callList()) != lanDials+2 || len(h.puncher.callTimes()) != len(backoff)+1 {
 			t.Fatalf("foreground: tor %d→%d, direct %d→%d, punches %v",
 				torDials, h.tor.dialCount(), lanDials, len(h.direct.callList()), h.puncher.callTimes())
 		}
 		h.expectActive(KindTor)
 
-		// A second foreground within the interval only re-dials the fallback.
+		// A second foreground within the spacing only re-dials the fallback.
 		h.manager.NotifyForeground(false)
-		h.clock.Advance(time.Minute)
+		h.clock.Advance(2 * time.Second)
 		h.manager.NotifyForeground(true)
 		synctest.Wait()
-		if h.tor.dialCount() != torDials+2 || len(h.direct.callList()) != lanDials+2 || len(h.puncher.callTimes()) != 5 {
+		if h.tor.dialCount() != torDials+2 || len(h.direct.callList()) != lanDials+2 || len(h.puncher.callTimes()) != len(backoff)+1 {
 			t.Fatalf("second foreground: tor %d, direct %d, punches %v", h.tor.dialCount(), len(h.direct.callList()), h.puncher.callTimes())
 		}
 		if len(h.events.pathList()) != 1 {
 			t.Fatalf("keeping the fallback must not emit events: %+v", h.events.pathList())
+		}
+
+		// The foreground restarted the backoff: the next attempt comes 5 s
+		// after the last one, not a minute.
+		h.clock.AdvanceTo(10*time.Minute + 5*time.Second)
+		if punches := h.puncher.callTimes(); len(punches) != len(backoff)+2 || punches[len(punches)-1] != 10*time.Minute+5*time.Second {
+			t.Fatalf("punches after the foreground: %v", punches)
+		}
+	})
+}
+
+// TestTheFallbackIsLeftAsSoonAsADirectPathAnswers is the reason of the quick
+// attempts: a desktop that becomes reachable on the local network a few
+// seconds after the phone fell to the reserve is adopted at the next attempt,
+// not minutes later.
+func TestTheFallbackIsLeftAsSoonAsADirectPathAnswers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t)
+		h.mustConnect(KindTor)
+		h.clock.AdvanceTo(8 * time.Second)
+		h.expectActive(KindTor)
+
+		h.direct.set(lanAddress, modeAnswer)
+		h.clock.AdvanceTo(15 * time.Second)
+		active := h.expectActive(KindLAN)
+		if active.Since.Sub(epoch) != 15*time.Second {
+			t.Fatalf("local path active since %s, want the attempt at 15 s", active.Since.Sub(epoch))
+		}
+		if last := h.lastEvent(); last.event.Reason != ReasonUpgrade || last.event.Path != KindLAN {
+			t.Fatalf("last event = %+v", last)
+		}
+	})
+}
+
+// TestALearnedAddressBringsTheNextAttemptForward covers the phone that sits on
+// the reserve with the addresses of another network: once native discovery or
+// a renewed reach card names an address it did not have, the next attempt does
+// not wait for the minute of the backoff.
+func TestALearnedAddressBringsTheNextAttemptForward(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t)
+		h.mustConnect(KindTor)
+		h.clock.AdvanceTo(3*time.Minute + 20*time.Second) // last attempt at 3 min 5 s, next at 4 min 5 s
+		attempts := len(h.puncher.callTimes())
+
+		reported := []netip.AddrPort{netip.MustParseAddrPort(reportedLocal)}
+		h.manager.SetReportedLAN(reported)
+		synctest.Wait()
+		if punches := h.puncher.callTimes(); len(punches) != attempts+1 || punches[attempts] != 3*time.Minute+20*time.Second {
+			t.Fatalf("punches at %v, want an attempt as the address was reported", punches)
+		}
+		calls := h.direct.callList()
+		if !slices.ContainsFunc(calls[len(calls)-2:], func(call dialCall) bool { return slices.Contains(call.candidates, reported[0]) }) {
+			t.Fatalf("dials = %+v, want the reported address among them", calls[len(calls)-2:])
+		}
+
+		// The same report again teaches nothing and changes nothing.
+		h.clock.Advance(time.Second)
+		h.manager.SetReportedLAN(reported)
+		synctest.Wait()
+		if punches := h.puncher.callTimes(); len(punches) != attempts+1 {
+			t.Fatalf("punches at %v after a repeated report", punches)
+		}
+
+		// A renewed card with the same addresses teaches nothing either, and
+		// one with a new address restarts the backoff.
+		h.clock.AdvanceTo(6 * time.Minute) // last attempt at 5 min 25 s, next at 6 min 25 s
+		attempts = len(h.puncher.callTimes())
+		same := h.card
+		same.IssuedAt, same.ExpiresAt = epoch.Add(6*time.Minute), epoch.Add(time.Hour)
+		if err := h.manager.UpdateCard(same); err != nil {
+			t.Fatal(err)
+		}
+		h.clock.AdvanceTo(6*time.Minute + 10*time.Second)
+		if punches := h.puncher.callTimes(); len(punches) != attempts {
+			t.Fatalf("punches at %v after a card with the same addresses", punches)
+		}
+		moved := testCard(t, h.desktop, pairing.Candidate{Type: pairing.CandidateLAN, Address: "10.0.0.5:4740"})
+		if err := h.manager.UpdateCard(moved); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		if punches := h.puncher.callTimes(); len(punches) != attempts+1 || punches[attempts] != 6*time.Minute+10*time.Second {
+			t.Fatalf("punches at %v, want an attempt as the card named a new address", punches)
+		}
+	})
+}
+
+// TestAFlapEndsOnceAnAttemptFindsNoDirectPath: a direct path that died young
+// makes the slow rules apply, and the first attempt that finds no direct path
+// brings the quick ones back, since there is nothing left to flap to.
+func TestAFlapEndsOnceAnAttemptFindsNoDirectPath(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		h := newHarness(t, withoutPuncher(), withCard(pairing.Candidate{Type: pairing.CandidateSTUN, Address: stunAddress}))
+		h.direct.set(stunAddress, modeAnswer)
+		h.mustConnect(KindDirect)
+		h.clock.AdvanceTo(10 * time.Second)
+		h.direct.set(stunAddress, modeRefuse)
+		h.direct.session(0).end(errors.New("gone"))
+		h.expectActive(KindTor)
+
+		h.clock.AdvanceTo(10 * time.Minute)
+		var attempts []time.Duration
+		for _, call := range h.direct.callList()[1:] {
+			attempts = append(attempts, call.at)
+		}
+		// The flap holds the first attempt for the 2 min hysteresis; it finds
+		// nothing, so the backoff follows from there.
+		want := []time.Duration{130 * time.Second, 135 * time.Second, 145 * time.Second, 165 * time.Second, 195 * time.Second}
+		if len(attempts) < len(want) || !slices.Equal(attempts[:len(want)], want) {
+			t.Fatalf("direct attempts at %v, want them to start with %v", attempts, want)
 		}
 	})
 }

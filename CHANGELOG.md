@@ -74,6 +74,25 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.6.1 · 2026-11-13
+
+### Changed
+
+* The phone leaves the Tor fallback as soon as a direct path answers. An improvement attempt used to run once every 5 minutes; it now runs 5, 10, 20 and 30 s after the previous one and then once a minute, with the fallback still carrying the streams. A network change, the foreground and a desktop address the phone did not have restart the backoff, and the learned address brings the next attempt forward. The slow rules, 2 minutes after a switch and one attempt every 5 minutes, now apply only while a direct path keeps dying within a minute of its adoption
+* The NAT punch budget went from 5 s to 30 s, because opening the control connection over Tor alone could take the old budget. The final dial of the exchanged candidates stays bounded by 5 s
+* On open, the phone attaches only the session on screen instead of every session, each with its 256 KiB replay. The others attach when opened
+* `pty_attach` takes an optional `have` offset, and the desktop replays only the bytes after it. The phone sends the offset it has already received, so a reattach no longer resends the whole ring. The reattach backoff resets only after 30 s attached
+* The phone terminal bar has seven icon only buttons: Enter, Esc, Interrupt, Paste, Special keyboard, Quick commands and Message. Interrupt still sends Ctrl+C. The special keyboard reuses the same icons from one map, has Enter on every tab and the arrows at the bottom of every tab, and shows symbols with short captions for Tab, Shift Tab, Backspace and the arrows
+
+### Added
+
+* The desktop writes `session.opened`, `session.closed` and `path.changed` to `tunnel.log` with the device, the transport, the path, the address and the reason, never the device key
+
+### Fixed
+
+* A Broto saved a renewed reach card to disk but did not hand it to the running path manager, so it kept dialing the old desktop addresses until restart
+* The yellow disconnected pill showed on every live phone session that was off screen; it is gone from the cards
+
 ## 0.6.0 · 2026-11-07
 
 ### Added

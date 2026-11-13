@@ -39,12 +39,21 @@ const bundle = await build({ entryPoints:['src/terminals/ui/PhoneWorkbench.jsx']
     api.onLoad({filter:/.*/,namespace:'fixture'}, ({path}) => ({contents:boundaries[path],loader:'js'}));
   },
 }] });
-function render({owned=false,demo=false,status='running',list=false,files=false,hydrated=true,sessions,color=null,icon=null}={}) {
+// `favorites` grava a escolha da pessoa no armazenamento da página, como a tela de preferências.
+function render({owned=false,demo=false,status='running',list=false,files=false,hydrated=true,sessions,color=null,icon=null,favorites}={}) {
   const fixture={demo,hydrated,sessions,route:list?{pane:'list',sessionId:null,path:null}:files?{pane:'files',sessionId:'fixture',path:null}:undefined,session:{id:'fixture',name:'Projeto',status,viewport:{owned},color,icon}};
-  const context=vm.createContext({fixture,module:{exports:{}},exports:{},require:createRequire(import.meta.url)});
+  const stored=favorites?{window:{localStorage:{getItem:()=>JSON.stringify({version:2,favorites}),setItem(){}}}}:{};
+  const context=vm.createContext({fixture,module:{exports:{}},exports:{},require:createRequire(import.meta.url),...stored});
   vm.runInContext(bundle.outputFiles[0].text,context);
   return renderToStaticMarkup(React.createElement(context.module.exports.default));
 }
+// O ícone como o mapa central o desenha, para comparar com o que a barra mostra.
+const iconBundle = await build({ entryPoints:['src/terminals/ui/PhoneKeyIcons.jsx'], bundle:true, write:false, format:'cjs', external:['react','lucide-react'] });
+const iconContext=vm.createContext({module:{exports:{}},exports:{},require:createRequire(import.meta.url)});
+vm.runInContext(iconBundle.outputFiles[0].text,iconContext);
+const keyIcon=(id)=>renderToStaticMarkup(React.createElement(iconContext.module.exports.KeyIcon,{id}));
+const barOf=(html)=>html.match(/<div class="phone-keybar"[\s\S]*?<\/div>/)?.[0]||'';
+const barButtons=(bar)=>[...bar.matchAll(/<button[^>]*aria-label="([^"]+)"[^>]*>([\s\S]*?)<\/button>/g)].map(match=>({label:match[1],inner:match[2]}));
 test('phone without ownership hides the mounted renderer and explains how to take control',()=>{
   const html=render();
   assert.match(html,/phone-terminal__host[^>]*aria-hidden="true"/);
@@ -69,26 +78,22 @@ test('exited and failed phone sessions show read-only history with all terminal 
   }
 });
 
-test('a barra do terminal traz Teclas, os favoritos, comandos rapidos e o botao de enviar',()=>{
+test('a barra do terminal traz sete botoes so com icone: os favoritos, o teclado especial, os comandos rapidos e a caixa de texto',()=>{
   const html=render({owned:true});
-  const bar=html.match(/<div class="phone-keybar"[\s\S]*?<\/div>/)?.[0]||'';
+  const bar=barOf(html);
   assert.ok(bar,'a barra aparece com o terminal aberto');
-  const labels=[...bar.matchAll(/aria-label="([^"]+)"/g)].map(match=>match[1]);
-  assert.deepEqual(labels,['Teclas do terminal','Teclado do aparelho','Enter','Esc','Ctrl C, interromper','Colar no computador, Ctrl V','Abrir o teclado especial','Comandos rápidos','Escrever texto para o terminal']);
-  // Enter vai só com o ícone; os atalhos empilham o Ctrl sobre a letra.
-  const enterButton=bar.match(/<button[^>]*aria-label="Enter"[^>]*>([\s\S]*?)<\/button>/)?.[1]??'';
-  assert.match(enterButton,/<svg/);
-  for(const [label,letter] of [['Ctrl C, interromper','C'],['Colar no computador, Ctrl V','V']]) {
-    const button=bar.match(new RegExp(`<button[^>]*aria-label="${label}"[^>]*>([\\s\\S]*?)<\\/button>`))?.[1]??'';
-    assert.match(button,new RegExp(`phone-keybar__combo" aria-hidden="true"><small>Ctrl</small>${letter}<`),label);
-  }
+  assert.match(bar,/^<div class="phone-keybar" role="toolbar" aria-label="Teclas do terminal">/);
+  // Sete botoes, nesta ordem, cada um com o nome para o leitor de tela e o icone do mapa central.
+  const expected=[['Enter','Enter'],['Esc','Escape'],['Ctrl C, interromper','CtrlC'],['Colar no computador, Ctrl V','CtrlV'],['Abrir o teclado especial','keys'],['Comandos rápidos','quick'],['Escrever texto para o terminal','compose']];
+  assert.deepEqual(barButtons(bar),expected.map(([label,id])=>({label,inner:keyIcon(id)})));
+  const drawn=(label)=>barButtons(bar).find(button=>button.label===label).inner.match(/class="lucide ([^"]+)"/)[1];
+  assert.deepEqual(expected.map(([label])=>drawn(label)),['lucide-corner-down-left','lucide-escape-key','lucide-square','lucide-clipboard','lucide-square-terminal','lucide-zap','lucide-message-square-text']);
+  // Tamanho e traco iguais nos sete.
+  assert.ok(barButtons(bar).every(button=>/width="22" height="22"/.test(button.inner)&&/stroke-width="2"/.test(button.inner)&&/aria-hidden="true"/.test(button.inner)));
+  // O botao do teclado do aparelho saiu da barra, e nada nela lembra desfazer, copiar ou o aviao de papel.
+  assert.doesNotMatch(bar,/phone-keybar__native|Teclado do aparelho|lucide-(keyboard|undo|undo-2|rotate-ccw|copy|send|ellipsis|chevron-up)"/);
   assert.match(bar,/phone-keybar__keys[^>]*aria-expanded="false"/);
-  // O teclado do aparelho abre pela barra, sem tocar no terminal.
-  assert.match(bar,/phone-keybar__native/);
-  // O botão do teclado especial é só o ícone: o nome fica para o leitor de tela.
-  const keysButton=bar.match(/<button[^>]*class="phone-keybar__keys"[^>]*>([\s\S]*?)<\/button>/)?.[1]??'';
-  assert.match(keysButton,/<svg/);
-  assert.equal(keysButton.replace(/<[^>]*>/g,'').trim(),'','sem texto no botão');
+  assert.match(bar,/phone-keybar__more/);
   assert.match(bar,/phone-keybar__send/);
   // O balao flutuante saiu: a caixa de texto abre pelo botao rosa da barra.
   assert.doesNotMatch(html,/phone-terminal__compose/);
@@ -96,6 +101,17 @@ test('a barra do terminal traz Teclas, os favoritos, comandos rapidos e o botao 
   assert.doesNotMatch(html,/phone-keys__tabs|phone-quick|phone-composer__area/);
   // A fileira antiga de nove teclas pequenas nao volta.
   assert.doesNotMatch(html,/phone-terminal__keys|aria-label="Ctrl D"/);
+});
+test('favorito escolhido sem icone proprio continua na barra, com o atalho empilhado ou o rotulo',()=>{
+  const bar=barOf(render({owned:true,favorites:['CtrlD','Home','Paste','Tab']}));
+  const buttons=barButtons(bar);
+  assert.deepEqual(buttons.map(button=>button.label),['Ctrl D, fim da entrada','Home','Colar da área de transferência, do celular','Tab','Abrir o teclado especial','Comandos rápidos','Escrever texto para o terminal']);
+  assert.equal(buttons[0].inner,'<span class="phone-keybar__combo" aria-hidden="true"><small>Ctrl</small>D</span>');
+  assert.equal(buttons[1].inner,'<span class="phone-keybar__text" aria-hidden="true">Home</span>');
+  assert.equal(buttons[2].inner,keyIcon('Paste'));
+  assert.equal(buttons[3].inner,keyIcon('Tab'));
+  // Sem favoritos, ficam os tres botoes de painel.
+  assert.deepEqual(barButtons(barOf(render({owned:true,favorites:[]}))).map(button=>button.label),['Abrir o teclado especial','Comandos rápidos','Escrever texto para o terminal']);
 });
 test('sem terminal interativo a barra continua na tela, com as teclas desabilitadas',()=>{
   for(const options of [{},{status:'exited'},{status:'error'}]) {
@@ -172,7 +188,11 @@ test('botoes do cabecalho e a barra de teclas usam o tom da sessao',async()=>{
   assert.match(css,/\[data-form-factor="phone"\] \.session-scope \.phone-terminal__toolbar \.mac-tool \{ background: var\(--session-accent-light\); color: var\(--session-on-accent-light\); \}/);
   assert.match(css,/\.session-scope \.phone-terminal__toolbar \.mac-tool:not\(:disabled\):active \{ background: color-mix\(in srgb, var\(--session-accent-light\)/);
   const rule=(selector)=>css.split('\n').find(line=>line.startsWith(`[data-form-factor="phone"] ${selector} {`))||'';
-  assert.match(rule('.phone-keybar__native'),/background: var\(--session-accent-soft,[^)]*\)\) !important; color: var\(--session-accent-text,/);
+  assert.equal(rule('.phone-keybar__native'),'','o botao do teclado do aparelho saiu da barra');
+  // Os botoes repartem a largura, e a area de toque de cada um vai ate o meio do vao.
+  assert.match(rule('.phone-keybar button'),/position: relative; display: inline-flex; flex: 1 1 0;[^}]*min-height: 48px;/);
+  assert.match(rule('.phone-keybar button::after'),/content: ""; position: absolute; inset: 0 -3px;/);
+  assert.match(rule('.phone-keybar button:not(:disabled):active'),/transform: scale/);
   assert.match(rule('.phone-keybar__keys.is-armed'),/background: var\(--session-accent,[^)]*\)\) !important; color: var\(--session-on-accent,/);
   assert.match(rule('.phone-keybar__send'),/background: var\(--session-accent,[^)]*\)\) !important; color: var\(--session-on-accent,/);
   // O icone do cabecalho e solto, no texto do tom.

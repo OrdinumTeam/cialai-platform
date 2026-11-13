@@ -258,10 +258,51 @@ func (runtime *runtimeState) emitTor(status TorStatus) {
 }
 
 func (runtime *runtimeState) emit(name string, data any) {
+	runtime.recordPath(name, data)
 	event, err := rpc.NewEvent(name, data, time.Now())
 	if err == nil {
 		_ = runtime.writer.Write(event)
 	}
+}
+
+// pathFields are the fields of a path event worth keeping in tunnel.log. The
+// device key is left out: the id already names the device.
+var pathFields = []string{"deviceId", "transport", "path", "address", "remoteAddr", "rttMs", "reason"}
+
+// recordPath writes the events that tell how a device reached the desktop to
+// tunnel.log: each bridge socket that opens and closes, with its transport, and
+// each path the device reports, with the reason. Without them a phone stuck on
+// the Tor fallback leaves no trace of when it got there or why.
+func (runtime *runtimeState) recordPath(name string, data any) {
+	if name != "session.opened" && name != "session.closed" && name != "path.changed" {
+		return
+	}
+	fields := logx.Fields{}
+	switch values := data.(type) {
+	case map[string]string:
+		for _, key := range pathFields {
+			if value := values[key]; value != "" {
+				fields[key] = value
+			}
+		}
+	case map[string]any:
+		for _, key := range pathFields {
+			switch value := values[key].(type) {
+			case nil:
+			case string:
+				if value != "" {
+					fields[key] = value
+				}
+			case int64:
+				if value != 0 {
+					fields[key] = value
+				}
+			default:
+				fields[key] = value
+			}
+		}
+	}
+	runtime.logger.Info(name, fields)
 }
 
 func decodeArgs(raw json.RawMessage, output any) error {

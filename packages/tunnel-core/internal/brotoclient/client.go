@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Cialai/cialai/packages/tunnel-core/internal/brotoaccount"
@@ -356,17 +357,19 @@ func (c *Client) run(ctx context.Context, g uint64, h *savedHost, p *pairing.Pay
 		c.status.Digits = ""
 		c.mu.Unlock()
 	}
+	var adopted atomic.Pointer[pathmgr.Manager]
 	puncher := &pathmgr.RendezvousPuncher{Local: c.local, Endpoint: c.endpoint, OpenControl: func(ctx context.Context, desktop pathmgr.Desktop) (io.ReadWriteCloser, error) {
 		return c.tor.DialControlTLS(ctx, desktop.Onion, c.local, desktop.PublicKey)
 	}, Candidates: func(ctx context.Context) ([]pairing.Candidate, error) {
 		snapshot, err := c.collector.Collect(ctx)
 		return snapshot.Pairing(), err
 	}, Handler: rendezvous.Handler{ReachUpdate: func(card candidates.Card) {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		if c.generation == g {
-			h.Card = card
-			_ = saveHost(c.paths, h)
+		// The manager dials the addresses of the renewed card at its next
+		// attempt and stores the card through OnCard. Only saving it here
+		// left the manager with the addresses of the network the host was on
+		// when this process started.
+		if current := adopted.Load(); current != nil {
+			_ = current.UpdateCard(card)
 		}
 	}}}
 	manager, err := pathmgr.New(pathmgr.Config{Card: h.Card, Local: c.local, Direct: c.endpoint, Tor: c.tor, Puncher: puncher, OnCard: func(card candidates.Card) {
@@ -381,6 +384,7 @@ func (c *Client) run(ctx context.Context, g uint64, h *savedHost, p *pairing.Pay
 		c.setError(g)
 		return
 	}
+	adopted.Store(manager)
 	defer manager.Close()
 	for ctx.Err() == nil {
 		if _, err = manager.Connect(ctx); err == nil {

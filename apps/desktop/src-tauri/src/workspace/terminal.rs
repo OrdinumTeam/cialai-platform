@@ -475,13 +475,27 @@ impl OutputLink {
     }
 
     fn attach(&self, key: SubscriberKey, channel: Channel) -> bool {
+        self.attach_from(key, channel, None)
+    }
+
+    /// Assina a partir de `have`, o deslocamento absoluto ate onde o cliente
+    /// ja recebeu a saida desta sessao. Quando ele cai dentro do historico, o
+    /// replay leva so o que falta, em vez dos 256 KiB inteiros a cada
+    /// religacao, o que pesa numa conexao lenta. Fora do historico, por ser
+    /// antigo demais ou de outro processo, o replay volta a ser o historico
+    /// inteiro.
+    fn attach_from(&self, key: SubscriberKey, channel: Channel, have: Option<u64>) -> bool {
         let _delivery = lock(&self.delivery);
         if self.closed.load(Ordering::SeqCst) {
             return false;
         }
         let (offset, bytes) = {
             let mut state = lock(&self.state);
-            let bytes: Vec<u8> = state.history.iter().copied().collect();
+            let start = state.sequence - state.history.len() as u64;
+            let skip = have
+                .filter(|have| (start..=state.sequence).contains(have))
+                .map_or(0, |have| (have - start) as usize);
+            let bytes: Vec<u8> = state.history.iter().skip(skip).copied().collect();
             let offset = state.sequence - bytes.len() as u64;
             state.subscribers.insert(
                 key,
@@ -1633,8 +1647,20 @@ impl TerminalManager {
         key: SubscriberKey,
         channel: Channel,
     ) -> Result<TerminalInfo, String> {
+        self.resume_for(id, key, channel, None)
+    }
+
+    /// Como `attach_for`, com o replay comecando em `have` quando o cliente
+    /// diz ate onde ja recebeu a saida.
+    pub fn resume_for(
+        &self,
+        id: u32,
+        key: SubscriberKey,
+        channel: Channel,
+        have: Option<u64>,
+    ) -> Result<TerminalInfo, String> {
         let (link, info) = self.output(id)?;
-        if !link.attach(key, channel) {
+        if !link.attach_from(key, channel, have) {
             return Err(closed_error());
         }
         Ok(info)
@@ -3566,6 +3592,56 @@ echo 'recovered-fixture'
         );
         link.send(InvokeResponseBody::Raw(b"next".to_vec()));
         assert!(matches!(rx.recv().unwrap(), InvokeResponseBody::Raw(data) if data == b"next"));
+    }
+
+    /// Quem religa dizendo ate onde ja recebeu ganha so o que falta. Um
+    /// deslocamento fora do historico devolve o historico inteiro.
+    #[test]
+    fn attach_from_an_offset_replays_only_the_missing_tail() {
+        let replay = |link: &OutputLink, key: u64, have: Option<u64>| {
+            let (remote, rx) = sink();
+            link.attach_from(SubscriberKey::Remote(key), remote, have);
+            let InvokeResponseBody::Json(marker) = rx.recv().unwrap() else {
+                panic!("replay marker");
+            };
+            let marker: serde_json::Value = serde_json::from_str(&marker).unwrap();
+            let length = marker["length"].as_u64().unwrap();
+            let data = if length == 0 {
+                Vec::new()
+            } else {
+                let InvokeResponseBody::Raw(data) = rx.recv().unwrap() else {
+                    panic!("replay bytes");
+                };
+                data
+            };
+            assert_eq!(data.len() as u64, length);
+            (marker["offset"].as_u64().unwrap(), data)
+        };
+
+        let link = OutputLink::new(Channel::new(|_| Ok(())));
+        link.send(InvokeResponseBody::Raw(vec![b'a'; 300_000]));
+        link.send(InvokeResponseBody::Raw(b"tail".to_vec()));
+        // O historico guarda de 37_860 a 300_004.
+        assert_eq!(replay(&link, 1, Some(300_000)), (300_000, b"tail".to_vec()));
+        assert_eq!(replay(&link, 2, Some(300_004)), (300_004, Vec::new()));
+        let whole = 262_144;
+        for outside in [None, Some(0), Some(37_859), Some(300_005)] {
+            let (offset, data) = replay(&link, 3, outside);
+            assert_eq!((offset, data.len()), (37_860, whole), "have {outside:?}");
+        }
+        let (offset, data) = replay(&link, 4, Some(37_860));
+        assert_eq!((offset, data.len()), (37_860, whole));
+
+        // A conta de bytes em voo segue o replay reduzido: confirmar o que
+        // chegou libera o assinante por inteiro.
+        let (remote, rx) = sink();
+        link.attach_from(SubscriberKey::Remote(9), remote, Some(300_000));
+        let _ = rx.recv().unwrap();
+        let _ = rx.recv().unwrap();
+        assert_eq!(
+            lock(&link.state).subscribers[&SubscriberKey::Remote(9)].in_flight,
+            4
+        );
     }
 
     /// O replay nao pode carregar consulta nenhuma, nem a que chegou cortada

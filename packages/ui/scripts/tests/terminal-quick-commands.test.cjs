@@ -123,10 +123,21 @@ test('teclado: a barra antiga, nunca mexida, vira a nova; a escolhida fica', asy
 test('todas as teclas das abas existem no catálogo e geram sequência', async () => {
   const { KEYBOARD_TABS, KEY_CATALOG, FAVORITE_CHOICES, SYMBOLS, PASTE_KEY } = await loadPrefs();
   const { encodeKey } = await import('../../src/terminals/key-encoder.js');
-  const ids = [...KEYBOARD_TABS.flatMap((tab) => tab.keys), ...FAVORITE_CHOICES];
+  const keysOf = (tab) => [...tab.keys, ...(tab.functions || [])];
+  const ids = [...KEYBOARD_TABS.flatMap(keysOf), ...FAVORITE_CHOICES];
   for (const id of ids) {
     assert.ok(KEY_CATALOG[id], id);
     if (id !== PASTE_KEY) assert.ok(encodeKey(KEY_CATALOG[id].key, KEY_CATALOG[id].mods), id);
   }
   for (const symbol of SYMBOLS) assert.equal(encodeKey(symbol), symbol);
+  // Nenhuma aba fica sem Enter nem Backspace, e nenhuma repete tecla.
+  for (const tab of KEYBOARD_TABS) {
+    for (const id of ['Enter', 'Backspace']) assert.ok(keysOf(tab).includes(id), `${id} em ${tab.id}`);
+    assert.equal(new Set(keysOf(tab)).size, keysOf(tab).length, tab.id);
+  }
+  assert.equal(encodeKey(KEY_CATALOG.Enter.key), '\r');
+  // Ctrl C continua sendo interromper, e Ctrl V continua indo ao computador.
+  assert.equal(encodeKey(KEY_CATALOG.CtrlC.key, KEY_CATALOG.CtrlC.mods), '\x03');
+  assert.equal(encodeKey(KEY_CATALOG.CtrlV.key, KEY_CATALOG.CtrlV.mods), '\x16');
+  assert.equal(encodeKey(KEY_CATALOG.Escape.key), '\x1b');
 });

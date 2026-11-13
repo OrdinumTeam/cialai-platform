@@ -147,11 +147,12 @@ test('cada fase tem sua classe e o terminal sem agente vira Terminal padrão', (
   assert.match(card({ ...base, id: 'failed', name: 'infra', status: 'exited', activity: null }), /phone-session--error/);
 });
 
-test('a queda da ponte aparece numa pílula própria, sem trocar o estado do agente', () => {
+test('sessão estacionada mostra o estado do agente, sem aviso de desconectada', () => {
   const html = card({ ...base, id: 'lost', name: 'deploy', status: 'disconnected', activity: { available: true, cpu: 4, memory: 0 } });
   assert.match(html, /phone-session--active/);
   assert.match(html, /Processando/);
-  assert.match(html, /phone-badge--warning">Sessão desconectada/);
+  assert.doesNotMatch(html, /phone-badge--warning/);
+  assert.doesNotMatch(html, /Sessão desconectada/);
 });
 
 test('nome longo fica inteiro no texto e o corte é feito pelo estilo', () => {

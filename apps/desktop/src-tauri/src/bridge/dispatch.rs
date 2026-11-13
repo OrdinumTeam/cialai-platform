@@ -187,7 +187,10 @@ pub(super) fn dispatch(
                 terminals.has_subscriber(id, conn.key())
             })?;
             let info = if let Some(id) = attaching {
-                terminals.attach_for(id, conn.key(), channel)?
+                // `have` e opcional: paginas antigas nao mandam e recebem o
+                // historico inteiro, como antes.
+                let have: Option<u64> = arg(&args, "have")?;
+                terminals.resume_for(id, conn.key(), channel, have)?
             } else {
                 let cwd: String = arg(&args, "cwd")?;
                 let tag: Option<String> = arg(&args, "tag")?;

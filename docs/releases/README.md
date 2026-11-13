@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.6.1](0.6.1.md) | 13/11/2026 | `v0.6.1` | Saída rápida da reserva Tor, terminais mais rápidos no celular e barra do terminal com sete botões; sai calada |
 | [0.6.0](0.6.0.md) | 07/11/2026 | `v0.6.0` | Broto ligado pelo QR do celular, grafo com seis vistas e cards recolhíveis; sai calada |
 | [0.5.4](0.5.4.md) | 01/11/2026 | `v0.5.4` | Anel de uso do Claude aceso com o limite de consultas; sai calada |
 | [0.5.3](0.5.3.md) | 31/10/2026 | `v0.5.3` | Uso do plano Ultra ao abrir, com a leitura guardada; sai calada |
