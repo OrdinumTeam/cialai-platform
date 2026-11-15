@@ -387,6 +387,24 @@ impl OutputLink {
         lock(&self.state).last_output
     }
 
+    /// Deslocamento absoluto do fim da saida recebida ate agora.
+    fn sequence(&self) -> u64 {
+        lock(&self.state).sequence
+    }
+
+    /// Saida recebida depois de `offset`, dentro do que o historico guarda.
+    fn output_since(&self, offset: u64) -> Vec<u8> {
+        let state = lock(&self.state);
+        let available = state.history.len() as u64;
+        let fresh = state.sequence.saturating_sub(offset).min(available) as usize;
+        state
+            .history
+            .iter()
+            .skip(state.history.len() - fresh)
+            .copied()
+            .collect()
+    }
+
     /// Turno que o Codex anunciou neste terminal.
     fn codex_turn(&self) -> Option<AgentTurn> {
         lock(&self.state).codex_osc.turn()
@@ -700,6 +718,13 @@ struct MetricsCache {
     values: Vec<SessionMetrics>,
 }
 const METRICS_CACHE_TTL: Duration = Duration::from_millis(250);
+/// Ctrl+C mandados a um Codex sem conversa provada na saida do app: o
+/// primeiro interrompe um turno ou limpa o rascunho, o segundo arma a saida e
+/// o terceiro sai.
+const CODEX_EXIT_PRESSES: u32 = 3;
+const CODEX_EXIT_STEP: Duration = Duration::from_millis(350);
+/// Espera maxima pelo anuncio de todos os Codex, somada a saida do app.
+const CODEX_EXIT_WAIT: Duration = Duration::from_secs(2);
 
 impl TerminalManager {
     pub fn broto_event(&self, name: &str, data: &serde_json::Value) {
@@ -1210,7 +1235,11 @@ impl TerminalManager {
         let writer = {
             let mut guard = self.lock();
             let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
-            session.user_input = true;
+            // A resposta do xterm a uma consulta do shell nao e digitacao e
+            // nao cancela a retomada do agente.
+            if !super::replies::is_terminal_reply(bytes) {
+                session.user_input = true;
+            }
             session.writer.clone()
         };
         writer
@@ -1264,9 +1293,10 @@ impl TerminalManager {
             let session = guard.sessions.get(&id).ok_or_else(closed_error)?;
             (session.info.cwd.clone(), session.info.shell_flavor)
         };
-        let search_path = platform::path_env(&self.prefs.get(), &self.home);
+        let app_path = platform::path_env(&self.prefs.get(), &self.home);
         let checked =
-            resume::compatibility::validate(&record, &cwd, flavor, &self.home, &search_path)?;
+            resume::compatibility::validate(&record, &cwd, flavor, &self.home, &app_path)?;
+        let search_path = resume::compatibility::executable_search_path(&record, &app_path);
         self.procs.refresh();
         let mut guard = self.lock();
         let session = guard.sessions.get_mut(&id).ok_or_else(closed_error)?;
@@ -1291,7 +1321,7 @@ impl TerminalManager {
             resume_shell_identity(self.procs.as_ref(), pid, &session.info.shell)
         });
         let shell_ready = shell_owned
-            && foreground == session.info.pid
+            && shell_holds_foreground(foreground, session.info.pid)
             && session
                 .link
                 .last_output()
@@ -1302,7 +1332,7 @@ impl TerminalManager {
             // must continue to fail the readiness gate.
             if session.resume_attempts > 0
                 && shell_owned
-                && (foreground == session.info.pid
+                && (shell_holds_foreground(foreground, session.info.pid)
                     || foreground.is_some_and(|pid| {
                         resume_foreground_matches(
                             self.procs.as_ref(),
@@ -1746,7 +1776,20 @@ impl TerminalManager {
     /// Encerra todas as sessoes ao sair do app. Bloqueia por no maximo a
     /// graca de encerramento, para nao segurar a saida.
     pub fn kill_all_blocking(&self) {
+        // A ultima amostra pode ter ate cinco segundos: um `/clear` ou um
+        // agente aberto agora ainda nao estariam no disco.
+        if let Some(store) = &self.journal {
+            snapshot(
+                &self.inner,
+                store,
+                &self.commands,
+                &self.home,
+                self.procs.as_ref(),
+                &self.closing,
+            );
+        }
         self.closing.store(true, Ordering::SeqCst);
+        self.capture_codex_conversations();
         self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
         let targets: Vec<KillTarget> = {
             let guard = self.lock();
@@ -1781,6 +1824,104 @@ impl TerminalManager {
             }
         }
         self.metrics_epoch.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// O Codex servido pelo daemon compartilhado nao prova, enquanto roda,
+    /// qual conversa e de qual terminal (decisao 055). Ao sair, ele mesmo
+    /// imprime `codex resume <id>` no terminal em que estava. Na saida do app,
+    /// cada sessao com um Codex sem conversa provada recebe Ctrl+C ate ele
+    /// sair e anunciar o id, que vira a conversa guardada da sessao (decisao
+    /// 079). Sem anuncio, nada e gravado; nada e deduzido de pasta ou data.
+    fn capture_codex_conversations(&self) {
+        let Some(store) = self.journal.as_ref() else {
+            return;
+        };
+        struct Pending {
+            tag: String,
+            cwd: String,
+            cols: u16,
+            rows: u16,
+            link: Arc<OutputLink>,
+            writer: SyncSender<Vec<u8>>,
+            from: u64,
+            command: procs::CommandLine,
+            agent_cwd: Option<String>,
+        }
+        self.procs.refresh();
+        let source = self.procs.as_ref();
+        let mut pending: Vec<Pending> = {
+            let guard = self.lock();
+            guard
+                .sessions
+                .values()
+                .filter(|session| {
+                    journal::valid_tag(&session.info.tag) && session.observed_agent.is_none()
+                })
+                .filter_map(|session| {
+                    let (pid, command) = nearest_codex_tui(source, session.info.pid?)?;
+                    let (cols, rows) = session
+                        .local_size
+                        .unwrap_or((session.info.cols, session.info.rows));
+                    Some(Pending {
+                        tag: session.info.tag.clone(),
+                        cwd: session.info.cwd.clone(),
+                        cols,
+                        rows,
+                        link: session.link.clone(),
+                        writer: session.writer.clone(),
+                        from: session.link.sequence(),
+                        agent_cwd: source.cwd(pid),
+                        command,
+                    })
+                })
+                .collect()
+        };
+        if pending.is_empty() {
+            return;
+        }
+        let started = Instant::now();
+        let mut presses = 0;
+        let mut next_press = started;
+        while !pending.is_empty() && started.elapsed() < CODEX_EXIT_WAIT {
+            if presses < CODEX_EXIT_PRESSES && Instant::now() >= next_press {
+                // Interrompe o turno, arma a saida e sai: o Codex pede o
+                // segundo Ctrl+C e o primeiro so limpa um rascunho.
+                for item in &pending {
+                    let _ = item.writer.try_send(vec![0x03]);
+                }
+                presses += 1;
+                next_press = Instant::now() + CODEX_EXIT_STEP;
+            }
+            thread::sleep(Duration::from_millis(50));
+            pending.retain(|item| {
+                // A janela pode ter parado de confirmar a saida; a thread de
+                // lote precisa seguir lendo o PTY.
+                item.link.drain();
+                let Some(session_id) =
+                    resume::announced_codex_id(&item.link.output_since(item.from))
+                else {
+                    return true;
+                };
+                if let Some(record) = resume::announced_codex_session(
+                    &item.command,
+                    item.agent_cwd.clone(),
+                    &session_id,
+                    &self.home,
+                ) {
+                    store.write_meta(
+                        &SavedMeta::sample(
+                            &item.tag,
+                            &item.cwd,
+                            item.cols,
+                            item.rows,
+                            Some(record),
+                        ),
+                        || true,
+                    );
+                }
+                false
+            });
+        }
     }
 
     pub fn list(&self) -> Vec<TerminalInfo> {
@@ -2335,6 +2476,45 @@ fn resume_foreground_matches(
             .is_some_and(|actual| same_path(Path::new(&actual), Path::new(cwd)))
 }
 
+/// Codex interativo mais perto do shell, com a linha de comando dele.
+fn nearest_codex_tui(source: &dyn ProcSource, shell: u32) -> Option<(u32, procs::CommandLine)> {
+    let mut best: Option<(usize, u32, procs::CommandLine)> = None;
+    for pid in source.descendants(shell) {
+        let Some(command) = source.command_line(pid) else {
+            continue;
+        };
+        if !resume::is_codex_conversation_tui(&command) {
+            continue;
+        }
+        let mut depth = 0;
+        let mut current = pid;
+        while current != shell && depth < 64 {
+            let Some(info) = source.info(current) else {
+                depth = usize::MAX;
+                break;
+            };
+            current = info.ppid;
+            depth += 1;
+        }
+        if best.as_ref().is_none_or(|(known, _, _)| depth < *known) {
+            best = Some((depth, pid, command));
+        }
+    }
+    best.map(|(_, pid, command)| (pid, command))
+}
+
+/// O shell ocupa sozinho o primeiro plano do terminal. No Unix o grupo de
+/// primeiro plano precisa ser o do shell. No Windows nao existe esse grupo: o
+/// backend aponta a folha viva mais nova abaixo do shell e nada quando ele
+/// esta ocioso no prompt, a mesma leitura que `launch_agent` faz.
+fn shell_holds_foreground(foreground: Option<u32>, shell: Option<u32>) -> bool {
+    if cfg!(windows) {
+        foreground.is_none() || foreground == shell
+    } else {
+        foreground.is_some() && foreground == shell
+    }
+}
+
 fn resume_shell_identity(source: &dyn ProcSource, pid: u32, expected: &str) -> bool {
     let Some(actual) = source.exe_path(pid) else {
         return false;
@@ -2590,6 +2770,7 @@ mod tests {
             config_dir: None,
             profile_name: None,
             args: vec!["--yolo".into()],
+            search_path: None,
         };
         source.set_info(procs::ProcInfo {
             pid: 84,
@@ -2825,6 +3006,7 @@ echo 'recovered-fixture'
             config_dir: Some(config.to_string_lossy().into_owned()),
             profile_name: Some("isolated".into()),
             args: vec![],
+            search_path: None,
         };
         manager.journal.as_ref().unwrap().write_meta(
             &SavedMeta::sample(
@@ -4891,6 +5073,7 @@ echo 'recovered-fixture'
                     config_dir: None,
                     profile_name: None,
                     args: Vec::new(),
+                    search_path: None,
                 },
                 evidence: AgentEvidence::ClaudeRecord(evidence),
             })
@@ -5311,6 +5494,124 @@ echo 'recovered-fixture'
         assert!(manager.write(info.id, b"x").is_err());
     }
 
+    // O daemon do Codex nao prova de quem e cada conversa; ao fechar o app,
+    // cada terminal guarda o id que o proprio Codex anuncia ao sair, mesmo
+    // com os dois na mesma pasta.
+    #[cfg(unix)]
+    #[test]
+    fn closing_the_app_keeps_the_conversation_each_codex_announces() {
+        let root = tempfile::tempdir().unwrap();
+        let home = root.path().canonicalize().unwrap();
+        std::fs::create_dir_all(home.join(".codex")).unwrap();
+        let source = Arc::new(procs::FakeProcs::default());
+        let manager = TerminalManager::with_environment(
+            Arc::new(|_| {}),
+            Arc::new(|_| {}),
+            PrefsState::new(Preferences::default()),
+            home.clone(),
+            source.clone(),
+        )
+        .with_journal(home.join("journal"));
+        let ids = [
+            "12345678-1234-4234-8234-123456789abc",
+            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        ];
+        let shell = pty::TestShell::isolated();
+        let mut tabs = Vec::new();
+        for (i, id) in ids.iter().enumerate() {
+            let tag = format!("codex_{i}");
+            let (tx, rx) = channel::<InvokeResponseBody>();
+            let info = manager
+                .spawn_for_with_spec(
+                    home.to_str().unwrap(),
+                    80,
+                    24,
+                    CursorPosition::default(),
+                    &tag,
+                    SubscriberKey::Webview,
+                    Channel::new(move |body| {
+                        let _ = tx.send(body);
+                        Ok(())
+                    }),
+                    shell.spec(),
+                    &manager.prefs.get(),
+                )
+                .unwrap();
+            let shell_pid = info.pid.unwrap();
+            let agent_pid = 910_000 + i as u32;
+            source.set_children(shell_pid, vec![agent_pid]);
+            source.set_info(procs::ProcInfo {
+                pid: shell_pid,
+                ..Default::default()
+            });
+            source.set_info(procs::ProcInfo {
+                pid: agent_pid,
+                ppid: shell_pid,
+                start_sec: 100,
+                ..Default::default()
+            });
+            source.set_cwd(agent_pid, home.to_string_lossy());
+            source.set_command(
+                agent_pid,
+                CommandLine {
+                    exe: "/x/codex".into(),
+                    argv: vec!["/x/codex".into(), "--yolo".into()],
+                    env: HashMap::from([("PATH".to_string(), "/x:/usr/bin".to_string())]),
+                },
+            );
+            // Faz o papel do Codex no terminal: espera o Ctrl+C e anuncia a
+            // conversa como o Codex faz ao sair.
+            let script = home.join(format!("codex-{i}.sh"));
+            std::fs::write(
+                &script,
+                format!(
+                    "trap 'printf \"To continue this session, run \\033[1mcodex resume {id}\\033[0m\\n\"; exit 0' INT\nprintf 'pronto-{i}\\n'\nwhile :; do sleep 0.05; done\n"
+                ),
+            )
+            .unwrap();
+            manager
+                .write(info.id, format!("sh '{}'\n", script.display()).as_bytes())
+                .unwrap();
+            let mut queries = LaterCursorQueries::new("codex_announces", &manager, info.id);
+            let mut printed = Vec::new();
+            assert!(
+                collect_until_printed(&rx, &mut queries, &mut printed, &format!("pronto-{i}")),
+                "saida: {}",
+                String::from_utf8_lossy(&printed)
+            );
+            tabs.push(tag);
+        }
+        manager.kill_all_blocking();
+        let store = JournalStore::new(home.join("journal"));
+        for (i, tag) in tabs.iter().enumerate() {
+            let saved = store.saved_agent(tag).expect("conversa anunciada");
+            assert_eq!(saved.agent, resume::CODEX);
+            assert_eq!(saved.session_id, ids[i]);
+            assert_eq!(saved.config_dir, None);
+            assert_eq!(
+                saved.args,
+                vec!["--dangerously-bypass-approvals-and-sandbox".to_string()]
+            );
+            assert_eq!(saved.search_path.as_deref(), Some("/x:/usr/bin"));
+            assert!(
+                String::from_utf8_lossy(&store.history(tag)).contains(ids[i]),
+                "o anuncio fica no historico da propria aba"
+            );
+        }
+    }
+
+    #[test]
+    fn idle_prompt_holds_the_foreground_on_each_system() {
+        if cfg!(windows) {
+            assert!(shell_holds_foreground(None, Some(10)));
+            assert!(!shell_holds_foreground(Some(11), Some(10)));
+        } else {
+            assert!(shell_holds_foreground(Some(10), Some(10)));
+            assert!(!shell_holds_foreground(None, Some(10)));
+            assert!(!shell_holds_foreground(Some(11), Some(10)));
+        }
+    }
+
     #[test]
     fn three_cards_keep_proven_conversations_through_snapshot_and_restart() {
         for agent in [resume::CODEX, resume::CLAUDE] {
@@ -5460,6 +5761,7 @@ echo 'recovered-fixture'
             config_dir: None,
             profile_name: None,
             args: vec![],
+            search_path: None,
         };
         let manager = TerminalManager::with_notifier(Arc::new(|_| {}));
         struct Cleanup(TerminalManager);

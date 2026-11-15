@@ -551,6 +551,7 @@ mod tests {
             config_dir: None,
             profile_name: None,
             args: vec!["--dangerously-skip-permissions".into()],
+            search_path: None,
         };
         store.write_meta(
             &SavedMeta::sample("s_m", "/tmp", 120, 40, Some(agent.clone())),

@@ -32,7 +32,24 @@ pub(super) const ENV_OF_INTEREST: &[&str] = &[
     "CLAUDE_PROFILE",
     "CODEX_HOME",
     "CODEX_PROFILE",
+    // O PATH com que o agente nasceu: o shell do usuario ja o montou, e e
+    // nele que a retomada acha o mesmo `claude` ou `codex`, mesmo quando o
+    // app foi aberto pelo Dock com o PATH minimo do sistema.
+    "PATH",
 ];
+
+/// Chave da lista fechada que corresponde a `name`. No Windows o sistema
+/// compara nomes de variavel sem distinguir maiusculas e costuma gravar
+/// `Path`; a chave volta na grafia da lista para o resto do codigo.
+pub(super) fn env_key_of_interest(name: &str, fold_case: bool) -> Option<&'static str> {
+    ENV_OF_INTEREST.iter().copied().find(|key| {
+        if fold_case {
+            key.eq_ignore_ascii_case(name)
+        } else {
+            *key == name
+        }
+    })
+}
 
 /// Tempo de CPU acumulado em nanossegundos e memoria atribuida em bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

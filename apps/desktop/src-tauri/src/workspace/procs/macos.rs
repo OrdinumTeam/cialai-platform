@@ -15,7 +15,7 @@
 use std::os::raw::{c_char, c_int, c_void};
 use std::sync::OnceLock;
 
-use super::{CommandLine, ENV_OF_INTEREST, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage};
+use super::{CommandLine, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage, env_key_of_interest};
 
 #[derive(Debug, Default)]
 pub(super) struct Backend;
@@ -416,7 +416,7 @@ fn parse_procargs(buffer: &[u8]) -> Option<CommandLine> {
         let Ok(key) = std::str::from_utf8(&entry[..equals]) else {
             continue;
         };
-        if ENV_OF_INTEREST.contains(&key) {
+        if let Some(key) = env_key_of_interest(key, false) {
             env.insert(
                 key.to_string(),
                 String::from_utf8_lossy(&entry[equals + 1..]).to_string(),

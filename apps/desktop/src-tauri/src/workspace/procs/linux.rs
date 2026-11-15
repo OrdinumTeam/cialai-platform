@@ -15,7 +15,8 @@ use std::sync::{Mutex, MutexGuard};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessStatus, ProcessesToUpdate, System};
 
 use super::{
-    CommandLine, ENV_OF_INTEREST, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage, bounded_descendants,
+    CommandLine, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage, bounded_descendants,
+    env_key_of_interest,
 };
 
 #[derive(Debug)]
@@ -296,9 +297,7 @@ fn allowed_environment(values: &[String]) -> HashMap<String, String> {
         .take(MAX_ENV_ENTRIES)
         .filter_map(|text| {
             let (name, value) = text.split_once('=')?;
-            ENV_OF_INTEREST
-                .contains(&name)
-                .then(|| (name.to_string(), value.to_string()))
+            env_key_of_interest(name, false).map(|key| (key.to_string(), value.to_string()))
         })
         .collect()
 }
