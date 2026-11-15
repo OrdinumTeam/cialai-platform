@@ -100,10 +100,9 @@ O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser c
 
 O que a App Store mostra em Novidades desta versão. A loja tem uma fonte só, e
 é esta: `tools/release/asc_submit.py` lê este bloco e grava o texto na versão
-antes de enviar à revisão. A última versão publicada na loja é a 0.3.0, então o
-texto cobre tudo que chegou ao iPhone desde ela, e não só o da entrega do dia.
-Da 0.3.0 à 0.6.0 o app nativo só ganhou Ligar um Broto; o resto chegou pela
-página que vem do computador.
+antes de enviar à revisão. A última versão publicada na loja é a 0.6.1, então o
+texto da 0.7.0 cobre o que chegou ao iPhone desde ela. A conexão em segundo
+plano é só do Android e não entra aqui.
 
 O ícone não entra na lista. Ele foi reenquadrado mais de uma vez entre a 0.2.2 e a
 0.2.9, mas voltou ao mesmo lugar: a arte mede 597 por 898 nos dois arquivos, e a
@@ -112,13 +111,11 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização traz a imagem da sessão nos avisos e uma barra do terminal nova.
+Esta atualização traz o ícone da sessão nos avisos e uma barra do terminal nova.
 
 • Cada aviso mostra o ícone da sessão em branco sobre a cor dela.
-• A barra do terminal ficou em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter. Segure um botão para ver o nome dele.
-• O app volta ao caminho direto em segundos em vez de ficar preso na reserva Tor.
-• Os terminais abrem mais rápido: só a sessão da tela carrega primeiro, e a reconexão continua de onde parou.
-• Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
+• A barra do terminal ficou em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter.
+• Segure um botão da barra para ver o nome dele, sem executar nada.
 ```
 <!-- ASC_WHATS_NEW_END -->
 
