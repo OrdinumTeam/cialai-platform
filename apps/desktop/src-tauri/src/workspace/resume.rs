@@ -1770,14 +1770,21 @@ mod tests {
             )
         );
         // Conta nomeada: as duas variaveis vao na linha, nada e removido.
+        let profile = if cfg!(windows) {
+            "C:/perfis/a"
+        } else {
+            "/perfis/a"
+        };
         let named = AgentSession {
-            config_dir: Some("/perfis/a".into()),
+            config_dir: Some(profile.into()),
             profile_name: Some("a".into()),
             ..session.clone()
         };
         let line = resume_command_for(&named, "/", ShellFlavor::Posix, Some("/x/claude")).unwrap();
         assert!(!line.contains("env -u"));
-        assert!(line.contains("CLAUDE_CONFIG_DIR=/perfis/a CLAUDE_PROFILE=a '/x/claude' --resume"));
+        assert!(line.contains(&format!(
+            "CLAUDE_CONFIG_DIR={profile} CLAUDE_PROFILE=a '/x/claude' --resume"
+        )));
         // Sem o caminho do CLI, a linha mostrada continua a mesma de antes.
         assert_eq!(
             resume_command(&session, "/", ShellFlavor::Posix).unwrap(),
