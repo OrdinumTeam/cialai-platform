@@ -105,8 +105,13 @@ export function releaseNotes(template, tag) {
   return template.replaceAll('{{version}}', tag.slice(1)).replaceAll('{{tag}}', tag);
 }
 
+// A lista de todas as releases, com os assets de cada uma, passou de 1 MiB, o
+// limite padrão de saída do execFileSync, e a 0.7.1 parou com ENOBUFS ao
+// procurar o próprio rascunho. O teto aqui sobra para anos de releases.
+export const GH_MAX_BUFFER = 512 * 1024 * 1024;
+
 function gh(args, options = {}) {
-  return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...options });
+  return execFileSync('gh', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], maxBuffer: GH_MAX_BUFFER, ...options });
 }
 
 function repository() {
