@@ -74,6 +74,22 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.7.1 · 2026-11-15
+
+### Fixed
+
+* Reopening a terminal resumes the Claude Code or Codex conversation of that terminal. A detected conversation keeps the PATH of the agent process, and the resume looks for the CLI there before the PATH of the app, which on a Mac opened from the Dock is only `/usr/bin:/bin:/usr/sbin:/sbin`; the version probe runs with the same PATH so `#!/usr/bin/env node` finds node
+* Codex served by the shared `codex app-server` daemon gets a conversation id. On quit the studio takes a last sample and sends up to three Ctrl+C to each interactive Codex without a proven conversation, reads the `codex resume <id>` it prints in its own terminal and keeps that id for the terminal, validated against the profile before any command
+* On Windows the resume command was never sent, because readiness required the shell to own the foreground and Windows has no foreground group. An idle prompt now counts as ready
+* The default Claude account resumes with `CLAUDE_CONFIG_DIR` and `CLAUDE_PROFILE` removed instead of pointing at `~/.claude`
+* Terminal replies such as cursor position, attributes, colors, modes, version and focus no longer count as typing and no longer cancel the resume
+* The macOS app declares `NSLocalNetworkUsageDescription`, in Portuguese, English and Spanish, and `NSBonjourServices` with `_cialai._udp`. Without the local network permission every multicast send failed with EHOSTUNREACH, the mDNS announcement never left the Mac and a Broto paired by QR could only reach the computer through Tor
+
+### Changed
+
+* The mDNS announcer reports when the system refuses the multicast sends and when they go out again, retrying every 15 s while refused. The mDNS state gains `blocked`, logged as a warning, and the advanced diagnostics of the desktop say where to allow it
+* The interrupt button of the phone terminal bar is named Interromper Ctrl+C, without parentheses
+
 ## 0.7.0 · 2026-11-14
 
 ### Added

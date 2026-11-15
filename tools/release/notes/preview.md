@@ -1,17 +1,17 @@
 ## Cialai {{version}} preview
 
-On Android the phone now stays connected to the computer while the app is in the background, so session alerts keep arriving until you close the app or tap Disconnect. Every alert shows the session icon in white on the session color, and the phone terminal bar has a fixed order with each name shown on hold. The phone apps are updated too.
+Reopening Cialai brings each terminal back to the Claude Code or Codex conversation it was running, on macOS, Windows and Linux, even with several terminals in the same folder. On a Mac, Cialai now asks for the local network permission, so a Broto connected by QR finds the computer in seconds on the same network instead of waiting for Tor.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Alerts with the app in the background, on Android.** With a computer open, the app keeps the direct connection through a system service with a pinned notification that names the computer and offers Disconnect. The core used to stop two minutes after the app left the screen. Removing the app from recents also ends the connection.
-* **Session icon on alerts.** Attention and session ended alerts show the session icon, the same as its card, in white on the session color. On Android it is the large icon, with the terminal as the small icon and the session color. On iPhone it comes as the alert thumbnail, because iOS keeps the app icon.
-* **Fixed terminal bar.** Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Chat has a neutral background, Interrupt is red and Enter takes the session color. Holding a button shows its name without running it; with a mouse the name shows on hover.
-* **A tap opens the session.** Tapping an alert drawn by Android opens its session, also when the tap launches the app.
+* **Resume in the right terminal.** On a Mac opened from the Dock, resuming Claude was refused before the command was typed, because the CLI lived outside the path the app searched. Cialai now looks for `claude` and `codex` in the same path they ran with. Codex served by its shared background process, which did not say which conversation belonged to which terminal, now announces its id when Cialai quits, and each terminal keeps its own.
+* **Resume on Windows too.** The resume command was never sent on Windows, because the app waited for a prompt signal that Windows does not have. The default Claude account resumes without switching its configuration folder, and automatic terminal replies no longer cancel the resume.
+* **Broto by QR in seconds on the same network.** Since macOS 15, without the local network permission, the Cialai announcement never left the Mac and a Broto could only find the computer through Tor, which took minutes or never finished. The Mac now asks for the permission on first use, warns when it was denied and shows in the diagnostics where to allow it. Checked with a Broto on Windows 11 with the firewall on: it found the computer in two seconds.
+* **Interrupt label.** The interrupt button of the phone terminal bar is now named Interromper Ctrl+C.
 
-The background connection and the alerts drawn by Android were not proven on a real phone before release; the bar, the long press and the drawing of the session icon were checked in Chromium and WebKit. The background connection and the Android alerts need the phone app at 0.7.0, and the new bar and the session icon arrive with the computer at 0.7.0, because the terminal page comes from it.
+On a Mac, accept the prompt to find devices on your local network when the new version opens. If it was denied before, turn on Cialai in System Settings, Privacy and Security, Local Network. The resume of Claude and Codex and the Broto pairing were checked on macOS with test command line tools and on a Windows 11 virtual machine; the CI ran the tests on the three systems.
 
 Broto has its own version, 0.2.1, and release tag `broto-v0.2.1`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 
@@ -28,7 +28,7 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
 
-The Android and iPhone apps are updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website, and the iPhone build is on TestFlight and in App Store review.
+The phone apps are unchanged in this preview. `Cialai_android_universal.apk` on the website stays at 0.7.0, and the iPhone app stays on build 21, on TestFlight and in App Store review.
 
 ### Install
 
