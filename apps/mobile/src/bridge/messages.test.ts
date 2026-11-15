@@ -1,4 +1,4 @@
-import { isBrotoQrPayload, pageMessageScript, parsePageMessage, shellMessageScript } from './messages';
+import { isBrotoQrPayload, MAX_BADGE_LENGTH, pageMessageScript, parsePageMessage, shellMessageScript } from './messages';
 
 describe('page bridge messages', () => {
   test('parses bounded auth requests', () => {
@@ -117,7 +117,8 @@ describe('page bridge messages', () => {
     const older = {
       ...valid,
       accounts: [{ ...valid.accounts[0], weeklyState: 'unknown' }],
-      sessions: [{ ...valid.sessions[0], color: null, tone: null, icon: null, attention: null, turn: null, viewed: false }]
+      sessions: [{ ...valid.sessions[0], color: null, tone: null, icon: null, attention: null, turn: null, viewed: false, badge: null }],
+      badges: {}
     };
 
     test('accepts the shape the page sends', () => {
@@ -130,7 +131,26 @@ describe('page bridge messages', () => {
         attention: { kind: 'bell', at: 1200, message: 'Pediu atenção' }, turn: { state: 'waiting', waitingFor: 'permission' }, viewed: true };
       const raw = { ...valid, accounts: [{ ...valid.accounts[0], weeklyState: 'none' }], sessions: [session] };
       const parsed = parsePageMessage(JSON.stringify(raw));
-      expect(parsed).toEqual(raw);
+      expect(parsed).toEqual({ ...raw, sessions: [{ ...session, badge: null }], badges: {} });
+    });
+
+    test('reads the session images once by key and links each session to its own', () => {
+      const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      const raw = {
+        ...valid,
+        sessions: [
+          { ...valid.sessions[0], badge: 'terminal:#1a4fa0' },
+          { ...valid.sessions[0], id: 's2', badge: 'rocket:#1f9d5b' },
+          { ...valid.sessions[0], id: 's3', badge: '../x' }
+        ],
+        badges: { 'terminal:#1a4fa0': png, 'BAD KEY': png, 'zap:#ffffff': 'not-a-png', 'star:#000000': `${png.slice(0, 20)}${'A'.repeat(MAX_BADGE_LENGTH)}` }
+      };
+      const parsed = parsePageMessage(JSON.stringify(raw));
+      expect(parsed?.type === 'dashboard' && parsed.badges).toEqual({ 'terminal:#1a4fa0': png });
+      // Chave sem imagem, ou fora do formato, deixa a sessão sem imagem, e o retrato continua.
+      expect(parsed?.type === 'dashboard' && parsed.sessions.map(session => session.badge)).toEqual(['terminal:#1a4fa0', null, null]);
+      const broken = parsePageMessage(JSON.stringify({ ...valid, badges: 'x' }));
+      expect(broken?.type === 'dashboard' && broken.badges).toEqual({});
     });
 
     test('a weekly window from an older page counts as available', () => {

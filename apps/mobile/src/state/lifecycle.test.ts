@@ -67,6 +67,25 @@ describe('app state transitions', () => {
     expect(result.action).toEqual({ kind: 'await-native-reopen', desktopId, url: shell.url });
   });
 
+  test('Android with the keep-alive service only verifies the connection, however long the app stayed away', () => {
+    const notifyForeground = jest.fn();
+    const result = handleAppStateTransition({ nextState: 'active', backgroundedAt: 1_000, now: 1_000 + ANDROID_BACKGROUND_STOP_MS * 30,
+      platform: 'android', screen: shell, notifyForeground, native: { keptAlive: true, stopped: false } });
+    expect(result.action).toEqual({ kind: 'verify', desktopId, url: shell.url });
+  });
+
+  test('Android waits for the native reopening when the core stopped early, by Disconnect or the end of the service', () => {
+    for (const keptAlive of [true, false]) {
+      const result = handleAppStateTransition({ nextState: 'active', backgroundedAt: 1_000, now: 31_000,
+        platform: 'android', screen: shell, notifyForeground: jest.fn(), native: { keptAlive, stopped: true } });
+      expect(result.action).toEqual({ kind: 'await-native-reopen', desktopId, url: shell.url });
+    }
+    // O iPhone não tem serviço nem parada do nativo: segue conferindo o proxy.
+    const ios = handleAppStateTransition({ nextState: 'active', backgroundedAt: 1_000, now: 31_000,
+      platform: 'ios', screen: shell, notifyForeground: jest.fn(), native: { keptAlive: false, stopped: true } });
+    expect(ios.action).toEqual({ kind: 'verify', desktopId, url: shell.url });
+  });
+
   test('retries an unreachable desktop right away on both systems', () => {
     const offline: AppScreen = { kind: 'offline', desktopId, reason: 'no-path' };
     for (const platform of ['ios', 'android'] as const) {

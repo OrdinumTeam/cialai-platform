@@ -3,8 +3,15 @@ import type { AppScreen } from './machine';
 type AppStateName = 'active' | 'background' | 'inactive' | 'unknown' | 'extension';
 type NativePlatform = 'ios' | 'android';
 
-// O módulo Android para o núcleo depois desse tempo em segundo plano e reabre sozinho.
+// O módulo Android para o núcleo depois desse tempo em segundo plano e reabre
+// sozinho, quando o serviço que segura a conexão não está ligado.
 export const ANDROID_BACKGROUND_STOP_MS = 120_000;
+
+// O que o nativo Android contou deste segundo plano: o serviço segurou a
+// conexão, ou o núcleo parou, pelo prazo, pelo Desconectar do aviso fixo ou
+// pelo fim do serviço.
+export type NativeBackground = { keptAlive: boolean; stopped: boolean };
+const NATIVE_UNKNOWN: NativeBackground = { keptAlive: false, stopped: false };
 
 export type ForegroundAction =
   | { kind: 'none' }
@@ -22,6 +29,7 @@ type AppStateTransition = {
   platform: NativePlatform;
   screen: AppScreen;
   notifyForeground: (active: boolean) => void;
+  native?: NativeBackground;
 };
 
 export type AppStateResult = { backgroundedAt: number | null; action: ForegroundAction };
@@ -36,7 +44,8 @@ export function handleAppStateTransition({
   now,
   platform,
   screen,
-  notifyForeground
+  notifyForeground,
+  native = NATIVE_UNKNOWN
 }: AppStateTransition): AppStateResult {
   if (nextState === 'background') {
     if (backgroundedAt === null) notifyForeground(false);
@@ -46,16 +55,19 @@ export function handleAppStateTransition({
 
   notifyForeground(true);
   const backgroundDuration = Math.max(0, now - backgroundedAt);
-  return { backgroundedAt: null, action: foregroundAction(platform, screen, backgroundDuration) };
+  return { backgroundedAt: null, action: foregroundAction(platform, screen, backgroundDuration, native) };
 }
 
-function foregroundAction(platform: NativePlatform, screen: AppScreen, backgroundDuration: number): ForegroundAction {
+function foregroundAction(platform: NativePlatform, screen: AppScreen, backgroundDuration: number,
+  native: NativeBackground): ForegroundAction {
   if (screen.kind === 'offline') {
     return screen.reason === 'removed' ? NONE : { kind: 'reconnect', desktopId: screen.desktopId };
   }
   if (screen.kind !== 'shell') return NONE;
-  // No Android o nativo já parou o núcleo e cuida da reabertura com o último token.
-  if (platform === 'android' && backgroundDuration >= ANDROID_BACKGROUND_STOP_MS) {
+  // No Android o nativo já parou o núcleo e cuida da reabertura com o último
+  // token. Com o serviço ligado e sem parada, a conexão seguiu viva e só é
+  // conferida, qualquer que seja a duração.
+  if (platform === 'android' && (native.stopped || (!native.keptAlive && backgroundDuration >= ANDROID_BACKGROUND_STOP_MS))) {
     return { kind: 'await-native-reopen', desktopId: screen.desktopId, url: screen.url };
   }
   // O iOS pode ter suspendido o app a qualquer momento, sem prazo garantido: todo

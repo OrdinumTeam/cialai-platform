@@ -13,8 +13,8 @@
 // `special-keys.js`, que combina os modificadores armados, codifica a
 // sequência e evita envio duplicado.
 import React, { useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronUp, Lock, Settings2, X } from 'lucide-react';
-import { FAVORITE_CHOICES, KEYBOARD_TABS, KEY_CATALOG, MAX_FAVORITES, MODIFIER_KEYS, PASTE_KEY, SYMBOLS, moveFavorite, toggleFavorite } from '../keyboard-prefs.js';
+import { ChevronLeft, Lock, Settings2, X } from 'lucide-react';
+import { KEYBOARD_TABS, KEY_CATALOG, MODIFIER_KEYS, PASTE_KEY, SYMBOLS } from '../keyboard-prefs.js';
 import { KeyIcon, hasKeyIcon } from './PhoneKeyIcons.jsx';
 import { translate } from '../../shared/i18n.js';
 
@@ -138,36 +138,11 @@ function Switch({ checked, onChange, label, description }) {
   );
 }
 
-// Preferências do teclado, atrás da engrenagem do painel.
+// Preferências do teclado, atrás da engrenagem do painel. A barra do
+// terminal é fixa e não entra aqui.
 export function KeyboardPreferences({ prefs, onChange, canVibrate }) {
-  const favorites = prefs.favorites;
-  const full = favorites.length >= MAX_FAVORITES;
   return (
     <div className="phone-keys__prefs">
-      <section aria-labelledby="phone-keys-favorites">
-        <h3 id="phone-keys-favorites">{translate('terminal.phone.keys.prefs.favorites')}</h3>
-        <p className="phone-keys__note">{translate('terminal.phone.keys.prefs.favoritesHint', { count: MAX_FAVORITES })}</p>
-        {favorites.length ? (
-          <ol className="phone-keys__order">
-            {favorites.map((id, index) => (
-              <li key={id}>
-                <KeyIcon id={id} size={18} />
-                <span>{keyCaption(id)}</span>
-                <button type="button" className="phone-keys__icon" disabled={index === 0} aria-label={translate('terminal.phone.keys.prefs.moveUp', { name: keyCaption(id) })} onClick={() => onChange(moveFavorite(prefs, id, -1))}><ChevronUp size={18} aria-hidden="true" /></button>
-                <button type="button" className="phone-keys__icon" disabled={index === favorites.length - 1} aria-label={translate('terminal.phone.keys.prefs.moveDown', { name: keyCaption(id) })} onClick={() => onChange(moveFavorite(prefs, id, 1))}><ChevronDown size={18} aria-hidden="true" /></button>
-              </li>
-            ))}
-          </ol>
-        ) : null}
-        <div className="phone-keys__chips">
-          {FAVORITE_CHOICES.map((id) => {
-            const selected = favorites.includes(id);
-            return (
-              <button key={id} type="button" className={`phone-keys__chip${selected ? ' is-selected' : ''}`} aria-pressed={selected} disabled={!selected && full} onClick={() => onChange(toggleFavorite(prefs, id))}><KeyIcon id={id} size={18} />{keyCaption(id)}</button>
-            );
-          })}
-        </div>
-      </section>
       <section aria-labelledby="phone-keys-modifiers">
         <h3 id="phone-keys-modifiers">{translate('terminal.phone.keys.prefs.modifiers')}</h3>
         <div className="phone-keys__radios" role="radiogroup" aria-labelledby="phone-keys-modifiers">

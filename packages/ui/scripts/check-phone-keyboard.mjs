@@ -149,18 +149,14 @@ test('sem terminal interativo todas as teclas ficam desabilitadas, e fechar cont
   assert.doesNotMatch(html.match(/<button[^>]*phone-keys__foot-button--close[^>]*>/)[0], /disabled/);
 });
 
-test('preferências: favoritos em ordem, modo dos modificadores, abertura automática e vibração só se houver', () => {
-  const prefs = { ...defaultKeyboardPrefs(), favorites: ['CtrlC', 'Escape', 'Tab', 'CtrlV'], modifierMode: 'sticky' };
+test('preferências: modo dos modificadores, abertura automática e vibração só se houver, sem escolha de teclas da barra', () => {
+  const prefs = { ...defaultKeyboardPrefs(), modifierMode: 'sticky' };
   const without = renderToStaticMarkup(React.createElement(sheet.KeyboardPreferences, { prefs, onChange() {}, canVibrate: false }));
-  // Cada favorito aparece com o ícone que tem na barra e o nome do painel.
-  assert.deepEqual([...without.matchAll(/<li>(<svg[\s\S]*?<\/svg>)<span>([^<]+)<\/span>/g)].map((match) => [match[2], match[1]]), [['Interromper', icon('CtrlC', 18)], ['Esc', icon('Escape', 18)], ['Tab', icon('Tab', 18)], ['Colar', icon('CtrlV', 18)]]);
-  const chips = [...without.matchAll(/<button[^>]*class="phone-keys__chip[^>]*>([\s\S]*?)<\/button>/g)].map((match) => match[1].replace(/<svg[\s\S]*?<\/svg>/g, ''));
-  assert.deepEqual(chips, ['Esc', 'Tab', 'Enter', 'Shift Tab', 'Interromper', 'Colar', 'Ctrl D', 'Ctrl L', 'Histórico', 'Ctrl Z', 'Apagar', 'Home', 'End', 'Colar do celular']);
-  assert.equal(new Set(chips).size, chips.length, 'nenhum nome repetido entre os favoritos');
+  // A barra do terminal é fixa: nada de favoritos, chips ou ordem nas preferências.
+  assert.doesNotMatch(without, /phone-keys__chip|phone-keys__order|Atalhos na barra/);
   assert.match(without, /checked="" value="sticky"/);
   assert.match(without, /Abrir ao entrar no terminal/);
   assert.doesNotMatch(without, /Vibrar ao tocar/);
-  assert.match(without, /phone-keys__chip" aria-pressed="false" disabled=""[^>]*><svg[\s\S]*?<\/svg>Enter</, 'barra cheia não aceita outro favorito');
   const withVibration = renderToStaticMarkup(React.createElement(sheet.KeyboardPreferences, { prefs, onChange() {}, canVibrate: true }));
   assert.match(withVibration, /Vibrar ao tocar/);
 });
@@ -297,5 +293,5 @@ test('alvo de toque: a área de cada tecla avança para os lados até o meio do 
   // No telefone de 320 px a barra e o painel ganham largura para os sete alvos de 44 px.
   assert.match(css, /@media \(max-width: 339px\) \{\n  \[data-form-factor="phone"\] \.phone-keybar \{ margin-inline: -4px; \}\n  \[data-form-factor="phone"\] \.phone-keys \{ padding-left: 8px; padding-right: 8px; \}\n/);
   assert.match(css, /\.phone-keys__key:not\(:disabled\):active,\n\[data-form-factor="phone"\] \.phone-dpad__key:not\(:disabled\):active \{[^}]*transform: scale/);
-  assert.match(css, /\.phone-keys__tab:active,[\s\S]*?\.phone-keys__chip:not\(:disabled\):active \{ opacity: \.7; \}/);
+  assert.match(css, /\.phone-keys__tab:active,[\s\S]*?\.phone-keys__foot-button:not\(:disabled\):active \{ opacity: \.7; \}/);
 });

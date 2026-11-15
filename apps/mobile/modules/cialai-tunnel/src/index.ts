@@ -65,9 +65,18 @@ export type ConnectErrorCode = 'reserve_unavailable' | 'reserve_preparing' | 'de
 export type PathEvent = { desktopId: string; transport: Transport | ''; path: PathKind | ''; reason: string };
 export type ProxyEvent = { state: string; desktopId?: string; deviceToken?: string; url?: string; port?: number; warning?: string };
 
-export type TunnelEventKind = 'state' | 'path' | 'tor' | 'proxy' | 'pair' | 'log';
+export type TunnelEventKind = 'state' | 'path' | 'tor' | 'proxy' | 'pair' | 'log' | 'notice';
 // A carga vem do nativo sem garantia de forma; quem consome valida antes de usar.
 export type TunnelEvent = { kind: TunnelEventKind; payload: unknown };
+
+// Aviso de sessão desenhado pelo Android, com a imagem da sessão em PNG base64.
+export type NativeNotice = {
+  tag: string; channel: 'activity' | 'attention'; channelName: string; title: string; body: string;
+  subtitle?: string; color?: string; image?: string; desktopId?: string; sessionId?: string;
+};
+export type NoticeOpened = { desktopId: string; sessionId: string };
+// Textos do aviso fixo da conexão em segundo plano; `{computer}` no título vira o nome do computador.
+export type KeepAliveText = { title: string; body: string; action: string; channel: string };
 
 type NativeCialaiTunnel = {
   addListener(eventName: 'onTunnelEvent', handler: (event: TunnelEvent) => void): EventSubscription;
@@ -85,6 +94,10 @@ type NativeCialaiTunnel = {
   notifyHealthy(): void;
   forgetDesktop(desktopId: string): Promise<void>;
   setLogLevel(level: LogLevel): void;
+  // Só no Android.
+  presentNotice?(notice: NativeNotice): Promise<boolean>;
+  takeOpenedNotice?(): NoticeOpened | null;
+  setKeepAliveText?(text: KeepAliveText): void;
 };
 
 const nativeModule = requireNativeModule<NativeCialaiTunnel>('CialaiTunnel');
@@ -110,3 +123,10 @@ export const forgetDesktop = (desktopId: string): Promise<void> => nativeModule.
 export const setLogLevel = (level: LogLevel): void => nativeModule.setLogLevel(level);
 export const addListener = (handler: (event: TunnelEvent) => void): EventSubscription =>
   nativeModule.addListener('onTunnelEvent', handler);
+// Avisos de sessão e conexão em segundo plano existem só no módulo Android;
+// no iPhone as funções não existem e as chamadas não fazem nada.
+export const canPresentNotices = (): boolean => typeof nativeModule.presentNotice === 'function';
+export const presentNotice = (notice: NativeNotice): Promise<boolean> =>
+  nativeModule.presentNotice ? nativeModule.presentNotice(notice) : Promise.resolve(false);
+export const takeOpenedNotice = (): NoticeOpened | null => nativeModule.takeOpenedNotice?.() ?? null;
+export const setKeepAliveText = (text: KeepAliveText): void => { nativeModule.setKeepAliveText?.(text); };

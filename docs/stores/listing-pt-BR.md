@@ -70,16 +70,14 @@ Consulte a política de privacidade e a documentação do projeto para saber qua
 
 ### Texto curto para Google Play
 
-Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/2026. Cobre o que chegou ao celular desde a 0.2.9, a versão anterior da loja.
+Texto da 0.7.0, de 14/11/2026. Cobre o que chegou ao celular desde a 0.6.1, a versão que a produção do Google Play tem.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Conexão mais rápida: o app volta ao caminho direto em segundos em vez de ficar preso na reserva Tor.
-• Terminais abrem mais rápido: só a sessão da tela carrega primeiro.
-• Barra do terminal nova, com sete botões, e Teclado especial com Enter em todas as abas.
-• Ligar um Cialai Broto pelo celular, lendo o QR que a janela do Broto mostra.
-• Os botões da tela não ficam mais embaixo da barra de navegação do Android.
+• Avisos com o app em segundo plano: o celular segue conectado ao computador até você fechar o app ou tocar em Desconectar.
+• Cada aviso mostra o ícone da sessão em branco sobre a cor dela.
+• Barra do terminal em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter. Segure um botão para ver o nome dele.
 ```
 <!-- PLAY_RELEASE_END -->
 
@@ -114,11 +112,12 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização deixa a conexão com o computador mais rápida.
+Esta atualização traz a imagem da sessão nos avisos e uma barra do terminal nova.
 
+• Cada aviso mostra o ícone da sessão em branco sobre a cor dela.
+• A barra do terminal ficou em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter. Segure um botão para ver o nome dele.
 • O app volta ao caminho direto em segundos em vez de ficar preso na reserva Tor.
 • Os terminais abrem mais rápido: só a sessão da tela carrega primeiro, e a reconexão continua de onde parou.
-• A barra do terminal ficou com sete botões, e o Teclado especial tem Enter em todas as abas.
 • Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
 ```
 <!-- ASC_WHATS_NEW_END -->

@@ -155,7 +155,7 @@ export function Settings({
                 variant="neutral" />
             </Notice>
           ) : null}
-          <Text style={[typography.caption, { color: colors.textSecondary }]}>{t('mobile.settings.notifications.hint')}</Text>
+          <Text style={[typography.caption, { color: colors.textSecondary }]}>{t(Platform.OS === 'android' ? 'mobile.settings.notifications.hintAndroid' : 'mobile.settings.notifications.hint')}</Text>
         </Section>
 
         <Section title={t('mobile.settings.diagnostics.section')}>

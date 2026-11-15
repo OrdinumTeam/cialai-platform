@@ -1,6 +1,32 @@
 import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
 
-import { noticeRequest, onNoticeOpened } from './notify';
+import { nativeNotice, noticeAttachment, noticeRequest, onNoticeOpened, presentNotices } from './notify';
+
+const mockNative = {
+  listeners: new Set<(event: { kind: string; payload: unknown }) => void>(),
+  presentNotice: jest.fn(async (_notice: unknown) => true),
+  opened: null as null | { desktopId: string; sessionId: string }
+};
+jest.mock('cialai-tunnel', () => ({
+  addListener: (handler: (event: { kind: string; payload: unknown }) => void) => {
+    mockNative.listeners.add(handler);
+    return { remove: () => mockNative.listeners.delete(handler) };
+  },
+  canPresentNotices: () => true,
+  presentNotice: (notice: unknown) => mockNative.presentNotice(notice),
+  takeOpenedNotice: () => { const opened = mockNative.opened; mockNative.opened = null; return opened; }
+}));
+const mockFiles: { uri: string; bytes: Uint8Array }[] = [];
+jest.mock('expo-file-system', () => ({
+  Paths: { cache: 'file:///cache' },
+  Directory: class { exists = true; uri: string; constructor(...parts: string[]) { this.uri = parts.join('/'); } create() {} },
+  File: class {
+    uri: string;
+    constructor(directory: { uri: string }, name: string) { this.uri = `${directory.uri}/${name}`; }
+    write(bytes: Uint8Array) { mockFiles.push({ uri: this.uri, bytes }); }
+  }
+}));
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
@@ -8,6 +34,8 @@ jest.mock('expo-notifications', () => ({
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
   getLastNotificationResponse: jest.fn(() => null),
   clearLastNotificationResponse: jest.fn(),
+  getPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
+  scheduleNotificationAsync: jest.fn(async () => 'id'),
   AndroidImportance: { DEFAULT: 3, HIGH: 4 }
 }));
 
@@ -42,4 +70,60 @@ test('tapping a session notice opens it, also when the tap launched the app, and
   listener(response({ other: true }));
   expect(opened).toEqual([target, { desktopId: 'd', sessionId: 's2' }]);
   stop();
+});
+
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+const withImage = { key: 'k2', title: 'site-exemplo', body: 'Pediu atenção', subtitle: 'Mac', color: '#1a4fa0', channel: 'attention' as const,
+  identifier: 'd:s1', target, image: PNG };
+
+test('the Android notice carries the session image, its color, the tag that replaces the previous one and the session it opens', () => {
+  expect(nativeNotice(withImage)).toEqual({
+    tag: 'd:s1', channel: 'attention', channelName: expect.any(String), title: 'site-exemplo', body: 'Pediu atenção',
+    subtitle: 'Mac', color: '#1a4fa0', image: PNG, desktopId: 'd', sessionId: 's1'
+  });
+  // Sem identificador, a chave do aviso vira a etiqueta; sem imagem, nada de imagem.
+  expect(nativeNotice({ key: 'k', title: 't', body: 'b' })).toEqual({ tag: 'k', channel: 'activity', channelName: expect.any(String), title: 't', body: 'b' });
+});
+
+test('the iPhone notice attaches the session image as a file of its own', () => {
+  const attachment = noticeAttachment(withImage);
+  expect(attachment).toEqual({ identifier: 'session', url: expect.stringMatching(/^file:\/\/\/cache\/notice-badges\/badge-\d+-\d+\.png$/), type: null, typeHint: 'public.png', hideThumbnail: false });
+  expect(Array.from(mockFiles.at(-1)!.bytes.slice(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  expect(noticeAttachment({ ...withImage, url: undefined, image: 'not a png' } as never)).toBeNull();
+  expect(noticeAttachment({ key: 'k', title: 't', body: 'b' })).toBeNull();
+  expect(noticeRequest(withImage, attachment).content.attachments).toEqual([attachment]);
+});
+
+test('on Android the native module draws the notice; when it fails the expo notice still goes out', async () => {
+  const os = Platform.OS;
+  Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+  try {
+    await presentNotices([withImage]);
+    expect(mockNative.presentNotice).toHaveBeenCalledWith(expect.objectContaining({ tag: 'd:s1', image: PNG }));
+    expect(mocked.scheduleNotificationAsync).not.toHaveBeenCalled();
+    mockNative.presentNotice.mockResolvedValueOnce(false);
+    await presentNotices([{ ...withImage, key: 'k3' }]);
+    expect(mocked.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
+  } finally {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+  }
+});
+
+test('tapping a notice drawn by Android opens its session, also when the tap launched the app', () => {
+  const os = Platform.OS;
+  Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+  try {
+    const opened: unknown[] = [];
+    mockNative.opened = { desktopId: 'd', sessionId: 's9' };
+    const stop = onNoticeOpened(value => opened.push(value));
+    expect(opened).toEqual([{ desktopId: 'd', sessionId: 's9' }]);
+    mockNative.opened = { desktopId: 'd', sessionId: 's10' };
+    mockNative.listeners.forEach(listener => listener({ kind: 'notice', payload: {} }));
+    mockNative.listeners.forEach(listener => listener({ kind: 'notice', payload: {} }));
+    expect(opened).toEqual([{ desktopId: 'd', sessionId: 's9' }, { desktopId: 'd', sessionId: 's10' }]);
+    stop();
+    expect(mockNative.listeners.size).toBe(0);
+  } finally {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+  }
 });

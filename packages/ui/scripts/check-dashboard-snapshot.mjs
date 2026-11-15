@@ -70,7 +70,8 @@ test('o retrato leva contas, janelas, projetos e sessoes sem o e-mail', () => {
   assert.deepEqual(result.projects, [{ name: 'psicoapp', path: '/home/pessoa/Projects/psicoapp', root: '~/Projects' }]);
   const pink = { light: { base: '#E23B84' }, dark: { base: '#FF7AB2' } };
   assert.deepEqual(result.sessions.map(({ tone, ...session }) => session), [{ id: 's1', name: 'psicoapp', cwd: '/home/pessoa/Projects/psicoapp', status: 'running', agent: 'codex',
-    color: null, icon: null, attention: null, turn: null, viewed: false }]);
+    color: null, icon: null, attention: null, turn: null, viewed: false, badge: null }]);
+  assert.deepEqual(result.badges, {}, 'sem imagens prontas o retrato nao leva nenhuma');
   assert.deepEqual([result.sessions[0].tone.light.base, result.sessions[0].tone.dark.base], [pink.light.base, pink.dark.base], 'sem cor o tom e o rosa');
   assert.equal(codex.weeklyState, 'available');
   assert.equal(result.accounts[1].weeklyState, 'unknown', 'login pendente nao vira 0% nem sem limite');
@@ -97,6 +98,21 @@ test('cada sessao leva cor, icone, atencao e a vez do agente; so o que a casca u
   assert.deepEqual([other.color, other.icon, other.attention, other.turn, other.viewed], [null, null, null, null, true],
     'cor e icone desconhecidos, saida do processo e estado estranho ficam de fora');
   assert.equal(long.attention.message.length, snapshot.ATTENTION_TEXT_MAX);
+});
+
+test('a imagem do aviso vai uma vez por chave, e cada sessao aponta a dela so quando ela veio', () => {
+  const png = 'iVBORw0KGgoAAAA';
+  const result = snapshot.buildDashboardSnapshot({
+    sessions: [
+      { id: 'a', cwd: '/p', status: 'running', color: 'azul' },
+      { id: 'b', cwd: '/p', status: 'running', color: 'azul' },
+      { id: 'c', cwd: '/p', status: 'running', color: 'verde' },
+      { id: 'd', cwd: '/p', status: 'running' },
+    ],
+    badges: { byId: { a: 'terminal:#1a4fa0', b: 'terminal:#1a4fa0', c: 'rocket:#1f9d5b', d: 'terminal:#e23b84' }, badges: { 'terminal:#1a4fa0': png, 'rocket:#1f9d5b': png } },
+  });
+  assert.deepEqual(result.sessions.map((session) => session.badge), ['terminal:#1a4fa0', 'terminal:#1a4fa0', 'rocket:#1f9d5b', null], 'chave sem imagem fica nula');
+  assert.deepEqual(Object.keys(result.badges), ['terminal:#1a4fa0', 'rocket:#1f9d5b']);
 });
 
 test('o semanal de cada conta vem nos tres estados da Barra de IA', () => {

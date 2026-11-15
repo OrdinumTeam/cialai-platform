@@ -74,6 +74,19 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.7.0 · 2026-11-14
+
+### Added
+
+* Android keeps the direct connection to the computer while the app is in the background. With a computer open, the tunnel module starts `ConnectionService`, a foreground service of type `connectedDevice` with a pinned notification that names the computer and offers Disconnect. It holds the connection until the app returns, Disconnect is tapped or the app is removed from recents, through `stopWithTask`. Without an open computer, or when the system refuses the foreground start, the previous 120 s stop still applies. Disconnect stops the core like that deadline, and returning reopens the last computer. The module reports `kept-alive` and `background-stopped`, and the app waits for the native reopening only when the core really stopped
+* Session notices show the session icon in white on the session color. The phone page draws one 192 px PNG per icon and color with a canvas and sends each image once in the Home snapshot, under `badges`, with each session pointing to its own in `badge`; the shell never writes them to disk. On Android the notice is posted by the tunnel module with the image as the large icon, the terminal glyph as the small icon and the session color, and a tap opens the session through the launch intent. On iOS the image is attached to the notice and shows as its thumbnail
+* Holding a button of the phone terminal bar shows its name in a bubble above it, kept inside the screen, and releasing does nothing. A short tap runs the action, and with a mouse the name shows on hover
+
+### Changed
+
+* The phone terminal bar has a fixed order: Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Chat has a neutral background, Interrupt the red of the theme and Enter the session color. The choice of bar keys left the keyboard preferences, and an older stored choice is ignored
+* Settings on Android explains that notices keep arriving in the background while the app stays open
+
 ## 0.6.1 · 2026-11-13
 
 ### Changed

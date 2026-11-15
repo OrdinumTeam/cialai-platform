@@ -66,16 +66,14 @@ Read the privacy policy and project documentation to learn which public networks
 
 ### Short text for Google Play
 
-Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It covers what reached the phone since 0.2.9, the previous store version.
+Text for 0.7.0, from 14/11/2026. It covers what reached the phone since 0.6.1, the version Google Play production has.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• Faster connection: the app goes back to the direct path in seconds instead of staying on the Tor fallback.
-• Terminals open faster: only the session on screen loads first.
-• New terminal bar with seven buttons, and a special keyboard with Enter on every tab.
-• Connect a Cialai Broto from your phone by scanning the QR code the Broto window shows.
-• On-screen buttons no longer sit under the Android navigation bar.
+• Alerts with the app in the background: the phone stays connected to the computer until you close the app or tap Disconnect.
+• Each alert shows the session icon in white on the session color.
+• New terminal bar order: Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Hold a button to see its name.
 ```
 <!-- PLAY_RELEASE_END -->
 

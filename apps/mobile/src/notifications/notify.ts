@@ -1,3 +1,7 @@
+import {
+  addListener as addTunnelListener, canPresentNotices, presentNotice, takeOpenedNotice, type NativeNotice
+} from 'cialai-tunnel';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
@@ -6,7 +10,10 @@ import type { LocalNotice, NoticeChannel, NoticeTarget } from './watch';
 
 // Avisos locais, disparados pelo próprio app quando um retrato novo do
 // computador chega. Não há push remoto: com o app fechado, ou suspenso pelo
-// sistema, nenhum retrato chega e nenhum aviso sai.
+// sistema, nenhum retrato chega e nenhum aviso sai. No Android a conexão fica
+// viva em segundo plano pelo serviço do módulo nativo, que também desenha o
+// aviso com a imagem da sessão como ícone grande; no iPhone a imagem vai
+// anexada, como miniatura.
 export type NotificationPermission = 'granted' | 'denied' | 'undetermined';
 
 // No Android, a atenção tem canal próprio, com importância alta para aparecer
@@ -68,13 +75,56 @@ export async function presentNotices(notices: readonly LocalNotice[]): Promise<v
   for (const notice of fresh) {
     shown.add(notice.key);
     if (shown.size > MAX_REMEMBERED) shown.delete(shown.values().next().value!);
-    await Notifications.scheduleNotificationAsync(noticeRequest(notice)).catch(() => undefined);
+    if (Platform.OS === 'android' && canPresentNotices()) {
+      // O nativo desenha o aviso com a imagem; se ele falhar, sai pelo expo, sem ela.
+      if (await presentNotice(nativeNotice(notice)).catch(() => false)) continue;
+    }
+    const attachment = Platform.OS === 'ios' ? noticeAttachment(notice) : null;
+    await Notifications.scheduleNotificationAsync(noticeRequest(notice, attachment)).catch(() => undefined);
+  }
+}
+
+// O aviso como o módulo Android desenha: a etiqueta faz o aviso novo de uma
+// sessão substituir o anterior, como o identificador do expo.
+export function nativeNotice(notice: LocalNotice): NativeNotice {
+  const channel = notice.channel ?? 'activity';
+  return {
+    tag: notice.identifier ?? notice.key,
+    channel,
+    channelName: t(CHANNELS[channel].key),
+    title: notice.title,
+    body: notice.body,
+    ...(notice.subtitle ? { subtitle: notice.subtitle } : {}),
+    ...(notice.color ? { color: notice.color } : {}),
+    ...(notice.image ? { image: notice.image } : {}),
+    ...(notice.target ? { desktopId: notice.target.desktopId, sessionId: notice.target.sessionId } : {})
+  };
+}
+
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]+={0,2}$/;
+let attachmentSeq = 0;
+
+// A imagem da sessão num arquivo para o iOS anexar. O sistema move o arquivo
+// para o próprio depósito, então cada aviso grava o seu.
+export function noticeAttachment(notice: LocalNotice): Notifications.NotificationContentAttachmentIos | null {
+  if (!notice.image || !PNG_BASE64.test(notice.image)) return null;
+  try {
+    const directory = new Directory(Paths.cache, 'notice-badges');
+    if (!directory.exists) directory.create({ intermediates: true });
+    const file = new File(directory, `badge-${Date.now()}-${attachmentSeq++}.png`);
+    const binary = globalThis.atob(notice.image);
+    file.write(Uint8Array.from(binary, character => character.charCodeAt(0)));
+    return { identifier: 'session', url: file.uri, type: null, typeHint: 'public.png', hideThumbnail: false };
+  } catch {
+    return null;
   }
 }
 
 // Pedido ao sistema para um aviso: título, corpo, o computador como subtítulo
-// no iOS, a cor da sessão no Android e a sessão que o toque abre.
-export function noticeRequest(notice: LocalNotice): Notifications.NotificationRequestInput {
+// no iOS, a cor da sessão no Android, a imagem da sessão anexada no iOS e a
+// sessão que o toque abre.
+export function noticeRequest(notice: LocalNotice,
+  attachment: Notifications.NotificationContentAttachmentIos | null = null): Notifications.NotificationRequestInput {
   const channelId = notice.channel ?? 'activity';
   return {
     ...(notice.identifier ? { identifier: notice.identifier } : {}),
@@ -83,7 +133,8 @@ export function noticeRequest(notice: LocalNotice): Notifications.NotificationRe
       body: notice.body,
       ...(notice.subtitle ? { subtitle: notice.subtitle } : {}),
       ...(notice.color ? { color: notice.color } : {}),
-      ...(notice.target ? { data: { target: notice.target } } : {})
+      ...(notice.target ? { data: { target: notice.target } } : {}),
+      ...(attachment ? { attachments: [attachment] } : {})
     },
     trigger: Platform.OS === 'android' ? { channelId } : null
   };
@@ -107,5 +158,18 @@ export function onNoticeOpened(listener: (target: NoticeTarget) => void): () => 
   };
   const subscription = Notifications.addNotificationResponseReceivedListener(deliver);
   try { deliver(Notifications.getLastNotificationResponse()); } catch { /* módulo sem resposta guardada */ }
-  return () => subscription.remove();
+  // Avisos desenhados pelo Android: o toque chega pelo módulo, que guarda a
+  // sessão até ser buscada, também quando o toque é que abriu o app.
+  const deliverNative = () => {
+    const opened = takeOpenedNotice();
+    if (opened) listener({ desktopId: opened.desktopId, sessionId: opened.sessionId });
+  };
+  const native = Platform.OS === 'android'
+    ? addTunnelListener(event => { if (event.kind === 'notice') deliverNative(); })
+    : null;
+  if (native) deliverNative();
+  return () => {
+    subscription.remove();
+    native?.remove();
+  };
 }

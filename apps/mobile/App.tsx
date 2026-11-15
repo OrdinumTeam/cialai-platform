@@ -11,6 +11,7 @@ import {
   connect,
   forgetDesktop as forgetTunnelDesktop,
   notifyForeground,
+  setKeepAliveText,
   notifyHealthy,
   notifyNetworkChange,
   openDesktop as openTunnelDesktop,
@@ -62,7 +63,7 @@ import { Settings } from './src/screens/Settings';
 import { Shell, type ShellDesktop } from './src/screens/Shell';
 import { openConnection, outcomeForCode, type ConnectionOutcome, type ConnectionPorts } from './src/state/connection';
 import { LOG_LEVEL_STORAGE_KEY, logApp, logCore, normalizeLogLevel } from './src/state/diagnostics';
-import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction } from './src/state/lifecycle';
+import { createNetworkForwarder, handleAppStateTransition, type ForegroundAction, type NativeBackground } from './src/state/lifecycle';
 import { describeDesktop, guardAction, screenRequiresDesktop, transition, type AppAction, type AppScreen, type OfflineReason } from './src/state/machine';
 import { lockedTabs, tabForScreen } from './src/state/tabs';
 import { interpretTunnelEvent, parseTorProgress, reservePercent, type TunnelSignal } from './src/state/tunnel-events';
@@ -146,6 +147,8 @@ function AppContent() {
   const keptShell = useRef<KeptShell | null>(null);
   const [keptDesktopId, setKeptDesktopId] = useState<string | null>(null);
   const backgroundedAt = useRef<number | null>(null);
+  // O que o nativo Android contou do segundo plano em curso; zera a cada ida.
+  const nativeBackground = useRef<NativeBackground>({ keptAlive: false, stopped: false });
   const appVersion = getAppVersion();
   const device = deviceIdentity(appVersion, t);
   const nativeCoreVersion = useMemo(() => coreVersion(), []);
@@ -513,13 +516,15 @@ function AppContent() {
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextState => {
       if (biometricSession.handleAppState(nextState)) setLockSignal(value => value + 1);
+      if (nextState === 'background' && backgroundedAt.current === null) nativeBackground.current = { keptAlive: false, stopped: false };
       const result = handleAppStateTransition({
         nextState,
         backgroundedAt: backgroundedAt.current,
         now: Date.now(),
         platform: Platform.OS === 'android' ? 'android' : 'ios',
         screen: screenRef.current,
-        notifyForeground
+        notifyForeground,
+        native: nativeBackground.current
       });
       backgroundedAt.current = result.backgroundedAt;
       void runForegroundAction(result.action);
@@ -614,6 +619,12 @@ function AppContent() {
         })();
         return;
       }
+      case 'native-kept-alive':
+        nativeBackground.current = { ...nativeBackground.current, keptAlive: true };
+        return;
+      case 'native-background-stopped':
+        nativeBackground.current = { ...nativeBackground.current, stopped: true };
+        return;
       case 'native-reopen-failed': {
         const waiting = nativeReopen.current;
         nativeReopen.current = null;
@@ -769,6 +780,17 @@ function AppContent() {
     openWithIntent(desktop, { kind: 'session', sessionId: target.sessionId });
   }, [openWithIntent, storeState]);
   useEffect(() => onNoticeOpened(openNotice), [openNotice]);
+  // Textos do aviso fixo do Android que segura a conexão em segundo plano, no
+  // idioma escolhido no app.
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    setKeepAliveText({
+      title: t('mobile.keepAlive.title', { computer: '{computer}' }),
+      body: t('mobile.keepAlive.body'),
+      action: t('mobile.keepAlive.disconnect'),
+      channel: t('mobile.keepAlive.channel')
+    });
+  }, [t]);
   useEffect(() => {
     if (storeState === 'ready' && pendingNotice.current) openNotice(pendingNotice.current);
   }, [openNotice, storeState]);

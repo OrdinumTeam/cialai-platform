@@ -2,12 +2,12 @@ import type { DashboardMessage, DashboardSession } from '../bridge/messages';
 import { setLocale, t } from '../i18n';
 import { CONTINUOUS_SNAPSHOT_MS, colorDot, noticesFor, parseNotificationPrefs } from './watch';
 
-const quiet = { color: null, tone: null, icon: null, attention: null, turn: null, viewed: false };
+const quiet = { color: null, tone: null, icon: null, attention: null, turn: null, viewed: false, badge: null };
 
 const window = (id: string, usedFraction: number) =>
   ({ id, label: id === 'session' ? 'Limite de 5 horas' : 'Limite semanal', usedFraction, resetsAtMs: 10, durationMs: null, headline: id === 'session', weekly: id === 'weekly' });
 const snapshot = (sessions: [string, string][], used: number): DashboardMessage => ({
-  type: 'dashboard', at: 1, projects: [], recent: [],
+  type: 'dashboard', at: 1, projects: [], recent: [], badges: {},
   sessions: sessions.map(([id, status]) => ({ id, name: id === 's1' ? 'psicoapp' : '', cwd: '/p/frontend', status, agent: null, ...quiet })),
   accounts: [{ id: 'a', agent: 'codex', label: 'Trabalho', plan: 'Plus', active: true, state: 'ok', fetchedAtMs: 1,
     windows: [window('session', used), window('weekly', 0.1)], weeklyState: 'available' }]
@@ -17,7 +17,7 @@ const verde = { light: { base: '#1f9d5b', text: '#187a46' }, dark: { base: '#3cc
 const session = (fields: Partial<DashboardSession>): DashboardSession =>
   ({ id: 's1', name: 'site-exemplo', cwd: '/p/site', status: 'running', agent: 'claude', ...quiet, ...fields });
 const withSessions = (at: number, sessions: DashboardSession[]): DashboardMessage =>
-  ({ type: 'dashboard', at, projects: [], recent: [], accounts: [], sessions });
+  ({ type: 'dashboard', at, projects: [], recent: [], accounts: [], sessions, badges: {} });
 
 beforeEach(async () => { await setLocale('pt-BR'); });
 
@@ -106,6 +106,22 @@ test('attention stays quiet when turned off, for the session being viewed and fo
   // O primeiro retrato, ou um guardado de outra abertura, não é base.
   expect(noticesFor(null, bell({}), 'd', 'Mac', all, t)).toEqual([]);
   expect(noticesFor(before, { ...bell({}), at: 1000 + CONTINUOUS_SNAPSHOT_MS + 1 }, 'd', 'Mac', all, t)).toEqual([]);
+});
+
+test('each session notice carries the image of its session, when the page sent one', () => {
+  const png = 'iVBORw0KGgoAAAA';
+  const before = withSessions(1000, [session({ id: 's1' }), session({ id: 's2', status: 'running' })]);
+  const after: DashboardMessage = {
+    ...withSessions(2000, [
+      session({ id: 's1', badge: 'rocket:#1f9d5b', attention: { kind: 'bell', at: 1500, message: '' } }),
+      session({ id: 's2', status: 'exited' })
+    ]),
+    badges: { 'rocket:#1f9d5b': png }
+  };
+  const notices = noticesFor(before, after, 'd', 'Mac', all, t);
+  expect(notices.find(notice => notice.target?.sessionId === 's1' && notice.channel === 'attention')?.image).toBe(png);
+  // Sessão sem imagem no retrato: o aviso sai sem ela.
+  expect(notices.find(notice => notice.target?.sessionId === 's2')).not.toHaveProperty('image');
 });
 
 test('the color dot follows the hue of the session tone', () => {

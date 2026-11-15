@@ -1,21 +1,17 @@
 ## Cialai {{version}} preview
 
-The phone now leaves the Tor fallback within seconds when a direct path is back, terminals open faster on the phone, and the phone terminal bar has seven icon buttons. The phone apps are updated too.
+On Android the phone now stays connected to the computer while the app is in the background, so session alerts keep arriving until you close the app or tap Disconnect. Every alert shows the session icon in white on the session color, and the phone terminal bar has a fixed order with each name shown on hold. The phone apps are updated too.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Out of the fallback fast.** Stuck on Tor, the phone used to try the direct path once every 5 minutes. It now tries after 5, 10, 20 and 30 seconds and then once a minute, while Tor keeps carrying what is open, and switches as soon as the direct path answers. A network change, coming back to the app or learning a new address of the computer restarts the count.
-* **A NAT punch with time to work.** The punch had 5 seconds in total and opening its control channel over Tor could take all of it. It now has 30 seconds.
-* **Only the terminal on screen opens first.** The phone used to load the history of every session on open, 256 KiB each. It now loads the selected one, and the others when you open them.
-* **Reconnect without the replay.** On reconnect the phone says how far it got and the computer sends only what is missing.
-* **Path in the log.** `tunnel.log` on the computer records which path each device came in through, when it changed and why.
-* **Seven button terminal bar.** Enter, Esc, Interrupt, Paste, Special keyboard, Quick commands and Message, icons only. Interrupt still sends Ctrl+C.
-* **Special keyboard.** Enter on every tab, arrows at the bottom of every tab, and symbols with short captions for Tab, Shift Tab, Backspace and the arrows.
-* **Broto uses renewed addresses at once.** A Broto saved the renewed addresses of the computer but kept dialing the old ones until restart.
+* **Alerts with the app in the background, on Android.** With a computer open, the app keeps the direct connection through a system service with a pinned notification that names the computer and offers Disconnect. The core used to stop two minutes after the app left the screen. Removing the app from recents also ends the connection.
+* **Session icon on alerts.** Attention and session ended alerts show the session icon, the same as its card, in white on the session color. On Android it is the large icon, with the terminal as the small icon and the session color. On iPhone it comes as the alert thumbnail, because iOS keeps the app icon.
+* **Fixed terminal bar.** Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Chat has a neutral background, Interrupt is red and Enter takes the session color. Holding a button shows its name without running it; with a mouse the name shows on hover.
+* **A tap opens the session.** Tapping an alert drawn by Android opens its session, also when the tap launches the app.
 
-Nothing in this preview was proven on a real phone before release; the fallback exit is proven by tests with a simulated clock. Leaving the fallback fast needs the phone app at 0.6.1, and the new bar and the faster terminal load arrive with the computer at 0.6.1, because the terminal page comes from it.
+The background connection and the alerts drawn by Android were not proven on a real phone before release; the bar, the long press and the drawing of the session icon were checked in Chromium and WebKit. The background connection and the Android alerts need the phone app at 0.7.0, and the new bar and the session icon arrive with the computer at 0.7.0, because the terminal page comes from it.
 
 Broto has its own version, 0.2.1, and release tag `broto-v0.2.1`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 

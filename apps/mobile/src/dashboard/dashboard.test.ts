@@ -13,10 +13,10 @@ const account = (overrides: Partial<AgentAccount>): AgentAccount => ({
   id: 'codex', agent: 'codex', label: 'Codex', plan: null, active: false, state: 'ok', fetchedAtMs: 1, windows: [], weeklyState: 'unknown', ...overrides
 });
 const session = (overrides: Partial<DashboardSession> & Pick<DashboardSession, 'id' | 'cwd'>): DashboardSession => ({
-  name: overrides.id, status: 'running', agent: null, color: null, tone: null, icon: null, attention: null, turn: null, viewed: false, ...overrides
+  name: overrides.id, status: 'running', agent: null, color: null, tone: null, icon: null, attention: null, turn: null, viewed: false, badge: null, ...overrides
 });
 const snapshot = (accounts: AgentAccount[] = [], extra: Partial<DashboardMessage> = {}): DashboardMessage =>
-  ({ type: 'dashboard', at: 10, accounts, projects: [], sessions: [], recent: [], ...extra });
+  ({ type: 'dashboard', at: 10, accounts, projects: [], sessions: [], recent: [], badges: {}, ...extra });
 
 beforeEach(async () => { if (getLocale() !== 'pt-BR') await setLocale('pt-BR'); });
 

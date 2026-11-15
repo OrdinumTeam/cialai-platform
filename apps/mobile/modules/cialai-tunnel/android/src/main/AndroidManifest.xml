@@ -1,6 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- Tor em processo e QUIC do núcleo. -->
   <uses-permission android:name="android.permission.INTERNET" />
-  <!-- MulticastLock enquanto a descoberta DNS-SD procura o computador. -->
+  <!-- MulticastLock enquanto a descoberta DNS-SD procura o computador. É
+       também o requisito do serviço de tipo connectedDevice no Android 14. -->
   <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+  <!-- Conexão com o computador mantida em segundo plano, com aviso fixo. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+
+  <application>
+    <!-- Mantém a conexão direta com o computador enquanto o app está em
+         segundo plano, até a pessoa fechar o app ou tocar em Desconectar.
+         stopWithTask encerra junto com o app tirado dos recentes. -->
+    <service
+        android:name="br.com.ordinum.cialai.tunnel.ConnectionService"
+        android:exported="false"
+        android:foregroundServiceType="connectedDevice"
+        android:stopWithTask="true" />
+    <!-- Ícone pequeno de qualquer aviso que ainda passe pelo expo-notifications. -->
+    <meta-data
+        android:name="expo.modules.notifications.default_notification_icon"
+        android:resource="@drawable/cialai_notification_terminal" />
+  </application>
 </manifest>

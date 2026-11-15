@@ -908,29 +908,35 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-terminal__scroll { background: var(--phone-terminal, #202127); }
 [data-form-factor="phone"] .phone-terminal__host,
 [data-form-factor="phone"][data-theme="dark"] .phone-terminal__host { --terminais-terminal-bg: var(--phone-terminal, #202127); --terminais-terminal-ink: #e9eaf0; }
-/* Barra do terminal, como na referencia: os favoritos, o teclado especial,
-   os comandos rapidos e o botao no tom da sessao que abre a caixa de texto,
-   todos so com o icone de PhoneKeyIcons.jsx. Alvos de 48 px de altura; com o
-   teclado do aparelho aberto a barra encolhe um pouco para nao roubar altura
-   do terminal. */
+/* Barra fixa do terminal, em PhoneKeybar.jsx: Conversa, Esc, Colar, teclado
+   especial, comandos rapidos, Interromper e Enter, todos so com o icone de
+   PhoneKeyIcons.jsx. Alvos de 48 px de altura; com o teclado do aparelho
+   aberto a barra encolhe um pouco para nao roubar altura do terminal. */
 [data-form-factor="phone"] .phone-keybar { display: flex; flex: none; align-items: center; gap: 6px; padding-top: 2px; }
 [data-form-factor="phone"] .phone-keybar button { position: relative; display: inline-flex; flex: 1 1 0; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 48px; padding: 0; border: 0; border-radius: var(--phone-radius-control); background: var(--phone-surface-muted); color: var(--phone-text); font: inherit; font-size: 16px; font-weight: 600; white-space: nowrap; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; touch-action: manipulation; transition: transform var(--mac-fast) var(--phone-press-ease), background var(--mac-fast) var(--mac-ease), opacity var(--mac-fast) var(--mac-ease); }
 [data-form-factor="phone"] .phone-keybar button:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-keybar button:not(:disabled):active { transform: scale(.95); }
 /* Os sete botoes repartem a largura por igual. A area de toque de cada um
    avanca ate o meio do vao, pelo ::after, e por isso nao ha faixa morta entre
-   eles e o alvo passa de 44 px mesmo quando o desenho fica mais estreito.
-   Favorito sem icone empilha o Ctrl pequeno sobre a letra, como na tecla de
-   verdade. */
+   eles e o alvo passa de 44 px mesmo quando o desenho fica mais estreito. */
 [data-form-factor="phone"] .phone-keybar button::after { content: ""; position: absolute; inset: 0 -3px; }
 /* A barra so existe dentro da sessao aberta, que leva `session-scope`: o
-   modificador armado e o botao da caixa de texto ficam no tom dela. */
-[data-form-factor="phone"] .phone-keybar__keys.is-armed { background: var(--session-accent, var(--phone-primary)) !important; color: var(--session-on-accent, var(--phone-on-primary)) !important; }
-[data-form-factor="phone"] .phone-keybar__key { font-size: 15px; }
-[data-form-factor="phone"] .phone-keybar__text { max-width: 100%; padding: 0 2px; overflow: hidden; text-overflow: ellipsis; }
-[data-form-factor="phone"] .phone-keybar__combo { display: flex; flex-direction: column; align-items: center; line-height: 1; }
-[data-form-factor="phone"] .phone-keybar__combo small { margin-bottom: 3px; font-size: 10px; font-weight: 600; letter-spacing: .02em; opacity: .62; }
-[data-form-factor="phone"] .phone-keybar__send { border-radius: var(--phone-radius-control)!important; background: var(--session-accent, var(--phone-primary)) !important; color: var(--session-on-accent, var(--phone-on-primary)) !important; box-shadow: var(--mac-shadow-primary); }
+   modificador armado e o Enter ficam no tom dela, a cor escolhida para a
+   sessao, ou o rosa do Cialai na sessao sem cor. Conversa fica no fundo
+   neutro dos outros; Interromper, no vermelho de parar. */
+[data-form-factor="phone"] .phone-keybar button.phone-keybar__keys.is-armed,
+[data-form-factor="phone"] .phone-keybar button.phone-keybar__enter { background: var(--session-accent, var(--phone-primary)); color: var(--session-on-accent, var(--phone-on-primary)); }
+[data-form-factor="phone"] .phone-keybar button.phone-keybar__enter { box-shadow: var(--mac-shadow-primary); }
+[data-form-factor="phone"] .phone-keybar button.phone-keybar__interrupt { background: var(--phone-danger); color: #FFFFFF; }
+/* Nome da funcao ao segurar um botao, ou ao passar o mouse: balao pequeno
+   acima do botao, no contraste invertido do tema, preso dentro da tela. A
+   ponta acompanha o centro do botao. Fica no body, fora do tom da sessao, e
+   nunca recebe toque. */
+[data-form-factor="phone"] .phone-keybar__hint { position: fixed; z-index: 2147483000; max-width: calc(100vw - 16px); padding: 7px 11px; border-radius: 10px; background: var(--phone-text); color: var(--phone-surface); font-size: 13px; font-weight: 600; line-height: 1.25; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 18px rgba(0, 0, 0, .22); animation: phone-keybar-hint-in var(--mac-fast) var(--mac-ease); }
+[data-form-factor="phone"] .phone-keybar__hint::after { content: ""; position: absolute; top: 100%; left: var(--phone-keybar-hint-arrow, 50%); width: 0; height: 0; margin-left: -6px; border: 6px solid transparent; border-top-color: var(--phone-text); }
+[data-form-factor="phone"] .phone-keybar__hint.is-below::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: var(--phone-text); }
+@keyframes phone-keybar-hint-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { [data-form-factor="phone"] .phone-keybar__hint { animation: none; } }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-keybar { padding-top: 0; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-keybar button { min-height: 44px; }
 [data-form-factor="phone"] .ios-shell--keyboard .phone-terminal { padding-bottom: 6px; }
@@ -1003,24 +1009,14 @@ body.is-dragging-path *{cursor:grabbing !important}
 [data-form-factor="phone"] .phone-keys__foot-button { flex: 1 1 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 48px; padding: 0 12px; border: 1.5px solid var(--phone-primary); border-radius: var(--phone-radius-control); background: transparent; color: var(--phone-primary); font: inherit; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 [data-form-factor="phone"] .phone-keys__foot-button:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-keys__foot-button--close { background: var(--phone-primary-soft); border-color: transparent; }
-/* Retorno de toque no que nao e tecla: abas, icones do cabecalho, rodape e
-   os chips das preferencias. As teclas tem o delas, com a cor e a escala. */
+/* Retorno de toque no que nao e tecla: abas, icones do cabecalho e rodape.
+   As teclas tem o delas, com a cor e a escala. */
 [data-form-factor="phone"] .phone-keys__tab:active,
 [data-form-factor="phone"] .phone-keys .phone-keys__icon:not(:disabled):active,
-[data-form-factor="phone"] .phone-keys__foot-button:not(:disabled):active,
-[data-form-factor="phone"] .phone-keys__chip:not(:disabled):active { opacity: .7; }
+[data-form-factor="phone"] .phone-keys__foot-button:not(:disabled):active { opacity: .7; }
 /* Preferencias do teclado. */
 [data-form-factor="phone"] .phone-keys__prefs { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 8px; }
 [data-form-factor="phone"] .phone-keys__prefs h3 { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
-[data-form-factor="phone"] .phone-keys__note { margin: 0 0 8px; font-size: 13px; line-height: 1.4; color: var(--phone-text-2); }
-[data-form-factor="phone"] .phone-keys__order { margin: 0 0 10px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
-[data-form-factor="phone"] .phone-keys__order li { display: flex; align-items: center; gap: 2px; min-height: 48px; padding-left: 14px; border-radius: 12px; background: var(--phone-surface-muted); font-weight: 500; }
-[data-form-factor="phone"] .phone-keys__order li span { flex: 1; }
-[data-form-factor="phone"] .phone-keys__order li > svg { flex: none; margin-right: 8px; color: var(--phone-text-2); }
-[data-form-factor="phone"] .phone-keys__chips { display: flex; flex-wrap: wrap; gap: 8px; }
-[data-form-factor="phone"] .phone-keys__chip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border: 1px solid var(--phone-border); border-radius: var(--phone-radius-control); background: var(--phone-surface); color: var(--phone-text); font: inherit; font-size: 14px; font-weight: 500; }
-[data-form-factor="phone"] .phone-keys__chip.is-selected { background: var(--phone-primary-soft); border-color: var(--phone-primary); color: var(--phone-primary); }
-[data-form-factor="phone"] .phone-keys__chip:disabled { opacity: .4; }
 [data-form-factor="phone"] .phone-keys__radios { display: flex; flex-direction: column; gap: 6px; }
 [data-form-factor="phone"] .phone-keys__radio { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: center; padding: 10px 14px; border: 1px solid var(--phone-border); border-radius: 12px; }
 [data-form-factor="phone"] .phone-keys__radio.is-selected { border-color: var(--phone-primary); background: var(--phone-primary-soft); }

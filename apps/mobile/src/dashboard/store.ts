@@ -71,9 +71,17 @@ export function parseDashboardFile(raw: string | null): Record<string, DesktopDa
   return out;
 }
 
+// As imagens das sessões só servem ao aviso do retrato que acabou de chegar:
+// não vão para o disco.
+function withoutBadges(desktops: Desktops): Desktops {
+  return Object.fromEntries(Object.entries(desktops).map(([id, entry]) => [id, entry.snapshot
+    ? { ...entry, snapshot: { ...entry.snapshot, badges: {}, sessions: entry.snapshot.sessions.map(session => ({ ...session, badge: null })) } }
+    : entry]));
+}
+
 function persist() {
   if (!writable) return;
-  const contents = JSON.stringify({ version: 1, desktops: state.desktops });
+  const contents = JSON.stringify({ version: 1, desktops: withoutBadges(state.desktops) });
   files.write(DASHBOARD_FILE, contents).catch(() => undefined);
 }
 

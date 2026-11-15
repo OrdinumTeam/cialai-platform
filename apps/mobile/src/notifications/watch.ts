@@ -23,11 +23,14 @@ export function parseNotificationPrefs(raw: string | null | undefined): Notifica
 // `channel` separa o que pede a pessoa agora, a atenção, do resto. `color`
 // pinta o aviso no Android; `target` abre a sessão no toque; `identifier`
 // faz o aviso novo de uma sessão substituir o anterior em vez de empilhar.
+// `image` é o ícone da sessão em branco sobre a cor dela, em PNG base64, que
+// a página desenhou: ícone grande no Android e miniatura no iPhone.
 export type NoticeChannel = 'activity' | 'attention';
 export type NoticeTarget = { desktopId: string; sessionId: string };
 export type LocalNotice = {
   key: string; title: string; body: string;
   subtitle?: string; color?: string; channel?: NoticeChannel; identifier?: string; target?: NoticeTarget;
+  image?: string;
 };
 type Translate = (key: string, values?: Record<string, string | number>) => string;
 
@@ -76,6 +79,12 @@ function sessionTitle(session: DashboardSession): string {
 // tom, de página antiga, fica a cor do app.
 const noticeColor = (tone: SessionTone | null) => tone?.light.base;
 
+// Imagem da sessão no retrato novo, quando a página mandou.
+const noticeImage = (snapshot: DashboardMessage, session: DashboardSession): { image?: string } => {
+  const image = session.badge ? snapshot.badges?.[session.badge] : undefined;
+  return image ? { image } : {};
+};
+
 // O que muda e pede a pessoa numa sessão, entre dois retratos: o sino, o
 // aviso do terminal, o processo que terminou fora da tela, o agente que passou
 // a aguardar ou pedir permissão e a resposta que ficou pronta. A sessão que a
@@ -111,7 +120,8 @@ function attentionNotices(previous: DashboardMessage, next: DashboardMessage, de
       color: noticeColor(session.tone),
       channel: 'attention',
       identifier: `${desktopId}:${session.id}`,
-      target: { desktopId, sessionId: session.id }
+      target: { desktopId, sessionId: session.id },
+      ...noticeImage(next, session)
     });
   }
   return notices;
@@ -141,7 +151,8 @@ export function noticesFor(previous: DashboardMessage | null, next: DashboardMes
         title: t(session.status === 'error' ? 'mobile.notify.session.failed' : 'mobile.notify.session.ended', { name }),
         body: t('mobile.notify.session.detail', { computer: desktopName }),
         color: noticeColor(session.tone),
-        target: { desktopId, sessionId: session.id }
+        target: { desktopId, sessionId: session.id },
+        ...noticeImage(next, session)
       });
     }
   }

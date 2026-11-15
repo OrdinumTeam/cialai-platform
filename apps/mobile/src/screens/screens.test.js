@@ -26,7 +26,11 @@ jest.mock('cialai-tunnel', () => ({
   },
   inspectPairPayload: (...args) => mockInspect(...args),
   pair: (...args) => mockPair(...args),
-  stop: () => mockStop()
+  stop: () => mockStop(),
+  canPresentNotices: () => false,
+  presentNotice: async () => false,
+  takeOpenedNotice: () => null,
+  setKeepAliveText: () => {}
 }));
 // A permissão da câmera começa negada; o teste da leitura a concede.
 const mockCamera = { granted: false };
@@ -998,7 +1002,7 @@ test('Shell hands the Home request to the page once and passes the page snapshot
   await act(async () => {
     await webView.props.onMessage({ nativeEvent: { url: 'http://127.0.0.1:47400/', data: JSON.stringify(snapshot) } });
   });
-  expect(onDashboard).toHaveBeenCalledWith({ ...snapshot, recent: [] });
+  expect(onDashboard).toHaveBeenCalledWith({ ...snapshot, recent: [], badges: {} });
   await act(async () => {
     await webView.props.onMessage({ nativeEvent: { url: 'https://evil.example/', data: JSON.stringify(snapshot) } });
   });

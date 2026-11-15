@@ -53,6 +53,13 @@ describe('native tunnel events', () => {
       .toEqual({ type: 'native-reopen-failed', desktopId: null, code: 'revoked' });
   });
 
+  test('Android tells when the service kept the connection and when the core stopped in the background', () => {
+    expect(interpretTunnelEvent({ kind: 'state', payload: { state: 'kept-alive', desktopId } })[0]).toEqual({ type: 'native-kept-alive' });
+    expect(interpretTunnelEvent({ kind: 'state', payload: { state: 'background-stopped' } })[0]).toEqual({ type: 'native-background-stopped' });
+    // O toque num aviso desenhado pelo Android vai direto ao ouvinte dos avisos.
+    expect(interpretTunnelEvent({ kind: 'notice', payload: { desktopId, sessionId: 's1' } })).toEqual([]);
+  });
+
   test('pair events expose the core stage', () => {
     expect(interpretTunnelEvent({ kind: 'pair', payload: { state: 'tor' } })).toEqual([{ type: 'pair-stage', state: 'tor' }]);
   });

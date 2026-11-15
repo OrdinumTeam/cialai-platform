@@ -11,11 +11,11 @@
 //
 // As preferências ficam no localStorage da página, por computador, como a
 // rota em `phone-navigation.js`. Valor desconhecido ou corrompido cai no
-// padrão.
+// padrão. A barra do terminal é fixa desde a versão 3, em `PhoneKeybar.jsx`:
+// a escolha de teclas da barra gravada pelas versões anteriores é ignorada.
 
 export const KEYBOARD_PREFS_KEY = 'cialai_terminal_keyboard';
-export const KEYBOARD_PREFS_VERSION = 2;
-export const MAX_FAVORITES = 4;
+export const KEYBOARD_PREFS_VERSION = 3;
 export const PASTE_KEY = 'Paste';
 
 const ctrl = { ctrl: true };
@@ -81,19 +81,7 @@ export const KEYBOARD_TABS = [
   { id: 'symbols', keys: [], functions: [...functionKeys(1, 6), 'Backspace', ...functionKeys(7, 12), 'Enter'], symbols: true },
 ];
 
-// Teclas que podem ir para a barra. Setas ficam de fora: na barra seriam os
-// botões pequenos em fila que o painel existe para evitar.
-export const FAVORITE_CHOICES = ['Escape', 'Tab', 'Enter', 'ShiftTab', 'CtrlC', 'CtrlV', 'CtrlD', 'CtrlL', 'CtrlR', 'CtrlZ', 'Backspace', 'Home', 'End', PASTE_KEY];
-
-// A barra que vinha antes da versão 2. Quem nunca mexeu nela recebe a nova;
-// quem escolheu as próprias teclas fica com elas.
-const LEGACY_FAVORITES = ['Escape', 'Tab', 'CtrlV'];
-
 export const defaultKeyboardPrefs = () => ({
-  // As quatro que mais se usam com os agentes ficam sempre à vista: Enter
-  // confirma, Esc cancela, Ctrl C interrompe e Ctrl V cola o que está na
-  // área de transferência do computador. O resto fica no teclado especial.
-  favorites: ['Enter', 'Escape', 'CtrlC', 'CtrlV'],
   modifierMode: 'oneShot',
   haptics: false,
   autoOpen: false,
@@ -107,11 +95,7 @@ export function keyboardPrefsStorage() {
 export function normalizeKeyboardPrefs(value) {
   const base = defaultKeyboardPrefs();
   if (!value || typeof value !== 'object') return base;
-  const favorites = Array.isArray(value.favorites)
-    ? [...new Set(value.favorites.filter((id) => FAVORITE_CHOICES.includes(id)))].slice(0, MAX_FAVORITES)
-    : base.favorites;
   return {
-    favorites,
     modifierMode: value.modifierMode === 'sticky' ? 'sticky' : 'oneShot',
     haptics: value.haptics === true,
     autoOpen: value.autoOpen === true,
@@ -119,13 +103,8 @@ export function normalizeKeyboardPrefs(value) {
 }
 
 export function readKeyboardPrefs(storage) {
-  try {
-    const stored = JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null');
-    const prefs = normalizeKeyboardPrefs(stored);
-    const untouched = stored && stored.version !== KEYBOARD_PREFS_VERSION
-      && prefs.favorites.join() === LEGACY_FAVORITES.join();
-    return untouched ? { ...prefs, favorites: defaultKeyboardPrefs().favorites } : prefs;
-  } catch (_error) { return defaultKeyboardPrefs(); }
+  try { return normalizeKeyboardPrefs(JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null')); }
+  catch (_error) { return defaultKeyboardPrefs(); }
 }
 
 export function writeKeyboardPrefs(storage, prefs) {
@@ -133,20 +112,4 @@ export function writeKeyboardPrefs(storage, prefs) {
   try { storage?.setItem(KEYBOARD_PREFS_KEY, JSON.stringify({ version: KEYBOARD_PREFS_VERSION, ...normalized })); }
   catch (_error) { /* sem storage */ }
   return normalized;
-}
-
-export function toggleFavorite(prefs, id) {
-  const favorites = prefs.favorites.includes(id)
-    ? prefs.favorites.filter((item) => item !== id)
-    : [...prefs.favorites, id].slice(0, MAX_FAVORITES);
-  return normalizeKeyboardPrefs({ ...prefs, favorites });
-}
-
-export function moveFavorite(prefs, id, delta) {
-  const favorites = [...prefs.favorites];
-  const from = favorites.indexOf(id);
-  const to = from + delta;
-  if (from < 0 || to < 0 || to >= favorites.length) return prefs;
-  [favorites[from], favorites[to]] = [favorites[to], favorites[from]];
-  return { ...prefs, favorites };
 }
