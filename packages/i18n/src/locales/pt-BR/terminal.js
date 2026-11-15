@@ -496,7 +496,7 @@ export default Object.freeze({
   'terminal.phone.bar.paste': 'Colar',
   'terminal.phone.bar.keys': 'Teclado especial',
   'terminal.phone.bar.quick': 'Comandos rápidos',
-  'terminal.phone.bar.interrupt': 'Interromper (Ctrl+C)',
+  'terminal.phone.bar.interrupt': 'Interromper Ctrl+C',
   'terminal.phone.bar.enter': 'Enter',
   'terminal.phone.pasteLabel': 'Colar da área de transferência',
   'terminal.phone.composer.title': 'Escrever texto',
