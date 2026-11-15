@@ -10,9 +10,11 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"os"
 	"slices"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -319,7 +321,7 @@ func TestBrowseIgnoresInvalidAnnouncements(t *testing.T) {
 			host:     name + ".local.",
 			text:     []string{""},
 		}.withPort(4761)
-		responder, err := openResponder(service, name+".local", records, interfaces, logTo(t))
+		responder, err := openResponder(service, name+".local", records, interfaces, logTo(t), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -376,4 +378,32 @@ func equalFound(got, want []Found) bool {
 	return slices.EqualFunc(got, want, func(a, b Found) bool {
 		return a.ID == b.ID && a.Fingerprint == b.Fingerprint && slices.Equal(a.Addrs, b.Addrs)
 	})
+}
+
+// A send the system refuses, as macOS does without the local network
+// permission, is told once when the refusals start and once, with nil, when
+// the announcement goes out again; a passing failure is not a refusal.
+func TestRefusalsAndRecoveryAreToldOnce(t *testing.T) {
+	refused := &net.OpError{Op: "write", Net: "udp", Err: os.NewSyscallError("sendmsg", syscall.EHOSTUNREACH)}
+	if !sendRefused(refused) || sendRefused(errors.New("network is down")) {
+		t.Fatal("refusal classification")
+	}
+	var told []error
+	public, _, _ := testDesktop(t)
+	announcer, err := Start(Config{
+		PublicKey:  public,
+		Port:       4761,
+		Interfaces: func() ([]net.Interface, error) { return nil, nil },
+		OnBlocked:  func(err error) { told = append(told, err) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = announcer.Close() })
+	for _, round := range []error{nil, refused, refused, nil, nil, refused} {
+		announcer.blocked(round)
+	}
+	if len(told) != 3 || told[0] != refused || told[1] != nil || told[2] != refused {
+		t.Fatalf("told %v, want the refusal, the recovery and the new refusal", told)
+	}
 }

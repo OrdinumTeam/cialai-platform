@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	pion "github.com/pion/mdns/v2"
@@ -30,6 +31,8 @@ const (
 	pointerTTL = 4500
 	// announceInterval separates the two announcements of RFC 6762 section 8.3.
 	announceInterval = time.Second
+	// blockedRetry spaces the announcements while the system refuses them.
+	blockedRetry = 15 * time.Second
 	// cacheFlush is the top bit of the record class, RFC 6762 section 10.2.
 	cacheFlush = dnsmessage.Class(1 << 15)
 )
@@ -59,6 +62,13 @@ type Config struct {
 	Interfaces func() ([]net.Interface, error)
 	// Logf receives diagnostics; nil discards them.
 	Logf func(format string, args ...any)
+	// OnBlocked is told when the system starts refusing the multicast sends
+	// with EHOSTUNREACH, as macOS 15 and later do while the app responsible
+	// for the process lacks the local network permission, and told nil when
+	// the announcement goes out again, once the person allowed it. While
+	// refused, the announcement is retried every blockedRetry; nil ignores
+	// both.
+	OnBlocked func(error)
 }
 
 // Announcer keeps the desktop announced on the local network.
@@ -69,6 +79,7 @@ type Announcer struct {
 	records    serviceRecords
 	interfaces func() ([]net.Interface, error)
 	logf       func(format string, args ...any)
+	blocked    func(error)
 
 	mu        sync.Mutex
 	closed    bool
@@ -100,6 +111,21 @@ func Start(config Config) (*Announcer, error) {
 	if interfaces == nil {
 		interfaces = nonLoopbackInterfaces
 	}
+	// Only the transitions are told, from every responder of the announcer.
+	var reportMu sync.Mutex
+	refusing := false
+	blocked := func(err error) {
+		if config.OnBlocked == nil {
+			return
+		}
+		reportMu.Lock()
+		changed := (err != nil) != refusing
+		refusing = err != nil
+		reportMu.Unlock()
+		if changed {
+			config.OnBlocked(err)
+		}
+	}
 	announcer := &Announcer{
 		instance: instanceName(fingerprint),
 		host:     hostName(fingerprint),
@@ -112,6 +138,7 @@ func Start(config Config) (*Announcer, error) {
 		},
 		interfaces: interfaces,
 		logf:       logf,
+		blocked:    blocked,
 		port:       config.Port,
 	}
 	announcer.mu.Lock()
@@ -201,7 +228,7 @@ func (announcer *Announcer) updateLocked() error {
 		Port:     announcer.port,
 		Text:     announcer.text,
 	}
-	active, err := openResponder(service, announcer.host, announcer.records.withPort(announcer.port), selected, announcer.logf)
+	active, err := openResponder(service, announcer.host, announcer.records.withPort(announcer.port), selected, announcer.logf, announcer.blocked)
 	if err != nil {
 		return err
 	}
@@ -301,6 +328,12 @@ func interfaceNames(interfaces []lanInterface) string {
 	return strings.Join(names, ",")
 }
 
+// sendRefused tells a multicast send the system refused, EHOSTUNREACH, from
+// one that failed for a passing reason.
+func sendRefused(err error) bool {
+	return errors.Is(err, syscall.EHOSTUNREACH)
+}
+
 // responder is one pion server over the interfaces of one moment, plus the
 // announcements pion does not send.
 type responder struct {
@@ -310,11 +343,15 @@ type responder struct {
 	records    serviceRecords
 	interfaces []lanInterface
 	logf       func(format string, args ...any)
+	blocked    func(error)
 	stop       chan struct{}
 	done       chan struct{}
 }
 
-func openResponder(service pion.ServiceInstance, host string, records serviceRecords, interfaces []lanInterface, logf func(string, ...any)) (*responder, error) {
+func openResponder(service pion.ServiceInstance, host string, records serviceRecords, interfaces []lanInterface, logf func(string, ...any), blocked func(error)) (*responder, error) {
+	if blocked == nil {
+		blocked = func(error) {}
+	}
 	v4, v6, err := listenMulticast(interfaces)
 	if err != nil {
 		return nil, err
@@ -346,6 +383,7 @@ func openResponder(service pion.ServiceInstance, host string, records serviceRec
 		records:    records,
 		interfaces: interfaces,
 		logf:       logf,
+		blocked:    blocked,
 		stop:       make(chan struct{}),
 		done:       make(chan struct{}),
 	}
@@ -386,13 +424,24 @@ func closePacketConns(v4 *ipv4.PacketConn, v6 *ipv6.PacketConn) {
 
 func (active *responder) announce() {
 	defer close(active.done)
-	active.send(false)
-	timer := time.NewTimer(announceInterval)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-		active.send(false)
-	case <-active.stop:
+	active.blocked(active.send(false))
+	wait := announceInterval
+	for {
+		timer := time.NewTimer(wait)
+		select {
+		case <-timer.C:
+		case <-active.stop:
+			timer.Stop()
+			return
+		}
+		refused := active.send(false)
+		active.blocked(refused)
+		if refused == nil {
+			return
+		}
+		// Refused by the system: the announcement goes out as soon as the
+		// person allows the app, without waiting for a network change.
+		wait = blockedRetry
 	}
 }
 
@@ -402,7 +451,7 @@ func (active *responder) close(goodbye bool) error {
 	close(active.stop)
 	<-active.done
 	if goodbye {
-		active.send(true)
+		_ = active.send(true)
 	}
 	return active.conn.Close()
 }
@@ -411,12 +460,15 @@ func (active *responder) close(goodbye bool) error {
 // interface with the addresses of that interface. The socket is shared with
 // pion, which also selects the interface before writing, so the interface is
 // set on the packet as well where the platform supports it.
-func (active *responder) send(goodbye bool) {
+//
+// It returns the first send the system refused in this round, nil when none
+// was refused.
+func (active *responder) send(goodbye bool) (refused error) {
 	for _, lan := range active.interfaces {
 		packet, err := active.records.packet(lan.addresses, goodbye)
 		if err != nil {
 			active.logf("mdns: build announcement: %v", err)
-			return
+			return refused
 		}
 		iface := lan.iface
 		if lan.has(netip.Addr.Is4) {
@@ -426,6 +478,9 @@ func (active *responder) send(goodbye bool) {
 			}
 			if err != nil {
 				active.logf("mdns: announce on %s over IPv4: %v", iface.Name, err)
+				if refused == nil && sendRefused(err) {
+					refused = err
+				}
 			}
 		}
 		if active.v6 != nil && lan.has(netip.Addr.Is6) {
@@ -435,9 +490,13 @@ func (active *responder) send(goodbye bool) {
 			}
 			if err != nil {
 				active.logf("mdns: announce on %s over IPv6: %v", iface.Name, err)
+				if refused == nil && sendRefused(err) {
+					refused = err
+				}
 			}
 		}
 	}
+	return refused
 }
 
 // serviceRecords holds the fully qualified names of the service.

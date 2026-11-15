@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- O núcleo se anuncia por mDNS para o celular e os Brotos acharem este
+	     computador na rede local. Desde o macOS 15, sem a permissão de rede
+	     local do app, todo envio multicast falha e só sobra o Tor. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cialai announces this computer on your local network so your phone and your Brotos connect directly, without going through Tor.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_cialai._udp</string>
+	</array>
+</dict>
+</plist>

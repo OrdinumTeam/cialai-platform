@@ -255,7 +255,7 @@ func (n *network) runQR(watch *qrWatch, temporary TemporaryOnions) {
 // derive from the QR secret.
 func (n *network) openQRPaths(watch *qrWatch, temporary TemporaryOnions) {
 	if factory := n.config.seams.NewAnnouncer; factory != nil {
-		marker, err := factory(AnnouncerConfig{PublicKey: watch.keys.MarkerKey(), Port: uint16(n.port), Logf: n.config.logger.Logf("debug")})
+		marker, err := factory(AnnouncerConfig{PublicKey: watch.keys.MarkerKey(), Port: uint16(n.port), Logf: n.config.logger.Logf("debug"), OnBlocked: n.announcementBlocked})
 		if err != nil {
 			n.config.logger.Warn("broto pairing marker not announced", logx.Fields{"error": err.Error()})
 		} else {

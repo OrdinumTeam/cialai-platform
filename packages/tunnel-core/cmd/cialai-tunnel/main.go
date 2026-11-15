@@ -123,7 +123,7 @@ func runServe(args []string, stdio streams, alive func(int) bool) int {
 // announceLocal publishes the direct listener by DNS-SD on the local network,
 // so a phone on the same Wi-Fi finds the desktop without the reach card.
 func announceLocal(config sidecar.AnnouncerConfig) (sidecar.Announcer, error) {
-	return mdns.Start(mdns.Config{PublicKey: config.PublicKey, Port: config.Port, Logf: config.Logf})
+	return mdns.Start(mdns.Config{PublicKey: config.PublicKey, Port: config.Port, Logf: config.Logf, OnBlocked: config.OnBlocked})
 }
 
 func runDoctor(args []string, stdio streams) int {

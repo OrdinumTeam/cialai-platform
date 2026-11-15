@@ -342,7 +342,11 @@ export function publicNetworks(net, torValue) {
   return [
     { id: 'tor', state: torState },
     { id: 'stun', state: stun === 'ok' ? 'active' : stun === 'failed' ? 'failed' : 'off' },
-    { id: 'mdns', state: mdns === 'announcing' ? 'active' : mdns === 'failed' ? 'failed' : 'off' },
+    // Bloqueado: o sistema recusa o anúncio, como o macOS sem a permissão de
+    // rede local; a dica diz onde liberar.
+    mdns === 'blocked'
+      ? { id: 'mdns', state: 'failed', hint: 'desktop.access.publicMdnsBlocked' }
+      : { id: 'mdns', state: mdns === 'announcing' ? 'active' : mdns === 'failed' ? 'failed' : 'off' },
   ];
 }
 
