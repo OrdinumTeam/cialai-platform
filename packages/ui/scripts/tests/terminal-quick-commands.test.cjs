@@ -89,44 +89,46 @@ test('validação, limite e storage corrompido', async () => {
 });
 
 test('preferências do teclado: padrão, gravação e valores inválidos', async () => {
-  const { readKeyboardPrefs, writeKeyboardPrefs, defaultKeyboardPrefs, toggleFavorite, moveFavorite, KEYBOARD_PREFS_KEY, MAX_FAVORITES } = await loadPrefs();
+  const { readKeyboardPrefs, writeKeyboardPrefs, defaultKeyboardPrefs, KEYBOARD_PREFS_KEY, KEYBOARD_PREFS_VERSION } = await loadPrefs();
   const storage = memoryStorage();
   assert.deepEqual(readKeyboardPrefs(storage), defaultKeyboardPrefs());
-  assert.deepEqual(defaultKeyboardPrefs().favorites, ['Enter', 'Escape', 'CtrlC', 'CtrlV'], 'as quatro dos agentes ficam sempre à vista');
-  assert.equal(MAX_FAVORITES, 4);
-  // Com a barra cheia, uma tecla nova só entra quando outra sai.
-  assert.deepEqual(toggleFavorite(readKeyboardPrefs(storage), 'Tab').favorites, ['Enter', 'Escape', 'CtrlC', 'CtrlV']);
-  let prefs = toggleFavorite(toggleFavorite(readKeyboardPrefs(storage), 'CtrlV'), 'Tab');
-  prefs = moveFavorite(prefs, 'Tab', -1);
-  prefs = writeKeyboardPrefs(storage, { ...prefs, modifierMode: 'sticky', haptics: true, autoOpen: true });
-  assert.deepEqual(readKeyboardPrefs(storage), { favorites: ['Enter', 'Escape', 'Tab', 'CtrlC'], modifierMode: 'sticky', haptics: true, autoOpen: true });
-  assert.equal(toggleFavorite(prefs, 'Home').favorites.length, MAX_FAVORITES, 'a barra tem teto');
-  assert.deepEqual(toggleFavorite(prefs, 'Tab').favorites, ['Enter', 'Escape', 'CtrlC']);
-  const broken = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ favorites: ['ArrowUp', 'Nope', 'Tab', 'Tab'], modifierMode: 'x', haptics: 'yes' }) });
-  assert.deepEqual(readKeyboardPrefs(broken), { favorites: ['Tab'], modifierMode: 'oneShot', haptics: false, autoOpen: false });
+  assert.deepEqual(defaultKeyboardPrefs(), { modifierMode: 'oneShot', haptics: false, autoOpen: false });
+  writeKeyboardPrefs(storage, { modifierMode: 'sticky', haptics: true, autoOpen: true });
+  assert.deepEqual(readKeyboardPrefs(storage), { modifierMode: 'sticky', haptics: true, autoOpen: true });
+  assert.equal(JSON.parse(storage.getItem(KEYBOARD_PREFS_KEY)).version, KEYBOARD_PREFS_VERSION);
+  const broken = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ modifierMode: 'x', haptics: 'yes' }) });
+  assert.deepEqual(readKeyboardPrefs(broken), defaultKeyboardPrefs());
   assert.deepEqual(readKeyboardPrefs(memoryStorage({ [KEYBOARD_PREFS_KEY]: '{' })), defaultKeyboardPrefs());
   assert.deepEqual(readKeyboardPrefs(null), defaultKeyboardPrefs());
 });
 
-test('teclado: a barra antiga, nunca mexida, vira a nova; a escolhida fica', async () => {
-  const { readKeyboardPrefs, writeKeyboardPrefs, defaultKeyboardPrefs, KEYBOARD_PREFS_KEY } = await loadPrefs();
-  const legacy = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ version: 1, favorites: ['Escape', 'Tab', 'CtrlV'], modifierMode: 'sticky', haptics: true, autoOpen: false }) });
-  assert.deepEqual(readKeyboardPrefs(legacy), { ...defaultKeyboardPrefs(), modifierMode: 'sticky', haptics: true });
-  const chosen = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ version: 1, favorites: ['CtrlC', 'Escape', 'Tab'] }) });
-  assert.deepEqual(readKeyboardPrefs(chosen).favorites, ['CtrlC', 'Escape', 'Tab']);
-  // Gravada na versão nova, a mesma escolha antiga é decisão da pessoa.
-  const storage = memoryStorage();
-  writeKeyboardPrefs(storage, { ...defaultKeyboardPrefs(), favorites: ['Escape', 'Tab', 'CtrlV'] });
-  assert.deepEqual(readKeyboardPrefs(storage).favorites, ['Escape', 'Tab', 'CtrlV']);
+test('teclado: a escolha de teclas da barra das versões antigas é ignorada, o resto fica', async () => {
+  const { readKeyboardPrefs, KEYBOARD_PREFS_KEY } = await loadPrefs();
+  for (const version of [1, 2]) {
+    const old = memoryStorage({ [KEYBOARD_PREFS_KEY]: JSON.stringify({ version, favorites: ['CtrlC', 'Escape', 'Tab'], modifierMode: 'sticky', haptics: true, autoOpen: false }) });
+    assert.deepEqual(readKeyboardPrefs(old), { modifierMode: 'sticky', haptics: true, autoOpen: false });
+  }
 });
 
 test('todas as teclas das abas existem no catálogo e geram sequência', async () => {
-  const { KEYBOARD_TABS, KEY_CATALOG, FAVORITE_CHOICES, SYMBOLS, PASTE_KEY } = await loadPrefs();
+  const { KEYBOARD_TABS, KEY_CATALOG, SYMBOLS, PASTE_KEY } = await loadPrefs();
   const { encodeKey } = await import('../../src/terminals/key-encoder.js');
-  const ids = [...KEYBOARD_TABS.flatMap((tab) => tab.keys), ...FAVORITE_CHOICES];
+  const keysOf = (tab) => [...tab.keys, ...(tab.functions || [])];
+  // As teclas da barra fixa saem do mesmo catálogo.
+  const ids = [...KEYBOARD_TABS.flatMap(keysOf), 'Escape', 'CtrlV', 'CtrlC', 'Enter'];
   for (const id of ids) {
     assert.ok(KEY_CATALOG[id], id);
     if (id !== PASTE_KEY) assert.ok(encodeKey(KEY_CATALOG[id].key, KEY_CATALOG[id].mods), id);
   }
   for (const symbol of SYMBOLS) assert.equal(encodeKey(symbol), symbol);
+  // Nenhuma aba fica sem Enter nem Backspace, e nenhuma repete tecla.
+  for (const tab of KEYBOARD_TABS) {
+    for (const id of ['Enter', 'Backspace']) assert.ok(keysOf(tab).includes(id), `${id} em ${tab.id}`);
+    assert.equal(new Set(keysOf(tab)).size, keysOf(tab).length, tab.id);
+  }
+  assert.equal(encodeKey(KEY_CATALOG.Enter.key), '\r');
+  // Ctrl C continua sendo interromper, e Ctrl V continua indo ao computador.
+  assert.equal(encodeKey(KEY_CATALOG.CtrlC.key, KEY_CATALOG.CtrlC.mods), '\x03');
+  assert.equal(encodeKey(KEY_CATALOG.CtrlV.key, KEY_CATALOG.CtrlV.mods), '\x16');
+  assert.equal(encodeKey(KEY_CATALOG.Escape.key), '\x1b');
 });

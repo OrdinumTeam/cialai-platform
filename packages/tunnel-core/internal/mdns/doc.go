@@ -53,7 +53,10 @@
 // the system then asks again by multicast. On macOS 15 and later the local
 // network permission of the app responsible for the process covers the
 // sidecar; without it every multicast send fails with EHOSTUNREACH, the
-// announcement never leaves the computer and only loopback keeps working.
+// announcement never leaves the computer and only loopback keeps working. The
+// desktop bundle declares NSLocalNetworkUsageDescription and NSBonjourServices
+// so the system asks; Config.OnBlocked tells the refusal and the recovery,
+// and a refused announcement is retried every blockedRetry.
 //
 // # Browsing
 //

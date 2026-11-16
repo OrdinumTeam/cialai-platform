@@ -13,7 +13,7 @@
 //	1. local network     1.5 s   lan candidates of the reach card and those reported by native discovery
 //	2. direct internet   4 s     ipv6, mapped and stun candidates of the reach card
 //	3. Tor fallback      20 s    onion address of the reach card, bootstrap included
-//	4. NAT punch         5 s     fresh candidates exchanged over the fallback channel
+//	4. NAT punch         30 s    fresh candidates exchanged over the fallback channel
 //
 // Steps 1 and 2 run in parallel, so together they take at most 4 s, enough for
 // the QUIC handshake over a slow mobile network. A local session wins over an
@@ -24,7 +24,9 @@
 // Config.OnTor, then dials the onion with the pinned desktop key, retrying
 // within the budget. The fallback becomes the active path as soon as it
 // answers, and step 4 then runs in the background when the stability rules
-// allow it.
+// allow it. Its budget covers the control connection it opens over Tor and the
+// round trips of the exchange, seconds each; the dial of the desktop candidates
+// that ends it is bounded by the 5 s the desktop keeps sending opening packets.
 //
 // # Stability
 //
@@ -34,11 +36,22 @@
 //     three lost bridge pings. A failed local path moves to steps 2 and 3, a
 //     failed internet or punched path to step 3, and a failed fallback runs
 //     every step again.
-//   - Improving a working fallback is limited: no attempt to move from Tor to a
-//     direct path within Timings.Hysteresis (2 min) of the last switch or loss
-//     of a path, and at most one attempt every Timings.UpgradeInterval (5 min).
-//     An attempt runs steps 1, 2 and 4. The first evaluation of a manager
-//     punches right after the fallback connects, since no switch happened yet.
+//   - The fallback is left as soon as a direct path answers. An attempt runs
+//     steps 1, 2 and 4 with the fallback still carrying the streams, and only
+//     a direct session that completed its handshake replaces it. The first
+//     evaluation of a manager punches right after the fallback connects. The
+//     next attempts wait Timings.Settle (10 s) after a switch or loss of a
+//     path and follow Timings.UpgradeBackoff, counted from the end of the
+//     previous attempt: 5, 10, 20 and 30 s, then one a minute. A network
+//     change, the foreground and an address of the desktop the phone did not
+//     have, reported by native discovery or by a renewed reach card, restart
+//     the backoff; the learned address also brings the next attempt forward.
+//   - Flapping is the exception: a direct path lost within Timings.FlapWindow
+//     (1 min) of its adoption makes the slow rules apply, no attempt within
+//     Timings.Hysteresis (2 min) of the last switch and at most one every
+//     Timings.UpgradeInterval (5 min), so an unstable direct path does not
+//     close the streams of the page over and over. They end when a direct
+//     path outlives the window or an attempt finds no direct path at all.
 //   - A network change with a direct path active first migrates the QUIC
 //     session to a new socket; only when migration fails does the manager drop
 //     the session and evaluate from scratch. With the fallback active it

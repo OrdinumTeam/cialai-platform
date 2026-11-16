@@ -36,17 +36,22 @@ export type TurnState = 'busy' | 'waiting' | 'done' | 'idle';
 export type SessionTurn = { state: TurnState; waitingFor: string | null };
 // Os campos depois de `agent` vieram com os avisos de atenção. Página antiga
 // não manda e eles ficam nulos; fora do formato também, sem recusar o retrato.
+// `badge` é a chave da imagem da sessão em `DashboardMessage.badges`, que a
+// página desenha para os avisos; sem imagem, nulo.
 export type DashboardSession = {
   id: string; name: string; cwd: string; status: string; agent: AgentId | null;
   color: string | null; tone: SessionTone | null; icon: string | null;
   attention: SessionAttention | null; turn: SessionTurn | null; viewed: boolean;
+  badge: string | null;
 };
 // Retrato que a página manda para o Início: o formato sai de
 // packages/ui/src/mobile/dashboard-snapshot.js.
 // `recent` são as últimas pastas em que o telefone abriu sessão; páginas
-// antigas não mandam e o campo fica vazio.
+// antigas não mandam e o campo fica vazio. `badges` leva cada imagem de sessão
+// uma vez, em PNG base64, pela chave `icone:#cor`; página antiga não manda.
 export type DashboardMessage = {
   type: 'dashboard'; at: number; accounts: AgentAccount[]; projects: DashboardProject[]; sessions: DashboardSession[]; recent: string[];
+  badges: Record<string, string>;
 };
 // Pasta escolhida no navegador da página para virar atalho em Projetos.
 export type ProjectPickedMessage = { type: 'project-picked'; path: string; name: string };
@@ -182,6 +187,22 @@ function turnOf(value: unknown): SessionTurn | null {
   return { state: value.state as TurnState, waitingFor };
 }
 
+// Imagens das sessões para os avisos. Fora do formato, a imagem some e o
+// retrato continua valendo: o aviso sai sem ela.
+export const BADGE_KEY = /^[a-z0-9-]{1,40}:#[0-9a-f]{6}$/;
+export const MAX_BADGES = 24;
+export const MAX_BADGE_LENGTH = 96_000;
+const PNG_BASE64 = /^iVBORw0KGgo[A-Za-z0-9+/]+={0,2}$/;
+
+function badgesOf(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, image] of Object.entries(value).slice(0, MAX_BADGES)) {
+    if (BADGE_KEY.test(key) && typeof image === 'string' && image.length <= MAX_BADGE_LENGTH && PNG_BASE64.test(image)) out[key] = image;
+  }
+  return out;
+}
+
 function parseProject(value: unknown): DashboardProject | null {
   if (!isRecord(value)) return null;
   const name = text(value.name);
@@ -200,7 +221,8 @@ function parseSession(value: unknown): DashboardSession | null {
   return {
     id, name, cwd, status, agent: agentOf(value.agent),
     color: slug(value.color), tone: toneOf(value.tone), icon: slug(value.icon),
-    attention: attentionOf(value.attention), turn: turnOf(value.turn), viewed: value.viewed === true
+    attention: attentionOf(value.attention), turn: turnOf(value.turn), viewed: value.viewed === true,
+    badge: typeof value.badge === 'string' && BADGE_KEY.test(value.badge) ? value.badge : null
   };
 }
 
@@ -212,7 +234,10 @@ export function parseDashboard(value: Record<string, unknown>): DashboardMessage
   const sessions = list(value.sessions, DASHBOARD_LIMITS.sessions, parseSession);
   const recent = value.recent === undefined ? [] : list(value.recent, DASHBOARD_LIMITS.recent, entry => text(entry, true));
   if (!at || !accounts || !projects || !sessions || !recent) return null;
-  return { type: 'dashboard', at, accounts, projects, sessions, recent };
+  const badges = badgesOf(value.badges);
+  // Sessão que aponta uma imagem que não veio fica sem imagem.
+  const linked = sessions.map(session => (session.badge && !badges[session.badge] ? { ...session, badge: null } : session));
+  return { type: 'dashboard', at, accounts, projects, sessions: linked, recent, badges };
 }
 
 export function parsePageMessage(raw: string, allowDevelopmentLoopback = false): PageMessage | null {

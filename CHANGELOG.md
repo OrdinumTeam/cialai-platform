@@ -74,6 +74,54 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.7.1 · 2026-11-15
+
+### Fixed
+
+* Reopening a terminal resumes the Claude Code or Codex conversation of that terminal. A detected conversation keeps the PATH of the agent process, and the resume looks for the CLI there before the PATH of the app, which on a Mac opened from the Dock is only `/usr/bin:/bin:/usr/sbin:/sbin`; the version probe runs with the same PATH so `#!/usr/bin/env node` finds node
+* Codex served by the shared `codex app-server` daemon gets a conversation id. On quit the studio takes a last sample and sends up to three Ctrl+C to each interactive Codex without a proven conversation, reads the `codex resume <id>` it prints in its own terminal and keeps that id for the terminal, validated against the profile before any command
+* On Windows the resume command was never sent, because readiness required the shell to own the foreground and Windows has no foreground group. An idle prompt now counts as ready
+* The default Claude account resumes with `CLAUDE_CONFIG_DIR` and `CLAUDE_PROFILE` removed instead of pointing at `~/.claude`
+* Terminal replies such as cursor position, attributes, colors, modes, version and focus no longer count as typing and no longer cancel the resume
+* The macOS app declares `NSLocalNetworkUsageDescription`, in Portuguese, English and Spanish, and `NSBonjourServices` with `_cialai._udp`. Without the local network permission every multicast send failed with EHOSTUNREACH, the mDNS announcement never left the Mac and a Broto paired by QR could only reach the computer through Tor
+
+### Changed
+
+* The mDNS announcer reports when the system refuses the multicast sends and when they go out again, retrying every 15 s while refused. The mDNS state gains `blocked`, logged as a warning, and the advanced diagnostics of the desktop say where to allow it
+* The interrupt button of the phone terminal bar is named Interromper Ctrl+C, without parentheses
+
+## 0.7.0 · 2026-11-14
+
+### Added
+
+* Android keeps the direct connection to the computer while the app is in the background. With a computer open, the tunnel module starts `ConnectionService`, a foreground service of type `connectedDevice` with a pinned notification that names the computer and offers Disconnect. It holds the connection until the app returns, Disconnect is tapped or the app is removed from recents, through `stopWithTask`. Without an open computer, or when the system refuses the foreground start, the previous 120 s stop still applies. Disconnect stops the core like that deadline, and returning reopens the last computer. The module reports `kept-alive` and `background-stopped`, and the app waits for the native reopening only when the core really stopped
+* Session notices show the session icon in white on the session color. The phone page draws one 192 px PNG per icon and color with a canvas and sends each image once in the Home snapshot, under `badges`, with each session pointing to its own in `badge`; the shell never writes them to disk. On Android the notice is posted by the tunnel module with the image as the large icon, the terminal glyph as the small icon and the session color, and a tap opens the session through the launch intent. On iOS the image is attached to the notice and shows as its thumbnail
+* Holding a button of the phone terminal bar shows its name in a bubble above it, kept inside the screen, and releasing does nothing. A short tap runs the action, and with a mouse the name shows on hover
+
+### Changed
+
+* The phone terminal bar has a fixed order: Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Chat has a neutral background, Interrupt the red of the theme and Enter the session color. The choice of bar keys left the keyboard preferences, and an older stored choice is ignored
+* Settings on Android explains that notices keep arriving in the background while the app stays open
+
+## 0.6.1 · 2026-11-13
+
+### Changed
+
+* The phone leaves the Tor fallback as soon as a direct path answers. An improvement attempt used to run once every 5 minutes; it now runs 5, 10, 20 and 30 s after the previous one and then once a minute, with the fallback still carrying the streams. A network change, the foreground and a desktop address the phone did not have restart the backoff, and the learned address brings the next attempt forward. The slow rules, 2 minutes after a switch and one attempt every 5 minutes, now apply only while a direct path keeps dying within a minute of its adoption
+* The NAT punch budget went from 5 s to 30 s, because opening the control connection over Tor alone could take the old budget. The final dial of the exchanged candidates stays bounded by 5 s
+* On open, the phone attaches only the session on screen instead of every session, each with its 256 KiB replay. The others attach when opened
+* `pty_attach` takes an optional `have` offset, and the desktop replays only the bytes after it. The phone sends the offset it has already received, so a reattach no longer resends the whole ring. The reattach backoff resets only after 30 s attached
+* The phone terminal bar has seven icon only buttons: Enter, Esc, Interrupt, Paste, Special keyboard, Quick commands and Message. Interrupt still sends Ctrl+C. The special keyboard reuses the same icons from one map, has Enter on every tab and the arrows at the bottom of every tab, and shows symbols with short captions for Tab, Shift Tab, Backspace and the arrows
+
+### Added
+
+* The desktop writes `session.opened`, `session.closed` and `path.changed` to `tunnel.log` with the device, the transport, the path, the address and the reason, never the device key
+
+### Fixed
+
+* A Broto saved a renewed reach card to disk but did not hand it to the running path manager, so it kept dialing the old desktop addresses until restart
+* The yellow disconnected pill showed on every live phone session that was off screen; it is gone from the cards
+
 ## 0.6.0 · 2026-11-07
 
 ### Added

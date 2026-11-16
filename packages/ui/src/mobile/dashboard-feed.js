@@ -11,6 +11,7 @@ import * as remote from '../lib/remote.js';
 import { isMobileShell, postDashboard } from '../lib/shell.js';
 import { getRecent, getState, hydrate, isDemo, isViewed, subscribe } from '../terminals/runtime.js';
 import { buildDashboardSnapshot } from './dashboard-snapshot.js';
+import { sessionBadges } from './notice-badges.js';
 
 const SNAPSHOT_MS = 60_000;
 const REPOS_MS = 5 * 60_000;
@@ -57,9 +58,13 @@ export function startDashboardFeed() {
     if (stopped || !connected()) return;
     // Sem a lista de contas o retrato nao representa o computador.
     if (accounts === null) return;
+    // A imagem de cada sessao para os avisos; a que nao ficou pronta a tempo
+    // vai no proximo retrato.
+    const badges = await sessionBadges(getState().sessions).catch(() => null);
+    if (stopped || !connected()) return;
     const { sessions } = getState();
     signature = attentionSignature(sessions, isViewed);
-    try { postDashboard(buildDashboardSnapshot({ accounts, repos, sessions, recent: getRecent(), viewed: isViewed })); }
+    try { postDashboard(buildDashboardSnapshot({ accounts, repos, sessions, recent: getRecent(), viewed: isViewed, badges })); }
     catch (_error) { /* sem casca para receber */ }
   }
   hydrate().then(() => { if (connected()) void send(); }).catch(() => undefined);

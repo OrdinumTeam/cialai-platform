@@ -121,6 +121,7 @@ export default Object.freeze({
   'desktop.access.onion': 'Endereço onion',
   'desktop.access.publicMdns': 'DNS-SD local',
   'desktop.access.publicMdnsDescription': 'Anuncia o computador somente na rede local.',
+  'desktop.access.publicMdnsBlocked': 'O sistema bloqueou o anúncio na rede local. No Mac, ligue o Cialai em Ajustes do Sistema, Privacidade e Segurança, Rede Local.',
   'desktop.access.publicNetworks': 'Redes públicas usadas',
   'desktop.access.publicNetworksDescription': 'O Cialai não usa servidor próprio. Estas redes ajudam o celular a encontrar este computador.',
   'desktop.access.publicStun': 'STUN opcional',

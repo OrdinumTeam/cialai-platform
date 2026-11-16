@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 import React, { useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { ArrowDown, ChevronLeft, ChevronUp, CornerDownLeft, Delete, FolderOpen, Keyboard, MoreHorizontal, Plus, RotateCcw, Send, UserRound } from 'lucide-react';
+import { ArrowDown, ChevronLeft, FolderOpen, MoreHorizontal, Plus, RotateCcw, UserRound } from 'lucide-react';
 import { AppModal, useToast } from '../../components/ui.jsx';
 import { hasBridge, invoke } from '../../lib/native.js';
 import { onNavigateBack, onShellIntent, postProjectPicked, postView, requestNavigateBack, takeShellIntent } from '../../lib/shell.js';
@@ -12,9 +12,10 @@ import { sessionAccentStyle } from '../session-accent.js';
 import ActivityIndicator from './ActivityIndicator.jsx';
 import SessionIcon from './SessionIcon.jsx';
 import PhoneComposer from './PhoneComposer.jsx';
-import PhoneKeyboardSheet, { keyHandlers, keyLabel, keyName } from './PhoneKeyboardSheet.jsx';
+import PhoneKeyboardSheet from './PhoneKeyboardSheet.jsx';
+import PhoneKeybar from './PhoneKeybar.jsx';
 import PhoneQuickCommands from './PhoneQuickCommands.jsx';
-import { KEY_CATALOG, PASTE_KEY, keyboardPrefsStorage, readKeyboardPrefs, writeKeyboardPrefs } from '../keyboard-prefs.js';
+import { keyboardPrefsStorage, readKeyboardPrefs, writeKeyboardPrefs } from '../keyboard-prefs.js';
 import { MODIFIERS } from '../key-encoder.js';
 import { bindSessionKeys, sessionKeyController } from '../special-keys.js';
 import PhoneSessionMenu from './PhoneSessionMenu.jsx';
@@ -33,16 +34,6 @@ import { getLocale, translate, useI18n } from '../../shared/i18n.js';
 const canVibrate = () => typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
 const modifierLabels = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', meta: 'Meta' };
 const ATTACH_WAIT_MS = 10000;
-const BAR_ICONS = { enter: CornerDownLeft, backspace: Delete };
-
-// O que a tecla mostra na barra: ícone, atalho empilhado ou o rótulo.
-function BarCap({ id }) {
-  const entry = KEY_CATALOG[id];
-  const Icon = BAR_ICONS[entry.icon];
-  if (Icon) return <Icon size={20} aria-hidden="true" />;
-  if (entry.bar) return <span className="phone-keybar__combo" aria-hidden="true"><small>{entry.bar[0]}</small>{entry.bar[1]}</span>;
-  return keyLabel(id);
-}
 
 function PhoneTerminal({ session, visible, onTakeControl, onPress }) {
   const host = useRef(null);
@@ -232,13 +223,6 @@ export default function PhoneWorkbench() {
     setKeysOpen(false);
     focusTerminal(selected.id);
   };
-  // O botão do teclado na barra alterna o teclado do aparelho. O estado é lido
-  // no toque, antes de o botão poder tirar o foco do terminal.
-  const nativeOpen = useRef(false);
-  const toggleNativeKeyboard = () => {
-    if (nativeOpen.current) blurTerminal(selected.id);
-    else nativeKeyboard();
-  };
   const updateKeyboardPrefs = (next) => setKeyboardPrefs(writeKeyboardPrefs(keyboardPrefsStorage(), next));
   const armedLabel = MODIFIERS.filter((name) => keyState.armed?.[name]).map((name) => modifierLabels[name]).join(' ');
   async function deliverQuick(command, enter) {
@@ -397,21 +381,17 @@ export default function PhoneWorkbench() {
         onNativeKeyboard={nativeKeyboard}
         onClose={() => setKeysOpen(false)}
       />}
-      {supported && controller && !keysOpen && <div className="phone-keybar" role="toolbar" aria-label={translate('terminal.phone.terminalKeys')}>
-        <button type="button" className="phone-keybar__native" disabled={!interactive} aria-label={translate('terminal.phone.keys.native')} onPointerDown={() => { nativeOpen.current = terminalHasFocus(selected.id); }} onMouseDown={(event) => event.preventDefault()} onClick={toggleNativeKeyboard}>
-          <Keyboard size={22} aria-hidden="true" />
-        </button>
-        {keyboardPrefs.favorites.map((id) => (id === PASTE_KEY
-          ? <button key={id} type="button" className="phone-keybar__key" disabled={!interactive} aria-label={keyName(id)} onPointerDown={press} onMouseDown={(event) => event.preventDefault()} onClick={paste}>{keyLabel(id)}</button>
-          : <button key={id} type="button" className={`phone-keybar__key${KEY_CATALOG[id].icon ? ' phone-keybar__key--icon' : ''}${KEY_CATALOG[id].bar ? ' phone-keybar__key--combo' : ''}`} disabled={!interactive} aria-label={keyName(id)} {...keyHandlers(controller, KEY_CATALOG[id].key, KEY_CATALOG[id].mods, press)}>
-            <BarCap id={id} />
-          </button>))}
-        <button type="button" className={`phone-keybar__keys${keyState.any ? ' is-armed' : ''}`} aria-expanded={keysOpen} aria-label={keyState.any ? translate('terminal.phone.keys.openArmed', { keys: armedLabel }) : translate('terminal.phone.keys.open')} onMouseDown={(event) => event.preventDefault()} onClick={openKeys}>
-          <ChevronUp size={22} aria-hidden="true" />
-        </button>
-        <button type="button" className="phone-keybar__more" disabled={!interactive} aria-label={translate('terminal.phone.quick.open')} onMouseDown={(event) => event.preventDefault()} onClick={openQuick}><MoreHorizontal size={22} aria-hidden="true" /></button>
-        <button type="button" className="phone-keybar__send" disabled={!interactive} aria-label={translate('terminal.phone.composer.open')} onMouseDown={(event) => event.preventDefault()} onClick={() => { setKeysOpen(false); setComposing(true); }}><Send size={20} aria-hidden="true" /></button>
-      </div>}
+      {supported && controller && !keysOpen && <PhoneKeybar
+        controller={controller}
+        interactive={interactive}
+        keysOpen={keysOpen}
+        armed={keyState.any}
+        armedLabel={armedLabel}
+        onPress={press}
+        onCompose={() => { setKeysOpen(false); setComposing(true); }}
+        onKeys={openKeys}
+        onQuick={openQuick}
+      />}
       {supported && <PhoneQuickCommands
         open={quickOpen}
         interactive={interactive}

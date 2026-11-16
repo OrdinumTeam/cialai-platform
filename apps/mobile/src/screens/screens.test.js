@@ -8,7 +8,7 @@ import { Offline } from './Offline';
 import { Pair } from './Pair';
 import { Agents } from './Agents';
 import { Settings } from './Settings';
-import { Shell } from './Shell';
+import { Shell, pageInsets } from './Shell';
 import { getLocale, setLocale } from '../i18n';
 import { clearDiagnostics, logApp } from '../state/diagnostics';
 import { chooseAccount, recordSnapshot, resetDashboardForTests, toggleFavorite } from '../dashboard/store';
@@ -26,7 +26,11 @@ jest.mock('cialai-tunnel', () => ({
   },
   inspectPairPayload: (...args) => mockInspect(...args),
   pair: (...args) => mockPair(...args),
-  stop: () => mockStop()
+  stop: () => mockStop(),
+  canPresentNotices: () => false,
+  presentNotice: async () => false,
+  takeOpenedNotice: () => null,
+  setKeepAliveText: () => {}
 }));
 // A permissão da câmera começa negada; o teste da leitura a concede.
 const mockCamera = { granted: false };
@@ -998,7 +1002,7 @@ test('Shell hands the Home request to the page once and passes the page snapshot
   await act(async () => {
     await webView.props.onMessage({ nativeEvent: { url: 'http://127.0.0.1:47400/', data: JSON.stringify(snapshot) } });
   });
-  expect(onDashboard).toHaveBeenCalledWith({ ...snapshot, recent: [] });
+  expect(onDashboard).toHaveBeenCalledWith({ ...snapshot, recent: [], badges: {} });
   await act(async () => {
     await webView.props.onMessage({ nativeEvent: { url: 'https://evil.example/', data: JSON.stringify(snapshot) } });
   });
@@ -1036,6 +1040,15 @@ test('Shell shows the reconnecting banner above the page and keeps the same sour
   expect(text(tree)).not.toMatch(/Reconectando/);
   await act(async () => tree.unmount());
   jest.useRealTimers();
+});
+
+test('Shell deixa a página acima dos botões de navegação do Android', () => {
+  const insets = { top: 24, right: 0, bottom: 48, left: 0 };
+  expect(pageInsets('android', insets)).toEqual({ paddingBottom: 48, paddingLeft: 0, paddingRight: 0 });
+  // Com a barra de navegação de lado, em paisagem, a margem vai para o lado dela.
+  expect(pageInsets('android', { top: 24, right: 48, bottom: 0, left: 0 })).toEqual({ paddingBottom: 0, paddingLeft: 0, paddingRight: 48 });
+  // No iPhone a página reserva a área segura sozinha, pelo env() do WebKit.
+  expect(pageInsets('ios', insets)).toBeNull();
 });
 
 test('Shell esconde a barra enquanto a página mostra uma sessão', async () => {

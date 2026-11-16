@@ -101,6 +101,10 @@ test('a reserva e as redes publicas saem do NetStatus', async () => {
     { id: 'mdns', state: 'active' },
   ]);
   assert.deepEqual(publicNetworks(normalizeNetStatus({ direct: { stun: { state: 'disabled' } }, mdns: { state: 'failed' }, tor: { state: 'disabled' } })).map((item) => item.state), ['off', 'off', 'failed']);
+  // Anúncio recusado pelo sistema, como o macOS sem a permissão de rede local:
+  // falha, com a dica de onde liberar.
+  const blocked = publicNetworks(normalizeNetStatus({ mdns: { state: 'blocked' }, tor: { state: 'disabled' } })).find((item) => item.id === 'mdns');
+  assert.deepEqual(blocked, { id: 'mdns', state: 'failed', hint: 'desktop.access.publicMdnsBlocked' });
   assert.equal(mappingLabel(net.direct.mapping), 'NAT-PMP');
   assert.equal(mappingLabel({ protocol: 'none' }), 'Nenhum');
   assert.equal(candidateKindLabel('lan'), 'Rede local');

@@ -49,9 +49,11 @@ function PhoneSessionCard({ session, onSelect, onMenu, onClose }) {
   const memory = live && activity?.available && activity.memory > 0 ? fmtMemory(activity.memory) : null;
   const measuring = live && !activity;
   const elapsed = session.jobStartedAt && live && !running?.background ? fmtElapsed(Date.now() - session.jobStartedAt) : null;
-  // A sessão segue viva no computador, mas a ponte caiu: o estado do agente
-  // continua no rótulo e a conexão vai na pílula.
-  const linkLost = session.status === 'disconnected' && status.code !== 'disconnected';
+  // Sessão estacionada: viva no computador, com a ponte de pé, só sem o
+  // terminal anexado nesta página. É o estado normal de toda sessão fora da
+  // tela, então não leva aviso nenhum; a pílula de desconectada que havia aqui
+  // aparecia justamente nesse caso e passava por erro. A queda de verdade já
+  // sai no estado escrito, porque sem ponte `describe` devolve desconectada.
   const agent = running?.text || translate('terminal.phone.defaultShell');
 
   // Encerramento e falha já aparecem no estado escrito; o resto da atenção
@@ -123,7 +125,6 @@ function PhoneSessionCard({ session, onSelect, onMenu, onClose }) {
           {cpu != null ? <span><em>{translate('terminal.common.cpu')}</em> {cpu}</span> : null}
           {memory != null ? <span><em>{translate('terminal.common.memory')}</em> {memory}</span> : null}
           {measuring ? <span className="phone-session__metrics-off">{translate('terminal.session.measuring')}</span> : null}
-          {linkLost ? <span className="phone-badge phone-badge--pill phone-badge--warning">{translate('terminal.session.disconnected')}</span> : null}
         </div>
         <button
           type="button"

@@ -19,7 +19,8 @@ use windows_sys::Win32::System::Threading::{
 use crate::platform::win_job;
 
 use super::{
-    CommandLine, ENV_OF_INTEREST, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage, bounded_descendants,
+    CommandLine, MAX_ENV_ENTRIES, ProcInfo, ProcState, Usage, bounded_descendants,
+    env_key_of_interest,
 };
 
 #[derive(Debug)]
@@ -261,9 +262,7 @@ fn allowed_environment(values: &[std::ffi::OsString]) -> HashMap<String, String>
         .filter_map(|value| {
             let text = value.to_string_lossy();
             let (name, value) = text.split_once('=')?;
-            ENV_OF_INTEREST
-                .contains(&name)
-                .then(|| (name.to_string(), value.to_string()))
+            env_key_of_interest(name, true).map(|key| (key.to_string(), value.to_string()))
         })
         .collect()
 }
@@ -301,6 +300,24 @@ mod tests {
             },
         ];
         assert_eq!(choose_foreground(10, candidates), Some(12));
+    }
+
+    #[test]
+    fn keeps_path_whatever_its_case() {
+        let env = allowed_environment(&[
+            "Path=C:\\Tools;C:\\Windows".into(),
+            "codex_home=C:\\perfil".into(),
+            "OUTRA=1".into(),
+        ]);
+        assert_eq!(
+            env.get("PATH").map(String::as_str),
+            Some("C:\\Tools;C:\\Windows")
+        );
+        assert_eq!(
+            env.get("CODEX_HOME").map(String::as_str),
+            Some("C:\\perfil")
+        );
+        assert!(!env.contains_key("OUTRA"));
     }
 
     #[test]

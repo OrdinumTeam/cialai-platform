@@ -11,21 +11,24 @@
 //
 // As preferências ficam no localStorage da página, por computador, como a
 // rota em `phone-navigation.js`. Valor desconhecido ou corrompido cai no
-// padrão.
+// padrão. A barra do terminal é fixa desde a versão 3, em `PhoneKeybar.jsx`:
+// a escolha de teclas da barra gravada pelas versões anteriores é ignorada.
 
 export const KEYBOARD_PREFS_KEY = 'cialai_terminal_keyboard';
-export const KEYBOARD_PREFS_VERSION = 2;
-export const MAX_FAVORITES = 4;
+export const KEYBOARD_PREFS_VERSION = 3;
 export const PASTE_KEY = 'Paste';
 
 const ctrl = { ctrl: true };
 
-// `hint` é a chave de tradução que explica o efeito no terminal.
+// `hint` é a chave de tradução que explica o efeito no terminal. `caption` é a
+// legenda curta que acompanha o ícone da tecla no painel, quando o nome da
+// tecla não diz o que ela faz: Interromper em vez de Ctrl C. Os ícones ficam
+// em `ui/PhoneKeyIcons.jsx`, pelo mesmo id.
 export const KEY_CATALOG = Object.freeze({
   Escape: { key: 'Escape', cap: 'Esc' },
   Tab: { key: 'Tab', cap: 'Tab' },
-  Enter: { key: 'Enter', cap: 'Enter', icon: 'enter' },
-  Backspace: { key: 'Backspace', cap: 'Backspace', icon: 'backspace' },
+  Enter: { key: 'Enter', cap: 'Enter' },
+  Backspace: { key: 'Backspace', cap: 'Backspace', caption: 'terminal.phone.keys.caption.backspace', hint: 'terminal.phone.keys.hint.backspace' },
   ArrowUp: { key: 'ArrowUp', cap: '↑', name: 'terminal.phone.arrowUp' },
   ArrowDown: { key: 'ArrowDown', cap: '↓', name: 'terminal.phone.arrowDown' },
   ArrowLeft: { key: 'ArrowLeft', cap: '←', name: 'terminal.phone.keys.arrowLeft' },
@@ -37,16 +40,16 @@ export const KEY_CATALOG = Object.freeze({
   Delete: { key: 'Delete', cap: 'Delete' },
   Insert: { key: 'Insert', cap: 'Ins', name: 'Insert' },
   ShiftTab: { key: 'Tab', mods: { shift: true }, cap: 'Shift Tab', hint: 'terminal.phone.keys.hint.shiftTab', bar: ['Shift', 'Tab'] },
-  CtrlC: { key: 'c', mods: ctrl, cap: 'Ctrl C', hint: 'terminal.phone.keys.hint.ctrlC', bar: ['Ctrl', 'C'] },
+  CtrlC: { key: 'c', mods: ctrl, cap: 'Ctrl C', caption: 'terminal.phone.keys.caption.interrupt', hint: 'terminal.phone.keys.hint.ctrlC', bar: ['Ctrl', 'C'] },
   CtrlD: { key: 'd', mods: ctrl, cap: 'Ctrl D', hint: 'terminal.phone.keys.hint.ctrlD', bar: ['Ctrl', 'D'] },
   CtrlL: { key: 'l', mods: ctrl, cap: 'Ctrl L', hint: 'terminal.phone.keys.hint.ctrlL', bar: ['Ctrl', 'L'] },
-  // Na barra, `icon` mostra a tecla só com o ícone, e `bar` empilha o
-  // modificador pequeno sobre a letra, para o atalho caber sem reticências.
+  // Na barra, a tecla sem ícone próprio usa `bar`, que empilha o modificador
+  // pequeno sobre a letra, para o atalho caber sem reticências.
   CtrlV: { key: 'v', mods: ctrl, cap: 'terminal.phone.keys.pasteCtrlV', translated: true, name: 'terminal.phone.keys.pasteCtrlVName', hint: 'terminal.phone.keys.hint.ctrlV', bar: ['Ctrl', 'V'] },
   CtrlA: { key: 'a', mods: ctrl, cap: 'Ctrl A', hint: 'terminal.phone.keys.hint.ctrlA', bar: ['Ctrl', 'A'] },
   CtrlZ: { key: 'z', mods: ctrl, cap: 'Ctrl Z', hint: 'terminal.phone.keys.hint.ctrlZ', bar: ['Ctrl', 'Z'] },
-  CtrlR: { key: 'r', mods: ctrl, cap: 'Ctrl R', hint: 'terminal.phone.keys.hint.ctrlR', bar: ['Ctrl', 'R'] },
-  [PASTE_KEY]: { key: null, cap: 'terminal.phone.paste', name: 'terminal.phone.pasteLabel', translated: true, hint: 'terminal.phone.keys.hint.pastePhone' },
+  CtrlR: { key: 'r', mods: ctrl, cap: 'Ctrl R', caption: 'terminal.phone.keys.caption.history', hint: 'terminal.phone.keys.hint.ctrlR', bar: ['Ctrl', 'R'] },
+  [PASTE_KEY]: { key: null, cap: 'terminal.phone.paste', caption: 'terminal.phone.keys.caption.pastePhone', name: 'terminal.phone.pasteLabel', translated: true, hint: 'terminal.phone.keys.hint.pastePhone' },
   ...Object.fromEntries(Array.from({ length: 12 }, (_, index) => [`F${index + 1}`, { key: `F${index + 1}`, cap: `F${index + 1}` }])),
 });
 
@@ -60,27 +63,25 @@ export const MODIFIER_KEYS = [
 // Os mais usados no shell e nos agentes que o teclado do celular esconde.
 export const SYMBOLS = ['|', '~', '`', '/', '\\', '-', '_', '{', '}', '[', ']', '<', '>', '$', '&', '*', ';', ':', "'", '"', '#', '%', '^', '!', '=', '+', '@', '?'];
 
+// A primeira linha das abas de teclas: cancelar, completar, confirmar e apagar
+// ficam sempre no mesmo lugar.
+const COMMON_KEYS = ['Escape', 'Tab', 'Enter', 'Backspace'];
+
+const functionKeys = (from, to) => Array.from({ length: to - from + 1 }, (_, index) => `F${from + index}`);
+
+// `keys` é a grade de quatro colunas; `functions`, a das teclas de função.
+// Nenhuma aba fica sem Enter nem Backspace. Em Símbolos a linha comum
+// empurraria os símbolos para fora da tela, então os dois fecham as linhas das
+// teclas de função, no canto direito, como num teclado.
 export const KEYBOARD_TABS = [
   // Os comandos mais usados nos agentes ficam já na primeira aba, na segunda linha.
-  { id: 'basic', keys: ['Escape', 'Tab', 'Enter', 'Backspace', 'ShiftTab', 'CtrlC', 'CtrlV', 'CtrlR'], modifiers: true, dpad: true },
-  { id: 'navigation', keys: ['Home', 'End', 'PageUp', 'PageDown'], dpad: true },
-  { id: 'editing', keys: ['Delete', 'Insert', 'CtrlD', 'CtrlL', 'CtrlA', 'CtrlZ', PASTE_KEY] },
-  { id: 'symbols', keys: Array.from({ length: 12 }, (_, index) => `F${index + 1}`), symbols: true },
+  { id: 'basic', keys: [...COMMON_KEYS, 'ShiftTab', 'CtrlC', 'CtrlV', 'CtrlR'], modifiers: true, dpad: true },
+  { id: 'navigation', keys: [...COMMON_KEYS, 'Home', 'End', 'PageUp', 'PageDown'], dpad: true },
+  { id: 'editing', keys: [...COMMON_KEYS, 'Delete', 'Insert', 'CtrlD', 'CtrlL', 'CtrlA', 'CtrlZ', PASTE_KEY] },
+  { id: 'symbols', keys: [], functions: [...functionKeys(1, 6), 'Backspace', ...functionKeys(7, 12), 'Enter'], symbols: true },
 ];
 
-// Teclas que podem ir para a barra. Setas ficam de fora: na barra seriam os
-// botões pequenos em fila que o painel existe para evitar.
-export const FAVORITE_CHOICES = ['Escape', 'Tab', 'Enter', 'ShiftTab', 'CtrlC', 'CtrlV', 'CtrlD', 'CtrlL', 'CtrlR', 'CtrlZ', 'Backspace', 'Home', 'End', PASTE_KEY];
-
-// A barra que vinha antes da versão 2. Quem nunca mexeu nela recebe a nova;
-// quem escolheu as próprias teclas fica com elas.
-const LEGACY_FAVORITES = ['Escape', 'Tab', 'CtrlV'];
-
 export const defaultKeyboardPrefs = () => ({
-  // As quatro que mais se usam com os agentes ficam sempre à vista: Enter
-  // confirma, Esc cancela, Ctrl C interrompe e Ctrl V cola o que está na
-  // área de transferência do computador. O resto fica atrás da setinha.
-  favorites: ['Enter', 'Escape', 'CtrlC', 'CtrlV'],
   modifierMode: 'oneShot',
   haptics: false,
   autoOpen: false,
@@ -94,11 +95,7 @@ export function keyboardPrefsStorage() {
 export function normalizeKeyboardPrefs(value) {
   const base = defaultKeyboardPrefs();
   if (!value || typeof value !== 'object') return base;
-  const favorites = Array.isArray(value.favorites)
-    ? [...new Set(value.favorites.filter((id) => FAVORITE_CHOICES.includes(id)))].slice(0, MAX_FAVORITES)
-    : base.favorites;
   return {
-    favorites,
     modifierMode: value.modifierMode === 'sticky' ? 'sticky' : 'oneShot',
     haptics: value.haptics === true,
     autoOpen: value.autoOpen === true,
@@ -106,13 +103,8 @@ export function normalizeKeyboardPrefs(value) {
 }
 
 export function readKeyboardPrefs(storage) {
-  try {
-    const stored = JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null');
-    const prefs = normalizeKeyboardPrefs(stored);
-    const untouched = stored && stored.version !== KEYBOARD_PREFS_VERSION
-      && prefs.favorites.join() === LEGACY_FAVORITES.join();
-    return untouched ? { ...prefs, favorites: defaultKeyboardPrefs().favorites } : prefs;
-  } catch (_error) { return defaultKeyboardPrefs(); }
+  try { return normalizeKeyboardPrefs(JSON.parse(storage?.getItem(KEYBOARD_PREFS_KEY) || 'null')); }
+  catch (_error) { return defaultKeyboardPrefs(); }
 }
 
 export function writeKeyboardPrefs(storage, prefs) {
@@ -120,20 +112,4 @@ export function writeKeyboardPrefs(storage, prefs) {
   try { storage?.setItem(KEYBOARD_PREFS_KEY, JSON.stringify({ version: KEYBOARD_PREFS_VERSION, ...normalized })); }
   catch (_error) { /* sem storage */ }
   return normalized;
-}
-
-export function toggleFavorite(prefs, id) {
-  const favorites = prefs.favorites.includes(id)
-    ? prefs.favorites.filter((item) => item !== id)
-    : [...prefs.favorites, id].slice(0, MAX_FAVORITES);
-  return normalizeKeyboardPrefs({ ...prefs, favorites });
-}
-
-export function moveFavorite(prefs, id, delta) {
-  const favorites = [...prefs.favorites];
-  const from = favorites.indexOf(id);
-  const to = from + delta;
-  if (from < 0 || to < 0 || to >= favorites.length) return prefs;
-  [favorites[from], favorites[to]] = [favorites[to], favorites[from]];
-  return { ...prefs, favorites };
 }

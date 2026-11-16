@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, BackHandler, Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets, type EdgeInsets } from 'react-native-safe-area-context';
 import type { WebViewMessageEvent, WebViewNavigation } from 'react-native-webview';
 import { WebView } from 'react-native-webview';
 import type { WebViewErrorEvent } from 'react-native-webview/lib/WebViewTypes';
@@ -50,11 +50,21 @@ type Props = {
   onDesktops?: () => void;
 };
 
+// O Android desenha a janela atrás das barras do sistema, e o WebView de boa
+// parte dos aparelhos devolve zero em env(safe-area-inset-bottom). Sem esta
+// margem a barra da página fica embaixo dos botões de navegação virtuais. No
+// iOS a página já reserva a área segura pelo env().
+export function pageInsets(os: typeof Platform.OS, insets: EdgeInsets) {
+  if (os !== 'android') return null;
+  return { paddingBottom: insets.bottom, paddingLeft: insets.left, paddingRight: insets.right };
+}
+
 export function Shell({
   url, desktopId, desktopName, version, biometricSession, lockSignal, transport, reconnecting,
   onConnectionLost, onConnectionRestored, onHome, intent = null, onDashboard, onProjectPicked, desktops = [], onSwitchDesktop, onDesktops
 }: Props) {
   const { colors } = useTokens();
+  const insets = useSafeAreaInsets();
   const [picker, setPicker] = useState(false);
   // Cobre o WebView até a página carregar: sem isso o Android mostra a tela
   // branca enquanto o HTML e o script chegam pelo túnel.
@@ -257,7 +267,7 @@ export function Shell({
           </View>
         ) : null}
       </SafeAreaView>
-      <View style={styles.page}>
+      <View style={[styles.page, pageInsets(Platform.OS, insets)]}>
         <WebView
           ref={webView}
           allowsBackForwardNavigationGestures={false}

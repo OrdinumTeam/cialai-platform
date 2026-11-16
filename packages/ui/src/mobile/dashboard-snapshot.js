@@ -10,6 +10,10 @@
 // casca transforma a mudanca desses campos em aviso local, com o nome e a cor
 // da sessao. `viewed` diz que a pessoa esta olhando aquela sessao no celular,
 // e ai nao ha aviso.
+//
+// `badges` leva a imagem de cada sessao para o aviso, desenhada em
+// `notice-badges.js`: cada sessao aponta a chave da dela em `badge`, e cada
+// imagem vai uma vez so. Sem imagem pronta, `badge` fica nulo.
 import { headlineWindow, readingState, weeklyWindow } from '../terminals/ui/AgentProfiles.jsx';
 import { windowLabel } from '../notch/copy.js';
 import { weeklyState } from '../notch/model.js';
@@ -91,7 +95,8 @@ function accountView(profile) {
 
 // Monta o retrato a partir das respostas da ponte. Tudo o que falta vira
 // lista vazia: uma integracao fora do ar nao derruba as outras.
-export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now = Date.now(), viewed = () => false }) {
+export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now = Date.now(), viewed = () => false, badges = null }) {
+  const badgeOf = (id) => (typeof badges?.byId?.[id] === 'string' && badges.badges?.[badges.byId[id]] ? badges.byId[id] : null);
   return {
     type: 'dashboard',
     at: now,
@@ -118,10 +123,12 @@ export function buildDashboardSnapshot({ accounts, repos, sessions, recent, now 
         attention: attentionOf(session),
         turn: turnOf(session),
         viewed: Boolean(viewed(session)),
+        badge: badgeOf(session.id),
       })),
     // Ultimas pastas em que o telefone abriu sessao, a mais nova primeiro.
     recent: (Array.isArray(recent) ? recent : [])
       .filter((path) => typeof path === 'string' && path && path.length <= DASHBOARD_LIMITS.text)
       .slice(0, DASHBOARD_LIMITS.recent),
+    badges: badges?.badges && typeof badges.badges === 'object' ? { ...badges.badges } : {},
   };
 }

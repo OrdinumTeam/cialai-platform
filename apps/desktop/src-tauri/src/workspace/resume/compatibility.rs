@@ -45,6 +45,35 @@ type CacheKey = (
 type ProbeResult = Option<(Instant, Result<Capabilities, String>)>;
 type ProbeCache = HashMap<CacheKey, (Instant, Arc<Mutex<ProbeResult>>)>;
 
+/// PATH em que a retomada procura o CLI: primeiro o do processo do agente
+/// quando ele foi visto, montado pelo shell do usuario, depois o do app.
+/// Sem repeticao, e no Windows sem distinguir maiusculas.
+pub(crate) fn executable_search_path(session: &AgentSession, app_path: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut merged = Vec::new();
+    let saved = session.search_path.as_deref().unwrap_or_default();
+    for value in [saved, app_path] {
+        for entry in std::env::split_paths(value) {
+            if entry.as_os_str().is_empty() || !entry.is_absolute() {
+                continue;
+            }
+            let mut key = entry
+                .to_string_lossy()
+                .trim_end_matches(['\\', '/'])
+                .to_string();
+            if cfg!(windows) {
+                key = key.to_lowercase();
+            }
+            if seen.insert(key) {
+                merged.push(entry);
+            }
+        }
+    }
+    std::env::join_paths(merged)
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|_| app_path.to_string())
+}
+
 /// Only capabilities are cached; cwd and conversation are checked on every
 /// attempt. The cache serializes concurrent probes for the same installation.
 pub fn validate(
@@ -88,11 +117,20 @@ pub fn validate(
     }
     validate_conversation(session, &config)?;
     let mut effective = session.clone();
-    // The shell may now inherit a different active account. Always bind the
-    // launch to the saved account, including an explicitly resolved default.
-    effective.config_dir = Some(platform::to_portable(&config));
+    // The shell may now inherit a different active account. Bind the launch
+    // to the saved account. Codex reads the same files whether CODEX_HOME
+    // names the default folder or is unset, so the resolved default is bound
+    // too. Claude does not: with CLAUDE_CONFIG_DIR set it looks for
+    // `.claude.json` and the stored login under that folder, so the default
+    // account resumes with the variable removed, as decision 042 asks.
+    effective.config_dir = if program == "claude" && session.config_dir.is_none() {
+        None
+    } else {
+        Some(platform::to_portable(&config))
+    };
     effective.cwd = Some(cwd.to_string());
-    let executable = which::which_in(program, Some(search_path), cwd)
+    let search_path = executable_search_path(session, search_path);
+    let executable = which::which_in(program, Some(&search_path), cwd)
         .map_err(|_| format!("{program} não foi encontrado no PATH do terminal. Instale ou configure o CLI e tente novamente."))?;
     let meta = fs::metadata(&executable)
         .map_err(|_| "O executável do agente não está acessível.".to_string())?;
@@ -145,7 +183,7 @@ pub fn validate(
     }) {
         result.clone()
     } else {
-        let result = probe(&executable, &effective, cwd);
+        let result = probe(&executable, &effective, cwd, &search_path);
         *cached = Some((Instant::now(), result.clone()));
         result
     }?;
@@ -226,14 +264,33 @@ fn validate_help(session: &AgentSession, help: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn probe(executable: &Path, session: &AgentSession, cwd: &str) -> Result<Capabilities, String> {
-    let version = run_probe(executable, &["--version"], session, cwd, PROBE_TIMEOUT)?;
+fn probe(
+    executable: &Path,
+    session: &AgentSession,
+    cwd: &str,
+    search_path: &str,
+) -> Result<Capabilities, String> {
+    let version = run_probe(
+        executable,
+        &["--version"],
+        session,
+        cwd,
+        search_path,
+        PROBE_TIMEOUT,
+    )?;
     let help_args: &[&str] = if session.agent == CODEX {
         &["resume", "--help"]
     } else {
         &["--help"]
     };
-    let help = run_probe(executable, help_args, session, cwd, PROBE_TIMEOUT)?;
+    let help = run_probe(
+        executable,
+        help_args,
+        session,
+        cwd,
+        search_path,
+        PROBE_TIMEOUT,
+    )?;
     let version = version
         .lines()
         .next()
@@ -251,6 +308,7 @@ fn run_probe(
     args: &[&str],
     session: &AgentSession,
     cwd: &str,
+    search_path: &str,
     timeout: Duration,
 ) -> Result<String, String> {
     // A private temporary file avoids a pipe filling up while waiting for the
@@ -296,6 +354,18 @@ fn run_probe(
         "CODEX_PROFILE",
     ] {
         command.env_remove(name);
+    }
+    // Um CLI do npm comeca por `#!/usr/bin/env node`: o node precisa estar no
+    // mesmo PATH em que o CLI foi achado, e nao so no PATH minimo do app. O
+    // PATH do app segue no fim, para as ferramentas do sistema.
+    if !search_path.is_empty() {
+        let mut entries: Vec<PathBuf> = std::env::split_paths(search_path).collect();
+        if let Some(inherited) = std::env::var_os("PATH") {
+            entries.extend(std::env::split_paths(&inherited));
+        }
+        if let Ok(path) = std::env::join_paths(entries) {
+            command.env("PATH", path);
+        }
     }
     let (dir_key, name_key) = if session.agent == CODEX {
         ("CODEX_HOME", "CODEX_PROFILE")
@@ -593,6 +663,7 @@ mod tests {
                 config_dir: Some(config.to_string_lossy().into_owned()),
                 profile_name: Some("fixture".into()),
                 args: vec![],
+                search_path: None,
             };
             Self { root, session }
         }
@@ -679,6 +750,7 @@ mod tests {
                 &["--version"],
                 &fixture.session,
                 fixture.root.to_str().unwrap(),
+                "",
                 Duration::from_millis(50)
             )
             .is_err()
@@ -740,6 +812,81 @@ mod tests {
             String::from_utf8(result.stdout).unwrap(),
             format!("{}|unset", default.display())
         );
+    }
+
+    #[test]
+    fn finds_the_cli_in_the_path_the_agent_ran_with() {
+        // O app aberto pelo Dock nao tem a pasta do CLI no PATH; o agente,
+        // aberto pelo shell do usuario, tinha.
+        let mut fixture = Fixture::new(CLAUDE);
+        let agent_bin = fixture.root.join("agent-bin");
+        fs::create_dir_all(&agent_bin).unwrap();
+        fs::write(agent_bin.join("helper"), "#!/bin/sh\nexit 0\n").unwrap();
+        fs::set_permissions(agent_bin.join("helper"), fs::Permissions::from_mode(0o700)).unwrap();
+        let cli = fixture.executable(
+            "helper || exit 7\ncase \"$1\" in --version) echo 'claude 2.1.300';; *) echo '--resume';; esac",
+        );
+        fs::rename(&cli, agent_bin.join("claude")).unwrap();
+        assert!(
+            fixture
+                .validate()
+                .unwrap_err()
+                .contains("não foi encontrado")
+        );
+        fixture.session.search_path = Some(agent_bin.to_string_lossy().into_owned());
+        let checked = fixture.validate().unwrap();
+        assert!(
+            checked
+                .command
+                .contains(&*agent_bin.join("claude").to_string_lossy())
+        );
+    }
+
+    #[test]
+    fn search_path_puts_the_agent_path_first_without_repeats_or_relative_entries() {
+        let session = AgentSession {
+            agent: CLAUDE.into(),
+            session_id: ID.into(),
+            cwd: None,
+            config_dir: None,
+            profile_name: None,
+            args: vec![],
+            search_path: Some("/opt/agent/bin:relativo:/usr/bin".into()),
+        };
+        assert_eq!(
+            executable_search_path(&session, "/usr/bin:/bin:."),
+            "/opt/agent/bin:/usr/bin:/bin"
+        );
+        let without = AgentSession {
+            search_path: None,
+            ..session
+        };
+        assert_eq!(
+            executable_search_path(&without, "/usr/bin:/bin"),
+            "/usr/bin:/bin"
+        );
+    }
+
+    #[test]
+    fn claude_default_account_resumes_without_the_config_variable() {
+        // Com CLAUDE_CONFIG_DIR definido, o Claude procura login e
+        // `.claude.json` dentro da pasta; a conta padrao volta sem a variavel.
+        let mut fixture = Fixture::new(CLAUDE);
+        let default = fixture.root.join(".claude");
+        fs::rename(fixture.root.join("profile"), &default).unwrap();
+        fixture.session.config_dir = None;
+        fixture.session.profile_name = None;
+        fixture.executable("case \"$1\" in --version) echo 'claude 2.1.300';; --help) echo '--resume';; *) printf '%s|%s' \"${CLAUDE_CONFIG_DIR-unset}\" \"${CLAUDE_PROFILE-unset}\";; esac");
+        let checked = fixture.validate().unwrap();
+        assert!(!checked.command.contains("CLAUDE_CONFIG_DIR="));
+        let result = Command::new("/bin/sh")
+            .args(["-c", &checked.command])
+            .env("CLAUDE_CONFIG_DIR", fixture.root.join("outra-conta"))
+            .env("CLAUDE_PROFILE", "outra")
+            .output()
+            .unwrap();
+        assert!(result.status.success());
+        assert_eq!(String::from_utf8(result.stdout).unwrap(), "unset|unset");
     }
 }
 
@@ -931,6 +1078,7 @@ mod windows_tests {
             config_dir: None,
             profile_name: None,
             args: vec![],
+            search_path: None,
         };
 
         std::thread::scope(|scope| {
@@ -941,6 +1089,7 @@ mod windows_tests {
                     &["--version"],
                     &session,
                     root.to_str().unwrap(),
+                    "",
                     Duration::from_secs(5),
                 )
             });

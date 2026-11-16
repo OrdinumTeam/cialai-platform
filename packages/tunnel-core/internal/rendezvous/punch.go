@@ -31,7 +31,8 @@ type PunchResult struct {
 // keeps working whatever the outcome; reporting the chosen path with
 // ReportPath is up to the caller.
 //
-// When ctx has no deadline, Config.PunchTimeout bounds the whole punch. A
+// When ctx has no deadline, Config.PunchTimeout bounds the whole punch; the
+// dial of the desktop candidates never takes longer than it either way. A
 // refusal returns an error wrapping ErrPunchRefused with the desktop reason.
 func (conn *Conn) Punch(ctx context.Context) (transport.Session, error) {
 	if conn.config.Role != identity.RolePhone && conn.config.Role != identity.RoleBroto {
@@ -78,7 +79,12 @@ func (conn *Conn) Punch(ctx context.Context) (transport.Session, error) {
 	if !ack.Accepted {
 		return nil, fmt.Errorf("%w: %s", ErrPunchRefused, ack.Reason)
 	}
-	session, err := conn.config.Puncher.DialCandidates(ctx, targets, conn.peerPublic)
+	// The desktop sends opening packets for PunchTimeout, so dialing longer
+	// than that cannot succeed whatever is left of ctx, which also covered
+	// opening the channel and the round trips of the exchange.
+	dialCtx, cancel := context.WithTimeout(ctx, conn.config.PunchTimeout)
+	defer cancel()
+	session, err := conn.config.Puncher.DialCandidates(dialCtx, targets, conn.peerPublic)
 	if err != nil {
 		return nil, fmt.Errorf("dial desktop candidates: %w", err)
 	}

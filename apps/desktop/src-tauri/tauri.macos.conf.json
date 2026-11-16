@@ -24,7 +24,12 @@
     "targets": ["app", "dmg"],
     "macOS": {
       "minimumSystemVersion": "13.0",
-      "hardenedRuntime": true
+      "hardenedRuntime": true,
+      "files": {
+        "Resources/pt-BR.lproj/InfoPlist.strings": "./macos/pt-BR.lproj/InfoPlist.strings",
+        "Resources/en.lproj/InfoPlist.strings": "./macos/en.lproj/InfoPlist.strings",
+        "Resources/es.lproj/InfoPlist.strings": "./macos/es.lproj/InfoPlist.strings"
+      }
     }
   }
 }

@@ -11,6 +11,9 @@ export type TunnelSignal =
   | { type: 'native-reopening'; desktopId: string }
   | { type: 'native-reopened'; desktopId: string; url: string }
   | { type: 'native-reopen-failed'; desktopId: string | null; code: string | null }
+  // Android: o serviço segurou a conexão neste segundo plano, ou o núcleo parou nele.
+  | { type: 'native-kept-alive' }
+  | { type: 'native-background-stopped' }
   | { type: 'legacy-discarded' }
   | { type: 'pair-stage'; state: string }
   | { type: 'log'; level: DiagnosticLevel; message: string }
@@ -85,6 +88,8 @@ export function interpretTunnelEvent(event: TunnelEvent): TunnelSignal[] {
       const state = text(payload.state);
       if (state === 'reconnecting' && desktopId) signals.push({ type: 'native-reopening', desktopId });
       else if (state === 'reconnect-failed') signals.push({ type: 'native-reopen-failed', desktopId, code: text(payload.code) });
+      else if (state === 'kept-alive') signals.push({ type: 'native-kept-alive' });
+      else if (state === 'background-stopped') signals.push({ type: 'native-background-stopped' });
       else if (state === 'offline') signals.push({ type: 'core-offline' });
       signals.push({ type: 'status-changed' });
       return signals;

@@ -20,20 +20,36 @@ import (
 
 // Default budgets and stability timings from section 6.3 of the plan.
 const (
-	DefaultLANBudget       = 1500 * time.Millisecond
-	DefaultDirectBudget    = 4 * time.Second
-	DefaultTorBudget       = 20 * time.Second
-	DefaultPunchBudget     = 5 * time.Second
-	DefaultMigrateBudget   = 2 * time.Second
-	DefaultTorPoll         = time.Second
-	DefaultTorRetry        = 5 * time.Second
+	DefaultLANBudget    = 1500 * time.Millisecond
+	DefaultDirectBudget = 4 * time.Second
+	DefaultTorBudget    = 20 * time.Second
+	// DefaultPunchBudget covers the whole step 4, including the control
+	// connection it opens over Tor and the round trips of the exchange, which
+	// take seconds each; the dial of the desktop candidates has its own bound
+	// in the rendezvous channel.
+	DefaultPunchBudget   = 30 * time.Second
+	DefaultMigrateBudget = 2 * time.Second
+	DefaultTorPoll       = time.Second
+	DefaultTorRetry      = 5 * time.Second
+	// DefaultSettle is the quiet time after a switch before the fallback is
+	// improved, and DefaultUpgradeBackoff spaces the attempts that follow.
+	DefaultSettle = 10 * time.Second
+	// DefaultHysteresis and DefaultUpgradeInterval replace them while direct
+	// paths flap, which is a direct path lost within DefaultFlapWindow.
 	DefaultHysteresis      = 2 * time.Minute
 	DefaultUpgradeInterval = 5 * time.Minute
+	DefaultFlapWindow      = time.Minute
 	// MaxReportedLAN bounds the candidates kept from native discovery.
 	MaxReportedLAN = 16
 	// maxDialFailures bounds the paths one DialContext call gives up on.
 	maxDialFailures = 3
 )
+
+// DefaultUpgradeBackoff returns the spacing of the attempts to leave the
+// fallback: the first ones come quickly and the last delay repeats.
+func DefaultUpgradeBackoff() []time.Duration {
+	return []time.Duration{5 * time.Second, 10 * time.Second, 20 * time.Second, 30 * time.Second, time.Minute}
+}
 
 // DefaultRetries returns the offline retry delays of section 6.4.
 func DefaultRetries() []time.Duration {
@@ -51,9 +67,20 @@ type Timings struct {
 	TorPoll time.Duration
 	// TorRetry spaces onion dials within the Tor budget.
 	TorRetry time.Duration
-	// Hysteresis is the quiet time after a switch before improving a path.
+	// Settle is the quiet time after a switch before improving the fallback.
+	Settle time.Duration
+	// UpgradeBackoff spaces consecutive improvement attempts that left the
+	// fallback active; the last delay repeats. Nil means
+	// DefaultUpgradeBackoff.
+	UpgradeBackoff []time.Duration
+	// FlapWindow is how long a direct path must live not to count as a flap.
+	// While direct paths flap, Hysteresis and UpgradeInterval replace Settle
+	// and UpgradeBackoff.
+	FlapWindow time.Duration
+	// Hysteresis is the quiet time after a switch while direct paths flap.
 	Hysteresis time.Duration
-	// UpgradeInterval is the minimum spacing of improvement attempts.
+	// UpgradeInterval is the minimum spacing of improvement attempts while
+	// direct paths flap.
 	UpgradeInterval time.Duration
 	// Retries are the delays of the evaluations after every path failed; nil
 	// means DefaultRetries and an empty non-nil slice disables them.
@@ -68,6 +95,13 @@ func (timings Timings) normalize() Timings {
 	timings.Migrate = orDefault(timings.Migrate, DefaultMigrateBudget)
 	timings.TorPoll = orDefault(timings.TorPoll, DefaultTorPoll)
 	timings.TorRetry = orDefault(timings.TorRetry, DefaultTorRetry)
+	timings.Settle = orDefault(timings.Settle, DefaultSettle)
+	timings.FlapWindow = orDefault(timings.FlapWindow, DefaultFlapWindow)
+	if len(timings.UpgradeBackoff) == 0 {
+		timings.UpgradeBackoff = DefaultUpgradeBackoff()
+	} else {
+		timings.UpgradeBackoff = slices.Clone(timings.UpgradeBackoff)
+	}
 	timings.Hysteresis = orDefault(timings.Hysteresis, DefaultHysteresis)
 	timings.UpgradeInterval = orDefault(timings.UpgradeInterval, DefaultUpgradeInterval)
 	if timings.Retries == nil {
@@ -132,16 +166,20 @@ type Manager struct {
 	lastErr       error
 	lastSwitchAt  time.Time
 	lastUpgradeAt time.Time
-	timer         Timer
-	timerSeq      uint64
-	retries       int
-	reachable     bool
-	foreground    bool
-	tor           TorStatus
-	lastEvent     PathEvent
-	revoked       error
-	closed        bool
-	changed       chan struct{}
+	// upgradeTries counts the improvement attempts in a row that left the
+	// fallback active; flapping is set while direct paths die young.
+	upgradeTries int
+	flapping     bool
+	timer        Timer
+	timerSeq     uint64
+	retries      int
+	reachable    bool
+	foreground   bool
+	tor          TorStatus
+	lastEvent    PathEvent
+	revoked      error
+	closed       bool
+	changed      chan struct{}
 }
 
 type activePath struct {
@@ -381,6 +419,9 @@ func (m *Manager) NotifyNetworkChange(reachable bool) {
 		return
 	}
 	m.reachable = reachable
+	if reachable {
+		m.upgradeTries = 0
+	}
 	if !reachable {
 		m.cancelRunLocked(newError(CodeNoPath, errNetworkUnreachable))
 		m.stopTimerLocked()
@@ -438,6 +479,7 @@ func (m *Manager) NotifyForeground(active bool) {
 		}
 		return
 	}
+	m.upgradeTries = 0
 	if m.run != nil || m.state == StateIdle {
 		return
 	}
@@ -481,8 +523,32 @@ func (m *Manager) SetReportedLAN(addresses []netip.AddrPort) {
 		cleaned = append(cleaned, address)
 	}
 	m.mu.Lock()
+	learned := slices.ContainsFunc(cleaned, func(address netip.AddrPort) bool { return !slices.Contains(m.reportedLAN, address) })
 	m.reportedLAN = cleaned
+	if learned {
+		m.nudgeUpgradeLocked()
+	}
 	m.mu.Unlock()
+}
+
+// nudgeUpgradeLocked brings the next improvement attempt forward after the
+// phone learned an address of the desktop it did not have, from native
+// discovery or from a renewed reach card. It restarts the backoff and leaves
+// the quiet time after a switch and the flap rules alone.
+func (m *Manager) nudgeUpgradeLocked() {
+	m.upgradeTries = 0
+	if m.run == nil && m.active != nil && m.active.path.Kind == KindTor {
+		m.scheduleUpgradeLocked()
+	}
+}
+
+// learnsAddress reports whether next lists a candidate address previous lacks.
+func learnsAddress(previous, next candidates.Card) bool {
+	return slices.ContainsFunc(next.Candidates, func(candidate pairing.Candidate) bool {
+		return !slices.ContainsFunc(previous.Candidates, func(known pairing.Candidate) bool {
+			return known.Address == candidate.Address
+		})
+	})
 }
 
 // UpdateCard replaces the reach card with a renewed one for the same desktop
@@ -497,10 +563,14 @@ func (m *Manager) UpdateCard(card candidates.Card) error {
 	if card.Desktop.PublicKey != m.card.Desktop.PublicKey {
 		return errors.New("reach card belongs to another desktop")
 	}
+	learned := learnsAddress(m.card, card)
 	m.card = card
 	m.desktop = desktop
 	if handle := m.config.OnCard; handle != nil {
 		m.events.post(func() { handle(card) })
+	}
+	if learned {
+		m.nudgeUpgradeLocked()
 	}
 	return nil
 }
@@ -629,6 +699,9 @@ func (m *Manager) adopt(current *run, kind Kind, session transport.Session, reas
 	}
 	m.hadPath = true
 	m.active = next
+	if session != nil {
+		m.upgradeTries = 0
+	}
 	m.retries = 0
 	m.lastErr = nil
 	m.state = StateConnected
@@ -687,6 +760,7 @@ func (m *Manager) dropKept(current *run) bool {
 		dropped = m.active
 		m.active = nil
 		m.lastSwitchAt = m.clock.Now()
+		m.noteLossLocked(dropped, m.lastSwitchAt)
 		m.state = StateConnecting
 		m.broadcastLocked()
 	}
@@ -706,8 +780,16 @@ func (m *Manager) finish(current *run, err error) {
 	m.run = nil
 	m.settledSeq = current.seq
 	if m.active != nil {
-		if m.active.path.Kind == KindTor && (current.plan.direct() || current.punched) && current.started.After(m.lastUpgradeAt) {
-			m.lastUpgradeAt = current.started
+		if m.active.path.Kind == KindTor && (current.plan.direct() || current.punched) {
+			// The spacing counts from the end of the attempt, so a slow
+			// punch over Tor is never followed at once by another one.
+			m.lastUpgradeAt = latest(m.lastUpgradeAt, m.clock.Now())
+			m.upgradeTries++
+			// An improvement attempt that found no direct path ends the
+			// flapping: there is nothing left to flap to.
+			if current.plan.upgrade || current.punched {
+				m.flapping = false
+			}
 		}
 		m.state = StateConnected
 		m.scheduleUpgradeLocked()
@@ -743,6 +825,7 @@ func (m *Manager) pathFailed(seq uint64, err error) {
 	m.config.Logf("pathmgr: %s path %s failed: %v", m.desktop.ID, failed.path.Kind, err)
 	m.active = nil
 	m.lastSwitchAt = m.clock.Now()
+	m.noteLossLocked(failed, m.lastSwitchAt)
 	m.retries = 0
 	if m.reachable {
 		m.startRunLocked(ReasonPathFailed, m.failoverPlan(failed.path.Kind))
@@ -804,14 +887,34 @@ func (m *Manager) upgradeOpenLocked(now time.Time) bool {
 }
 
 func (m *Manager) upgradeAtLocked(now time.Time) time.Time {
+	quiet, spacing := m.timings.Settle, m.upgradeSpacingLocked()
+	if m.flapping {
+		quiet, spacing = m.timings.Hysteresis, m.timings.UpgradeInterval
+	}
 	at := now
 	if !m.lastSwitchAt.IsZero() {
-		at = latest(at, m.lastSwitchAt.Add(m.timings.Hysteresis))
+		at = latest(at, m.lastSwitchAt.Add(quiet))
 	}
 	if !m.lastUpgradeAt.IsZero() {
-		at = latest(at, m.lastUpgradeAt.Add(m.timings.UpgradeInterval))
+		at = latest(at, m.lastUpgradeAt.Add(spacing))
 	}
 	return at
+}
+
+// upgradeSpacingLocked is the backoff delay after the attempts made so far.
+func (m *Manager) upgradeSpacingLocked() time.Duration {
+	backoff := m.timings.UpgradeBackoff
+	return backoff[min(max(m.upgradeTries, 1), len(backoff))-1]
+}
+
+// noteLossLocked records whether the path lost at now died young. A direct
+// path lost within the flap window makes the slower flap rules apply until a
+// direct path lasts or an improvement attempt finds none.
+func (m *Manager) noteLossLocked(lost *activePath, now time.Time) {
+	if lost == nil || lost.path.Kind == KindTor {
+		return
+	}
+	m.flapping = now.Sub(lost.path.Since) < m.timings.FlapWindow
 }
 
 // claimPunch counts the punch of a run as an improvement attempt when the

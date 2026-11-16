@@ -295,6 +295,38 @@ func TestAnnouncerSeamFollowsRefreshAndStop(t *testing.T) {
 	}
 }
 
+// An announcement the system refuses, as macOS does without the local network
+// permission, shows as blocked through a refresh and as announcing once the
+// announcer tells it goes out again.
+func TestRefusedAnnouncementShowsBlocked(t *testing.T) {
+	announcer := &fakeAnnouncer{}
+	var reported AnnouncerConfig
+	h := startHarness(t, harnessOptions{announcer: func(config AnnouncerConfig) (Announcer, error) {
+		reported = config
+		if config.OnBlocked == nil {
+			t.Error("the announcer cannot report a refused send")
+		} else {
+			config.OnBlocked(errors.New("sendmsg: no route to host"))
+		}
+		return announcer, nil
+	}})
+	if status := h.start(t, nil); status.MDNS.State != "blocked" {
+		t.Fatalf("mdns state: %+v", status.MDNS)
+	}
+	h.call(t, "net.refresh", map[string]any{}, nil)
+	var status NetStatus
+	h.call(t, "net.status", map[string]any{}, &status)
+	if status.MDNS.State != "blocked" {
+		t.Fatalf("mdns state after refresh: %+v", status.MDNS)
+	}
+	// The person allowed the app: the announcement goes out again.
+	reported.OnBlocked(nil)
+	h.call(t, "net.status", map[string]any{}, &status)
+	if status.MDNS.State != "announcing" {
+		t.Fatalf("mdns state after the permission: %+v", status.MDNS)
+	}
+}
+
 func TestDeviceCommandsUseTheV2Registry(t *testing.T) {
 	paths, err := statedir.Prepare(t.TempDir())
 	if err != nil {

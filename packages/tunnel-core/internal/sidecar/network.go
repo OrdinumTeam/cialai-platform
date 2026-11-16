@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"runtime"
 	"slices"
 	"strconv"
 	"sync"
@@ -59,6 +60,9 @@ type AnnouncerConfig struct {
 	PublicKey ed25519.PublicKey
 	Port      uint16
 	Logf      func(format string, args ...any)
+	// OnBlocked is told once when the system refuses the multicast sends,
+	// as macOS does without the local network permission of the app.
+	OnBlocked func(error)
 }
 
 // Announcer publishes the direct listener on the local network by DNS-SD;
@@ -247,6 +251,7 @@ func startNetwork(config startConfig) (*network, error) {
 	if config.seams.NewAnnouncer != nil {
 		announcer, err := config.seams.NewAnnouncer(AnnouncerConfig{
 			PublicKey: config.identity.PublicKey(), Port: uint16(n.port), Logf: config.logger.Logf("debug"),
+			OnBlocked: n.announcementBlocked,
 		})
 		n.mu.Lock()
 		if err != nil {
@@ -254,7 +259,9 @@ func startNetwork(config startConfig) (*network, error) {
 			config.logger.Warn("local network announcement failed", logx.Fields{"error": err.Error()})
 		} else {
 			n.announcer = announcer
-			n.mdnsState = "announcing"
+			if n.mdnsState != "blocked" {
+				n.mdnsState = "announcing"
+			}
 		}
 		n.mu.Unlock()
 	}
@@ -476,7 +483,7 @@ func (n *network) reannounce() {
 	n.mu.Lock()
 	if err != nil {
 		n.mdnsState = "failed"
-	} else {
+	} else if n.mdnsState != "blocked" {
 		n.mdnsState = "announcing"
 	}
 	n.mu.Unlock()
@@ -838,3 +845,33 @@ var (
 	_ io.Writer  = (*lineLogger)(nil)
 	_ TorService = (*tor.Desktop)(nil)
 )
+
+// announcementBlocked follows the refusals of the multicast sends of the
+// announcement: while the system refuses them, the phones and the Brotos on
+// the same network do not find this desktop and fall back to remembered
+// addresses and Tor. On macOS it is the local network permission of the app,
+// which the person grants in the prompt or in the system settings; nil means
+// the announcement goes out again.
+func (n *network) announcementBlocked(err error) {
+	next := "blocked"
+	if err == nil {
+		next = "announcing"
+	}
+	n.mu.Lock()
+	changed := n.mdnsState != next && (err != nil || n.mdnsState == "blocked")
+	if changed {
+		n.mdnsState = next
+	}
+	n.mu.Unlock()
+	if !changed {
+		return
+	}
+	if err != nil {
+		n.config.logger.Warn("local network announcement blocked by the system", logx.Fields{"error": err.Error(), "os": runtime.GOOS})
+	} else {
+		n.config.logger.Info("local network announcement allowed again", nil)
+	}
+	// The announcer may report from inside the network start, while its
+	// caller still holds the runtime; the status goes out on its own.
+	go n.config.onChange()
+}

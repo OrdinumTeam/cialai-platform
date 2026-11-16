@@ -17,7 +17,8 @@ const mockTunnel = {
   status: jest.fn(),
   notifyForeground: jest.fn(),
   notifyNetworkChange: jest.fn(),
-  notifyHealthy: jest.fn()
+  notifyHealthy: jest.fn(),
+  setKeepAliveText: jest.fn()
 };
 const mockHealth = jest.fn(async () => true);
 const mockStore = {
@@ -40,6 +41,10 @@ jest.mock('cialai-tunnel', () => ({
   notifyNetworkChange: reachable => mockTunnel.notifyNetworkChange(reachable),
   notifyHealthy: () => mockTunnel.notifyHealthy(),
   setLogLevel: () => {},
+  setKeepAliveText: text => mockTunnel.setKeepAliveText(text),
+  canPresentNotices: () => false,
+  presentNotice: async () => false,
+  takeOpenedNotice: () => null,
   version: () => 'core-test',
   inspectPairPayload: jest.fn(),
   pair: jest.fn()

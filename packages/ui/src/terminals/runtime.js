@@ -62,7 +62,7 @@ export { NATIVE_ONLY_MESSAGE };
 import * as remote from '../lib/remote.js';
 import { isMobileShell, isPhone, onShellLock } from '../lib/shell.js';
 import { consumeOutput, beginReplay } from './replay.js';
-import { reattachDelay, shouldReattachOnPoll } from './reattach.js';
+import { reattachDelay, resumeOffset, settledAttempt, shouldReattachOnPoll } from './reattach.js';
 import { OUTPUT_WINDOW_MS, deriveActivity } from './activity-state.js';
 import { untaggedOwner } from './pty-adoption.js';
 import { createResumeCoordinator, restoredNotice, savedSize, waitForPrompt } from './restore.js';
@@ -791,6 +791,7 @@ function handleMessage(session, token, message) {
       // Backoff com teto por sessão: 500 ms, 1 s, 2 s, 4 s e 8 s. Cada reattach
       // reenvia o histórico, então repetir a cada 500 ms realimenta o ciclo de
       // detached. A contagem zera quando o reattach dá certo.
+      session.reattachAttempt = settledAttempt(session.reattachAttempt, session.attachedAt ? Date.now() - session.attachedAt : NaN);
       const delay = reattachDelay(session.reattachAttempt);
       session.reattachAttempt += 1;
       if (session.reattachTimer) clearTimeout(session.reattachTimer);
@@ -913,10 +914,14 @@ async function reattachSession(session, ptyId) {
     session.outputChannel = channel;
     session.channelId = channel?.id;
     session.ptyId = ptyId;
-    const info = await invoke('pty_attach', { id: ptyId, onOutput: channel });
+    // Pela ponte, o computador reenvia só o que esta página ainda não recebeu.
+    const have = isTauri() ? null : resumeOffset(session.receivedOffset);
+    const info = await invoke('pty_attach', have == null ? { id: ptyId, onOutput: channel } : { id: ptyId, onOutput: channel, have });
     if (session.spawnToken !== token) return;
     applyTerminalInfo(session, info);
-    session.reattachAttempt = 0;
+    // A contagem de tentativas só zera depois de a sessão ficar anexada por
+    // um tempo; ver `settledAttempt`.
+    session.attachedAt = Date.now();
     setStatus(session, 'running');
     fitNow(session);
     if (isPhone() && session.host) requestTerminalControl(session.id).catch(() => {});
@@ -1799,6 +1804,9 @@ async function syncSharedSessions() {
         session = createSession({ id: info.tag && !state.sessions.has(info.tag) ? info.tag : undefined, cwd: info.cwd, name: info.tag?.endsWith(':ia') ? translate('desktop.brotos.aiName', { name: info.brotoName || info.deviceId }) : (info.deviceId && info.brotoName) || baseName(info.cwd), collapsed: getLayout().cardsCompact });
         state.order.push(session.id);
         session.ptyId = info.id;
+        // A primeira sessão descoberta é a escolhida, para ser a única
+        // anexada na abertura do celular.
+        if (!state.selectedId) state.selectedId = session.id;
       }
       if (session.ptyId !== info.id || session.pid !== (info.pid ?? null)) {
         session.term.reset();
@@ -1833,7 +1841,10 @@ async function syncSharedSessions() {
         // Não reattachar sessão em erro nem repetir o replay de uma sessão
         // estacionada fora da tela; ela reattacha quando for exibida.
         const visible = session.host != null || state.selectedId === session.id;
-        if (shouldReattachOnPoll({ status: session.status, visible })) await reattachSession(session, info.id);
+        if (shouldReattachOnPoll({ status: session.status, visible, phone: isPhone() })) await reattachSession(session, info.id);
+        // Descoberta fora da tela no celular: fica estacionada, com o estado
+        // vindo das métricas, e anexa quando for exibida.
+        else if (session.status === 'starting') setStatus(session, 'disconnected');
       }
     }
     if (!isTauri()) state.order.sort((a, b) => (state.sessions.get(a)?.remoteOrder ?? Infinity) - (state.sessions.get(b)?.remoteOrder ?? Infinity));

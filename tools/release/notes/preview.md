@@ -1,24 +1,19 @@
 ## Cialai {{version}} preview
 
-A Broto now connects from the phone by QR, the documentation graph gains six views, and session cards collapse to one line. The phone apps are updated too.
+Reopening Cialai brings each terminal back to the Claude Code or Codex conversation it was running, on macOS, Windows and Linux, even with several terminals in the same folder. On a Mac, Cialai now asks for the local network permission, so a Broto connected by QR finds the computer in seconds on the same network instead of waiting for Tor.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Broto from the phone.** The Broto window shows a QR code, valid once and for ten minutes. On the phone, the three dot menu of a computer gains Connect a Broto, which reads it with the camera. The computer publishes a temporary onion and a mark on the local network, and the Broto dials as always: nothing listens on the Broto and the phone never talks to it. The phone shows the Broto name and four digits, and you type the same digits on the Broto, so a photo of the QR is not enough to pair another machine. Pasting a code still works.
-* **Six graph views.** A selector in the graph bar switches between Map, Tree, Radial, Blocks, Neighbors and 3D. Blocks sizes each file by its bytes, Neighbors shows one file with the files it links to and the ones that link to it, up to three steps away, and 3D turns with a drag on the same canvas, without WebGL.
-* **Links between files.** The options panel reads the documentation or the whole project, up to 20,000 files, and draws Markdown links and wikilinks and the imports of JavaScript, TypeScript, CSS, HTML, Python, Rust and Go. The next scan only reads what changed.
-* **Graph colours.** Colour by group, folder, file type, size, date of change or rules of your own, in four palettes: Safe, the default, tested for colour blindness, Neon, Pastel and Monochrome.
-* **Collapsible session cards.** A card collapses to its icon, name and activity dot, one by one or all at once, and Preferences can make new cards join collapsed.
-* **Folder looks.** A folder remembers the colour and the icon last chosen for a session in it.
-* **Terminal theme.** The terminal can be light or dark on its own, apart from the window.
-* **More formats in the editor.** Audio, video, fonts and read only Jupyter notebooks, plus highlighting for `.env`, ignore files, Makefile and shell profiles.
-* **Windows terminal size.** The terminal no longer goes back to an old size after maximizing, opening a panel or changing the font. A Windows 11 virtual machine reproduced the old behaviour with an earlier build and showed this one keeping the size. It has no real GPU, so long use on a Windows machine with one is still the final proof of the WebGL part.
-* **Window buttons on Wayland.** On Linux with Wayland the title bar buttons follow the side and order set in GNOME or KDE.
-* **One button per side column.** The edge rail is the only way back for a collapsed column.
+* **Resume in the right terminal.** On a Mac opened from the Dock, resuming Claude was refused before the command was typed, because the CLI lived outside the path the app searched. Cialai now looks for `claude` and `codex` in the same path they ran with. Codex served by its shared background process, which did not say which conversation belonged to which terminal, now announces its id when Cialai quits, and each terminal keeps its own.
+* **Resume on Windows too.** The resume command was never sent on Windows, because the app waited for a prompt signal that Windows does not have. The default Claude account resumes without switching its configuration folder, and automatic terminal replies no longer cancel the resume.
+* **Broto by QR in seconds on the same network.** Since macOS 15, without the local network permission, the Cialai announcement never left the Mac and a Broto could only find the computer through Tor, which took minutes or never finished. The Mac now asks for the permission on first use, warns when it was denied and shows in the diagnostics where to allow it. Checked with a Broto on Windows 11 with the firewall on: it found the computer in two seconds.
+* **Interrupt label.** The interrupt button of the phone terminal bar is now named Interromper Ctrl+C.
 
-Broto has its own version, 0.2.0, and release tag `broto-v0.2.0`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
+On a Mac, accept the prompt to find devices on your local network when the new version opens. If it was denied before, turn on Cialai in System Settings, Privacy and Security, Local Network. The resume of Claude and Codex and the Broto pairing were checked on macOS with test command line tools and on a Windows 11 virtual machine; the CI ran the tests on the three systems.
+
+Broto has its own version, 0.2.1, and release tag `broto-v0.2.1`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 
 Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tree/main/docs/releases
 
@@ -33,7 +28,7 @@ Earlier versions are listed at https://github.com/OrdinumTeam/cialai-platform/tr
 | Fedora, openSUSE and derivatives | `Cialai_x86_64.rpm` |
 | Other Linux distributions | `Cialai_amd64.AppImage` |
 
-The Android and iPhone apps are updated in this preview. `Cialai_android_universal.apk` is attached here and mirrored on the website, and the iPhone build is on TestFlight and in App Store review.
+The phone apps are unchanged in this preview. `Cialai_android_universal.apk` on the website stays at 0.7.0, and the iPhone app stays on build 21, on TestFlight and in App Store review.
 
 ### Install
 

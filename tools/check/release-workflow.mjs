@@ -201,6 +201,9 @@ assert.throws(() => verifyUpdaterSignature({ digest: signedDigest, signature: up
 const otherKey = minisign(['untrusted comment: minisign public key: 0000000000000000', Buffer.concat([Buffer.from('Ed'), Buffer.alloc(8), rawPublic]).toString('base64')]);
 assert.throws(() => verifyUpdaterSignature({ digest: signedDigest, signature: updaterSignature(), publicKey: otherKey }), /another key/);
 
+// A busca do rascunho lê a lista inteira de releases, que já passou de 1 MiB.
+assert.match(read('tools/release/release-assets.mjs'), /maxBuffer: GH_MAX_BUFFER/, 'gh calls must lift the 1 MiB output limit of execFileSync');
+
 // Notas da prévia: macOS notarizado sem liberação manual e passos do Windows ainda sem assinatura.
 const preview = releaseNotes(read('tools/release/notes/preview.md'), 'v0.1.0');
 for (const required of ['signed with the Ordinum Developer ID and notarized by Apple', 'Windows installers are not signed', 'More info', 'Run anyway', 'SHA256SUMS', 'TestFlight']) {

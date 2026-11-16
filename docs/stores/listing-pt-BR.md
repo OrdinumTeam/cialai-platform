@@ -70,15 +70,14 @@ Consulte a política de privacidade e a documentação do projeto para saber qua
 
 ### Texto curto para Google Play
 
-Aplicado na produção do Google Play com a 0.2.12, versionCode 32, em 12/10/2026. Cobre o que chegou ao celular desde a 0.2.9, a versão anterior da loja.
+Texto da 0.7.0, de 14/11/2026. Cobre o que chegou ao celular desde a 0.6.1, a versão que a produção do Google Play tem.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 Novidades desta versão:
-• Ligar um Cialai Broto pelo celular: no menu de três pontos de um computador, leia o QR que a janela do Broto mostra.
-• Você confere os mesmos quatro dígitos no celular e no Broto antes de ligar.
-• O QR vale uma vez e por dez minutos, e uma foto dele não basta para ligar outra máquina.
-• Pede o Cialai 0.6.0 no computador e o Cialai Broto 0.2.0 na outra máquina.
+• Avisos com o app em segundo plano: o celular segue conectado ao computador até você fechar o app ou tocar em Desconectar.
+• Cada aviso mostra o ícone da sessão em branco sobre a cor dela.
+• Barra do terminal em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter. Segure um botão para ver o nome dele.
 ```
 <!-- PLAY_RELEASE_END -->
 
@@ -101,10 +100,9 @@ O aplicativo requer o Cialai aberto no computador. Nenhum servidor precisa ser c
 
 O que a App Store mostra em Novidades desta versão. A loja tem uma fonte só, e
 é esta: `tools/release/asc_submit.py` lê este bloco e grava o texto na versão
-antes de enviar à revisão. A última versão publicada na loja é a 0.3.0, então o
-texto cobre tudo que chegou ao iPhone desde ela, e não só o da entrega do dia.
-Da 0.3.0 à 0.6.0 o app nativo só ganhou Ligar um Broto; o resto chegou pela
-página que vem do computador.
+antes de enviar à revisão. A última versão publicada na loja é a 0.6.1, então o
+texto da 0.7.0 cobre o que chegou ao iPhone desde ela. A conexão em segundo
+plano é só do Android e não entra aqui.
 
 O ícone não entra na lista. Ele foi reenquadrado mais de uma vez entre a 0.2.2 e a
 0.2.9, mas voltou ao mesmo lugar: a arte mede 597 por 898 nos dois arquivos, e a
@@ -113,11 +111,11 @@ não mudou, e anunciar que mudou seria mentira na ficha da loja.
 
 <!-- ASC_WHATS_NEW_START -->
 ```text
-Esta atualização liga um Cialai Broto pelo celular.
+Esta atualização traz o ícone da sessão nos avisos e uma barra do terminal nova.
 
-• Ligar um Broto: no menu de três pontos de um computador, o celular lê o QR que a janela do Broto mostra. Você confere os mesmos quatro dígitos no celular e digita esses dígitos no Broto, e ele fica ligado a este computador.
-• O QR vale uma vez e por dez minutos, e uma foto dele não basta para ligar outra máquina.
-• Pede o Cialai 0.6.0 no computador e o Cialai Broto 0.2.0 na máquina que vai ser ligada. Atualize o computador antes de ler o QR.
+• Cada aviso mostra o ícone da sessão em branco sobre a cor dela.
+• A barra do terminal ficou em nova ordem: Conversa, Esc, Colar, Teclado especial, Comandos rápidos, Interromper e Enter.
+• Segure um botão da barra para ver o nome dele, sem executar nada.
 ```
 <!-- ASC_WHATS_NEW_END -->
 

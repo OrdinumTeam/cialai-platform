@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package br.com.ordinum.cialai.tunnel
 
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
@@ -24,9 +25,13 @@ import org.json.JSONObject
 // por três filas seriais: pareamento, operações que trocam caminho ou proxy, e
 // consultas curtas. Assim uma conexão que espera a reserva não prende o status,
 // a descoberta local nem o Stop, que cancela o que está em andamento no Go.
-// O módulo também cuida do tor em processo, da descoberta DNS-SD e da parada
-// após 120 s em segundo plano, com reabertura do último computador na volta.
-class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
+// O módulo também cuida do tor em processo, da descoberta DNS-SD e do segundo
+// plano: com um computador aberto, o serviço de ConnectionService segura a
+// conexão até a pessoa voltar, fechar o app ou tocar em Desconectar; sem ele,
+// ou se o sistema recusar, o núcleo para após 120 s e o último computador
+// reabre na volta. Os avisos das sessões com a imagem da sessão também saem
+// daqui, por SessionNotices.
+class CialaiTunnelModule : Module(), Listener, TorRuntime.Events, ConnectionService.Listener {
   private val pairing = lane("cialai-tunnel-pair")
   private val operations = lane("cialai-tunnel-ops")
   private val queries = lane("cialai-tunnel-query")
@@ -47,6 +52,14 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
   private var stoppedForBackground = false
   // Tipo da rede na última notificação, para só reiniciar o DNS-SD quando ele muda de fato.
   private var lastNetworkKind: String? = null
+  // Serviço que segura a conexão neste segundo plano. `stoppingKeepAlive`
+  // marca a parada pedida pelo módulo, para o fim do serviço não ser lido como
+  // o app tirado dos recentes.
+  private var keepAlive = KeepAlive.OFF
+  private var stoppingKeepAlive = false
+  @Volatile private var keepAliveText = ConnectionService.KeepAliveText.DEFAULT
+  // Sessão de um aviso tocado, até o TypeScript buscar.
+  private var openedNotice: Map<String, String>? = null
 
   private val backgroundStop = Runnable { queries.post { stopForBackground(overdue = false) } }
 
@@ -56,6 +69,7 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
 
     OnCreate {
       val context = appContext.reactContext?.applicationContext ?: return@OnCreate
+      ConnectionService.listener = this@CialaiTunnelModule
       tor = TorRuntime(context, this@CialaiTunnelModule)
       discovery = LanDiscovery(context, ::reportLan, ::nativeLog)
       queries.post { requireTunnel() }
@@ -65,6 +79,8 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     OnDestroy {
       destroyed = true
       mainHandler.removeCallbacks(backgroundStop)
+      if (ConnectionService.listener === this@CialaiTunnelModule) ConnectionService.listener = null
+      stopKeepAlive()
       discovery?.close()
       tor?.close()
       queries.post {
@@ -76,7 +92,37 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
       queries.shutdown()
     }
 
+    // Toque num aviso de sessão com o app aberto, ou que abriu o app.
+    OnNewIntent { intent -> takeNotice(intent) }
+    OnActivityEntersForeground { takeNotice(appContext.currentActivity?.intent) }
+
     Function("version") { Mobile.version() }
+
+    // Aviso de sessão com a imagem dela como ícone grande.
+    AsyncFunction("presentNotice") { notice: Map<String, String>, promise: Promise ->
+      execute(queries, promise) {
+        val context = appContext.reactContext?.applicationContext
+          ?: throw IllegalStateException("tunnel_unavailable: O app ainda não está pronto.")
+        val silent = synchronized(lifecycle) { backgroundedAt == null }
+        SessionNotices.present(context, SessionNotices.parse(notice), silent)
+      }
+    }
+
+    // Sessão do último aviso tocado, entregue uma vez.
+    Function("takeOpenedNotice") {
+      synchronized(lifecycle) { openedNotice.also { openedNotice = null } }
+    }
+
+    // Textos do aviso fixo da conexão em segundo plano, no idioma do app.
+    Function("setKeepAliveText") { text: Map<String, String> ->
+      val fallback = ConnectionService.KeepAliveText.DEFAULT
+      keepAliveText = ConnectionService.KeepAliveText(
+        title = text["title"]?.takeIf { it.isNotBlank() } ?: fallback.title,
+        body = text["body"]?.takeIf { it.isNotBlank() } ?: fallback.body,
+        action = text["action"]?.takeIf { it.isNotBlank() } ?: fallback.action,
+        channel = text["channel"]?.takeIf { it.isNotBlank() } ?: fallback.channel
+      )
+    }
 
     AsyncFunction("inspectPairPayload") { payload: String, promise: Promise ->
       execute(queries, promise) { jsonObject(requireTunnel().inspectPairPayload(payload)) }
@@ -133,6 +179,7 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
           stoppedForBackground = false
         }
         discovery?.stop()
+        stopKeepAlive()
         null
       }
     }
@@ -224,22 +271,115 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     }
     if (!first) return
     mainHandler.removeCallbacks(backgroundStop)
-    mainHandler.postDelayed(backgroundStop, BACKGROUND_TTL_MS)
+    // Com um computador aberto, o serviço segura a conexão; sem ele, ou se o
+    // sistema recusar o primeiro plano, vale o prazo de sempre.
+    if (!startKeepAlive()) mainHandler.postDelayed(backgroundStop, BACKGROUND_TTL_MS)
     discovery?.stop()
     queries.post { requireTunnel().notifyForeground(false) }
   }
 
+  // Liga o serviço quando há um computador aberto. Verdadeiro quando o pedido
+  // foi aceito; a recusa do sistema chega depois por onKeepAliveRefused.
+  private fun startKeepAlive(): Boolean {
+    val context = appContext.reactContext?.applicationContext ?: return false
+    val desktopId = synchronized(lifecycle) {
+      lastOpen?.desktopId?.takeIf { !stoppedForBackground && keepAlive == KeepAlive.OFF }
+    } ?: return false
+    val text = keepAliveText.let { it.copy(title = it.title.replace(DESKTOP_PLACEHOLDER, desktopName(desktopId))) }
+    return try {
+      synchronized(lifecycle) {
+        keepAlive = KeepAlive.RUNNING
+        stoppingKeepAlive = false
+      }
+      ConnectionService.start(context, text)
+      nativeLog("info", "connection kept in the background")
+      emit("state", mapOf("state" to "kept-alive", "desktopId" to desktopId))
+      true
+    } catch (error: Exception) {
+      // ForegroundServiceStartNotAllowedException e afins.
+      synchronized(lifecycle) { keepAlive = KeepAlive.OFF }
+      nativeLog("info", "background connection refused: ${error.javaClass.simpleName}")
+      false
+    }
+  }
+
+  private fun stopKeepAlive() {
+    val running = synchronized(lifecycle) {
+      val running = keepAlive != KeepAlive.OFF
+      if (running) stoppingKeepAlive = true
+      keepAlive = KeepAlive.OFF
+      running
+    }
+    val context = appContext.reactContext?.applicationContext ?: return
+    if (running) runCatching { ConnectionService.stop(context) }
+  }
+
+  // Nome do computador como o núcleo guardou no pareamento.
+  private fun desktopName(desktopId: String): String {
+    val raw = runCatching { tunnel?.desktopsJSON() }.getOrNull() ?: return "Cialai"
+    val desktops = runCatching { JSONObject(raw).optJSONArray("desktops") }.getOrNull() ?: return "Cialai"
+    for (index in 0 until desktops.length()) {
+      val desktop = desktops.optJSONObject(index) ?: continue
+      if (desktop.optString("id") == desktopId) return desktop.optString("name").takeIf { it.isNotBlank() } ?: "Cialai"
+    }
+    return "Cialai"
+  }
+
+  // Desconectar no aviso fixo: o núcleo para como no fim do prazo, e a volta
+  // ao app reabre o computador.
+  override fun onDisconnectRequested() {
+    queries.post {
+      stopForBackground(overdue = false)
+      stopKeepAlive()
+    }
+  }
+
+  override fun onKeepAliveRefused() {
+    val background = synchronized(lifecycle) {
+      keepAlive = KeepAlive.OFF
+      backgroundedAt != null
+    }
+    nativeLog("info", "background connection refused by the system")
+    if (background) mainHandler.post {
+      mainHandler.removeCallbacks(backgroundStop)
+      mainHandler.postDelayed(backgroundStop, BACKGROUND_TTL_MS)
+    }
+  }
+
+  // Fim do serviço que o módulo não pediu, como o app tirado dos recentes: a
+  // conexão não fica viva num processo que o sistema pode congelar.
+  override fun onKeepAliveEnded() {
+    val external = synchronized(lifecycle) {
+      val external = keepAlive == KeepAlive.RUNNING && !stoppingKeepAlive && backgroundedAt != null
+      keepAlive = KeepAlive.OFF
+      stoppingKeepAlive = false
+      external
+    }
+    if (external) {
+      nativeLog("info", "background connection ended outside the app")
+      queries.post { stopForBackground(overdue = false) }
+    }
+  }
+
+  private fun takeNotice(intent: Intent?) {
+    val target = SessionNotices.takeTarget(intent) ?: return
+    synchronized(lifecycle) { openedNotice = target }
+    emit("notice", target)
+  }
+
   private fun enterForeground() {
     mainHandler.removeCallbacks(backgroundStop)
-    val since = synchronized(lifecycle) {
+    val (since, keptAlive) = synchronized(lifecycle) {
       val since = backgroundedAt
       backgroundedAt = null
-      since
+      since to (keepAlive == KeepAlive.RUNNING)
     }
+    stopKeepAlive()
     queries.post {
       // Com o processo congelado o temporizador pode não ter disparado a tempo;
       // passado o prazo, as conexões são tratadas como mortas do mesmo jeito.
-      if (since != null && SystemClock.elapsedRealtime() - since >= BACKGROUND_TTL_MS) {
+      // Com o serviço ligado o processo não congelou e a conexão continua.
+      if (!keptAlive && since != null && SystemClock.elapsedRealtime() - since >= BACKGROUND_TTL_MS) {
         stopForBackground(overdue = true)
       }
       tor?.start()
@@ -319,13 +459,15 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
   }
 
   private fun forgetActive(desktopId: String) {
-    val wasActive = synchronized(lifecycle) {
+    val (wasActive, nothingOpen) = synchronized(lifecycle) {
       if (lastOpen?.desktopId == desktopId) lastOpen = null
       val active = activeDesktopId == desktopId
       if (active) activeDesktopId = null
-      active
+      active to (lastOpen == null)
     }
     if (wasActive) discovery?.stop()
+    // Sem computador aberto não há conexão para segurar.
+    if (nothingOpen) stopKeepAlive()
   }
 
   // Transporte da rede ativa segundo o sistema; desconhecido quando não há rede ativa.
@@ -444,8 +586,12 @@ class CialaiTunnelModule : Module(), Listener, TorRuntime.Events {
     else -> value
   }
 
+  private enum class KeepAlive { OFF, RUNNING }
+
   private companion object {
     const val BACKGROUND_TTL_MS = 120_000L
+    // Marca do nome do computador no título do aviso fixo.
+    const val DESKTOP_PLACEHOLDER = "{computer}"
     const val TOR_HANDOVER_WAIT_MS = 15_000L
     const val LOG_TAG = "CialaiTunnel"
     const val NETWORK_NONE = "none"

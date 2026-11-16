@@ -70,6 +70,30 @@ storage, microphone, phone or account permission. The `android.permission.DUMP`
 string that appears in the manifest is the guard of the AndroidX
 `ProfileInstallReceiver`, not a permission the app requests.
 
+Since 0.7.0, versionCode 45, the manifest also carries `POST_NOTIFICATIONS`,
+`FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_CONNECTED_DEVICE`, for the service
+that keeps the connection to the paired computer while the app is in the
+background. The answers for that declaration are below.
+
+### Foreground service declaration
+
+Play Console asks for it under Policy and programs, App content, Foreground
+service permissions, and the Publishing API refuses any release with HTTP 403
+until it is filled. Answers used for versionCode 45:
+
+* Permission: `FOREGROUND_SERVICE_CONNECTED_DEVICE`, task type connected device.
+* Description: Cialai is the phone client of the user's own computer running
+  Cialai. When the app goes to the background with a computer open, a foreground
+  service keeps the direct network connection to that paired computer, so
+  alerts from its terminal sessions keep arriving. It shows a persistent
+  notification naming the computer with a Disconnect action and stops when the
+  user returns to the app, taps Disconnect or removes the app from recents.
+* Impact if the system defers or stops it: the connection drops about two
+  minutes after the app leaves the screen, and the user misses alerts such as an
+  agent waiting for permission or a finished command until opening the app again.
+* Video: a short recording of an Android phone with a computer open, the app sent
+  to the background, the pinned notification and an alert arriving.
+
 ### Endpoints
 
 No Ordinum controlled endpoint appears in the binary. The `googleapis.com`

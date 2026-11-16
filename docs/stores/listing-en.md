@@ -66,15 +66,14 @@ Read the privacy policy and project documentation to learn which public networks
 
 ### Short text for Google Play
 
-Applied to Google Play production with 0.2.12, versionCode 32, on 12/10/2026. It covers what reached the phone since 0.2.9, the previous store version.
+Text for 0.7.0, from 14/11/2026. It covers what reached the phone since 0.6.1, the version Google Play production has.
 
 <!-- PLAY_RELEASE_START -->
 ```text
 What is new:
-• Connect a Cialai Broto from your phone: in a computer's three dot menu, scan the QR code the Broto window shows.
-• You check the same four digits on the phone and on the Broto before it connects.
-• The QR code works once and for ten minutes, and a photo of it is not enough to connect another machine.
-• Needs Cialai 0.6.0 on the computer and Cialai Broto 0.2.0 on the other machine.
+• Alerts with the app in the background: the phone stays connected to the computer until you close the app or tap Disconnect.
+• Each alert shows the session icon in white on the session color.
+• New terminal bar order: Chat, Esc, Paste, Special keyboard, Quick commands, Interrupt and Enter. Hold a button to see its name.
 ```
 <!-- PLAY_RELEASE_END -->
 

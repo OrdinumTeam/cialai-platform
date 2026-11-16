@@ -40,6 +40,9 @@ pub const CODEX: &str = "Codex";
 const SESSION_FILE_LIMIT: u64 = 64 * 1024;
 /// Maior valor de opcao repassado ao comando de retomada.
 const VALUE_LIMIT: usize = 1024;
+/// Maior PATH guardado com a conversa. PATHs longos sao comuns; acima disto
+/// o valor e tratado como lixo.
+const SEARCH_PATH_LIMIT: usize = 32 * 1024;
 /// Folga entre o inicio do processo e o `startedAt` do arquivo de sessao.
 const STARTED_SLACK_SECS: u64 = 5;
 /// Profundidade dada a um processo cuja cadeia nao chega ao shell.
@@ -62,6 +65,12 @@ pub struct AgentSession {
     pub profile_name: Option<String>,
     /// Opcoes da linha de comando original que valem de novo na retomada.
     pub args: Vec<String>,
+    /// PATH do processo do agente quando ele foi visto. A retomada procura o
+    /// CLI nele antes do PATH do app, que aberto pelo Dock ou pelo menu do
+    /// sistema nao tem as pastas que o shell do usuario acrescenta. Fica no
+    /// estado local da sessao e nao vai ao celular.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search_path: Option<String>,
 }
 
 /// Arquivo do proprio agente que prova o estado do turno desta conversa.
@@ -286,6 +295,7 @@ fn claude_session_from(
             config_dir: profile.explicit.then_some(profile.config_dir),
             profile_name: profile.name,
             args: keep_flags(program_args(&command.argv), &CLAUDE_FLAGS),
+            search_path: search_path_of(command),
         },
         evidence: AgentEvidence::ClaudeRecord(path),
     })
@@ -345,6 +355,7 @@ fn codex_session_from(
             config_dir: profile.explicit.then_some(profile.config_dir),
             profile_name: profile.name,
             args: keep_flags(program_args(&command.argv), &CODEX_FLAGS),
+            search_path: search_path_of(command),
         },
         evidence: AgentEvidence::CodexRollout(rollout),
     })
@@ -441,6 +452,155 @@ fn read_small(path: &Path) -> Option<String> {
     fs::read_to_string(path).ok()
 }
 
+/// Conversa que o proprio Codex anunciou ao sair, com perfil, pasta e opcoes
+/// lidos do processo que rodava no terminal. O daemon compartilhado do Codex
+/// nao deixa prova de qual conversa e de qual aba enquanto ela roda; o
+/// anuncio impresso no proprio terminal e essa prova.
+pub(crate) fn announced_codex_session(
+    command: &CommandLine,
+    cwd: Option<String>,
+    session_id: &str,
+    home: &Path,
+) -> Option<AgentSession> {
+    if !is_session_id(session_id) {
+        return None;
+    }
+    let profile = procs::agent_profile(command, CODEX, home)?;
+    Some(AgentSession {
+        agent: CODEX.to_string(),
+        session_id: session_id.to_ascii_lowercase(),
+        cwd: cwd.filter(|cwd| valid_value(cwd)),
+        config_dir: profile.explicit.then_some(profile.config_dir),
+        profile_name: profile.name,
+        args: keep_flags(program_args(&command.argv), &CODEX_FLAGS),
+        search_path: search_path_of(command),
+    })
+}
+
+/// Codex interativo, que segura uma conversa no terminal: sem subcomando, com
+/// um prompt inicial, `resume` ou `fork`. Subcomandos de uma vez so, o daemon
+/// e o navegador de sessoes ficam de fora.
+pub(crate) fn is_codex_conversation_tui(command: &CommandLine) -> bool {
+    const ONE_SHOT: &[&str] = &[
+        "exec",
+        "e",
+        "review",
+        "login",
+        "logout",
+        "mcp",
+        "mcp-server",
+        "plugin",
+        "app-server",
+        "remote-control",
+        "app",
+        "completion",
+        "update",
+        "doctor",
+        "sandbox",
+        "debug",
+        "apply",
+        "a",
+        "cloud",
+        "exec-server",
+        "features",
+        "help",
+        "queue",
+        "archive",
+        "delete",
+        "unarchive",
+        "migrate-rollouts",
+        "migrate-nfs-db",
+        "agents",
+    ];
+    if procs::agent_of(command) != Some(CODEX) || is_codex_app_server(command) {
+        return false;
+    }
+    let args = program_args(&command.argv);
+    let mut index = 0;
+    while index < args.len() {
+        let arg = args[index].as_str();
+        if !arg.starts_with('-') {
+            return !ONE_SHOT.contains(&arg);
+        }
+        // Opcao com valor separado: o valor nao e subcomando.
+        let takes_value = CODEX_FLAGS
+            .values
+            .iter()
+            .any(|(alias, _)| *alias == arg && !arg.contains('='));
+        index += if takes_value { 2 } else { 1 };
+    }
+    true
+}
+
+/// Id que o Codex imprime ao sair, `codex resume <uuid>`, no meio de cores e
+/// outras sequencias do terminal. Vale o ultimo anuncio da saida.
+pub(crate) fn announced_codex_id(output: &[u8]) -> Option<String> {
+    let text = printable_text(output);
+    let mut found = None;
+    let mut from = 0;
+    while let Some(offset) = text[from..].find("resume ") {
+        let at = from + offset;
+        from = at + "resume ".len();
+        let before = &text[at.saturating_sub(64)..at];
+        let Some(candidate) = text.get(from..from + 36) else {
+            continue;
+        };
+        let ends = text[from + 36..]
+            .chars()
+            .next()
+            .is_none_or(|next| !next.is_ascii_alphanumeric() && next != '-');
+        if before.contains("codex") && ends && is_session_id(candidate) {
+            found = Some(candidate.to_ascii_lowercase());
+        }
+    }
+    found
+}
+
+/// Texto visivel de uma saida de terminal: tira CSI, OSC e os demais escapes
+/// e troca os controles por espaco.
+fn printable_text(output: &[u8]) -> String {
+    let mut plain = Vec::with_capacity(output.len());
+    let mut index = 0;
+    while index < output.len() {
+        let byte = output[index];
+        if byte != 0x1b {
+            plain.push(if byte < 0x20 || byte == 0x7f {
+                b' '
+            } else {
+                byte
+            });
+            index += 1;
+            continue;
+        }
+        match output.get(index + 1) {
+            Some(b'[') => {
+                index += 2;
+                while index < output.len() && !(0x40..=0x7e).contains(&output[index]) {
+                    index += 1;
+                }
+                index += 1;
+            }
+            Some(b']') | Some(b'P') | Some(b'_') | Some(b'^') => {
+                index += 2;
+                while index < output.len() {
+                    if output[index] == 0x07 {
+                        index += 1;
+                        break;
+                    }
+                    if output[index] == 0x1b && output.get(index + 1) == Some(&b'\\') {
+                        index += 2;
+                        break;
+                    }
+                    index += 1;
+                }
+            }
+            Some(_) => index += 2,
+            None => index += 1,
+        }
+    }
+    String::from_utf8_lossy(&plain).into_owned()
+}
+
 /// Id da conversa no nome `rollout-<data>-<uuid>.jsonl` do Codex.
 fn rollout_session_id(path: &str) -> Option<String> {
     let name = Path::new(path).file_name()?.to_str()?;
@@ -460,6 +620,20 @@ pub fn is_session_id(value: &str) -> bool {
 
 fn valid_value(value: &str) -> bool {
     !value.is_empty() && value.len() <= VALUE_LIMIT && !value.chars().any(char::is_control)
+}
+
+/// PATH do processo do agente, quando legivel e de tamanho sensato. Serve so
+/// para achar o executavel; nunca entra no comando digitado.
+pub(crate) fn search_path_of(command: &CommandLine) -> Option<String> {
+    command
+        .env
+        .get("PATH")
+        .filter(|value| {
+            !value.is_empty()
+                && value.len() <= SEARCH_PATH_LIMIT
+                && !value.chars().any(char::is_control)
+        })
+        .cloned()
 }
 
 /// Argumentos depois do programa: pula o executavel e, quando ele e um
@@ -631,14 +805,26 @@ pub(super) fn resume_command_for(
     }));
     let command = command.join(" ");
 
+    // Com o caminho do CLI, a linha nao herda a conta ativa do shell: a
+    // variavel que a conversa nao define sai do ambiente do agente.
+    let mut unset = Vec::new();
+    if executable.is_some() {
+        if session.config_dir.is_none() {
+            unset.push(dir_key);
+        }
+        if session.profile_name.is_none() {
+            unset.push(name_key);
+        }
+    }
     let mut parts = Vec::new();
     match flavor {
         ShellFlavor::Posix => {
             if let Some(cwd) = cwd {
                 parts.push(format!("cd {} &&", shell_quote(cwd, flavor)));
             }
-            if executable.is_some() && session.profile_name.is_none() {
-                parts.push(format!("env -u {name_key}"));
+            if !unset.is_empty() {
+                let flags: Vec<String> = unset.iter().map(|key| format!("-u {key}")).collect();
+                parts.push(format!("env {}", flags.join(" ")));
             }
             parts.extend(
                 environment
@@ -658,9 +844,7 @@ pub(super) fn resume_command_for(
                     }
                 ));
             }
-            if executable.is_some() && session.profile_name.is_none() {
-                parts.push(format!("$env:{name_key}=$null;"));
-            }
+            parts.extend(unset.iter().map(|key| format!("$env:{key}=$null;")));
             parts.extend(
                 environment.iter().map(|(key, value)| {
                     format!("$env:{key}={};", shell_quote_always(value, flavor))
@@ -671,9 +855,7 @@ pub(super) fn resume_command_for(
             if let Some(cwd) = cwd {
                 parts.push(format!("cd /d {} &&", shell_quote_always(cwd, flavor)));
             }
-            if executable.is_some() && session.profile_name.is_none() {
-                parts.push(format!("set \"{name_key}=\" &&"));
-            }
+            parts.extend(unset.iter().map(|key| format!("set \"{key}=\" &&")));
             parts.extend(environment.iter().map(|(key, value)| {
                 // `set` altera o ambiente deste cmd; isso e intencional e a
                 // variavel permanece no shell depois que o agente encerra.
@@ -978,6 +1160,7 @@ mod tests {
                 "--print",
                 "$(touch /tmp/x)",
             ]),
+            search_path: None,
         };
         assert_eq!(
             resume_command(&session, "/", ShellFlavor::Posix).unwrap(),
@@ -1009,6 +1192,7 @@ mod tests {
             config_dir: Some(profile_text.clone()),
             profile_name: Some("Web Rota".into()),
             args: strings(&["--model", "opus max"]),
+            search_path: None,
         };
         assert_eq!(
             resume_command(&session, "", ShellFlavor::Powershell).unwrap(),
@@ -1038,6 +1222,7 @@ mod tests {
             config_dir: None,
             profile_name: None,
             args: Vec::new(),
+            search_path: None,
         };
         assert_eq!(
             resume_command(&base, "/", ShellFlavor::Posix),
@@ -1118,6 +1303,7 @@ mod tests {
                     config_dir: None,
                     profile_name: None,
                     args: strings(&["--dangerously-skip-permissions"]),
+                    search_path: None,
                 },
                 // O caminho do registro acompanha a conversa: e dele que o
                 // estudio le o estado do turno a cada amostra de metricas.
@@ -1393,5 +1579,216 @@ mod tests {
         assert_eq!(depth_below(11, 1, &parents), 2);
         assert_eq!(depth_below(12, 1, &parents), 3);
         assert_eq!(depth_below(20, 1, &parents), DETACHED_DEPTH);
+    }
+
+    #[test]
+    fn detected_conversation_keeps_the_path_the_agent_ran_with() {
+        let mut env = HashMap::new();
+        env.insert(
+            "PATH".to_string(),
+            "/Users/x/.npm-global/bin:/usr/bin".to_string(),
+        );
+        let command = CommandLine {
+            exe: "/x/claude".into(),
+            argv: strings(&["/x/claude"]),
+            env,
+        };
+        assert_eq!(
+            search_path_of(&command).as_deref(),
+            Some("/Users/x/.npm-global/bin:/usr/bin")
+        );
+        let mut broken = command.clone();
+        broken.env.insert("PATH".into(), "/a\n/b".into());
+        assert_eq!(search_path_of(&broken), None);
+        broken.env.clear();
+        assert_eq!(search_path_of(&broken), None);
+    }
+
+    #[test]
+    fn codex_announces_its_conversation_when_it_exits() {
+        let announced = format!(
+            "\x1b[?1049l\x1b[0mTo continue this session, run \x1b[1;36mcodex resume {}\x1b[0m\r\n",
+            ID.to_uppercase()
+        );
+        assert_eq!(
+            announced_codex_id(announced.as_bytes()).as_deref(),
+            Some(ID)
+        );
+        // Vale o ultimo anuncio, e so o do Codex.
+        let other = "01a1df55-0398-7b72-92fe-aea2f20da639";
+        let both = format!("codex resume {ID}\r\n$ \x1b]0;t\x07codex resume {other}\r\n");
+        assert_eq!(announced_codex_id(both.as_bytes()).as_deref(), Some(other));
+        for wrong in [
+            format!("claude --resume {ID}"),
+            format!("git resume {ID}"),
+            format!("codex resume {}", &ID[..35]),
+            format!("codex resume {ID}0"),
+            "codex resume --last".to_string(),
+        ] {
+            assert_eq!(announced_codex_id(wrong.as_bytes()), None, "{wrong}");
+        }
+    }
+
+    #[test]
+    fn only_interactive_codex_holds_a_conversation_in_the_terminal() {
+        let codex = |args: &[&str]| CommandLine {
+            exe: "/x/codex".into(),
+            argv: std::iter::once("/x/codex")
+                .chain(args.iter().copied())
+                .map(String::from)
+                .collect(),
+            env: HashMap::new(),
+        };
+        for interactive in [
+            &[][..],
+            &["resume", ID],
+            &["fork", "--last"],
+            &["--yolo", "-m", "gpt-5", "conserta o teste"],
+            &["-c", "model=\"o3\""],
+        ] {
+            assert!(
+                is_codex_conversation_tui(&codex(interactive)),
+                "{interactive:?}"
+            );
+        }
+        for one_shot in [
+            &["exec", "oi"][..],
+            &["-m", "gpt-5", "exec", "oi"],
+            &["app-server"],
+            &["login"],
+            &["agents"],
+        ] {
+            assert!(!is_codex_conversation_tui(&codex(one_shot)), "{one_shot:?}");
+        }
+        let node = CommandLine {
+            exe: "/usr/bin/node".into(),
+            argv: strings(&[
+                "node",
+                "/x/node_modules/@openai/codex/bin/codex.js",
+                "--yolo",
+            ]),
+            env: HashMap::new(),
+        };
+        assert!(is_codex_conversation_tui(&node));
+        let claude = CommandLine {
+            exe: "/x/claude".into(),
+            argv: strings(&["/x/claude"]),
+            env: HashMap::new(),
+        };
+        assert!(!is_codex_conversation_tui(&claude));
+    }
+
+    #[test]
+    fn announced_codex_conversation_carries_profile_flags_and_path() {
+        let home = scratch("announced");
+        let profile = home.join("perfis/trabalho");
+        fs::create_dir_all(&profile).unwrap();
+        let mut env = HashMap::new();
+        env.insert(
+            "CODEX_HOME".to_string(),
+            profile.to_string_lossy().into_owned(),
+        );
+        env.insert("CODEX_PROFILE".to_string(), "trabalho".to_string());
+        env.insert("PATH".to_string(), "/opt/codex/bin:/usr/bin".to_string());
+        let command = CommandLine {
+            exe: "/opt/codex/bin/codex".into(),
+            argv: strings(&[
+                "/opt/codex/bin/codex",
+                "resume",
+                "outro-id",
+                "--yolo",
+                "-m",
+                "gpt-5",
+            ]),
+            env,
+        };
+        let session =
+            announced_codex_session(&command, Some("/projeto".into()), &ID.to_uppercase(), &home)
+                .unwrap();
+        assert_eq!(session.agent, CODEX);
+        assert_eq!(session.session_id, ID);
+        assert_eq!(session.cwd.as_deref(), Some("/projeto"));
+        assert!(
+            session
+                .config_dir
+                .as_deref()
+                .is_some_and(|dir| dir.ends_with("perfis/trabalho"))
+        );
+        assert_eq!(session.profile_name.as_deref(), Some("trabalho"));
+        assert_eq!(
+            session.args,
+            strings(&[
+                "--dangerously-bypass-approvals-and-sandbox",
+                "--model",
+                "gpt-5"
+            ])
+        );
+        assert_eq!(
+            session.search_path.as_deref(),
+            Some("/opt/codex/bin:/usr/bin")
+        );
+        assert!(announced_codex_session(&command, None, "nao-e-uuid", &home).is_none());
+        let _ = fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn resuming_with_the_cli_path_drops_the_variables_the_conversation_does_not_set() {
+        let session = AgentSession {
+            agent: CLAUDE.into(),
+            session_id: ID.into(),
+            cwd: None,
+            config_dir: None,
+            profile_name: None,
+            args: vec![],
+            search_path: None,
+        };
+        let posix =
+            resume_command_for(&session, "/", ShellFlavor::Posix, Some("/x/claude")).unwrap();
+        assert_eq!(
+            posix,
+            format!("env -u CLAUDE_CONFIG_DIR -u CLAUDE_PROFILE '/x/claude' --resume {ID}")
+        );
+        let ps = resume_command_for(
+            &session,
+            "C:/",
+            ShellFlavor::Powershell,
+            Some("C:/x/claude.exe"),
+        )
+        .unwrap();
+        assert_eq!(
+            ps,
+            format!(
+                "$env:CLAUDE_CONFIG_DIR=$null; $env:CLAUDE_PROFILE=$null; & 'C:/x/claude.exe' --resume {ID}"
+            )
+        );
+        let cmd =
+            resume_command_for(&session, "C:/", ShellFlavor::Cmd, Some("C:/x/claude.cmd")).unwrap();
+        assert_eq!(
+            cmd,
+            format!(
+                "set \"CLAUDE_CONFIG_DIR=\" && set \"CLAUDE_PROFILE=\" && \"C:/x/claude.cmd\" --resume {ID}"
+            )
+        );
+        // Conta nomeada: as duas variaveis vao na linha, nada e removido.
+        let profile = if cfg!(windows) {
+            "C:/perfis/a"
+        } else {
+            "/perfis/a"
+        };
+        let named = AgentSession {
+            config_dir: Some(profile.into()),
+            profile_name: Some("a".into()),
+            ..session.clone()
+        };
+        let line = resume_command_for(&named, "/", ShellFlavor::Posix, Some("/x/claude")).unwrap();
+        assert!(!line.contains("env -u"));
+        assert!(line.contains(&format!(
+            "CLAUDE_CONFIG_DIR={profile} CLAUDE_PROFILE=a '/x/claude' --resume"
+        )));
+        // Sem o caminho do CLI, a linha mostrada continua a mesma de antes.
+        assert_eq!(
+            resume_command(&session, "/", ShellFlavor::Posix).unwrap(),
+            format!("claude --resume {ID}")
+        );
     }
 }

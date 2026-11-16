@@ -125,7 +125,7 @@ function Advanced({ tunnel, notify, setError }) {
       <section className="mac-advanced__card" aria-labelledby="advanced-networks">
         <h4 id="advanced-networks">{translate('desktop.access.publicNetworks')}</h4>
         <p className="mac-advanced__note">{translate('desktop.access.publicNetworksDescription')}</p>
-        <ul className="mac-advanced__networks">{publicNetworks(net, tor).map((item) => <li key={item.id}><span><strong>{translate(NETWORK_KEYS[item.id].title)}</strong><small>{translate(NETWORK_KEYS[item.id].description)}</small></span><span className={`mac-chip is-${NETWORK_STATE_TONES[item.state]}`}>{translate(NETWORK_STATE_KEYS[item.state])}</span></li>)}</ul>
+        <ul className="mac-advanced__networks">{publicNetworks(net, tor).map((item) => <li key={item.id}><span><strong>{translate(NETWORK_KEYS[item.id].title)}</strong><small>{translate(item.hint || NETWORK_KEYS[item.id].description)}</small></span><span className={`mac-chip is-${NETWORK_STATE_TONES[item.state]}`}>{translate(NETWORK_STATE_KEYS[item.state])}</span></li>)}</ul>
       </section>
     </div>
 
