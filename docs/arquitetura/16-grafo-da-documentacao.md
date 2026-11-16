@@ -384,9 +384,28 @@ roda as 49 verificações de `check-docgraph.mjs`.
 | Suíte | O que cobre |
 | --- | --- |
 | `workspace::docgraph` no Rust | O exemplo de `programas/azul`, `verde` e `vermelho`, os dois escopos, extensões, pastas ocultas, `CACHEDIR.TAG`, links simbólicos, permissões, tetos de entradas e de arquivos, prazo e profundidade, cancelamento com token, uma árvore de mil pastas com dez áreas documentadas, a extração e a resolução de cada linguagem, código recuado e comentários, os tetos da leitura, do `use` e dos módulos em linha, a leitura que recusa FIFO e link, o cancelamento que guarda o que leu e o orçamento do cache |
+| `workspace::watch::notify::tests` no Rust | Abertura e leitura não viram mudanças; escrita, metadados, criação, renomeação e remoção continuam sendo repassados. No Linux, leituras reais de arquivo e pasta ficam silenciosas e a escrita notifica arquivo e pasta pai |
 | `packages/ui/scripts/check-docgraph.mjs` | Poda, invariante das contagens ao recolher, diferença entre índices, renomeação, adoção de resposta, leitura parcial, busca, ligações por posição, cada vista, a projeção do 3D, os modos de cor, as paletas e as rampas, observadores, raízes amplas, persistência das opções, indexador, a demonstração e a regra de texto visível |
 | `npm run check:i18n --workspace @cialai/ui` | As 191 chaves `terminal.docgraph.*` existem nos três idiomas, com os mesmos valores substituíveis, e todas são usadas |
 | `npm run check:text` | Nenhum texto do grafo usa parênteses como aposto nem hífen, meia-risca ou travessão como separador |
+
+### Correção do ciclo de atualização no Linux em 13/11/2026
+
+O inotify anuncia a abertura de pastas feita por `read_dir`. O observador
+repassava esse acesso como mudança, e cada varredura do grafo provocava outra,
+fazendo o aviso de atualização piscar mesmo sem edição. O backend `notify`
+agora descarta eventos de acesso, exceto fechamento de escrita. As alterações
+reais, a releitura periódica e o botão Atualizar continuam com o mesmo contrato.
+
+Os testes de regressão de leitura falharam antes do filtro e os três testes do
+módulo passaram depois. Foram compilados num harness temporário que inclui o
+próprio arquivo fonte do backend, com `notify` 8.2.0 e inotify reais, sem a
+dependência do Tauri. Em 45 segundos, 125 rodadas de leitura de pasta e arquivo
+geraram zero falsas mudanças; criação, escrita, renomeação e remoção foram
+detectadas em quatro de quatro operações. As 49 verificações JavaScript do
+grafo e `cargo fmt --check` também passaram. O build completo e a conferência visual no app Linux
+permanecem pendentes neste ambiente, sem GTK e WebKit de desenvolvimento.
+Windows nativo também não foi executado; o macOS conserva seu backend kqueue.
 
 A medida de tempo do Rust fica fora do `npm test` e lê um projeto de verdade:
 

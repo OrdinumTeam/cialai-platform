@@ -6,7 +6,7 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use notify::event::{CreateKind, ModifyKind, RemoveKind, RenameMode};
+use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind, RenameMode};
 use notify::{Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use super::{Backend, RawChange};
@@ -144,6 +144,17 @@ fn watch_root(path: &Path, dir: bool) -> Result<PathBuf, String> {
 }
 
 fn classify(id: u64, registration: &Registration, event: &Event) -> Option<RawChange> {
+    // inotify anuncia a abertura feita pelo proprio indexador, inclusive por
+    // read_dir. Repassa-la como mudanca realimenta a varredura do grafo.
+    // Fechamento de escrita continua sendo uma dica de alteracao concluida.
+    if matches!(event.kind, EventKind::Access(_))
+        && !matches!(
+            event.kind,
+            EventKind::Access(AccessKind::Close(AccessMode::Write))
+        )
+    {
+        return None;
+    }
     let relevant = if registration.dir {
         event.paths.iter().any(|path| {
             path == &registration.path || path.parent() == Some(registration.path.as_path())
@@ -168,4 +179,136 @@ fn classify(id: u64, registration: &Registration, event: &Event) -> Option<RawCh
     ) && (!registration.dir
         || event.paths.iter().any(|path| path == &registration.path));
     Some(RawChange { id, gone })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{DataChange, MetadataKind};
+
+    fn registration(dir: bool) -> Registration {
+        let path = std::env::temp_dir().join("cialai-watch-classifier");
+        Registration {
+            root: path.clone(),
+            path,
+            dir,
+        }
+    }
+
+    #[test]
+    fn ignores_read_only_access_for_files_and_directories() {
+        for dir in [false, true] {
+            let registration = registration(dir);
+            for kind in [
+                AccessKind::Any,
+                AccessKind::Read,
+                AccessKind::Open(AccessMode::Any),
+                AccessKind::Open(AccessMode::Read),
+                AccessKind::Open(AccessMode::Write),
+                AccessKind::Close(AccessMode::Read),
+                AccessKind::Close(AccessMode::Any),
+                AccessKind::Other,
+            ] {
+                let event = Event::new(EventKind::Access(kind)).add_path(registration.path.clone());
+                assert!(classify(7, &registration, &event).is_none(), "{kind:?}");
+                if dir {
+                    let child = Event::new(EventKind::Access(kind))
+                        .add_path(registration.path.join("README.md"));
+                    assert!(
+                        classify(7, &registration, &child).is_none(),
+                        "child {kind:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn preserves_mutations_and_write_completion() {
+        for dir in [false, true] {
+            let registration = registration(dir);
+            for kind in [
+                EventKind::Create(CreateKind::File),
+                EventKind::Remove(RemoveKind::File),
+                EventKind::Modify(ModifyKind::Name(RenameMode::Both)),
+                EventKind::Modify(ModifyKind::Data(DataChange::Content)),
+                EventKind::Modify(ModifyKind::Metadata(MetadataKind::Permissions)),
+                EventKind::Access(AccessKind::Close(AccessMode::Write)),
+            ] {
+                let event = Event::new(kind).add_path(registration.path.clone());
+                let change = classify(7, &registration, &event).expect("mutation lost");
+                assert_eq!(change.id, 7);
+                assert_eq!(
+                    change.gone,
+                    matches!(
+                        kind,
+                        EventKind::Create(_)
+                            | EventKind::Remove(_)
+                            | EventKind::Modify(ModifyKind::Name(_))
+                    )
+                );
+                if dir {
+                    let child = Event::new(kind).add_path(registration.path.join("README.md"));
+                    let change = classify(7, &registration, &child).expect("child mutation lost");
+                    assert!(
+                        !change.gone,
+                        "a child mutation must not remove its watched parent"
+                    );
+                }
+                let unrelated =
+                    Event::new(kind).add_path(registration.path.with_extension("unrelated"));
+                assert!(classify(7, &registration, &unrelated).is_none());
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn linux_directory_and_file_reads_stay_quiet_but_writes_notify() {
+        use std::time::{Instant, SystemTime, UNIX_EPOCH};
+        let unique = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root =
+            std::env::temp_dir().join(format!("cialai-watch-read-{}-{unique}", std::process::id()));
+        std::fs::create_dir(&root).unwrap();
+        let file = root.join("README.md");
+        std::fs::write(&file, "# Fixture\n").unwrap();
+        let watcher = PlatformWatcher::new();
+        assert!(watcher.available());
+        watcher.register(1, &root, true).unwrap();
+        watcher.register(2, &file, false).unwrap();
+        for _ in 0..6 {
+            std::fs::read_dir(&root)
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            assert_eq!(std::fs::read_to_string(&file).unwrap(), "# Fixture\n");
+        }
+        let deadline = Instant::now() + Duration::from_millis(500);
+        while Instant::now() < deadline {
+            assert!(
+                watcher.poll(Duration::from_millis(20)).unwrap().is_empty(),
+                "reading the graph must not trigger another scan"
+            );
+        }
+        std::fs::write(&file, "# Updated\n").unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let mut changed = [false; 2];
+        while Instant::now() < deadline && !changed.iter().all(|value| *value) {
+            for change in watcher.poll(Duration::from_millis(50)).unwrap() {
+                assert!(!change.gone);
+                changed[(change.id - 1) as usize] = true;
+            }
+        }
+        watcher.unregister(2);
+        watcher.unregister(1);
+        std::fs::remove_dir_all(root).unwrap();
+        assert_eq!(
+            changed,
+            [true, true],
+            "file and parent must still report writes"
+        );
+    }
 }
