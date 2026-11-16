@@ -1,17 +1,16 @@
 ## Cialai {{version}} preview
 
-Reopening Cialai brings each terminal back to the Claude Code or Codex conversation it was running, on macOS, Windows and Linux, even with several terminals in the same folder. On a Mac, Cialai now asks for the local network permission, so a Broto connected by QR finds the computer in seconds on the same network instead of waiting for Tor.
+Search, the app menu and the window buttons now share the same toolbar on macOS, Windows and Linux. On Linux, the graph no longer keeps refreshing on its own.
 
 **macOS is signed with the Ordinum Developer ID and notarized by Apple.** **The Windows installers are not signed with a code signing certificate yet**, so SmartScreen warns you before the first launch. In app updates are verified with the Cialai updater key on every system.
 
 ### What is new
 
-* **Resume in the right terminal.** On a Mac opened from the Dock, resuming Claude was refused before the command was typed, because the CLI lived outside the path the app searched. Cialai now looks for `claude` and `codex` in the same path they ran with. Codex served by its shared background process, which did not say which conversation belonged to which terminal, now announces its id when Cialai quits, and each terminal keeps its own.
-* **Resume on Windows too.** The resume command was never sent on Windows, because the app waited for a prompt signal that Windows does not have. The default Claude account resumes without switching its configuration folder, and automatic terminal replies no longer cancel the resume.
-* **Broto by QR in seconds on the same network.** Since macOS 15, without the local network permission, the Cialai announcement never left the Mac and a Broto could only find the computer through Tor, which took minutes or never finished. The Mac now asks for the permission on first use, warns when it was denied and shows in the diagnostics where to allow it. Checked with a Broto on Windows 11 with the firewall on: it found the computer in two seconds.
-* **Interrupt label.** The interrupt button of the phone terminal bar is now named Interromper Ctrl+C.
+* **Window buttons in the toolbar.** Close, minimize and the third button sit after search and the app menu, on every system. On a Mac they keep the red, yellow and green colors and the green one toggles full screen; on Windows and Linux the middle button maximizes and restores. On narrow windows search turns into an icon.
+* **Linux window without the system title bar.** The toolbar draws the buttons and the window can be resized from its eight edges and corners. If the interface fails to load, the system frame comes back so the window can still be moved and closed.
+* **Graph refresh on Linux.** Reading the folders to build the graph was reported as a change and started another scan, so the Refreshing notice blinked without end. Reads are now ignored, while creating, writing, renaming and removing files still refresh the graph.
 
-On a Mac, accept the prompt to find devices on your local network when the new version opens. If it was denied before, turn on Cialai in System Settings, Privacy and Security, Local Network. The resume of Claude and Codex and the Broto pairing were checked on macOS with test command line tools and on a Windows 11 virtual machine; the CI ran the tests on the three systems.
+The toolbar was checked in Chromium on the production build for the three systems, with the window bridge simulated; the native window behavior was not tested on each system before release. The graph fix was checked on Linux with 125 reads in 45 seconds and no false change.
 
 Broto has its own version, 0.2.1, and release tag `broto-v0.2.1`. Its Windows and Linux installers are separate from the Cialai host installers below. Visit https://cialai.com.br/broto for downloads. Connecting a Broto by QR needs Cialai 0.6.0 on the computer and on the phone and Broto 0.2.0.
 

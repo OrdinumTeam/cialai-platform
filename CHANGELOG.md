@@ -74,6 +74,18 @@ The format follows Keep a Changelog, and the project intends to use Semantic Ver
 
 Version 1.0.0 has not been published. Signed installers, native mobile archives, physical device testing, store review and the external release gates remain pending.
 
+## 0.7.2 · 2026-11-16
+
+### Changed
+
+* Search, the app menu and the window controls share the 52 px toolbar on macOS, Windows and Linux. On macOS the system buttons are hidden, the toolbar draws close, minimize and full screen in the traditional colors after the app menu, and the native buttons come back if the interface does not load
+* Linux starts without window manager decorations. The toolbar draws minimize, maximize or restore and close, and eight edge areas start `startResizeDragging`; the rescue frame keeps the Wayland button order of the system
+* Up to 800 px of toolbar width, search becomes an icon and the subtitle and connection label are hidden
+
+### Fixed
+
+* On Linux, inotify reported the directory opens made by the graph indexer as changes, which started another scan and kept the Refreshing notice blinking. Access events are ignored except a close after writing
+
 ## 0.7.1 · 2026-11-15
 
 ### Fixed

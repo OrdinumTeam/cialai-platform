@@ -10,6 +10,7 @@ data e onde cada arquivo está.
 
 | Versão | Data | Tag | Onde está |
 | --- | --- | --- | --- |
+| [0.7.2](0.7.2.md) | 16/11/2026 | `v0.7.2` | Controles da janela na toolbar dos três sistemas e fim da atualização contínua do grafo no Linux; sai calada |
 | [0.7.1](0.7.1.md) | 15/11/2026 | `v0.7.1` | Retomada do Claude e do Codex pelo terminal certo nos três sistemas e Broto pelo QR em segundos com a permissão de rede local do Mac; sai calada |
 | [0.7.0](0.7.0.md) | 14/11/2026 | `v0.7.0` | Avisos do Android com o app em segundo plano, ícone da sessão nos avisos e barra do terminal em ordem fixa; sai calada |
 | [0.6.1](0.6.1.md) | 13/11/2026 | `v0.6.1` | Saída rápida da reserva Tor, terminais mais rápidos no celular e barra do terminal com sete botões; sai calada |
