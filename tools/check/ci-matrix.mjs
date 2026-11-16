@@ -101,7 +101,7 @@ assert.ok(
 const browserPackage = JSON.parse(readFileSync(`${root}/tools/browser/package.json`, 'utf8'));
 assert.match(browserPackage.dependencies.playwright, /^\d+\.\d+\.\d+$/, 'o Playwright precisa de versão exata');
 const { SCENARIOS, verdict, viteFsPath } = await import(new URL('../browser/run-browser-checks.mjs', import.meta.url));
-assert.deepEqual(SCENARIOS.map(({ name }) => name), ['desktop studio', 'desktop network', 'phone terminal', 'desktop dialog geometry', 'desktop dialog geometry on a narrow window']);
+assert.deepEqual(SCENARIOS.map(({ name }) => name), ['desktop window toolbar linux', 'desktop window toolbar windows', 'desktop window toolbar macos', 'desktop studio', 'desktop network', 'phone terminal', 'desktop dialog geometry', 'desktop dialog geometry on a narrow window']);
 // A geometria dos diálogos precisa ser medida no build de produção: é lá que o
 // emotion injeta por CSSOM e que o Vite decide a ordem dos pedaços.
 assert.ok(SCENARIOS.some(({ origin }) => origin === 'build'), 'nenhum cenário roda contra o build de produção');

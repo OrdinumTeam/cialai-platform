@@ -10,12 +10,20 @@
 import { existsSync } from 'node:fs';
 import { createServer as createNetServer } from 'node:net';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkWindowToolbar } from './check-window-toolbar.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const desktop = fileURLToPath(new URL('../../apps/desktop/', import.meta.url));
 const TIMEOUT_MS = 90000;
 
 export const SCENARIOS = [
+  ...['linux', 'windows', 'macos'].map((os) => ({
+    name: `desktop window toolbar ${os}`,
+    origin: 'build',
+    path: `/?terminais=demo&motion=0&onboarding=skip&platform=${os}#terminais`,
+    viewport: { width: 1440, height: 900 },
+    toolbarOs: os,
+  })),
   {
     name: 'desktop studio',
     path: '/?terminais=demo&motion=0&platform=macos#terminais',
@@ -83,6 +91,7 @@ async function runScenario(browser, baseUrl, scenario) {
   });
   try {
     await page.goto(`${baseUrl}${scenario.path}`, { waitUntil: 'load' });
+    if (scenario.toolbarOs) return await checkWindowToolbar(page, scenario.toolbarOs);
     let importing = Promise.resolve();
     if (scenario.script) {
       importing = page.evaluate((source) => import(source).then(() => undefined), viteFsPath(root, scenario.script));

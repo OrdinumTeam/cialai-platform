@@ -92,9 +92,8 @@ export function onNativeDragEnd(handler) {
   return listen('drag-out://end', (payload) => handler(payload || {}));
 }
 
-// Estado de tela cheia da janela, para a toolbar nao reservar o espaco dos
-// semaforos quando o macOS os esconde. Chama o handler na hora e a cada
-// mudanca; fora do app nao faz nada.
+// Fullscreen state for toolbar controls and resize borders. Notify the
+// handler immediately and on subsequent changes.
 export async function watchFullscreen(handler) {
   if (!isTauri()) return () => {};
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
@@ -111,9 +110,9 @@ export async function watchFullscreen(handler) {
   return () => { off(); };
 }
 
-// Controles da janela sem moldura do Windows. Fechar passa pelo mesmo pedido
-// de saída da janela nativa, com a confirmação de terminais abertos. Fora do
-// app nada acontece e a janela nunca está maximizada.
+// Main window controls on all desktop platforms. Closing uses the native
+// exit request and its open-terminal confirmation. Outside the app, controls
+// are inert and the window is never maximized.
 async function currentWindow() {
   const { getCurrentWindow } = await import('@tauri-apps/api/window');
   return getCurrentWindow();
@@ -125,6 +124,14 @@ export const windowControls = {
   },
   async toggleMaximize() {
     if (isTauri()) await (await currentWindow()).toggleMaximize();
+  },
+  async toggleFullscreen() {
+    if (!isTauri()) return;
+    const current = await currentWindow();
+    await current.setFullscreen(!await current.isFullscreen());
+  },
+  async startResizeDragging(direction) {
+    if (isTauri()) await (await currentWindow()).startResizeDragging(direction);
   },
   async close() {
     if (isTauri()) await (await currentWindow()).close();

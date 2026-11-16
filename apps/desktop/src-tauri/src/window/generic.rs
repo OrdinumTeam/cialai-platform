@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-//! Backend Linux, com decoracoes do gerenciador de janelas. No X11 a abertura
+//! Backend Linux, sem barra de título do gerenciador de janelas. No X11 a abertura
 //! anima posicao e tamanho por `set_position` e `set_size` a cada quadro. O
 //! tamanho animado e o interno, porque `set_size` pede a area do cliente sem a
 //! barra de titulo; a posicao e a do quadro externo. No Wayland o compositor

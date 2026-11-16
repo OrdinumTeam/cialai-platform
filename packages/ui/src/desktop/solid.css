@@ -181,6 +181,10 @@ html[data-shell="desktop"][data-theme] .mac-tunnel-status{border-radius:var(--ui
 html[data-shell="desktop"][data-theme] .mac-tool--search{height:32px;min-width:210px;padding:0 8px 0 11px;border:0;border-radius:var(--ui-radius-control);background:var(--mac-surface-2)}
 html[data-shell="desktop"][data-theme] .mac-tool--search:hover{background:var(--mac-surface-3)}
 
+@container desktop-toolbar (max-width:800px){
+  html[data-shell="desktop"][data-theme] .mac-tool--search{min-width:30px;width:30px;padding:0;justify-content:center;margin-left:4px}
+}
+
 /* Marca na toolbar, so com a lateral fechada: o lettering sozinho, sem a
    cabeca, pequeno e apagado para nao competir com o titulo, separado dele
    por um fio. */

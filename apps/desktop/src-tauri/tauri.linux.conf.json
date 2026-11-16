@@ -11,7 +11,7 @@
         "minHeight": 320,
         "center": true,
         "resizable": false,
-        "decorations": true,
+        "decorations": false,
         "transparent": false,
         "backgroundColor": "#37112F",
         "visible": true

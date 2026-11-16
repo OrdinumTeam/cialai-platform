@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-// Casca da janela por sistema. O macOS mantém semáforos, menubar nativa e a
-// guarda do Escape. Linux e Windows não têm menubar, porque os aceleradores
-// nativos engoliriam Ctrl T, Ctrl W e Ctrl C antes do terminal: as mesmas
-// ações ficam num botão de menu na toolbar. Só o Windows, sem moldura, desenha
-// os próprios controles; no Linux eles vêm do gerenciador de janelas.
+// Every desktop platform keeps its menu and window controls in the toolbar.
+// macOS also retains its native menubar, Escape guard and traffic-light colors.
+// Linux and Windows handle shortcuts in the DOM to preserve terminal Ctrl keys.
 
 import { currentOs } from '../lib/keys.js';
 import { toggleShortcut } from '../notch/model.js';
@@ -13,8 +11,8 @@ export function windowChrome(os) {
   const mac = os === 'macos';
   return {
     nativeMenu: mac,
-    menuButton: !mac,
-    windowControls: os === 'windows',
+    menuButton: true,
+    windowControls: true,
     trafficLights: mac,
     escapeGuard: mac,
   };
